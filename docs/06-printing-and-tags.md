@@ -1,105 +1,150 @@
-# 6. Tags, mail merge and printing
+# 6. Mail merges, tags and printing
 
-## 6.1 What gets printed
+## 6.1 What a "mail merge" is in Kinus
 
-| Kind | Content | Barcode | Typical use |
-|---|---|---|---|
-| Name tag | First name large, last name, division colour band, bunk, `camper_code` | Code 128 (`KN100016`) + small QR | Worn; scanned at check-in/out |
-| Luggage tag | Full name, division, bunk, camper code, local address line (optional), office phone | Code 128 | Tied to luggage |
-| Bunk sheet | Per bunk, one page: names + barcodes grid | Code 128 per row | Counselor's paper backup for scanning |
+A **template** (name tag, luggage tag, bus card, anything you design) plus a set of
+**merge fields** (the named values the template consumes) produces one printable
+page per camper. Templates are designed outside Kinus (Publisher) and converted
+once; after that every camper, batch or single, merges the same way.
 
-Templates are designed once (your image template is the background), then every tag
-is a merge of camper fields into that template.
+| Template | Typical content | Barcode |
+|---|---|---|
+| Name tag | First name large, last name, division band, bunk, camper code | Code 128 `KN100016` (+ QR optional) |
+| Luggage tag | Full name, division, bunk, code, local address, office phone | Code 128 |
+| Bunk sheet | One page per bunk: names + barcodes grid | Code 128 per row |
+| … | Any further Publisher design you supply | optional |
 
-## 6.2 Template model
+## 6.2 Merge fields and value conversions
 
-A `print_templates` row:
+Templates do not read camper columns directly. They read **merge fields**, each of
+which is a camper field passed through a chain of **transforms**. This is where
+"Youth Small → YS" and "Division 1 → 1" live, and it is what lets a Publisher
+template built against field names like `TSHIRT` keep working.
+
+| Transform | Example | Behaviour on no match |
+|---|---|---|
+| **Value map** (lookup table) | `tshirt_size`: Youth Small → YS, Youth Medium → YM, Adult Small → AS | `fallback`: *passthrough* (print the original), *blank*, or *error* (flagged on the job, tag still prints with a ⚠ in the queue) |
+| **Regex** | `division.name`: `^Division (\d+)$` → `$1`, so "Division 2" → "2"; "French Division" → unchanged | passthrough |
+| **Template** | `{{first_name}} {{last_name}}` or `{{bunk.name}}` | — |
+| **Case / trim / truncate** | upper, title, first 12 chars | — |
+| **Transliterate** (later) | Hebrew → Latin for an English-only font | — |
+
+Admin UI (`/print/merge-fields`):
+- A list of merge fields: key (as the template uses it), label, source field,
+  transform chain, sample output for a chosen camper.
+- The **value map editor is seeded from real data**: pick the source field and it
+  lists every distinct value currently in the roster with a count, with an empty
+  "output" column to fill in. Unmapped values are highlighted, and a new import that
+  introduces a never-seen value ("Youth XS") shows up as a warning on the import
+  report and on the next print job. Case and whitespace are ignored when matching.
+- A merge field can be previewed against any camper, including the long-name and
+  Hebrew edge cases, before it is used.
+
+Default merge fields to ship: `FIRST`, `LAST`, `FULL`, `CODE`, `BARCODE`
+(`KN`+code), `DIVISION` (full name), `DIV` (short code via value map),
+`BUNK` (name), `BUNK_SHORT` (value map), `GRADE`, `TSHIRT` (value map),
+`ADDRESS`, `CROSS_STREETS`, `MOTHER_PHONE`, `FATHER_PHONE`.
+
+## 6.3 Templates from Publisher
+
+You design in Publisher; Kinus prints. Two paths, both supported:
+
+**A. Native Kinus template (used for on-demand printing).** One-time conversion of
+each `.pub` design: the static artwork is exported from Publisher as a PNG/PDF
+background, and each merge field placeholder becomes a positioned text/barcode
+layer in Kinus's template model. The original `.pub` is stored alongside for
+reference. After conversion the template renders anywhere (browser, PDF, email)
+with no Publisher involved. I do this conversion when you hand over the files; the
+editor (6.4) lets you nudge positions afterwards.
+
+**B. Publisher data-source export (zero conversion, batch only).** `/print/export`
+produces a CSV/XLSX whose column headers are exactly the merge field keys, already
+converted (YS, 2, …), for any scope (division, bunk, all, changed since last
+export). The office opens it as the data source in Publisher and runs the merge
+there. Good for the first big print run before the program, and as a fallback if a
+template has not been converted yet.
+
+Template model (path A), stored as JSON on `print_templates`:
 
 ```json
 {
-  "kind": "name_tag",
+  "kind": "name_tag", "name": "Name tag 2026",
   "page_width_mm": 90, "page_height_mm": 55,
   "background_path": "templates/<id>/bg.png",
   "layers": [
-    { "type": "text", "field": "first_name", "x": 8, "y": 14, "w": 74, "h": 14,
+    { "type": "text", "field": "FIRST", "x": 8, "y": 14, "w": 74, "h": 14,
       "font": "Noto Sans Hebrew", "size": 22, "weight": 700, "align": "center",
-      "fit": "shrink", "dir": "auto", "color": "#111111" },
-    { "type": "text", "field": "last_name", "x": 8, "y": 28, "w": 74, "h": 8, "size": 12, "align": "center" },
-    { "type": "text", "template": "{{division.name}} · {{bunk.name}}", "x": 8, "y": 38, "w": 74, "h": 6, "size": 9 },
-    { "type": "rect", "x": 0, "y": 0, "w": 6, "h": 55, "fill": "{{division.color}}" },
-    { "type": "barcode", "symbology": "code128", "value": "KN{{camper_code}}",
-      "x": 20, "y": 44, "w": 50, "h": 8, "text": true },
-    { "type": "qr", "value": "KN{{camper_code}}", "x": 76, "y": 40, "w": 12, "h": 12 }
+      "fit": "shrink", "dir": "auto" },
+    { "type": "text", "field": "LAST", "x": 8, "y": 28, "w": 74, "h": 8, "size": 12, "align": "center" },
+    { "type": "text", "template": "{{DIVISION}} · {{BUNK}}", "x": 8, "y": 38, "w": 74, "h": 6, "size": 9 },
+    { "type": "barcode", "symbology": "code128", "field": "BARCODE", "x": 20, "y": 44, "w": 50, "h": 8, "text": true }
   ],
-  "sheet_layout": { "paper": "letter", "cols": 2, "rows": 5, "marginMm": 10, "gapMm": 3 }
+  "sheet_layout": { "paper": "letter", "cols": 2, "rows": 5, "marginMm": 10, "gapMm": 3 },
+  "show_on_card": true, "auto_on_first_checkin": true, "sort_order": 1
 }
 ```
 
-- Units are millimetres so a template matches the physical label.
-- `fit: "shrink"` reduces font size until the text fits its box: long French
-  double-barrelled names and short Hebrew names both look right.
-- `dir: "auto"` lets a Hebrew name render RTL inside an otherwise LTR tag.
-- Per-division templates override the default (different background colour, Hebrew
-  font) by setting `division_id`.
-- `sheet_layout` is optional: with it, batches are imposed N-up on letter/A4 sheets
-  (Avery-style); without it, one tag per page for a label printer.
+- Millimetre units so a template matches the physical label.
+- `fit: "shrink"` reduces the font until the text fits its box (long French
+  double-barrelled names, short Hebrew names).
+- `dir: "auto"` renders a Hebrew name RTL inside an otherwise LTR tag.
+- Per-division templates override the default by setting `division_id`.
+- `sheet_layout` imposes batches N-up on letter/A4; without it, one tag per page
+  for a label printer.
+- `show_on_card` puts a one-tap button on the camper card; `auto_on_first_checkin`
+  requests it automatically on the camper's first check-in; `sort_order` orders
+  the buttons.
 
-## 6.3 Template editor (admin)
+## 6.4 Template editor (admin)
 
-Phase 1: a form-based editor — upload background, set size, a list of layers with
-numeric fields, and a **live preview** rendered from the same HTML renderer with a
-sample camper (pick any camper, including a long Hebrew name and a long French
-name). Phase 2 (optional): drag-to-position on the preview.
+Phase 1: form-based — upload background, set size, a list of layers with numeric
+position fields, flags above, and a **live preview** rendered by the same engine
+with a chosen camper. Phase 2 (optional): drag-to-position on the preview.
 
-## 6.4 Rendering pipeline
+## 6.5 Rendering pipeline
 
 ```
-template + camper(s) ─► HTML (React, print CSS, mm units, embedded fonts, SVG barcodes)
-                     ─► headless Chromium (puppeteer-core + @sparticuz/chromium) ─► PDF
-                     ─► Storage: print-output/<job_id>.pdf
+template + merge fields + camper(s) ─► HTML (React, print CSS, mm units, embedded fonts, SVG barcodes)
+                                    ─► headless Chromium (puppeteer-core + @sparticuz/chromium) ─► PDF
+                                    ─► Storage: print-output/<job_id>.pdf
 ```
 
 - Route handler `POST /api/print/render` (Node runtime, `maxDuration` 60 s). One
-  Chromium launch per job; a job with 300 tags renders in a few seconds.
-- Barcodes via `bwip-js` as inline SVG (crisp at any DPI, no font dependency).
-- Fonts: Noto Sans + Noto Sans Hebrew bundled in the repo and referenced with
-  `@font-face` from the HTML; the PDF embeds them.
-- The identical HTML is served at `GET /print/jobs/<id>/preview` so the office can
-  also just hit **Print** in the browser (`@page { size: 90mm 55mm }`). This is the
-  zero-dependency fallback if server rendering ever fails.
-- Cold start on Vercel for Chromium is ~2–4 s; acceptable for an on-demand tag.
-  Batches run through the queue (below) so the UI never waits on them.
+  Chromium launch per job; 300 tags render in seconds.
+- Barcodes via `bwip-js` as inline SVG.
+- Fonts: Noto Sans + Noto Sans Hebrew bundled; the PDF embeds them.
+- The same HTML is served at `GET /print/jobs/<id>/preview` so the office can also
+  press **Print** in the browser. Zero-dependency fallback.
 
-## 6.5 On-demand request from check-in
+## 6.6 On-demand request from the camper card
 
-1. Staff taps **Request tag** on the camper card. Default kind = name tag; the caret
-   offers *luggage tag* / *both* / *copies*.
-2. Destination email defaults to `settings.office_email.to`; a small "Send to…" link
-   lets the user change it **for this request only** (fallback when the office
-   printer moves). The last override is remembered on that device as a suggestion.
-3. Server action creates `print_jobs` (`status = queued`) + `print_job_items`, then
-   immediately calls the worker (`/api/cron/print-jobs?job=<id>`); Vercel Cron also
-   sweeps the queue every minute as a safety net.
-4. Worker: `rendering` → PDF to Storage → Resend email with the PDF attached
-   (subject `Name tag · מנחם כהן · Bunk א · req. by Shmuli`, body with a link to the
-   job page) → `sent`. Failure → `failed` with the error; the requester sees a red
-   badge on the card and can retry.
-5. The office **Print queue** page (`/print`) lists jobs in realtime: who, what, for
-   whom, status, **Open PDF**, **Mark printed**, **Re-send**. Marking printed
-   closes the loop; the requester's camper card shows "Tag printed 9:40".
+1. Staff taps a template button on the card (Name tag / Luggage tag / …).
+   Long-press: copies, and a one-off "send to" override (the last override is
+   remembered on that device as a suggestion). Default destination:
+   `settings.office_email.to`.
+2. Server action creates `print_jobs` (`queued`) + `print_job_items`, then calls
+   the worker immediately; Vercel Cron sweeps the queue every minute as a safety net.
+3. Worker: `rendering` → PDF to Storage → Resend email with the PDF attached
+   (subject `Name tag · מנחם כהן · Group 112 · req. by Shmuli`, body links to the
+   job) → `sent`. Failure → `failed` with the error; the card button turns red with
+   **Retry**.
+4. Office **Print queue** (`/print`), realtime: who, what, for whom, status,
+   **Open PDF**, **Mark printed**, **Re-send** (with "to" override). Marking printed
+   updates the card ("Printed 9:44").
 
-## 6.6 Batch printing (before the program)
+## 6.7 Batch printing (before the program)
 
-`/print/batch`: choose kind, template, scope (division / bunk / all / only campers
-without a printed tag / only campers whose name changed since last print), copies,
-sheet layout → one job → one PDF. Also "Bunk sheets for division X".
+`/print/batch`: template, scope (division / bunk / all / only campers without a
+printed tag / only campers whose merge output changed since last print), copies,
+sheet layout → one job → one PDF. Also "Bunk sheets for division X", and the
+Publisher data-source export (6.3 B) from the same screen.
 
-## 6.7 Email (Resend)
+## 6.8 Email (Resend)
 
-- Domain verified in Resend (SPF/DKIM); from `tags@<your-domain>`.
-- Attachment limit 40 MB covers hundreds of tags; above that the email carries only
-  a signed Storage link (valid 7 days) and says so.
-- React Email templates in `emails/`: `PrintJobEmail`, `StaffInviteEmail`,
-  optional `DailySummaryEmail` (counts per division, sent to directors at a set time).
-- Every send records `email_message_id` on the job; Resend webhooks (delivered /
-  bounced) update a `delivery` field so the queue shows bounces.
+- Verified domain (SPF/DKIM); from `tags@<your-domain>`.
+- Attachment limit 40 MB covers hundreds of tags; above that the email carries a
+  signed Storage link (7 days) and says so.
+- React Email templates: `PrintJobEmail`, `StaffInviteEmail`, optional
+  `DailySummaryEmail`.
+- `email_message_id` recorded per job; Resend webhooks (delivered / bounced)
+  update the queue so bounces are visible.

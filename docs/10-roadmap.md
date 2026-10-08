@@ -12,68 +12,68 @@ something usable.
 - Vercel project, Resend domain, env vars, deploy hook pipeline.
 
 ### Phase 1 — Roster and people (4–6 days)
-- Import wizard end-to-end with the real export (mapping preset, diff preview,
-  apply, report, history on the camper page).
+- Import wizard end-to-end with the real export (mapping preset, encoding guard,
+  sparse rows, diff preview, apply, report, history on the camper page).
 - Divisions/bunks admin; users & scopes admin; field visibility settings.
 - Camper detail page; search; lists with the five default presets + preset editor.
 - **Milestone: the roster is in, staff have logins, lists print.**
 
 ### Phase 2 — Operations (5–7 days)
-- Scan screen (camera + hardware scanner + search + browse), camper card, modes,
-  undo, status machine, status board with realtime, bulk actions, corrections.
-- Tags: template model, HTML renderer, PDF via Chromium, batch job, on-demand
-  request with office email, print queue page, mark printed.
+- Scan screen (Check in / Check out / Lookup, camera + hardware scanner + search +
+  browse), flashes and undo, status machine, status board with realtime, bulk
+  actions, corrections.
+- Merge fields and value maps (editor seeded from roster values); Publisher
+  data-source export.
+- Conversion of your Publisher templates to native templates; HTML renderer; PDF
+  via Chromium; batch job; one-tap request from the card; auto-request on first
+  check-in; office email; print queue page; mark printed.
 - PWA shell with cached roster.
-- **Milestone: a full dry run of arrival, a mid-day checkout, and tag requests.**
+- **Milestone: a full dry run of arrival, a mid-day checkout, pickup, and tag
+  requests from the card.**
 
-### Phase 3 — Pickup and polish (3–5 days)
-- Buzzer handout, lookup/page screens, manual mode, `page_requests` log.
-- Bridge package with one adapter once the pager model is known (plus heartbeat and
-  offline fallback).
-- Health page, daily summary email, Resend webhooks, Playwright test of the check-in
-  flow, load check with a 600-camper fixture.
+### Phase 3 — Hardening (2–4 days)
+- Health page, daily summary email, Resend webhooks, Playwright test of the
+  check-in/out flow, load check with a 600-camper fixture, staff walkthrough.
 - **Milestone: ready for the program.**
 
-### Phase 4 — Later / optional
-- Camper photos on the card (from the registration system if it exports them).
+### Phase 4 — Later / on hold
+- **Buzzer / pager** (doc 7): handout, lookup, paging via on-site bridge once the
+  pager model is known. On hold by decision.
+- Camper photos on the card (if the registration system exports them).
 - Full offline write queue with conflict display.
-- Drag-and-drop template editor.
+- Drag-and-drop template editor; transliteration transform.
 - Hebrew/French UI translations.
 - Parent-facing SMS ("your child has been checked in") via Twilio, if wanted.
 - Read-only shared list links for counselors without accounts.
 
 ## 10.2 Open questions (answers change details, not the architecture)
 
-1. **Export values.** The sample had only the header row. I need one real export
-   (or a few anonymised rows) to confirm: how division names are written
-   (`Hebrew` / `עברית` / `French A`?), how `group_types.bunks` vs
-   `group_types.hebrew_bunks` are populated (is `hebrew_bunks` only filled for the
-   Hebrew division?), the yes/no spelling in `*_yes_no` columns, and the phone
-   format.
-2. **One export or one per program?** The file name says "Single Program". If each
-   division/program exports separately, the import treats each file as the full
-   list for the divisions it contains (already designed for); confirm.
-3. **Is `students.id` stable across exports?** The whole matching strategy rests on
-   it. If it can change (e.g. re-registration creates a new id), name matching
-   becomes the primary path and we should add birth date or parent email to the
-   export for a safer composite key.
-4. **Pager system make/model.** Determines whether a bridge adapter exists or the
-   manual mode is the only mode. A photo of the transmitter and its model number is
-   enough to answer.
-5. **Label stock and printer.** Name tag and luggage tag physical sizes, whether the
-   office prints on a label printer (one per page) or on letter sheets (N-up), and
-   the image template files themselves.
-6. **Is there one check-in per day or one per program?** The status machine supports
-   both; it changes whether an "end of day" reset is needed (new day → everyone
-   back to `expected`) or whether `present` persists across days. If daily, add a
-   `day_resets` setting that runs `pickup` → `expected` nightly for a new attendance
-   cycle, keeping the full timeline.
-7. **Authorized pickup.** Should pickup record *who* collected the camper and check
-   it against a list? The export has no authorized-pickup field; the design has a
-   free-text "picked up by" and an `authorized_pickup` contact role staff can fill in.
-8. **Office email(s).** One address or one per division? Settings supports one
-   default plus per-request override; a per-division default is a small addition.
-9. **Counselor accounts.** Will every counselor get a login (recommended, so every
-   scan has a name on it), or will some bunks share a head counselor's device?
-10. **Session reuse.** Does the program run yearly with the same staff? That decides
-    how much the user/scopes admin needs "copy from last session".
+1. **A clean sample.** The 5-row sample had been re-saved in WPS, which replaced
+   the Hebrew with `?????`. The export itself is fine; I still need one untouched
+   download (or `.xlsx`) with real Hebrew and French values to run the search,
+   sorting and tag-rendering tests against actual data.
+2. **One export or one per program?** The file name says "Single Program" but the
+   sample mixes five divisions. The import handles both; confirm which it will be.
+3. **Is `students.id` stable across exports?** Matching rests on it. If a
+   re-registration can create a new id, name matching becomes primary and a birth
+   date or parent email in the export would make a safer composite key.
+4. **Publisher templates.** Which merges exist (name tag, luggage tag, others?),
+   their physical sizes, the printer (label printer vs. sheets), and the `.pub`
+   files plus the field names used inside them. Each becomes a native template;
+   I need the artwork exported as PNG/PDF at print resolution too.
+5. **Conversion tables.** The full list of t-shirt sizes and their codes, division
+   short codes, and any other value conversions the templates need. The editor
+   will show every distinct value from the roster so you can fill them in, but the
+   first set can be seeded from a list if you have one.
+6. **Daily or once?** Is check-in once per program or once per day? The status
+   machine supports both; daily needs a nightly reset to `expected` (kept as
+   history).
+7. **Pickup record.** Should "Going home" record who collected the camper? The
+   design has an optional free-text "picked up by"; a checked list of authorized
+   people would need a field in the export.
+8. **Office email(s).** One address or one per division? One default plus a
+   per-request override is designed; per-division defaults are a small addition.
+9. **Counselor accounts.** Every counselor gets a login (recommended, so every scan
+   has a name), or some bunks share a head counselor's device?
+10. **Session reuse.** Yearly with the same staff? That decides how much "copy
+    from last session" the admin needs.

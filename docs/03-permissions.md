@@ -76,7 +76,7 @@ table with their own policy.
 | See medical details | ✔ | ✔ | flag only | flag only | ✔ | ✔ | flag only |
 | Request name/luggage tag | ✔ | ✔ | ✔ | ✔ (batch) | ✔ | ✔ | ✔ |
 | Print queue: mark printed, re-send | ✔ | ✔ | – | ✔ | – | – | – |
-| Buzzer handout / lookup / page | ✔ | ✔ | ✔ | lookup | ✔ | ✔ | bunk |
+| Buzzer handout / lookup / page (on hold) | ✔ | ✔ | ✔ | lookup | ✔ | ✔ | bunk |
 | Lists (bunk/HC/DH) | all presets | all presets | all | all | DH preset, division | HC preset, division | counselor preset, bunk |
 | Upload import, apply | ✔ | view only | – | – | – | – | – |
 | Manage users and scopes | ✔ | scopes only | – | – | – | – | – |

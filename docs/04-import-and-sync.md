@@ -20,7 +20,16 @@ can upload, leave, and come back to the preview.
   `imports/<import_id>/<original name>`. SHA-256 stored; uploading the identical file
   twice is detected and offered as "nothing new".
 - Encoding: UTF-8 (with or without BOM) and UTF-16 are detected; CRLF handled.
-  Hebrew/French text passes through untouched.
+  Hebrew/French text passes through untouched. If the bytes are neither, the
+  parser tries Windows-1255 (Hebrew ANSI) and Windows-1252 (Western/French ANSI)
+  and picks the one that yields valid Hebrew/Latin text, so a file re-saved as
+  "ANSI" by Excel/WPS still decodes when the characters survived.
+- **Lost-text guard.** One sample had been re-saved in WPS, which replaced Hebrew
+  with `?????` (`Group ????? 112`); at that point the text is gone for good. The
+  parser counts runs of two or more `?` in name, bunk and contact fields; if any
+  are found the upload is **refused** with the affected cells listed and the advice
+  to upload the original download (or `.xlsx`). An admin can override for a file
+  that genuinely contains question marks.
 
 ### Step 2 — Parse
 - SheetJS reads the first sheet to an array of `{ header: value }` rows.
@@ -40,6 +49,7 @@ The default preset for the current export:
     "students.last_name": "last_name",
     "group_types.division": "division",
     "group_types.hebrew_bunks": "bunk",
+    "group_types.french_bunks": "bunk",
     "group_types.bunks": "bunk",
     "ppa.grade": "grade",
     "ppa.t-shirt_size": "tshirt_size",
@@ -66,7 +76,8 @@ The default preset for the current export:
     "ppa.emergency_contact_number": "contact[emergency,2].phone"
   },
   "options": {
-    "bunkColumnPriority": ["group_types.hebrew_bunks", "group_types.bunks"],
+    "bunkColumnPriority": ["group_types.hebrew_bunks", "group_types.french_bunks", "group_types.bunks"],
+    "emptyMeansUnknown": true,
     "booleanYes": ["yes", "y", "true", "oui", "כן"],
     "booleanNo":  ["no", "n", "false", "non", "לא", ""],
     "phoneDefaultRegion": "US",
@@ -86,6 +97,10 @@ Typed parsing rules:
 - Phones → `phone_e164` via `libphonenumber-js` with the default region; the original
   string is kept as `phone`. Unparseable → stored as entered, `phone_e164 = null`,
   warning.
+- Empty cells mean *unknown*: they never overwrite an existing value and are not
+  reported as changes (`emptyMeansUnknown`). Most rows in the sample were sparse
+  registrations with only id, name and division filled in. An admin can turn this
+  off for a specific import to deliberately clear values.
 - Division: matched by exact name after trimming within the session. Unknown →
   created (language guessed: Hebrew letters → `he`, otherwise `en`; admin fixes
   later) and listed in the preview under "New divisions".
@@ -161,10 +176,12 @@ changes in its history tab, attributed to the import.
 | Header renamed upstream | Unmapped column highlighted in the mapping step; nothing silently dropped because raw rows are retained. |
 | Same file uploaded twice | Hash match → "Already imported on <date>; nothing changed". |
 | Export has rows with no `students.id` | Falls back to name matching within division; otherwise added with a warning. |
+| A value map has never seen a value (e.g. a new t-shirt size) | Import succeeds; the report lists "new values needing a merge mapping" with a link to the value map editor (doc 6.2). |
 
 ## 4.3 Testing the diff engine
 
 `lib/import/*` is pure TypeScript (parse → map → match → diff) with no I/O so it can be
 unit-tested against fixture files: the real header, Hebrew/French names with
 accents and niqqud, yes/no variants, a renamed column, a duplicate id, a moved
-division. These tests are the main guard against a bad import.
+division, a Windows-1255 file, the WPS-mangled `?????` file, and the sparse-row
+sample in `docs/fixtures/`. These tests are the main guard against a bad import.

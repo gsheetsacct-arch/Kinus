@@ -1,4 +1,9 @@
-# 7. Buzzer / pager integration
+# 7. Buzzer / pager integration — ON HOLD
+
+> **Status: deferred.** Nothing in phases 0–3 depends on this. The design is kept
+> so it can be picked up later without re-planning; the schema tables already
+> exist and cost nothing. The pickup flow in doc 5 works without buzzers
+> (Check out mode, "Going home").
 
 ## 7.1 How it works today (as described)
 

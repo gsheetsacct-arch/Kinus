@@ -316,8 +316,39 @@ create table print_templates (
   layers        jsonb not null default '[]',   -- see doc 6
   sheet_layout  jsonb,                  -- optional N-up: { cols, rows, marginMm, gapMm, paper: 'letter' }
   is_default    boolean not null default false,
+  show_on_card  boolean not null default true,     -- one-tap "print this" button on the camper card
+  auto_on_first_checkin boolean not null default false,  -- request automatically on a camper's first check-in
+  sort_order    int not null default 0,
+  source_file_path text,                -- original designer file (.pub) kept in Storage for reference
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
+);
+
+-- Merge fields: the named fields a mail-merge template consumes, derived from camper
+-- data through a chain of transforms (value maps, regex, templates, case). See doc 6.
+create table value_maps (
+  id           uuid primary key default gen_random_uuid(),
+  name         text not null,
+  source_field text not null,          -- field catalog key, e.g. 'tshirt_size', 'division.name'
+  created_at   timestamptz not null default now()
+);
+create table value_map_entries (
+  map_id        uuid not null references value_maps(id) on delete cascade,
+  source_value  text not null,         -- matched trimmed + case-insensitive
+  output_value  text not null,
+  primary key (map_id, source_value)
+);
+create table merge_fields (
+  id           uuid primary key default gen_random_uuid(),
+  key          text not null unique,   -- as used in templates: {{TSHIRT}} / Publisher field «TSHIRT»
+  label        text not null,
+  source_field text not null,
+  transforms   jsonb not null default '[]',
+  -- e.g. [{"type":"value_map","map_id":"…","fallback":"passthrough"},
+  --       {"type":"regex","pattern":"^Division (\\d+)$","replace":"$1"},
+  --       {"type":"case","mode":"upper"}]
+  sort_order   int not null default 0,
+  created_at   timestamptz not null default now()
 );
 
 create table print_jobs (
@@ -523,6 +554,9 @@ alter table import_mappings     enable row level security;
 alter table imports             enable row level security;
 alter table import_rows         enable row level security;
 alter table print_templates     enable row level security;
+alter table value_maps          enable row level security;
+alter table value_map_entries   enable row level security;
+alter table merge_fields        enable row level security;
 alter table print_jobs          enable row level security;
 alter table print_job_items     enable row level security;
 alter table list_presets        enable row level security;
@@ -543,6 +577,12 @@ create policy presets_read   on list_presets for select to authenticated using (
 create policy presets_admin  on list_presets for all to authenticated using (is_admin()) with check (is_admin());
 create policy templates_read on print_templates for select to authenticated using (true);
 create policy templates_admin on print_templates for all to authenticated using (is_admin()) with check (is_admin());
+create policy value_maps_read  on value_maps for select to authenticated using (true);
+create policy value_maps_admin on value_maps for all to authenticated using (is_admin()) with check (is_admin());
+create policy vme_read         on value_map_entries for select to authenticated using (true);
+create policy vme_admin        on value_map_entries for all to authenticated using (is_admin()) with check (is_admin());
+create policy merge_fields_read  on merge_fields for select to authenticated using (true);
+create policy merge_fields_admin on merge_fields for all to authenticated using (is_admin()) with check (is_admin());
 
 -- Campers: scoped by can_access_camper. Inserts only via import (service role) or admins.
 create policy campers_select on campers for select to authenticated using (can_access_camper(id, 'view'));

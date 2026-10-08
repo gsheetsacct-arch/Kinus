@@ -1,106 +1,111 @@
 # 5. Check-in, check-out and status
 
-## 5.1 One screen, context-aware action
+## 5.1 One screen, three explicit modes, one scan each
 
-There is a single **Scan** screen rather than separate check-in and check-out pages.
-Scanning (or searching) a camper shows a **camper card** whose primary button
-depends on the camper's current status:
+There is a single **Scan** screen. At the top is a large segmented control with
+three modes. **Every mode takes exactly one scan** and acts immediately; the
+difference between modes is *what* the scan does, never *how many* scans it takes.
 
-| Current status | Primary button | Secondary buttons |
+| Mode | A scan of a camper… | If the camper is already in that state |
 |---|---|---|
-| `expected` | **Check in** | — |
-| `present` | **Check out** (asks: temporary or pickup?) | Request tag · Call parent · Note |
-| `out` | **Check back in** | Picked up (final) |
-| `departed` | **Check in again** (confirm) | — |
-| `no_show` | **Check in** (confirm) | — |
+| **Check in** | records an arrival (or a return if they were out) → green flash, beep, 6-second Undo | "Already in since 9:12 (Rivky)" — soft flash, nothing recorded |
+| **Check out** | records a check-out → blue/amber flash, beep, 6-second Undo | "Already out since 13:40 (Shmuli)" — soft flash, nothing recorded |
+| **Lookup** | opens the camper card; nothing is recorded until a button is tapped | — |
 
-The screen has a **mode** selector at the top that tunes the fast path for the
-moment of the day:
+Check-out has a sticky sub-toggle, visible under the segmented control:
+**Coming back** (temporary, status `out`) / **Going home** (final, status
+`departed`). The default follows the "today" setting (normal day → Coming back;
+pickup day → Going home) and the user can flip it at any time. The current choice
+is always written on the flash so a mistake is obvious and undoable.
 
-- **Arrival** (buses/drop-off): a scan of an `expected` camper checks them in
-  *immediately* with a big green flash, a beep/vibration, and a 6-second **Undo**
-  toast. No tap needed. Anyone not `expected` shows the card instead of auto-acting.
-- **Day** (default): every scan shows the card; nothing happens until a tap.
-- **Pickup** (end of program): a scan shows the card with buzzer number large and
-  the primary button **Picked up**; a second scan of the same camper within 10 s
-  confirms pickup (two-scan confirm, so one accidental read never departs a kid).
+Mode is per device (remembered locally). Admins can set the default mode and the
+day type for everyone in Settings. The segmented control is big enough to switch
+with a thumb, and the whole screen is tinted faintly by mode (green / blue / neutral)
+so nobody scans into the wrong one without noticing.
 
-Mode is per device (remembered in local storage); an admin can set the default mode
-for everyone in Settings ("today is arrival day").
+Manual entry works identically in every mode: typing a name or code and tapping a
+result does the mode's action (Check in / Check out) or opens the card (Lookup).
+Browsing by bunk does the same.
 
 ## 5.2 Input methods, in priority order
 
 1. **Camera scan** (phone): `@zxing/browser` reads Code 128 and QR. The viewfinder
-   is the top half of the screen in Arrival mode. Torch toggle for dim rooms.
+   is the top half of the screen in Check in / Check out modes. Torch toggle.
 2. **Hardware scanner** (USB/Bluetooth keyboard wedge on a laptop/tablet): a global
    key listener collects a fast burst (< 50 ms between keys) ending in Enter and
-   routes it to the same handler. Works even when the search box is not focused.
-3. **Search** (always visible): type name (any script), camper code, or a parent's
-   phone number. Results are the scope-filtered `search_campers()` RPC, debounced
-   250 ms, showing name · division · bunk · status chip. Tap → card.
-4. **Browse** (fallback for "I can't spell it"): Division → Bunk → list of names
-   with status chips; tap → card. Two taps for a counselor (their bunk is pre-selected).
+   routes it to the same handler, even when no input is focused.
+3. **Search** (always visible): name in any script, camper code, or a parent's
+   phone number → scope-filtered `search_campers()` RPC, debounced 250 ms; results
+   show name · division · bunk · status chip.
+4. **Browse**: Division → Bunk → names with status chips. Two taps for a counselor
+   (their bunk is pre-selected).
 
-Payload handling: `KN` + code → camper; `BZ` + number → buzzer (only meaningful on
-the buzzer screens; elsewhere shows "that's a buzzer label"); anything else →
-"Unknown barcode" with the raw text, and the search box pre-filled with it.
+Payload handling: `KN` + code → camper; anything else → "Unknown barcode" with the
+raw text, and the search box pre-filled with it.
 
 ## 5.3 The camper card
 
+Opened by Lookup mode, by tapping a row on the status board, or by tapping the
+"last scans" list after a check-in/out. It is the one place with buttons.
+
 ```
 ┌──────────────────────────────────────────┐
-│ ●  מנחם מענדל כהן                 100016  │  ← status dot, name (dir=auto), code
-│    Hebrew · Bunk א · Grade 4             │
-│    ⚑ medical flag                        │  ← only if any flag; details per visibility
+│ ●  מנחם מענדל כהן                 100016  │  status dot, name (dir=auto), code
+│    Hebrew Division · Group 112 · Grade 4 │
+│    ⚑ medical flag                        │  only if any flag; details per visibility
 │                                          │
-│  PRESENT since 9:12 · by Shmuli L.       │  ← last event
-│  Buzzer 17                               │  ← if assigned
+│  PRESENT since 9:12 · by Shmuli L.       │  last event
 │                                          │
-│  [        CHECK OUT          ]           │  ← primary, 64px tall
-│  [ Request tag ] [ Call parent ▾ ]       │
-│  [ Note ]        [ Details → ]           │
+│  [ Check out ▾ ]      [ Check in ]       │  only the valid actions are enabled
+│                                          │
+│  Print:  [Name tag] [Luggage tag] [Bus]  │  one button per template (doc 6)
+│                                          │
+│  [ Call parent ▾ ]  [ Note ]  [Details →]│
 └──────────────────────────────────────────┘
 ```
 
-- **Call parent** opens a sheet listing contacts (mother, father, emergency) with
-  `tel:` links and a copy button; `sms:` link as a long-press alternative. Shown
-  only if the user may see contacts.
-- **Check out** opens a sheet: *Temporary (coming back)* / *Picked up (final)*, an
-  optional reason chip row (Parent · Doctor · Other) and a note. Final pickup in
-  non-Pickup mode asks "Who picked up?" as free text (optional).
-- **Request tag** → doc 6; one tap sends the default (name tag) to the office; a
-  long-press/caret chooses luggage tag or both and lets the user override the
-  destination email once.
+- **Print row**: one button per mail-merge template the admin marked
+  *show on card*, in the admin's order. One tap generates that merge for this
+  camper and emails it to the office (default address from Settings; long-press
+  to change the destination for this request only). The button shows the result
+  inline: "Sent 9:41" → "Printed 9:44" when the office marks it.
+- **Call parent** opens a sheet listing contacts (mother, father, emergency 1/2)
+  with `tel:` links and copy; `sms:` on long-press. Only if contacts are visible to
+  this user.
+- **Check out ▾** opens the Coming back / Going home choice plus an optional reason
+  (Parent · Doctor · Other) and note. **Check in** records arrival or return.
 - **Details** → full camper page (contacts, medical per visibility, timeline,
-  history of import changes, bunk move, staff notes).
+  import history, bunk move, staff notes).
 
 ## 5.4 Writing an event
 
 Client → server action `recordAttendance({camperId, eventType, method, note})` →
 RPC `record_attendance()`. The RPC validates the transition (doc 2.3), inserts the
-event, updates the camper, releases the buzzer on final pickup, and returns the event.
-The client:
-- optimistically updates the card (status, "by you, just now");
-- on error (invalid transition because someone else already acted, or no permission)
-  rolls back and shows the actual current status: "Already checked in by Rivky at
-  9:10".
+event, updates the camper, and returns the event. The client:
 
-**Undo**: the toast's Undo calls `record_attendance(camper, 'correction', force_status
-= previous)` with note "undo" — but only directors/admins may correct, so for
-everyone else the *server action* performs the undo under the service role within
-the 6-second window, verifying the last event is the user's own and younger than
-the window. Result: a normal user can undo *their own* last scan immediately,
-never anything older.
+- optimistically updates the flash/card (status, "by you, just now");
+- on error (someone else already acted, or no permission) shows the actual state:
+  "Already checked in by Rivky at 9:10".
 
-**Duplicate scans**: the same camper scanned twice in Arrival mode within 10 s is
-ignored with a soft "already checked in" flash (no second event).
+**Undo**: the toast's Undo reverts the user's own last event if it is younger than
+the undo window (default 6 s, Settings). It is performed by the server action under
+the service role after verifying both conditions; it inserts a `correction` event
+with note "undo" rather than deleting anything. Nobody can undo someone else's
+action or anything older; directors use the Timeline's correction instead.
+
+**Duplicate reads**: the same barcode read twice within 3 s is ignored (camera
+scanners fire repeatedly while the tag is in view).
+
+**Auto-print on first check-in**: templates marked *auto on first check-in* (e.g.
+the name tag) are requested automatically the first time a camper is checked in
+during the session, once. The flash says "Name tag sent to office".
 
 ## 5.5 Bulk actions (directors/admins, Status screen)
 
 - Mark all remaining `expected` as `no_show` (end of program).
-- Mark a whole bunk as `present` (bus arrived, roll call done on paper) — creates
-  one `arrival` event per camper with `method = 'bulk'`.
-- Both require a confirmation with the count.
+- Mark a whole bunk as `present` (roll call done on paper): one `arrival` event per
+  camper with `method = 'bulk'`.
+- Both confirm with the count.
 
 ## 5.6 Status board
 
@@ -111,29 +116,30 @@ division filter).
 Top: count tiles **Expected · Present · Out · Departed · No-show** (tappable
 filters). Then a list, grouped by bunk (or by division for wide scopes):
 
-| Name | Bunk | Status | Since | By | Buzzer | Parent |
-|---|---|---|---|---|---|---|
-| Léa Gérard | F-2 | ● Present | 9:14 | Shmuli L. | 17 | 📞 |
+| Name | Bunk | Status | Since | By | Parent |
+|---|---|---|---|---|---|
+| Léa Gérard | F-2 | ● Present | 9:14 | Shmuli L. | 📞 |
 
-- Status chip + time + who; tap row → camper card (same component as Scan).
+- Status chip + time + who; tap row → camper card.
 - Parent icon opens the contacts sheet (`tel:` links).
 - Search box and division/bunk filters; "only out" and "not yet arrived" quick filters.
 - Live: Realtime subscription on `attendance_events` (insert) and `campers`
-  (update) for the user's scope; rows animate on change; a 60 s background refetch.
+  (update) for the user's scope; rows animate on change; 60 s background refetch.
 - Export: CSV / print view of the current filter (office, directors).
 
 ## 5.7 Camper detail page
 
-Tabs: **Overview** (card + contacts + bunk + flags) · **Timeline** (attendance events,
-buzzer assignments, print jobs, each with actor and time) · **History** (field changes
-from imports and edits, from `camper_history()`) · **Edit** (if `edit` level).
+Tabs: **Overview** (card + contacts + bunk + flags) · **Timeline** (attendance
+events, print jobs, each with actor and time) · **History** (field changes from
+imports and edits, from `camper_history()`) · **Edit** (if `edit` level).
 
 ## 5.8 Failure modes
 
 | Situation | Behaviour |
 |---|---|
-| No network | Card still renders from the cached roster; the action button shows "Pending…" and retries; after 30 s a persistent banner says what is queued. |
-| Barcode damaged | Search by name / code; browse by bunk. |
-| Camper not in system (walk-up) | "Not found" with **Add walk-in** (directors/admins): creates a camper with `source = manual`, flagged on the next import if still absent. |
-| Wrong camper checked in | Undo within 6 s; otherwise a director corrects from the timeline (note required). |
+| No network | Card still renders from the cached roster; the action shows "Pending…" and retries; after 30 s a banner says what is queued. |
+| Barcode damaged or tag lost | Search by name / code; browse by bunk; print a new tag from the card. |
+| Camper not in system (walk-up) | "Not found" with **Add walk-in** (directors/admins): creates a camper flagged `manual`, surfaced on the next import if still absent. |
+| Wrong mode | The flash names the action ("Checked OUT — going home"); Undo within 6 s. |
+| Wrong camper | Undo within 6 s; otherwise a director corrects from the timeline (note required). |
 | Two staff act at once | Second write fails validation; UI shows the real state. |

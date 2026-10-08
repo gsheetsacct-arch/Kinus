@@ -58,8 +58,9 @@ the real schema.
 - Node runtime for `/api/print/*` (Chromium); set `maxDuration = 60` on that route.
   The `@sparticuz/chromium` package stays under the 50 MB function limit; verify in
   the first preview.
-- Cron (`vercel.json`): `/api/cron/print-jobs` every minute, `/api/cron/pager-sweep`
-  every minute, `/api/cron/daily-summary` at the configured hour. Cron routes check
+- Cron (`vercel.json`): `/api/cron/print-jobs` every minute,
+  `/api/cron/daily-summary` at the configured hour (`/api/cron/pager-sweep` only
+  when the pager feature is enabled). Cron routes check
   the `CRON_SECRET` header.
 - Env vars (per environment):
 
@@ -91,7 +92,7 @@ the real schema.
 
 ## 9.6 Operations during the program
 
-- Status page for staff: `/health` shows DB reachable, bridge online, last cron run,
+- Status page for staff: `/health` shows DB reachable, last cron run,
   queue depths. Directors check it in the morning.
 - A "today" switch in Settings (arrival day / normal / pickup day) changes the
   default scan mode on all devices.

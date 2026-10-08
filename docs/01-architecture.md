@@ -46,7 +46,7 @@
                 └───────────────────┬────────────────┘
                                     │ realtime subscription (queue table)
                           ┌─────────▼──────────┐
-                          │  On-site pager     │   optional, see doc 7
+                          │  On-site pager     │   ON HOLD, see doc 7
                           │  bridge (laptop /  │──► pager transmitter
                           │  Raspberry Pi)     │   (serial / USB / LAN)
                           └────────────────────┘
@@ -108,7 +108,7 @@ There is no long-running worker. Three mechanisms cover it:
    kicked immediately by the action that created them). Batch tag generation for a
    whole division runs this way.
 3. **Queue table + on-site bridge** for the pager: `page_requests` rows are consumed
-   by a small Node script on the camp's network (doc 7).
+   by a small Node script on the camp's network (doc 7, on hold).
 
 ## 1.5 Cross-cutting concerns
 
@@ -127,6 +127,8 @@ key; see [doc 4](04-import-and-sync.md).
   regular forms, so "כהן" and "כהנ" match and "Léa" matches "lea".
 - Display uses `dir="auto"` per field so a Hebrew name right-aligns inside an
   English UI without flipping the whole layout.
+- Import accepts UTF-8, UTF-16 and legacy Windows-1255/1252 files and refuses
+  files whose Hebrew/French was already destroyed by a re-save (doc 4).
 - Fonts: bundle Noto Sans + Noto Sans Hebrew for the UI and for PDFs so rendering is
   identical everywhere.
 
@@ -163,7 +165,7 @@ kinus/
 │   │   ├── campers/[id]/     # camper detail
 │   │   ├── lists/            # bunk / HC / DH lists from presets
 │   │   ├── print/            # queue (office), templates (admin)
-│   │   ├── buzzers/          # handout, lookup, page
+│   │   ├── buzzers/          # handout, lookup, page (on hold)
 │   │   └── admin/            # imports, users & scopes, divisions/bunks, settings
 │   └── api/                  # route handlers: print render, cron, pager bridge, export
 ├── components/
@@ -172,14 +174,14 @@ kinus/
 │   ├── import/               # parser, mapping, matcher, diff engine
 │   ├── attendance/           # status machine (pure functions)
 │   ├── print/                # template model, HTML renderer, barcode
-│   ├── pager/                # provider interface + implementations
+│   ├── pager/                # provider interface + implementations (on hold)
 │   └── fields.ts             # field catalog (labels, sensitivity, list availability)
 ├── emails/                   # React Email templates
 ├── supabase/
 │   ├── migrations/
 │   ├── seed.sql
 │   └── config.toml
-├── bridge/                   # optional on-site pager bridge (separate package)
+├── bridge/                   # on-site pager bridge (separate package, on hold)
 └── docs/
 ```
 
@@ -191,6 +193,6 @@ kinus/
 | A2 | Event-sourced attendance with a denormalized status column | Status column only | Need "who checked them in/out last" and a full timeline; a trigger keeps the fast-read column current. |
 | A3 | Full re-import with diff preview, never delete | Incremental edits in the app | Matches how the roster is actually managed. Campers missing from a new export are flagged, not removed. |
 | A4 | Scopes as rows (`user × division × bunk? × level`) | Role-only RBAC | One person can be head counselor of one division and a plain scanner elsewhere; rows express that directly and RLS can evaluate them. |
-| A5 | Pager integration via a queue table and an on-site bridge | Direct API call from Vercel | Pager transmitters sit on the camp LAN or a serial port; Vercel cannot reach them. The queue also doubles as the paging log. The manual lookup page is always available. |
+| A5 | Pager integration via a queue table and an on-site bridge (on hold) | Direct API call from Vercel | Pager transmitters sit on the camp LAN or a serial port; Vercel cannot reach them. The queue also doubles as the paging log. The manual lookup page is always available. |
 | A6 | One Supabase project, `sessions` table to separate years | A project per year | Keeps staff accounts, templates, and presets across seasons; archiving a session is one flag. |
 | A7 | Column-mapping presets for import | Hard-coded column names | The export format is not known yet and may change; a saved mapping makes future uploads one click. |
