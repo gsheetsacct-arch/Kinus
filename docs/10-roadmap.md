@@ -5,13 +5,13 @@
 Effort is for one developer working with the plan above; each phase ends in
 something usable.
 
-### Phase 0 — Foundations (2–3 days)
+### Phase 0 — Foundations — **done**
 - Repo scaffold: Next.js, Tailwind, shadcn/ui, Supabase client, typed env, CI.
 - Supabase staging + prod projects, migration `0001` applied, types generated.
 - Auth: login, invite flow, `profiles`, first owner bootstrap.
-- Vercel project, Resend domain, env vars, deploy hook pipeline.
+- Vercel project, Resend domain, env vars, deploy hook pipeline (workflows in repo; the Supabase/Vercel/Resend accounts themselves still need to be created, see doc 9).
 
-### Phase 1 — Roster and people (4–6 days)
+### Phase 1 — Roster and people — **done**
 - Import wizard end-to-end with the real export (mapping preset, encoding guard,
   sparse rows, diff preview, apply, report, history on the camper page).
 - Divisions/bunks admin; users & scopes admin; field visibility settings.

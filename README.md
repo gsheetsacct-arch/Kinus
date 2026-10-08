@@ -9,8 +9,34 @@ re-uploaded whenever it changes.
 
 ## Status
 
-Planning. This repository currently holds the architecture and UI/UX plan and
-a draft database schema. No application code yet.
+**Phases 0 and 1 are built** (foundations, roster, people, lists). Phase 2
+(check-in/out, status board, tags and printing) is next. See
+[docs/10-roadmap.md](docs/10-roadmap.md).
+
+What works today:
+
+- Sign-in (password or emailed link), staff invites, roles and per-division/bunk access
+- Sessions, divisions and bunks (created by import, editable)
+- Roster import: upload → map columns → field-by-field diff preview → apply → report,
+  with conflict resolution, "not in export" flagging, encoding recovery and the
+  lost-text guard
+- Camper search (Hebrew/French/English, accent- and niqqud-insensitive) and detail
+  pages with contacts, timeline, change history and scoped editing
+- Lists from presets (counselor / head counselor / division head / office / bus),
+  grouped by bunk, printable, CSV export; preset editor; field-visibility matrix
+
+## Running it
+
+```bash
+cp .env.example .env.local        # fill in the Supabase keys
+npm install
+npm run dev                       # http://localhost:3000
+npm test                          # import engine unit tests
+npm run typecheck && npm run lint
+supabase/tests/run.sh postgresql://postgres:postgres@localhost:5432   # schema + RLS + import tests
+```
+
+First-time setup is in [docs/09-deployment.md](docs/09-deployment.md#92-supabase-setup-once).
 
 ## Documents
 
@@ -27,7 +53,7 @@ a draft database schema. No application code yet.
 | 9 | [Deployment](docs/09-deployment.md) | Supabase, GitHub, Vercel, Resend setup, environments, CI, secrets |
 | 10 | [Roadmap & open questions](docs/10-roadmap.md) | Build phases and the questions that need answers from you |
 
-Draft schema: [`supabase/migrations/0001_initial_schema.sql`](supabase/migrations/0001_initial_schema.sql)
+Schema: [`supabase/migrations/`](supabase/migrations/) (validated by `supabase/tests/run.sh` on every CI run)
 
 ## Stack (summary)
 

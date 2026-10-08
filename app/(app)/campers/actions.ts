@@ -1,0 +1,150 @@
+"use server";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/server";
+import { getActiveSession, requireAdmin, requireUser } from "@/lib/auth/current-user";
+import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
+import { parsePhone } from "@/lib/import/mapping";
+import type { Database } from "@/lib/supabase/database.types";
+
+type CamperUpdate = Database["public"]["Tables"]["campers"]["Update"];
+
+const opt = z.string().trim().optional().transform((v) => (v ? v : null));
+const tri = z.enum(["", "true", "false"]).optional().transform((v) => (v === "true" ? true : v === "false" ? false : null));
+
+const edit = z.object({
+  id: z.string().uuid(),
+  first_name: z.string().trim().min(1),
+  last_name: z.string().trim().min(1),
+  bunk_id: z.string().optional(),
+  grade: opt,
+  tshirt_size: opt,
+  local_address: opt,
+  local_address_cross_streets: opt,
+  medical_notes: opt,
+  allergies: opt,
+  has_allergies: tri,
+  has_epipen: tri,
+  has_medications: tri,
+  notes_from_parents: opt,
+  staff_notes: opt,
+  can_edit_sensitive: z.enum(["1", "0"]).default("0"),
+});
+
+export async function updateCamper(fd: FormData): Promise<ActionResult> {
+  await requireUser();
+  try {
+    const d = edit.parse(Object.fromEntries(fd));
+    const supabase = await createClient();
+    const { data: current } = await supabase.from("campers").select("bunk_id").eq("id", d.id).maybeSingle();
+    if (!current) return fail("You cannot edit this camper.");
+    const patch: CamperUpdate = {
+      first_name: d.first_name,
+      last_name: d.last_name,
+      grade: d.grade,
+      tshirt_size: d.tshirt_size,
+      staff_notes: d.staff_notes,
+    };
+    if (d.can_edit_sensitive === "1") {
+      Object.assign(patch, {
+        local_address: d.local_address,
+        local_address_cross_streets: d.local_address_cross_streets,
+        medical_notes: d.medical_notes,
+        allergies: d.allergies,
+        has_allergies: d.has_allergies,
+        has_epipen: d.has_epipen,
+        has_medications: d.has_medications,
+        notes_from_parents: d.notes_from_parents,
+      });
+    }
+    const newBunk = d.bunk_id === undefined ? undefined : d.bunk_id || null;
+    if (newBunk !== undefined && newBunk !== current.bunk_id) {
+      patch.bunk_id = newBunk;
+      patch.bunk_locked_by_staff = true;
+    }
+    const { error } = await supabase.from("campers").update(patch).eq("id", d.id);
+    if (error) throw error;
+    revalidatePath(`/campers/${d.id}`);
+    return ok("Saved.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+const contact = z.object({
+  camper_id: z.string().uuid(),
+  role: z.enum(["mother", "father", "guardian", "emergency", "host", "authorized_pickup"]),
+  name: opt,
+  phone: opt,
+  email: opt,
+});
+
+export async function addContact(fd: FormData): Promise<ActionResult> {
+  await requireUser();
+  try {
+    const d = contact.parse(Object.fromEntries(fd));
+    if (!d.name && !d.phone) return fail("Give a name or a phone number.");
+    const supabase = await createClient();
+    const { data: existing } = await supabase.from("camper_contacts").select("slot").eq("camper_id", d.camper_id).eq("role", d.role);
+    const slot = Math.max(0, ...(existing ?? []).map((e) => e.slot)) + 1;
+    const { error } = await supabase.from("camper_contacts").insert({
+      camper_id: d.camper_id,
+      role: d.role,
+      slot,
+      name: d.name,
+      phone: d.phone,
+      phone_e164: parsePhone(d.phone, "US"),
+      email: d.email?.toLowerCase() ?? null,
+      source: "manual",
+    });
+    if (error) throw error;
+    revalidatePath(`/campers/${d.camper_id}`);
+    return ok("Contact added.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+export async function removeContact(fd: FormData): Promise<ActionResult> {
+  await requireUser();
+  const id = String(fd.get("id"));
+  const camperId = String(fd.get("camper_id"));
+  const supabase = await createClient();
+  const { error } = await supabase.from("camper_contacts").delete().eq("id", id).eq("source", "manual");
+  if (error) return fail(error.message);
+  revalidatePath(`/campers/${camperId}`);
+  return ok("Contact removed.");
+}
+
+export async function archiveCamper(fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const id = String(fd.get("id"));
+  const restore = fd.get("restore") === "1";
+  const supabase = await createClient();
+  const { error } = await supabase.from("campers").update({ archived_at: restore ? null : new Date().toISOString() }).eq("id", id);
+  if (error) return fail(error.message);
+  revalidatePath("/", "layout");
+  return ok(restore ? "Camper restored." : "Camper archived.");
+}
+
+const walkIn = z.object({ first_name: z.string().trim().min(1), last_name: z.string().trim().min(1), division_id: z.string().uuid(), bunk_id: z.string().optional() });
+
+export async function createWalkIn(fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const session = await getActiveSession();
+  if (!session) return fail("No active session.");
+  try {
+    const d = walkIn.parse(Object.fromEntries(fd));
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("campers")
+      .insert({ session_id: session.id, first_name: d.first_name, last_name: d.last_name, division_id: d.division_id, bunk_id: d.bunk_id || null, bunk_locked_by_staff: Boolean(d.bunk_id), in_latest_import: false })
+      .select("id")
+      .single();
+    if (error) throw error;
+    revalidatePath("/campers");
+    return ok("Camper added (not from an import).", `/campers/${data.id}`);
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}

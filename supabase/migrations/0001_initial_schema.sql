@@ -485,6 +485,7 @@ language sql stable security definer set search_path = public as $$
       join staff_scopes s on s.user_id = auth.uid()
                          and s.division_id = c.division_id
                          and (s.bunk_id is null or s.bunk_id = c.bunk_id)
+      join profiles p on p.id = s.user_id and p.is_active
       where c.id = p_camper_id
         and level_rank(s.access_level) >= level_rank(p_needed)
     )
@@ -493,7 +494,7 @@ $$;
 create or replace function can_access_division(p_division_id uuid, p_needed access_level) returns boolean
 language sql stable security definer set search_path = public as $$
   select coalesce(level_rank(global_level()) >= level_rank(p_needed), false)
-    or exists (select 1 from staff_scopes s
+    or exists (select 1 from staff_scopes s join profiles p on p.id = s.user_id and p.is_active
                where s.user_id = auth.uid() and s.division_id = p_division_id
                  and level_rank(s.access_level) >= level_rank(p_needed))
 $$;
@@ -506,6 +507,7 @@ language sql stable security definer set search_path = public as $$
     where fv.field_group = p_group
       and ( my_role() = any(fv.global_roles)
             or exists (select 1 from staff_scopes s join campers c on c.id = p_camper_id
+                       join profiles p on p.id = s.user_id and p.is_active
                        where s.user_id = auth.uid() and s.division_id = c.division_id
                          and (s.bunk_id is null or s.bunk_id = c.bunk_id)
                          and s.scope_role = any(fv.scope_roles)) )

@@ -1,0 +1,79 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/supabase/database.types";
+import { FIELD_BY_KEY, UNGATED_GROUPS, getFieldValue } from "@/lib/fields";
+import { presetAudiencesFor, visibleDivisionIds, visibleFieldGroups, type CurrentUser, type FieldVisibilityRow } from "@/lib/auth/permissions";
+import { listCampers, type CamperRow } from "./campers";
+import { STATUS_LABEL } from "@/lib/attendance/machine";
+
+type DB = SupabaseClient<Database>;
+
+export type ListPreset = { id: string; name: string; audience: string; columns: string[]; sort: { field: string; dir: string }[]; group_by: string | null; is_default: boolean };
+
+export type BuiltList = {
+  preset: ListPreset;
+  columns: { key: string; label: string }[];
+  groups: { title: string; rows: { camper: CamperRow; cells: (string | boolean | null)[] }[] }[];
+  scopeLabel: string;
+};
+
+export async function getPresetsFor(supabase: DB, user: CurrentUser): Promise<ListPreset[]> {
+  const audiences = presetAudiencesFor(user);
+  const { data } = await supabase.from("list_presets").select("id, name, audience, columns, sort, group_by, is_default").in("audience", audiences).order("audience").order("name");
+  return (data ?? []).map((p) => ({ ...p, columns: p.columns as string[], sort: p.sort as { field: string; dir: string }[] }));
+}
+
+const cmp = (a: string | boolean | null, b: string | boolean | null) => String(a ?? "").localeCompare(String(b ?? ""), undefined, { numeric: true, sensitivity: "base" });
+
+/** Builds a list: scope-filtered campers, visible columns only, grouped and sorted per preset. */
+export async function buildList(
+  supabase: DB,
+  user: CurrentUser,
+  preset: ListPreset,
+  scope: { sessionId: string; divisionId?: string; bunkId?: string },
+  fv: FieldVisibilityRow[],
+): Promise<BuiltList> {
+  const campers = await listCampers(supabase, { sessionId: scope.sessionId, divisionId: scope.divisionId, bunkId: scope.bunkId });
+  const allowedDivs = visibleDivisionIds(user);
+  const { data: divisions } = await supabase.from("divisions").select("id, name").eq("session_id", scope.sessionId);
+  const divIds = (divisions ?? []).map((d) => d.id).filter((id) => !allowedDivs || allowedDivs.includes(id));
+  // a column is shown if the user may see its group in at least one division in scope
+  const groupsAnywhere = new Set<string>();
+  for (const id of scope.divisionId ? [scope.divisionId] : divIds) for (const g of visibleFieldGroups(user, fv, id, scope.bunkId ?? null)) groupsAnywhere.add(g);
+  const columns = preset.columns
+    .map((k) => FIELD_BY_KEY[k])
+    .filter((f): f is NonNullable<typeof f> => Boolean(f))
+    .filter((f) => UNGATED_GROUPS.includes(f.group) || groupsAnywhere.has(f.group))
+    .map((f) => ({ key: f.key, label: f.label }));
+
+  const sortKeys = preset.sort.length ? preset.sort : [{ field: "last_name", dir: "asc" }];
+  const sorted = [...campers].sort((a, b) => {
+    for (const s of sortKeys) {
+      const r = cmp(getFieldValue(a, s.field), getFieldValue(b, s.field));
+      if (r !== 0) return s.dir === "desc" ? -r : r;
+    }
+    return 0;
+  });
+  const groupKey = preset.group_by;
+  const groupsMap = new Map<string, BuiltList["groups"][number]>();
+  for (const c of sorted) {
+    const title = groupKey ? String(getFieldValue(c, groupKey) ?? (groupKey === "bunk" ? "Unassigned" : "—")) : "";
+    if (!groupsMap.has(title)) groupsMap.set(title, { title, rows: [] });
+    groupsMap.get(title)!.rows.push({
+      camper: c,
+      cells: columns.map((col) => {
+        const v = getFieldValue(c, col.key);
+        if (col.key === "status" && typeof v === "string") return STATUS_LABEL[v as keyof typeof STATUS_LABEL] ?? v;
+        return v;
+      }),
+    });
+  }
+  const divName = scope.divisionId ? (divisions ?? []).find((d) => d.id === scope.divisionId)?.name : null;
+  let bunkName: string | null = null;
+  if (scope.bunkId) bunkName = (await supabase.from("bunks").select("name").eq("id", scope.bunkId).maybeSingle()).data?.name ?? null;
+  return {
+    preset,
+    columns,
+    groups: [...groupsMap.values()],
+    scopeLabel: [divName, bunkName].filter(Boolean).join(" · ") || "All divisions",
+  };
+}

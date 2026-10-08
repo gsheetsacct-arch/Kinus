@@ -25,16 +25,31 @@ cheaper, and staging can hold a scrubbed copy of the roster for testing imports.
    office+admins to read `print-output`.
 5. Realtime: enable for `attendance_events`, `campers`, `print_jobs`, `page_requests`
    (`alter publication supabase_realtime add table …`, add to migration 0002).
-6. Create the first owner: sign up via the dashboard, then
-   `update profiles set global_role = 'owner'` (a seed script does this from an env
-   var `BOOTSTRAP_OWNER_EMAIL`).
+6. Create the first owner:
+   ```bash
+   npm run bootstrap-owner -- you@example.com "Your Name"
+   ```
+   (reads `.env.local`; stores the email in `settings.bootstrap_owner` and sends a
+   Supabase invite that lands on `/set-password`). Every later staff member is
+   invited from **Staff → Invite** inside the app.
 7. Database backups: Supabase daily backups (Pro plan) plus a nightly
    `pg_dump` GitHub Action to a private artifact during the program week.
 
 Migrations: Supabase CLI. `supabase/migrations/*.sql` are applied by CI
-(`supabase db push`) on merge to `main` (prod) and on PR (staging). Generated
-TypeScript types (`supabase gen types`) are committed so the app compiles against
-the real schema.
+(`supabase db push`) on merge to `main` (prod) and on PR (staging) — see
+`.github/workflows/db-*.yml`; they need the `SUPABASE_ACCESS_TOKEN` and
+`SUPABASE_DB_PASSWORD` secrets and the `SUPABASE_PROJECT_REF` variable on the
+`staging` / `production` GitHub environments. For the very first deploy you can
+also run `supabase link && supabase db push` from your machine.
+
+Generated TypeScript types (`lib/supabase/database.types.ts`) are committed;
+regenerate after a schema change with
+`supabase gen types typescript --db-url <url> --schema public > lib/supabase/database.types.ts`.
+
+Auth email templates: point the **Invite user** and **Magic link** templates at
+`{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite` (resp.
+`type=magiclink`) or leave the defaults, which go through `/auth/callback`;
+both routes exist.
 
 ## 9.3 GitHub
 
@@ -73,7 +88,6 @@ the real schema.
 | `EMAIL_FROM` | server | `Kinus Tags <tags@your-domain>` |
 | `CRON_SECRET` | server | |
 | `APP_URL` | server | links in emails |
-| `BOOTSTRAP_OWNER_EMAIL` | server | first-run only |
 
 - Custom domain (e.g. `kinus.your-domain`), HTTPS automatic. PWA requires HTTPS,
   which previews and prod both have.
