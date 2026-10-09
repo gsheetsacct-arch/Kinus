@@ -26,7 +26,7 @@ const unescapeRe = (s: string) => s.replace(/\\([.*+?^${}()|[\]\\])/g, "$1");
 function describeTransform(t: Transform, maps: ValueMap[]): string {
   if (t.type === "value_map") return `convert with “${maps.find((m) => m.id === t.map_id)?.name ?? "a deleted table"}”`;
   if (t.type === "case") return t.mode === "upper" ? "CAPITALS" : t.mode === "lower" ? "lower case" : "Title Case";
-  return isPlain(t) ? `replace “${unescapeRe(t.pattern)}” with “${t.replacement}”` : `pattern ${t.pattern} → ${t.replacement || "nothing"}`;
+  return isPlain(t) ? `replace “${unescapeRe(t.pattern)}” with “${t.replacement}”` : "reshape it (an advanced pattern; open to see it)";
 }
 
 export function FieldsEditor({ fields, maps, catalog, sample, sampleName }: { fields: FieldRow[]; maps: ValueMap[]; catalog: Source[]; sample: Record<string, string>; sampleName: string }) {
@@ -36,7 +36,15 @@ export function FieldsEditor({ fields, maps, catalog, sample, sampleName }: { fi
   const mapById = React.useMemo(() => new Map(maps.map((m) => [m.id, m])), [maps]);
   const raw = (source: string) => (source.includes("{{") ? fill(source, (k) => sample[k] ?? "") : (sample[source] ?? ""));
   const example = (f: Pick<FieldRow, "source_field" | "transforms">) => applyTransforms(raw(f.source_field), f.transforms, mapById);
-  const sourceLabel = (s: string) => catalog.find((c) => c.key === s)?.label ?? s;
+  const sourceLabel = (s: string) => (s.startsWith("source.") ? `the export's “${s.slice(7)}” column` : (catalog.find((c) => c.key === s)?.label ?? fields.find((f) => f.key === s)?.label ?? s));
+  // "{{source.ppa.hebrew_name|FIRST}} {{LAST}}" → "the export's “ppa.hebrew_name” column (or else First name) + Last name"
+  const describeSource = (s: string) =>
+    [...s.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)]
+      .map((m) => {
+        const [first, ...rest] = m[1].split("|").map((k) => sourceLabel(k.trim()));
+        return rest.length ? `${first} (or else ${rest.join(", or ")})` : first;
+      })
+      .join(" + ");
 
   return (
     <div className="space-y-10">
@@ -76,7 +84,7 @@ export function FieldsEditor({ fields, maps, catalog, sample, sampleName }: { fi
                           <span className="block text-xs text-muted-foreground">{f.label}</span>
                         </span>
                         <span className="text-sm text-muted-foreground">
-                          From {f.source_field.includes("{{") ? <span className="font-mono">{f.source_field}</span> : sourceLabel(f.source_field)}
+                          From {f.source_field.includes("{{") ? describeSource(f.source_field) : sourceLabel(f.source_field)}
                           {f.transforms.length > 0 && <>, then {f.transforms.map((t) => describeTransform(t, maps)).join(", then ")}</>}
                         </span>
                         <span className="flex items-center gap-2 truncate text-sm" dir="auto">
@@ -84,6 +92,7 @@ export function FieldsEditor({ fields, maps, catalog, sample, sampleName }: { fi
                           {example(f) || <span className="text-muted-foreground">(empty)</span>}
                         </span>
                       </button>
+                      <label className="flex shrink-0 flex-col items-center gap-1 text-[11px] text-muted-foreground">
                       <Switch
                         checked={f.enabled}
                         disabled={pending}
@@ -95,8 +104,10 @@ export function FieldsEditor({ fields, maps, catalog, sample, sampleName }: { fi
                             router.refresh();
                           })
                         }
-                        aria-label={`{{${f.key}}} on the merge list`}
+                        aria-label={`${f.label} on the mail merge list`}
                       />
+                        {f.enabled ? "On list" : "Off list"}
+                      </label>
                     </li>
                   ))}
                 </ul>

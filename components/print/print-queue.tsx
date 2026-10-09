@@ -20,6 +20,8 @@ export type QueueJob = {
   pdf: boolean;
   printedAt: string | null;
   note: string | null;
+  /** The campers, for a request of one to three tags. */
+  who: string | null;
   template: string;
   by: string;
   printedBy: string | null;
@@ -95,21 +97,29 @@ export function PrintQueue({ jobs, show }: { jobs: QueueJob[]; show: string }) {
                     return n;
                   })
                 }
-                aria-label={`Select ${j.template} for ${j.by}`}
+                aria-label={`Select ${j.template} for ${j.who ?? j.note ?? "this batch"}`}
               />
               <Link href={`/print/jobs/${j.id}`} className="min-w-0 flex-1 basis-60">
                 <span className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">
-                    {j.count} × {j.template}
+                  <span className="font-medium" dir="auto">
+                    {j.who ?? j.note ?? "Batch"}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {j.template}
+                    {j.count > 1 && ` · ${j.count} tags`}
                   </span>
                   <Badge variant={st.variant}>{st.label}</Badge>
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">
-                  {now ? formatWhen(j.at, now) : " "} · {j.by}
+                  {now ? formatWhen(j.at, now) : " "} · asked by {j.by}
                   {j.to && ` · to ${j.to}`}
                   {j.printedAt && now && ` · printed ${formatWhen(j.printedAt, now)}${j.printedBy ? ` by ${j.printedBy}` : ""}`}
                 </span>
-                {j.error && <span className={cn("block text-xs", j.status === "failed" ? "text-destructive" : "text-amber-700 dark:text-amber-400")}>{j.error}</span>}
+                {j.error && (
+                  <span className={cn("block text-xs", j.status === "failed" ? "text-destructive" : "text-amber-700 dark:text-amber-400")} title={j.error}>
+                    {j.status === "failed" ? "Couldn't make the tags. Try again, or open it to see why." : "Couldn't email the office. You can still print it here."}
+                  </span>
+                )}
               </Link>
               <span className="flex shrink-0 flex-wrap gap-1.5">
                 {j.status !== "cancelled" && j.status !== "queued" && j.status !== "rendering" && (
@@ -125,13 +135,13 @@ export function PrintQueue({ jobs, show }: { jobs: QueueJob[]; show: string }) {
                   </Button>
                 )}
                 {open && j.status !== "queued" && j.status !== "rendering" && (
-                  <Button size="sm" variant="outline" onClick={() => run(() => markPrinted([j.id]))} title="Mark printed">
-                    <CheckCheck /> Done
+                  <Button size="sm" variant="outline" onClick={() => run(() => markPrinted([j.id]))}>
+                    <CheckCheck /> Mark printed
                   </Button>
                 )}
                 {(j.status === "failed" || (j.status === "ready" && j.error)) && (
                   <Button size="sm" variant="outline" onClick={() => run(() => resendJob(j.id))}>
-                    <RotateCcw /> Try again
+                    <RotateCcw /> {j.status === "failed" ? "Try again" : "Email again"}
                   </Button>
                 )}
                 {j.status === "printed" && (

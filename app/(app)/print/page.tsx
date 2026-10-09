@@ -2,7 +2,6 @@ import Link from "next/link";
 import { Printer } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
-import { Button } from "@/components/ui/button";
 import { PrintQueue, type QueueJob } from "@/components/print/print-queue";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
@@ -37,6 +36,17 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
     officeEmail(),
     supabase.from("print_jobs").select("id", { count: "exact", head: true }).eq("session_id", session.id).eq("status", "failed"),
   ]);
+  // a request for one camper (or a few) names them; a batch says what it covered (its note)
+  const few = (data ?? []).filter((j) => j.item_count <= 3).map((j) => j.id);
+  const { data: items } = few.length
+    ? await supabase.from("print_job_items").select("job_id, campers(first_name, last_name, bunks(name))").in("job_id", few)
+    : { data: [] as never[] };
+  const whoByJob = new Map<string, string[]>();
+  for (const it of items ?? []) {
+    const c = it.campers as { first_name: string; last_name: string; bunks: { name: string } | null } | null;
+    if (!c) continue;
+    whoByJob.set(it.job_id, [...(whoByJob.get(it.job_id) ?? []), `${c.first_name} ${c.last_name}${c.bunks ? ` (${c.bunks.name})` : ""}`]);
+  }
   const jobs: QueueJob[] = (data ?? []).map((j) => ({
     id: j.id,
     status: j.status,
@@ -47,6 +57,7 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
     pdf: Boolean(j.pdf_path),
     printedAt: j.printed_at,
     note: j.note,
+    who: whoByJob.get(j.id)?.join(", ") ?? null,
     template: (j.print_templates as { name: string } | null)?.name ?? "Deleted template",
     by: (j.requester as { full_name: string } | null)?.full_name ?? "—",
     printedBy: (j.printer as { full_name: string } | null)?.full_name ?? null,
@@ -56,11 +67,6 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
       <PageHeader
         title="Print queue"
         description={office.to ? `Tag requests are emailed to ${office.to} as a PDF, and wait here until marked printed.` : "No office email is set, so requests wait here. Set one in Settings."}
-        actions={
-          <Button asChild size="sm">
-            <Link href="/print/batch">Print a batch</Link>
-          </Button>
-        }
       />
       <div className="mb-4 flex flex-wrap gap-2">
         {(Object.keys(SHOW) as (keyof typeof SHOW)[]).map((k) => (

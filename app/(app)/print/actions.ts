@@ -87,6 +87,17 @@ const batchSchema = z.object({
   deliver_to: z.string().trim().optional(),
 });
 
+const WHICH_SHORT: Record<BatchWhich, string | null> = { all: null, not_printed: "not printed before", present: "here now", arrived_today: "arrived today" };
+
+/** "Bunk Tes", "Division 2", "American camp": what a batch covered, for the queue. */
+async function placeName(db: Awaited<ReturnType<typeof createClient>>, where: string) {
+  const [kind, id] = where.split(":");
+  if (kind === "b" && id) return (await db.from("bunks").select("name, divisions(name)").eq("id", id).maybeSingle()).data?.name ?? "A bunk";
+  if (kind === "d" && id) return (await db.from("divisions").select("name").eq("id", id).maybeSingle()).data?.name ?? "A division";
+  const camp = await getCampContext();
+  return camp.current ? `All of ${camp.current.name}` : "Whole camp";
+}
+
 async function resolveWhere(where: string) {
   const camp = await getCampContext();
   const [kind, id] = where.split(":");
@@ -118,7 +129,7 @@ export async function createBatch(fd: FormData): Promise<ActionResult> {
       camperIds: ids,
       copies: d.copies,
       deliverTo: d.deliver === "email" ? d.deliver_to || null : user.email,
-      note: d.deliver === "here" ? "Printed from the print area" : null,
+      note: [await placeName(supabase, d.where), WHICH_SHORT[d.which]].filter(Boolean).join(" · "),
     });
     if (d.deliver === "email") {
       const base = await appUrl();
