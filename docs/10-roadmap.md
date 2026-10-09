@@ -31,12 +31,11 @@ something usable.
   loading states everywhere.
 - Still to do from this phase: **converting your Publisher templates** (waiting for
   the files: export the design without merge fields as PNG, and tell me which
-  fields go where) and the **PWA shell** (moved to phase 3).
+  fields go where). The installable app (PWA) was dropped by decision.
 - **Milestone: a full dry run of arrival, a mid-day checkout, pickup, and tag
   requests from the card.**
 
 ### Phase 3 — Hardening (2–4 days)
-- PWA shell (installable, cached roster for spotty Wi-Fi at the gate).
 - Health page, daily summary email, Resend webhooks, Playwright test of the
   check-in/out flow, load check with a 600-camper fixture, staff walkthrough.
 - **Milestone: ready for the program.**

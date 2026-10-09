@@ -159,6 +159,33 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"camper_followups": {
+                  Row: {
+                    "camper_id": string,"note": string | null,"until": string | null,"updated_at": string,"updated_by": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "camper_id": string,"note"?: string | null,"until"?: string | null,"updated_at"?: string,"updated_by"?: string | null
+                  }
+                  Update: {
+                    "camper_id"?: string,"note"?: string | null,"until"?: string | null,"updated_at"?: string,"updated_by"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "camper_followups_camper_id_fkey"
+      columns: ["camper_id"]
+isOneToOne: true
+      referencedRelation: "campers"
+      referencedColumns: ["id"]
+    },
+    {
+      foreignKeyName: "camper_followups_updated_by_fkey"
+      columns: ["updated_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"camper_contacts": {
                   Row: {
                     "camper_id": string,"can_pickup": boolean,"created_at": string,"email": string | null,"id": string,"is_primary": boolean,"name": string | null,"phone": string | null,"phone_e164": string | null,"role": Database["public"]['Enums']["contact_role"],"slot": number,"source": Database["public"]['Enums']["record_source"]

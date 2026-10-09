@@ -1,19 +1,21 @@
 "use client";
 import * as React from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Phone, Radio, Search, X } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, ChevronRight, Phone, Radio, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { CamperCard, type TemplateButton } from "@/components/scan/camper-card";
-import { countStatuses, decodeScope, encodeScope, groupRows, inScope, scopeExists, type BoardScope } from "@/lib/attendance/board";
+import { countStatuses, decodeScope, groupRows, inScope, scopeExists, type BoardScope } from "@/lib/attendance/board";
+import { ScopeSelect, useScope } from "./scope-select";
 import { EVENT_LABEL, type AttendanceEventType, type CamperStatus } from "@/lib/attendance/machine";
 import type { BoardRow } from "@/lib/data/board";
 import { matchScore, searchEntry } from "@/lib/search";
 import { createClient } from "@/lib/supabase/client";
-import { cn, formatWhen } from "@/lib/utils";
+import { CAMP_TIME_ZONE, cn, formatWhen } from "@/lib/utils";
+import { campClock, missingStates, type Followup, type MissingRules, type MissingState } from "@/lib/attendance/missing";
 import { boardChanges, bulkAttendance } from "@/app/(app)/status/actions";
 
 type Tree = { groups: { id: string; name: string }[]; divisions: { id: string; name: string; group_id: string | null; bunks: { id: string; name: string }[] }[] };
@@ -57,6 +59,8 @@ export function StatusBoard({
   canBulk,
   canScan,
   templates,
+  rules,
+  followups,
 }: {
   rows: BoardRow[];
   tree: Tree;
@@ -66,10 +70,12 @@ export function StatusBoard({
   canBulk: boolean;
   canScan: boolean;
   templates: TemplateButton[];
+  rules: MissingRules;
+  followups: Record<string, Followup>;
 }) {
   const [rows, setRows] = React.useState(initialRows);
-  const [scope, setScope] = React.useState<BoardScope>(defaultScope);
-  const [status, setStatus] = React.useState<CamperStatus | "">("");
+  const [scope, chooseScopeRaw] = useScope(SCOPE_KEY, defaultScope, (x) => scopeExists(x, tree), decodeScope);
+  const [status, setStatus] = React.useState<CamperStatus | "">("present");
   const [q, setQ] = React.useState("");
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [open, setOpen] = React.useState<string | null>(null);
@@ -80,20 +86,9 @@ export function StatusBoard({
   const now = useNow();
   React.useEffect(() => setRows(initialRows), [initialRows]);
 
-  // remembered view on this device (if it still exists)
-  React.useEffect(() => {
-    try {
-      const s = decodeScope(localStorage.getItem(SCOPE_KEY));
-      if (s && scopeExists(s, tree)) setScope(s);
-    } catch {}
-  }, [tree]);
   const chooseScope = (v: string) => {
-    const s = decodeScope(v) ?? { kind: "all" };
-    setScope(s);
+    chooseScopeRaw(v);
     setSelected(new Set());
-    try {
-      localStorage.setItem(SCOPE_KEY, v);
-    } catch {}
   };
 
   // live: a push from the database when anyone checks a camper in or out, plus a slow poll as a safety net
@@ -136,6 +131,9 @@ export function StatusBoard({
   const index = React.useMemo(() => new Map(rows.map((r) => [r.id, searchEntry(r.name, r.code, r.phones.map((p) => p.tel))])), [rows]);
   const scoped = React.useMemo(() => rows.filter((r) => inScope(r, scope, tree)), [rows, scope, tree]);
   const counts = countStatuses(scoped);
+  // who should be checked up on, recomputed as check-ins arrive
+  const flags = React.useMemo(() => (now ? missingStates(scoped, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE)) : new Map<string, MissingState>()), [scoped, rules, followups, now]);
+  const toCheck = [...flags.values()].filter((f) => f.kind === "check").length;
   const shown = React.useMemo(() => {
     const out = scoped.filter((r) => (!status || r.status === status) && (!q.trim() || matchScore(index.get(r.id)!, q) > 0));
     return out.sort((a, b) => a.last.localeCompare(b.last) || a.name.localeCompare(b.name));
@@ -153,39 +151,10 @@ export function StatusBoard({
       return next;
     });
 
-  // scope choices: only places that have campers this person can see
-  const withCampers = React.useMemo(() => {
-    const d = new Set(rows.map((r) => r.divisionId));
-    const b = new Set(rows.map((r) => r.bunkId));
-    return { d, b };
-  }, [rows]);
-  const divisions = tree.divisions.filter((d) => withCampers.d.has(d.id));
-  const camps = tree.groups.filter((g) => divisions.some((d) => d.group_id === g.id));
-
   return (
     <div className="space-y-4 pb-24" data-ready={now ? "" : undefined}>
       <div className="no-print flex flex-wrap items-center gap-3">
-        <Select value={encodeScope(scope)} onChange={(e) => chooseScope(e.target.value)} aria-label="Show" className="w-auto min-w-56 max-w-full font-medium">
-          <option value="all">{campLabel}</option>
-          {camps.length > 1 &&
-            camps.map((g) => (
-              <option key={g.id} value={encodeScope({ kind: "group", id: g.id })}>
-                {g.name} camp
-              </option>
-            ))}
-          {divisions.map((d) => (
-            <optgroup key={d.id} label={d.name}>
-              <option value={encodeScope({ kind: "division", id: d.id })}>All of {d.name}</option>
-              {d.bunks
-                .filter((b) => withCampers.b.has(b.id))
-                .map((b) => (
-                  <option key={b.id} value={encodeScope({ kind: "bunk", divisionId: d.id, id: b.id })}>
-                    {b.name}
-                  </option>
-                ))}
-            </optgroup>
-          ))}
-        </Select>
+        <ScopeSelect value={scope} onChange={chooseScope} rows={rows} tree={tree} campLabel={campLabel} />
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground" title={live ? "Updates appear by themselves" : "Checking for updates every 15 seconds"}>
           <Radio className={cn("size-3.5", live ? "text-status-present" : "text-muted-foreground")} />
           {live ? "Live" : "Auto-updating"}
@@ -214,6 +183,16 @@ export function StatusBoard({
           </button>
         ))}
       </div>
+
+      {toCheck > 0 && (
+        <Link href="/missing" className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100">
+          <AlertTriangle className="size-4 shrink-0" />
+          <span className="flex-1">
+            <strong>{toCheck}</strong> {toCheck === 1 ? "camper" : "campers"} to check up on: still not here when they should be.
+          </span>
+          <ChevronRight className="size-4" />
+        </Link>
+      )}
 
       <div className="no-print relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -273,6 +252,8 @@ export function StatusBoard({
                         {r.name}
                       </span>
                       {r.medical && <AlertTriangle className="size-3.5 shrink-0 text-amber-500" aria-label="Medical flag" />}
+                      {flags.get(r.id)?.kind === "check" && <span className="shrink-0 rounded-full bg-amber-100 px-1.5 text-[11px] font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">check up</span>}
+                      {flags.get(r.id)?.kind === "later" && <span className="shrink-0 rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground">coming later</span>}
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">
                       {r.at && now ? `${formatWhen(r.at, now)} · ${eventLabel(r)}${r.by ? ` by ${r.by}` : ""}` : r.at ? " " : "Not checked in yet"}
@@ -297,7 +278,7 @@ export function StatusBoard({
           </section>
         );
       })}
-      {!groups.length && <p className="rounded-xl border bg-card px-4 py-10 text-center text-sm text-muted-foreground">{rows.length ? "Nobody matches." : "No campers here yet."}</p>}
+      {!groups.length && <p className="rounded-xl border bg-card px-4 py-10 text-center text-sm text-muted-foreground">{!rows.length ? "No campers here yet." : status === "present" && !q ? "Nobody has checked in here yet." : "Nobody matches."}</p>}
 
       {canBulk && selected.size > 0 && (
         <div className="no-print fixed inset-x-0 bottom-16 z-40 px-3 md:bottom-4 md:left-64">

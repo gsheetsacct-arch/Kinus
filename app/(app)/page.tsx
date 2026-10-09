@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { Users, ListChecks, Upload, ArrowRight, Layers, Check, Circle, ScanLine } from "lucide-react";
+import { Users, ListChecks, Upload, ArrowRight, Layers, Check, Circle, ScanLine, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/section";
 import { Callout } from "@/components/callout";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { isAdmin, type CurrentUser } from "@/lib/auth/permissions";
+import { canFollowUp, isAdmin, type CurrentUser } from "@/lib/auth/permissions";
+import { flagRows, loadFollowups, loadRules } from "@/lib/data/missing";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
 import { cn } from "@/lib/utils";
 import { fetchAll } from "@/lib/supabase/fetch-all";
@@ -51,12 +52,19 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const [divisionRows, allCampers, steps] = await Promise.all([
     session ? supabase.from("divisions").select("id, name, color, sort_order").eq("session_id", session.id).order("sort_order").then((r) => r.data ?? []) : Promise.resolve([]),
     session
-      ? fetchAll((from, to) => supabase.from("campers").select("id, division_id, status").eq("session_id", session.id).is("archived_at", null).order("id").range(from, to))
+      ? fetchAll((from, to) => supabase.from("campers").select("id, division_id, bunk_id, status").eq("session_id", session.id).is("archived_at", null).order("id").range(from, to))
       : Promise.resolve([]),
     isAdmin(user) ? setupSteps(user, session?.id ?? null) : Promise.resolve([]),
   ]);
   const divisions = divisionRows.filter((d) => inCamp(d.id));
   const campers = allCampers.filter((c) => inCamp(c.division_id));
+  // campers who should be here by now (same rules as "Not here yet")
+  let toCheck = 0;
+  if (session && canFollowUp(user) && campers.some((c) => c.status === "expected")) {
+    const [rules, followups] = await Promise.all([loadRules(supabase), loadFollowups(supabase, session.id)]);
+    const flags = flagRows(campers.map((c) => ({ id: c.id, divisionId: c.division_id, bunkId: c.bunk_id, status: c.status })), rules, followups);
+    toCheck = Object.values(flags).filter((f) => f.kind === "check").length;
+  }
   const perDivision = divisions.map((d) => ({ ...d, count: campers.filter((c) => c.division_id === d.id).length })).filter((d) => d.count > 0);
   const remaining = steps.filter((s) => !s.done);
   const next = remaining[0];
@@ -79,6 +87,22 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       {denied && <Callout tone="warning">That page needs {denied} access. Ask an admin if you think you should have it.</Callout>}
       {!session && !isAdmin(user) && <Callout>Camp hasn&apos;t been set up yet. An admin needs to create this year&apos;s session.</Callout>}
       {!user.allAreas && user.role !== "owner" && user.areas.length === 0 && <Callout tone="warning">You haven&apos;t been given a division or bunk yet. Ask a director to add you.</Callout>}
+
+      {toCheck > 0 && (
+        <Link
+          href="/missing"
+          className="flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 shadow-[var(--shadow-card)] hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100"
+        >
+          <AlertTriangle className="size-5 shrink-0" />
+          <span className="flex-1">
+            <span className="block font-semibold">
+              Check up on {toCheck} {toCheck === 1 ? "camper" : "campers"}
+            </span>
+            <span className="block text-sm opacity-80">Not here yet, though they should be by now.</span>
+          </span>
+          <ArrowRight className="size-4" />
+        </Link>
+      )}
 
       {steps.length > 0 && remaining.length > 0 && (
         <Section title="Getting started" description={`${steps.length - remaining.length} of ${steps.length} done`} bodyClassName="p-0">

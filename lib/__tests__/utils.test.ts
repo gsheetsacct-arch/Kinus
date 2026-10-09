@@ -23,3 +23,11 @@ describe("startOfCampDay", () => {
     expect(startOfCampDay(new Date("2026-01-10T12:00:00Z"))).toBe("2026-01-10T05:00:00.000Z");
   });
 });
+
+import { campDateTimeToIso } from "../time";
+describe("campDateTimeToIso", () => {
+  it("reads a camp wall-clock time, summer and winter", () => {
+    expect(campDateTimeToIso("2026-07-01", "16:30")).toBe("2026-07-01T20:30:00.000Z");
+    expect(campDateTimeToIso("2026-12-01", "09:00")).toBe("2026-12-01T14:00:00.000Z");
+  });
+});

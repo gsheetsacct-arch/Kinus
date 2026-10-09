@@ -56,3 +56,28 @@ export async function saveImportSettings(fd: FormData): Promise<ActionResult> {
     return fail(errorMessage(e));
   }
 }
+
+const missingRules = z.object({
+  percent: z.coerce.number().int().min(0).max(100),
+  after_time: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v && /^\d{2}:\d{2}$/.test(v) ? v : null)),
+});
+
+/** When a camper who hasn't arrived gets flagged "check up on". */
+export async function saveMissingRules(fd: FormData): Promise<ActionResult> {
+  const me = await requireAdmin();
+  try {
+    const d = missingRules.parse(Object.fromEntries(fd));
+    const supabase = await createClient();
+    const { error } = await supabase.from("settings").upsert({ key: "missing_rules", value: d, updated_by: me.id, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    revalidatePath("/admin/settings");
+    revalidatePath("/missing");
+    return ok("Saved.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}

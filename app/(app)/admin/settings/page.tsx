@@ -8,7 +8,8 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
 import { FIELD_GROUPS, STAFF_ROLES } from "@/lib/labels";
 import type { StaffRole } from "@/lib/auth/permissions";
-import { saveFieldVisibility, saveImportSettings, saveOfficeEmail } from "./actions";
+import { saveFieldVisibility, saveImportSettings, saveMissingRules, saveOfficeEmail } from "./actions";
+import { DEFAULT_RULES, type MissingRules } from "@/lib/attendance/missing";
 
 export const metadata = { title: "Settings" };
 
@@ -26,6 +27,7 @@ export default async function SettingsPage() {
   const setting = (k: string) => (settings?.find((s) => s.key === k)?.value ?? {}) as Record<string, unknown>;
   const officeEmail = setting("office_email");
   const imp = setting("import");
+  const missing = { ...DEFAULT_RULES, ...(setting("missing_rules") as Partial<MissingRules>) };
 
   const Box = ({ name, checked }: { name: string; checked: boolean }) => (
     <td className="px-2 py-3 text-center">
@@ -72,6 +74,26 @@ export default async function SettingsPage() {
           </div>
           <p className="text-xs text-muted-foreground">Owners always see everything. A person only ever sees campers in their own area.</p>
           <Button type="submit">Save</Button>
+        </ActionForm>
+      </Section>
+
+      <Section
+        title="Campers who haven't arrived"
+        description="On “Not here yet”, campers still missing are flagged “check up on” so someone calls home. Nothing is flagged before the first camper of the session arrives."
+      >
+        <ActionForm action={saveMissingRules} className="grid gap-4 sm:grid-cols-2">
+          <Field label="Flag once this share of their bunk is here" htmlFor="percent" hint="0 turns this off. Campers without a bunk count against their division.">
+            <div className="flex items-center gap-2">
+              <Input id="percent" name="percent" type="number" min={0} max={100} defaultValue={missing.percent} className="w-24" />
+              <span className="text-sm text-muted-foreground">%</span>
+            </div>
+          </Field>
+          <Field label="Or flag everyone still missing after" htmlFor="after_time" hint="Camp time. Leave empty to only use the percentage.">
+            <Input id="after_time" name="after_time" type="time" defaultValue={missing.after_time ?? ""} className="w-36" />
+          </Field>
+          <div className="sm:col-span-2">
+            <Button type="submit">Save</Button>
+          </div>
         </ActionForm>
       </Section>
 

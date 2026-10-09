@@ -2,7 +2,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { fetchAll } from "@/lib/supabase/fetch-all";
-import { CAMP_TIME_ZONE } from "@/lib/utils";
+import { startOfCampDay } from "@/lib/time";
+export { startOfCampDay };
 
 type DB = SupabaseClient<Database>;
 
@@ -10,17 +11,6 @@ export type BatchWhere = { divisionIds: string[] | null; divisionId?: string; bu
 import { BATCH_WHICH_LABELS, type BatchWhichKey } from "./batch-labels";
 export type BatchWhich = BatchWhichKey;
 export const BATCH_WHICH = BATCH_WHICH_LABELS;
-
-/** Start of today in camp's time zone, as an ISO instant. */
-export function startOfCampDay(now = new Date()): string {
-  const day = now.toLocaleDateString("en-CA", { timeZone: CAMP_TIME_ZONE }); // YYYY-MM-DD
-  // the zone's offset at that moment, e.g. "GMT-4"
-  const off = new Intl.DateTimeFormat("en-US", { timeZone: CAMP_TIME_ZONE, timeZoneName: "shortOffset" }).formatToParts(now).find((p) => p.type === "timeZoneName")?.value ?? "GMT";
-  const m = /GMT([+-]\d{1,2})(?::(\d{2}))?/.exec(off);
-  const sign = m && m[1].startsWith("-") ? "-" : "+";
-  const hh = m ? String(Math.abs(Number(m[1]))).padStart(2, "0") : "00";
-  return new Date(`${day}T00:00:00${sign}${hh}:${m?.[2] ?? "00"}`).toISOString();
-}
 
 /** Campers (ids, in printing order) for a batch; the user's own access applies. */
 export async function batchCamperIds(db: DB, sessionId: string, where: BatchWhere, which: BatchWhich, templateId: string): Promise<string[]> {

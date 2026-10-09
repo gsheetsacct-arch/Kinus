@@ -1,7 +1,7 @@
 import type { CurrentUser } from "@/lib/auth/permissions";
-import { canUsePrintArea, isAdmin, isDirector } from "@/lib/auth/permissions";
+import { canFollowUp, canUsePrintArea, isAdmin, isDirector } from "@/lib/auth/permissions";
 
-export type NavIcon = "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer";
+export type NavIcon = "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch";
 export type NavItem = { href: string; label: string; icon: NavIcon; description: string; section: "main" | "admin"; mobile?: boolean };
 
 export function buildNav(user: CurrentUser): NavItem[] {
@@ -9,6 +9,7 @@ export function buildNav(user: CurrentUser): NavItem[] {
     { href: "/", label: "Home", icon: "LayoutGrid", description: "Overview and next steps", section: "main" },
     { href: "/scan", label: "Check in", icon: "ScanLine", description: "Scan or search to check campers in and out", section: "main", mobile: true },
     { href: "/status", label: "Who's here", icon: "Activity", description: "Live status by bunk or division", section: "main", mobile: true },
+    ...(canFollowUp(user) ? [{ href: "/missing", label: "Not here yet", icon: "UserSearch" as const, description: "Who hasn't arrived, and who to check up on", section: "main" as const }] : []),
     { href: "/campers", label: "Campers", icon: "Users", description: "Find any camper", section: "main", mobile: true },
     { href: "/lists", label: "Lists", icon: "ListChecks", description: "Bunk and division lists to print", section: "main" },
   ];

@@ -20,11 +20,14 @@ export async function GET(request: Request) {
       // each check is something a migration added; the first one missing names what to run
       const { error: staff } = await admin.from("profiles").select("role, all_areas").limit(1);
       const { error: fast } = staff ? { error: null } : await admin.rpc("my_level_rank");
+      const { error: followups } = staff || fast ? { error: null } : await admin.from("camper_followups").select("camper_id").limit(1);
       out.schema = staff
         ? "OUT OF DATE: run migrations from 0006 on (staff sign-in fails until then)"
         : fast
           ? "OUT OF DATE: run migrations 0007 (camps) and 0008 (faster pages)"
-          : "applied";
+          : followups
+            ? "OUT OF DATE: run migration 0009 (campers not here yet)"
+            : "applied";
       const [{ count: profiles }, { data: session }] = await Promise.all([
         admin.from("profiles").select("id", { count: "exact", head: true }),
         admin.from("sessions").select("name").eq("is_active", true).maybeSingle(),
