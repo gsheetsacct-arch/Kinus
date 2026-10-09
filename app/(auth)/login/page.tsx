@@ -1,54 +1,43 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { ActionForm } from "@/components/action-form";
-import { sendMagicLink, signInWithPassword } from "../actions";
+import { Tent } from "lucide-react";
 import { HashSession } from "./hash-session";
+import { LoginForm } from "./login-form";
 
 export const metadata = { title: "Sign in" };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string }> }) {
   const { next, error } = await searchParams;
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-muted/40 p-4">
-      <HashSession />
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Kinus</CardTitle>
-          <CardDescription>Staff sign-in</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {error && <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{decodeURIComponent(error)}</p>}
-          <ActionForm action={signInWithPassword} className="space-y-3">
-            <input type="hidden" name="next" value={next ?? "/"} />
-            <div className="space-y-1">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" autoComplete="email" inputMode="email" required />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" autoComplete="current-password" required />
-            </div>
-            <Button type="submit" className="w-full" size="lg">
-              Sign in
-            </Button>
-          </ActionForm>
-          <div className="relative text-center text-xs text-muted-foreground">
-            <span className="bg-card px-2">or</span>
-            <div className="absolute inset-x-0 top-1/2 -z-10 h-px bg-border" />
+    <main className="grid min-h-dvh lg:grid-cols-[1.1fr_1fr]">
+      <section className="relative hidden overflow-hidden bg-primary text-primary-foreground lg:flex lg:flex-col lg:justify-between lg:p-12">
+        <div className="absolute -right-24 -top-24 size-96 rounded-full bg-white/10" />
+        <div className="absolute -bottom-32 -left-16 size-[28rem] rounded-full bg-black/10" />
+        <div className="relative flex items-center gap-3">
+          <span className="flex size-11 items-center justify-center rounded-2xl bg-white/15">
+            <Tent className="size-6" />
+          </span>
+          <span className="text-xl font-semibold">Kinus</span>
+        </div>
+        <div className="relative max-w-md">
+          <h1 className="text-4xl font-semibold leading-tight">Every camper, accounted for.</h1>
+          <p className="mt-4 text-lg text-primary-foreground/80">Check-in and check-out, live status by bunk, lists for every role, and name tags on demand.</p>
+        </div>
+        <div className="relative text-sm text-primary-foreground/60">Staff access only.</div>
+      </section>
+      <section className="flex items-center justify-center p-6 sm:p-10">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 flex items-center gap-3 lg:hidden">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+              <Tent className="size-5" />
+            </span>
+            <span className="text-lg font-semibold">Kinus</span>
           </div>
-          <ActionForm action={sendMagicLink} className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor="email2">Email me a sign-in link</Label>
-              <Input id="email2" name="email" type="email" autoComplete="email" required />
-            </div>
-            <Button type="submit" variant="outline" className="w-full">
-              Send link
-            </Button>
-          </ActionForm>
-        </CardContent>
-      </Card>
+          <h2 className="text-2xl font-semibold">Sign in</h2>
+          <p className="mb-6 mt-1 text-sm text-muted-foreground">Use the email your invitation was sent to.</p>
+          {error && <p className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{decodeURIComponent(error)}</p>}
+          <HashSession />
+          <LoginForm next={next ?? "/"} />
+        </div>
+      </section>
     </main>
   );
 }

@@ -14,11 +14,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (isDirectorOrAbove(user)) nav.push({ href: "/admin/users", label: "Staff", icon: "UserCog" });
   if (isAdmin(user)) {
     nav.push(
-      { href: "/admin/imports", label: "Imports", icon: "Upload", mobile: false },
-      { href: "/admin/divisions", label: "Divisions", icon: "Layers", mobile: false },
-      { href: "/admin/presets", label: "List presets", icon: "SlidersHorizontal", mobile: false },
-      { href: "/admin/sessions", label: "Sessions", icon: "CalendarDays", mobile: false },
-      { href: "/admin/settings", label: "Settings", icon: "Settings", mobile: false },
+      { href: "/admin/imports", label: "Imports", icon: "Upload", mobile: false, section: "admin" },
+      { href: "/admin/divisions", label: "Divisions & bunks", icon: "Layers", mobile: false, section: "admin" },
+      { href: "/admin/presets", label: "List presets", icon: "SlidersHorizontal", mobile: false, section: "admin" },
+      { href: "/admin/sessions", label: "Sessions", icon: "CalendarDays", mobile: false, section: "admin" },
+      { href: "/admin/settings", label: "Settings", icon: "Settings", mobile: false, section: "admin" },
     );
   }
   return (

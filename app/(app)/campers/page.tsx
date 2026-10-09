@@ -40,7 +40,7 @@ export default async function CampersPage({ searchParams }: { searchParams: Prom
           ) : undefined
         }
       />
-      <form className="no-print mb-4 grid gap-2 sm:grid-cols-[1fr_180px_160px_140px_auto]" method="get">
+      <form className="no-print mb-4 grid gap-2 rounded-xl border bg-card p-3 shadow-[var(--shadow-card)] sm:grid-cols-[1fr_180px_160px_140px_auto]" method="get">
         <Input name="q" defaultValue={sp.q ?? ""} placeholder="Name (any language), code, or phone" dir="auto" autoFocus />
         <Select name="division" defaultValue={sp.division ?? ""}>
           <option value="">All divisions</option>
@@ -72,6 +72,28 @@ export default async function CampersPage({ searchParams }: { searchParams: Prom
           Filter
         </Button>
       </form>
+      <div className="space-y-2 md:hidden">
+        {campers.map((c) => (
+          <Link key={c.id} href={`/campers/${c.id}`} className="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-[var(--shadow-card)]">
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-medium" dir="auto">
+                {c.display_name}
+              </div>
+              <div className="truncate text-xs text-muted-foreground" dir="auto">
+                {[c.division_name, c.bunk_name ?? "unassigned", c.grade ? `Grade ${c.grade}` : null].filter(Boolean).join(" · ")}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {c.has_medical_flag && <Badge variant="warning">medical</Badge>}
+                {c.in_latest_import === false && <Badge variant="outline">not in export</Badge>}
+                {c.archived_at && <Badge variant="secondary">archived</Badge>}
+              </div>
+            </div>
+            <StatusBadge status={c.status!} />
+          </Link>
+        ))}
+        {!campers.length && <p className="py-8 text-center text-sm text-muted-foreground">No campers match.</p>}
+      </div>
+      <div className="hidden md:block">
       <Table>
         <TableHeader>
           <TableRow>
@@ -115,6 +137,7 @@ export default async function CampersPage({ searchParams }: { searchParams: Prom
           )}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }
