@@ -19,6 +19,8 @@ import { fetchAll } from "@/lib/supabase/fetch-all";
 import type { FieldChange, ParsedCamper, Candidate } from "@/lib/import";
 import { applyImportAction, archiveMissing, cancelImport, resolveConflict } from "../actions";
 
+export const metadata = { title: "Import" };
+
 type Row = { id: string; row_number: number; action: string; matched_camper_id: string | null; match_method: string | null; parsed: ParsedCamper | null; changes: FieldChange[]; warnings: string[] };
 
 const FIELD_LABEL: Record<string, string> = {
@@ -33,7 +35,7 @@ const FIELD_LABEL: Record<string, string> = {
   local_address_cross_streets: "Cross streets",
   medical_notes: "Medical notes",
   allergies: "Allergies",
-  has_allergies: "Allergies?",
+  has_allergies: "Has allergies",
   has_epipen: "EpiPen",
   has_medications: "Medications",
   notes_from_parents: "Notes from parents",
@@ -104,6 +106,11 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
     newStructure.set(div, [...(newStructure.get(div) ?? []), pair.slice(i + 3)]);
   }
   const newBunkCount = summary.newBunks?.length ?? 0;
+  // the "Updated" tab groups changes by field, most common first
+  const fieldMap = new Map<string, { r: Row; c: FieldChange }[]>();
+  for (const r of by("update")) for (const c of r.changes) fieldMap.set(c.field, [...(fieldMap.get(c.field) ?? []), { r, c }]);
+  const byField = [...fieldMap.entries()].sort((a, b) => b[1].length - a[1].length);
+  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
   const st = IMPORT_STATUS[imp.status];
   const by_ = (imp.profiles as { full_name: string } | null)?.full_name ?? "someone";
 
@@ -134,13 +141,13 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
 
       {previewed && (
         <p className="text-base">
-          Applying this file will <strong>add {by("add").length} campers</strong>, <strong>update {by("update").length}</strong>
+          Applying this file will <strong>add {n(by("add").length, "camper", "campers")}</strong>, <strong>update {by("update").length}</strong>
           {missing.length > 0 && (
             <>
               , and mark <strong>{missing.length}</strong> as no longer in the export
             </>
           )}
-          . {by("unchanged").length > 0 && `${by("unchanged").length} campers are unchanged.`}
+          . {by("unchanged").length > 0 && `${n(by("unchanged").length, "camper is", "campers are")} unchanged.`}
         </p>
       )}
 
@@ -222,41 +229,50 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
         </TabsContent>
 
         <TabsContent value="update" className="space-y-3">
-          {by("update").map((r) => (
-            <Section key={r.id}>
-              <div className="flex items-start justify-between gap-3">
-                <Who p={r.parsed} />
-                {r.matched_camper_id && (
-                  <Link href={`/campers/${r.matched_camper_id}`} className="shrink-0 text-xs text-primary hover:underline">
-                    Open camper
-                  </Link>
-                )}
-              </div>
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[420px] text-sm">
+          {/* by field first ("Bunk: 700 campers"), so a big re-shuffle reads at a glance */}
+          {byField.map(([field, list]) => (
+            <details key={field} className="group overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-card)]">
+              <summary className="flex cursor-pointer select-none items-center gap-3 px-5 py-3.5 text-sm">
+                <span className="font-semibold">{fieldLabel(field)}</span>
+                <span className="text-muted-foreground">
+                  changes for {list.length} {list.length === 1 ? "camper" : "campers"}
+                </span>
+                <span className="ml-auto text-xs text-primary group-open:hidden">Show</span>
+              </summary>
+              <div className="overflow-x-auto border-t">
+                <table className="w-full min-w-[520px] table-fixed text-sm">
                   <thead>
                     <tr className="text-left text-xs text-muted-foreground">
-                      <th className="py-1 pr-3 font-medium">What</th>
-                      <th className="py-1 pr-3 font-medium">Before</th>
-                      <th className="py-1 font-medium">After</th>
+                      <th className="w-[40%] px-5 py-2 font-medium">Camper</th>
+                      <th className="w-[30%] py-2 pr-3 font-medium">Before</th>
+                      <th className="w-[30%] py-2 pr-5 font-medium">After</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {r.changes.map((c, i) => (
-                      <tr key={i} className="border-t">
-                        <td className="py-1.5 pr-3 text-muted-foreground">{fieldLabel(c.field)}</td>
-                        <td className="py-1.5 pr-3 text-muted-foreground line-through decoration-destructive/50" dir="auto">
+                    {list.slice(0, 300).map(({ r, c }) => (
+                      <tr key={r.id} className="border-t align-top">
+                        <td className="px-5 py-1.5">
+                          {r.matched_camper_id ? (
+                            <Link href={`/campers/${r.matched_camper_id}`} className="hover:underline" dir="auto">
+                              {r.parsed ? `${r.parsed.first_name} ${r.parsed.last_name}` : `Row ${r.row_number}`}
+                            </Link>
+                          ) : (
+                            <span dir="auto">{r.parsed ? `${r.parsed.first_name} ${r.parsed.last_name}` : `Row ${r.row_number}`}</span>
+                          )}
+                        </td>
+                        <td className="break-words py-1.5 pr-3 text-muted-foreground line-through decoration-destructive/50" dir="auto">
                           {show(c.old) ?? <em className="no-underline">empty</em>}
                         </td>
-                        <td className="py-1.5 font-medium" dir="auto">
+                        <td className="break-words py-1.5 pr-5 font-medium" dir="auto">
                           {show(c.new) ?? <em className="font-normal text-muted-foreground">empty</em>}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                {list.length > 300 && <p className="border-t px-5 py-3 text-xs text-muted-foreground">Showing the first 300 of {list.length}.</p>}
               </div>
-            </Section>
+            </details>
           ))}
           {!by("update").length && <p className="text-sm text-muted-foreground">No existing campers change.</p>}
         </TabsContent>
@@ -334,7 +350,7 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
         <TabsContent value="missing">
           {missing.length ? (
             <Section description={`These campers are in ${options.divisionsInFile?.join(", ")} in Kinus but not in this file. ${imp.status === "applied" ? "They are marked “not in the latest export”." : "When you apply, they get marked; nothing is deleted."} Archive anyone who has left the program.`}>
-              <ActionForm action={archiveMissing} className="space-y-3" confirm="Archive the selected campers? They disappear from lists but keep their history.">
+              <ActionForm action={archiveMissing} className="space-y-3" confirm="Archive the selected campers?" confirmDetail="They disappear from lists and check-in. Their history is kept, and you can restore them from their page." confirmLabel="Archive" danger>
                 <ul className="divide-y rounded-lg border">
                   {missing.map((m) => (
                     <li key={m.id}>
@@ -381,13 +397,13 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
             <Button asChild variant="ghost">
               <Link href={`/admin/imports/${id}/map`}>Back to columns</Link>
             </Button>
-            <ActionForm action={cancelImport} confirm="Discard this draft? Nothing has been changed.">
+            <ActionForm action={cancelImport} confirm="Discard this draft?" confirmDetail="Nothing has been changed yet; the file is just set aside." confirmLabel="Discard" danger>
               <input type="hidden" name="id" value={id} />
               <Button variant="outline" type="submit">
                 Discard
               </Button>
             </ActionForm>
-            <ActionForm action={applyImportAction} confirm={`Apply now? ${by("add").length} campers will be added and ${by("update").length} updated. You can undo it afterwards.`}>
+            <ActionForm action={applyImportAction} confirm="Apply this import now?" confirmDetail={`${n(by("add").length, "camper", "campers")} will be added and ${by("update").length} updated. You can undo it afterwards.`} confirmLabel="Apply">
               <input type="hidden" name="id" value={id} />
               <Button type="submit" disabled={conflicts.length > 0}>
                 <CheckCircle2 /> Apply import

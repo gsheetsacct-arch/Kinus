@@ -9,6 +9,8 @@ import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
 import { BunkPicker } from "@/components/bunk-picker";
 import { createWalkIn } from "../actions";
 
+export const metadata = { title: "Add a walk-in" };
+
 export default async function NewCamperPage() {
   await requireAdmin();
   const session = await getActiveSession();

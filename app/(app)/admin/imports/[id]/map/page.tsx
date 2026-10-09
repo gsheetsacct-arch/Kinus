@@ -13,6 +13,8 @@ import { requireAdmin } from "@/lib/auth/current-user";
 import { TARGET_OPTIONS, type ColumnMap, type MappingOptions } from "@/lib/import";
 import { previewImport } from "../../actions";
 
+export const metadata = { title: "Match the columns" };
+
 function ColumnRow({ header, value, samples, highlight }: { header: string; value: string; samples: string[]; highlight?: boolean }) {
   return (
     <div className={`grid gap-2 border-b px-4 py-3 last:border-0 sm:grid-cols-[1fr_1fr_240px] sm:items-center ${highlight ? "bg-amber-50/70 dark:bg-amber-950/20" : ""}`}>

@@ -303,7 +303,7 @@ function FieldDialog({
         </div>
         <DialogFooter className="sm:justify-between">
           {field && field !== "new" ? (
-            <ActionForm action={deleteField} onSuccess={onClose} confirm={`Delete {{${field.key}}}? Templates that use it will leave that spot empty.`}>
+            <ActionForm action={deleteField} onSuccess={onClose} confirm={`Delete “${field.label}”?`} confirmDetail="Tags that use it will leave that spot empty." confirmLabel="Delete" danger>
               <input type="hidden" name="id" value={field.id} />
               <Button type="submit" variant="ghost" className="text-destructive">
                 Delete field

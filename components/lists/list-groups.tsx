@@ -19,6 +19,7 @@ export function ListGroups({ columns, groups }: Pick<BuiltList, "columns" | "gro
               {g.title} <span className="text-sm font-normal text-muted-foreground">({g.rows.length})</span>
             </h2>
           )}
+          {gi === 0 && columns.length > 3 && <p className="no-print mb-1 text-xs text-muted-foreground sm:hidden">Swipe the table sideways to see every column →</p>}
           <div className="-mx-4 overflow-x-auto px-4 print:mx-0 print:overflow-visible print:px-0">
             <table className="list-table w-full border-collapse text-sm">
               <thead>
@@ -42,7 +43,7 @@ export function ListGroups({ columns, groups }: Pick<BuiltList, "columns" | "gro
                         </td>
                       ) : phoneCols.has(ci) && v ? (
                         <td key={ci}>
-                          <a href={telHref(String(v))}>{String(v)}</a>
+                          <a href={telHref(String(v))} className="-my-2 inline-block py-2">{String(v)}</a>
                         </td>
                       ) : (
                         <td key={ci}>{typeof v === "boolean" ? (v ? "Yes" : "No") : String(v ?? "")}</td>

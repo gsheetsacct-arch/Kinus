@@ -140,7 +140,17 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
                             ))}
                           </ul>
                         ) : r.existingId ? (
-                          <Badge variant="outline">Already has an account · will update</Badge>
+                          <span className="block text-xs">
+                            <Badge variant="outline">Has an account</Badge>
+                            <span className="mt-1 block text-muted-foreground">
+                              {r.existingRole && r.role && r.existingRole !== r.role ? (
+                                <>
+                                  Will change: <strong className="text-foreground">{STAFF_ROLES[r.existingRole].label}</strong> → <strong className="text-foreground">{STAFF_ROLES[r.role].label}</strong>.{" "}
+                                </>
+                              ) : null}
+                              Their areas become: {r.areaText}.
+                            </span>
+                          </span>
                         ) : (
                           <Badge variant="success">New</Badge>
                         )}

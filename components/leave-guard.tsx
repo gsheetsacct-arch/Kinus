@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
  * While there are unsaved changes, links inside the app (sidebar, back links) ask first
  * instead of quietly throwing the work away; closing or reloading the tab asks too.
  */
-export function LeaveGuard({ dirty, onSave }: { dirty: boolean; onSave: () => Promise<boolean> }) {
+export function LeaveGuard({ dirty, onSave }: { dirty: boolean; onSave?: () => Promise<boolean> }) {
   const router = useRouter();
   const [to, setTo] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -55,17 +55,19 @@ export function LeaveGuard({ dirty, onSave }: { dirty: boolean; onSave: () => Pr
             <Button variant="outline" onClick={() => setTo(null)}>
               Stay
             </Button>
-            <Button
-              disabled={saving}
-              onClick={async () => {
-                const href = to;
-                setSaving(true);
-                const ok = await onSave().finally(() => setSaving(false));
-                if (ok && href) go(href);
-              }}
-            >
-              {saving ? "Saving…" : "Save and leave"}
-            </Button>
+            {onSave && (
+              <Button
+                disabled={saving}
+                onClick={async () => {
+                  const href = to;
+                  setSaving(true);
+                  const ok = await onSave().finally(() => setSaving(false));
+                  if (ok && href) go(href);
+                }}
+              >
+                {saving ? "Saving…" : "Save and leave"}
+              </Button>
+            )}
           </div>
         </DialogFooter>
       </DialogContent>

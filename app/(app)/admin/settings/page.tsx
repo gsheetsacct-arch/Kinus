@@ -29,9 +29,9 @@ export default async function SettingsPage() {
   const imp = setting("import");
   const missing = { ...DEFAULT_RULES, ...(setting("missing_rules") as Partial<MissingRules>) };
 
-  const Box = ({ name, checked }: { name: string; checked: boolean }) => (
+  const Box = ({ name, checked, label }: { name: string; checked: boolean; label: string }) => (
     <td className="px-2 py-3 text-center">
-      <input type="checkbox" name={name} defaultChecked={checked} className="size-5 accent-[var(--primary)]" />
+      <input type="checkbox" name={name} defaultChecked={checked} aria-label={label} title={label} className="size-5 accent-[var(--primary)]" />
     </td>
   );
 
@@ -43,7 +43,7 @@ export default async function SettingsPage() {
         title="Who can see sensitive details"
         description="Everyone sees names, bunks and check-in status for the campers in their area. Tick who also sees these details, again only for campers in their area. Without medical access, people still see a “medical flag” so they know to ask."
       >
-        <ActionForm action={saveFieldVisibility} className="space-y-5">
+        <ActionForm action={saveFieldVisibility} warnUnsaved className="group space-y-5">
           <div className="-mx-5 overflow-x-auto px-5">
             <table className="w-full min-w-[720px] text-sm">
               <thead>
@@ -65,7 +65,7 @@ export default async function SettingsPage() {
                       <div className="text-xs text-muted-foreground">{FIELD_GROUPS[row.field_group]?.description}</div>
                     </td>
                     {COLS.map((r) => (
-                      <Box key={r} name={`${row.field_group}:${r}`} checked={row.roles.includes(r)} />
+                      <Box key={r} name={`${row.field_group}:${r}`} checked={row.roles.includes(r)} label={`${STAFF_ROLES[r].label} can see ${FIELD_GROUPS[row.field_group]?.label ?? row.field_group}`} />
                     ))}
                   </tr>
                 ))}
@@ -73,7 +73,10 @@ export default async function SettingsPage() {
             </table>
           </div>
           <p className="text-xs text-muted-foreground">Owners always see everything. A person only ever sees campers in their own area.</p>
-          <Button type="submit">Save</Button>
+          <span className="flex items-center gap-3">
+            <Button type="submit">Save</Button>
+            <span className="hidden text-sm font-medium text-amber-700 group-data-[dirty=true]:inline dark:text-amber-300">Unsaved changes</span>
+          </span>
         </ActionForm>
       </Section>
 
@@ -81,7 +84,7 @@ export default async function SettingsPage() {
         title="Campers who haven't arrived"
         description="On “Not here yet”, campers still missing are flagged “check up on” so someone calls home. Nothing is flagged before the first camper of the session arrives."
       >
-        <ActionForm action={saveMissingRules} className="grid gap-4 sm:grid-cols-2">
+        <ActionForm action={saveMissingRules} warnUnsaved className="group grid gap-4 sm:grid-cols-2">
           <Field label="Flag once this share of their bunk is here" htmlFor="percent" hint="0 turns this off. Campers without a bunk count against their division.">
             <div className="flex items-center gap-2">
               <Input id="percent" name="percent" type="number" min={0} max={100} defaultValue={missing.percent} className="w-24" />
@@ -92,25 +95,31 @@ export default async function SettingsPage() {
             <Input id="after_time" name="after_time" type="time" defaultValue={missing.after_time ?? ""} className="w-36" />
           </Field>
           <div className="sm:col-span-2">
-            <Button type="submit">Save</Button>
+            <span className="flex items-center gap-3">
+              <Button type="submit">Save</Button>
+              <span className="hidden text-sm font-medium text-amber-700 group-data-[dirty=true]:inline dark:text-amber-300">Unsaved changes</span>
+            </span>
           </div>
         </ActionForm>
       </Section>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Section title="Office email" description="Name tag and luggage tag requests are emailed here. Staff can change the address for a single request.">
-          <ActionForm action={saveOfficeEmail} className="space-y-4">
+          <ActionForm action={saveOfficeEmail} warnUnsaved className="group space-y-4">
             <Field label="Send to" htmlFor="to">
               <Input id="to" name="to" type="email" defaultValue={String(officeEmail.to ?? "")} placeholder="office@example.com" />
             </Field>
             <Field label="Also copy (optional)" htmlFor="cc" hint="Separate several addresses with commas.">
               <Input id="cc" name="cc" defaultValue={Array.isArray(officeEmail.cc) ? (officeEmail.cc as string[]).join(", ") : ""} />
             </Field>
-            <Button type="submit">Save</Button>
+            <span className="flex items-center gap-3">
+              <Button type="submit">Save</Button>
+              <span className="hidden text-sm font-medium text-amber-700 group-data-[dirty=true]:inline dark:text-amber-300">Unsaved changes</span>
+            </span>
           </ActionForm>
         </Section>
         <Section title="Imports" description="Get a clear warning when an uploaded export looks incomplete.">
-          <ActionForm action={saveImportSettings} className="space-y-4">
+          <ActionForm action={saveImportSettings} warnUnsaved className="group space-y-4">
             <Field
               label="Warn when this share of a division is missing from the file"
               htmlFor="missingThresholdPct"
@@ -121,7 +130,10 @@ export default async function SettingsPage() {
                 <span className="text-sm text-muted-foreground">%</span>
               </div>
             </Field>
-            <Button type="submit">Save</Button>
+            <span className="flex items-center gap-3">
+              <Button type="submit">Save</Button>
+              <span className="hidden text-sm font-medium text-amber-700 group-data-[dirty=true]:inline dark:text-amber-300">Unsaved changes</span>
+            </span>
           </ActionForm>
         </Section>
       </div>

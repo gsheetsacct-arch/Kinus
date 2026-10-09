@@ -14,6 +14,8 @@ import { FIELDS, UNGATED_GROUPS, type FieldGroup } from "@/lib/fields";
 import { AUDIENCES, FIELD_GROUPS } from "@/lib/labels";
 import { deletePreset, savePreset } from "../actions";
 
+export const metadata = { title: "List layout" };
+
 const GROUP_TITLES: { group: FieldGroup | "basic+status"; title: string }[] = [
   { group: "basic+status", title: "Camper" },
   { group: "contacts", title: "Contacts" },

@@ -13,7 +13,8 @@ export function searchEntry(name: string, code: string, phones: string[] = []): 
  * ("levi coh" finds "Cohen, Levi"); or the code starts with it; or 4+ digits end a parent phone.
  */
 export function matchScore(e: SearchEntry, q: string): number {
-  const raw = q.trim();
+  // the tag's barcode reads "KN100180"; a USB scanner types exactly that
+  const raw = q.trim().replace(/^kn(?=\d)/i, "");
   if (!raw) return 1;
   const digits = raw.replace(/\D/g, "");
   if (digits && digits.length === raw.replace(/[\s()+-]/g, "").length) {

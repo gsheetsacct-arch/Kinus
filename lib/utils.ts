@@ -50,3 +50,6 @@ export function formatPhone(raw: string | null | undefined): string {
 
 /** What a tel: link needs: digits and a leading plus. */
 export const telHref = (raw: string) => `tel:${raw.replace(/[^\d+]/g, "")}`;
+
+/** "1 bunk", "3 bunks". */
+export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;

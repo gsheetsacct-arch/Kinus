@@ -15,7 +15,7 @@ import { RadioCards } from "@/components/ui/radio-cards";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
 import { DIVISION_COLORS, LANGUAGES } from "@/lib/labels";
-import { cn } from "@/lib/utils";
+import { cn, plural } from "@/lib/utils";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { deleteBunk, deleteDivision, deleteGroup, mergeBunk, moveBunk, moveDivision, removeEmpty, saveBunk, saveDivision, saveGroup } from "./actions";
 
@@ -169,7 +169,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
     const active = d.id === selected?.id;
     return (
       <Link
-        href={`/admin/divisions?d=${d.id}`}
+        href={`/admin/divisions?d=${d.id}#details`}
         scroll={false}
         className={cn("flex items-center gap-3 border-b px-4 py-3 last:border-0", active ? "bg-primary-soft/70" : "hover:bg-muted/50")}
       >
@@ -179,7 +179,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
             {d.name}
           </span>
           <span className="block text-xs text-muted-foreground">
-            {bunksOf(d.id).length} bunks · {campersIn(d.id)} campers
+            {plural(bunksOf(d.id).length, "bunk")} · {plural(campersIn(d.id), "camper")}
           </span>
         </span>
       </Link>
@@ -195,7 +195,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
           tone="warning"
           title={`${empty.length} ${empty.length === 1 ? "division has" : "divisions have"} no campers`}
           action={
-            <ActionForm action={removeEmpty} confirm="Remove every division and bunk that has no campers and no staff access?">
+            <ActionForm action={removeEmpty} confirm="Remove empty divisions and bunks?" confirmDetail="Every division and bunk with no campers and no staff access is removed." confirmLabel="Remove them" danger>
               <Button size="sm" variant="outline" type="submit">
                 <Sparkles /> Remove empty ones
               </Button>
@@ -266,6 +266,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
           </div>
 
           {selected && (
+            <div id="details" className="scroll-mt-20">
             <Section
               title={
                 <span className="flex flex-wrap items-center gap-2">
@@ -274,7 +275,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
                   <Badge variant="secondary">{LANGUAGES[selected.language]}</Badge>
                 </span>
               }
-              description={`${bunksOf(selected.id).length} bunks · ${campersIn(selected.id)} campers · ${campersIn(selected.id, null)} without a bunk`}
+              description={`${plural(bunksOf(selected.id).length, "bunk")} · ${plural(campersIn(selected.id), "camper")} · ${campersIn(selected.id, null)} without a bunk`}
               actions={
                 <>
                   <MoveButtons action={moveDivision} id={selected.id} first={divs[0].id === selected.id} last={divs[divs.length - 1].id === selected.id} />
@@ -409,6 +410,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
                 </FormDialog>
               </div>
             </Section>
+            </div>
           )}
         </div>
       )}

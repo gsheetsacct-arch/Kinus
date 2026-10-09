@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { ChevronRight } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, plural } from "@/lib/utils";
 import type { AreaTree } from "@/lib/data/areas";
 
 /**
@@ -103,7 +103,7 @@ export function AreaPicker({ tree, defaultAll, defaultAreas, lockAll }: { tree: 
                   <span className="text-sm font-semibold" dir="auto">
                     {g.name}
                   </span>
-                  <span className="text-xs text-muted-foreground">whole camp · {divs.length} divisions</span>
+                  <span className="text-xs text-muted-foreground">whole camp · {plural(divs.length, "division")}</span>
                 </label>
                 {divs.map((d) => (
                   <Division key={d.id} d={d} indent />

@@ -23,6 +23,8 @@ import { getCamper } from "@/lib/data/campers";
 import { formatDateTime, formatPhone } from "@/lib/utils";
 import { addContact, archiveCamper, removeContact, updateCamper } from "../actions";
 
+export const metadata = { title: "Camper" };
+
 const ROLE_LABEL: Record<string, string> = { mother: "Mother", father: "Father", guardian: "Guardian", emergency: "Emergency", host: "Host", authorized_pickup: "Authorized pickup" };
 
 function Field({ label, value, dir }: { label: string; value: React.ReactNode; dir?: string }) {
@@ -72,10 +74,10 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
           <>
             <span className="font-mono text-sm text-muted-foreground">{c.camper_code}</span>
             {isAdmin(user) && (
-              <ActionForm action={archiveCamper} confirm={c.archived_at ? undefined : "Archive this camper?"}>
+              <ActionForm action={archiveCamper} confirm={c.archived_at ? undefined : `Archive ${c.display_name}?`} confirmDetail="They disappear from lists and check-in. Their history is kept, and you can restore them here." confirmLabel="Archive" danger>
                 <input type="hidden" name="id" value={c.id!} />
                 {c.archived_at && <input type="hidden" name="restore" value="1" />}
-                <Button variant="ghost" size="sm" type="submit">
+                <Button variant="outline" size="sm" type="submit" className={c.archived_at ? undefined : "border-destructive/40 text-destructive hover:bg-destructive/10"}>
                   {c.archived_at ? "Restore" : "Archive"}
                 </Button>
               </ActionForm>
@@ -100,10 +102,10 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
         </Card>
       )}
       <Tabs defaultValue="overview">
-        <TabsList>
+        <TabsList className="h-auto max-w-full flex-wrap justify-start">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="timeline">Timeline ({events?.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
+          <TabsTrigger value="timeline">Check-ins ({events?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="history">Changes</TabsTrigger>
           {canEdit && <TabsTrigger value="edit">Edit</TabsTrigger>}
         </TabsList>
         <TabsContent value="overview" className="grid gap-6 lg:grid-cols-2">
@@ -123,17 +125,17 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
               {groups.has("staff_notes") && <Field label="Staff notes" value={c.staff_notes} />}
             </CardContent>
           </Card>
-          <Card className={groups.has("medical") ? "border-amber-400/60" : undefined}>
+          <Card className={c.has_medical_flag ? "border-amber-400/60" : undefined}>
             <CardHeader>
               <CardTitle>Medical</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-3">
               {groups.has("medical") ? (
                 <>
-                  <Field label="Allergies?" value={yn(c.has_allergies)} />
+                  <Field label="Has allergies" value={yn(c.has_allergies)} />
                   <Field label="EpiPen" value={yn(c.has_epipen)} />
                   <Field label="Medications" value={yn(c.has_medications)} />
-                  <Field label="Allergies" value={c.allergies} />
+                  <Field label="Allergy details" value={c.allergies} />
                   <div className="col-span-2">
                     <Field label="Medical notes" value={c.medical_notes} />
                   </div>

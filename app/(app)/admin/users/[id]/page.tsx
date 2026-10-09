@@ -19,6 +19,8 @@ import { signInInfo, statusOf } from "@/lib/data/staff";
 import { formatDateTime } from "@/lib/utils";
 import { savePerson, sendSignInLink, setActive, setUserPassword } from "../actions";
 
+export const metadata = { title: "Edit person" };
+
 export default async function PersonPage({ params }: { params: Promise<{ id: string }> }) {
   const me = await requireDirector();
   const { id } = await params;
@@ -95,7 +97,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
             </div>
           </Section>
           <Section tone="danger" title={p.is_active ? "Deactivate account" : "Account is deactivated"} description={p.is_active ? "They immediately lose access. You can reactivate them later." : "They can't see anything until reactivated."}>
-            <ActionForm action={setActive} confirm={p.is_active ? `Deactivate ${p.full_name}?` : undefined}>
+            <ActionForm action={setActive} confirm={p.is_active ? `Deactivate ${p.full_name}?` : undefined} confirmDetail="They can't sign in until you turn their account back on. Nothing they recorded is lost." confirmLabel="Deactivate" danger>
               <input type="hidden" name="id" value={p.id} />
               <input type="hidden" name="active" value={p.is_active ? "false" : "true"} />
               <Button variant={p.is_active ? "destructive" : "default"} type="submit">

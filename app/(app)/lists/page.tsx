@@ -8,6 +8,7 @@ import { visibleDivisionIds } from "@/lib/auth/permissions";
 import { buildList, getPresetsFor } from "@/lib/data/lists";
 import { PrintButton } from "./print-button";
 import { ListGroups } from "@/components/lists/list-groups";
+import { ListFilters } from "@/components/lists/list-filters";
 import { getCampContext } from "@/lib/data/camp";
 
 export const metadata = { title: "Lists" };
@@ -32,8 +33,16 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
   const asked = divs.some((d) => d.id === sp.division) ? sp.division : undefined;
   const divisionId = asked ?? (only && divs.some((d) => d.id === only.division_id) ? only.division_id : undefined) ?? (divs.length === 1 ? divs[0].id : undefined);
   const bunkId = (asked ? sp.bunk : undefined) ?? (only?.division_id === divisionId ? only?.bunk_id : undefined) ?? undefined;
-  const preset = presets.find((p) => p.id === sp.preset) ?? presets.find((p) => p.is_default) ?? presets[0];
-  const list = preset ? await buildList(supabase, user, preset, { sessionId: session.id, divisionId: divisionId || undefined, bunkId: bunkId || undefined, divisionIds: camp.divisionIds }, fv ?? []) : null;
+  // the default list for this person's own role, else the nearest role below theirs
+  const ladder = ["director", "division_head", "head_counselor", "counselor"];
+  const own = user.role === "owner" ? "director" : user.role;
+  const order = ladder.includes(own) ? ladder.slice(ladder.indexOf(own)) : [own];
+  const preset =
+    presets.find((p) => p.id === sp.preset) ??
+    order.map((a) => presets.find((p) => p.audience === a && p.is_default) ?? presets.find((p) => p.audience === a)).find(Boolean) ??
+    presets.find((p) => p.is_default) ??
+    presets[0];
+  const list = preset ? await buildList(supabase, user, preset, { sessionId: session.id, divisionId: divisionId || undefined, bunkId: bunkId || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name }, fv ?? []) : null;
   const qs = new URLSearchParams({ ...(preset ? { preset: preset.id } : {}), ...(divisionId ? { division: divisionId } : {}), ...(bunkId ? { bunk: bunkId } : {}) }).toString();
 
   return (
@@ -52,23 +61,31 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
           ) : undefined
         }
       />
-      <form method="get" className="no-print mb-6 grid gap-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] md:grid-cols-[1fr_200px_180px_auto]">
-        <Select name="preset" defaultValue={preset?.id ?? ""}>
+      <ListFilters className="no-print mb-6 grid gap-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] md:grid-cols-[1fr_200px_180px]">
+        <label className="space-y-1">
+          <span className="block text-xs font-medium text-muted-foreground">List</span>
+          <Select name="preset" defaultValue={preset?.id ?? ""}>
           {presets.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>
           ))}
-        </Select>
-        <Select name="division" defaultValue={divisionId ?? ""}>
+          </Select>
+        </label>
+        <label className="space-y-1">
+          <span className="block text-xs font-medium text-muted-foreground">Division</span>
+          <Select name="division" defaultValue={divisionId ?? ""}>
           <option value="">{camp.current && camp.camps.length > 1 ? `All of ${camp.current.name}` : "All divisions"}</option>
           {divs.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
             </option>
           ))}
-        </Select>
-        <Select name="bunk" defaultValue={bunkId ?? ""}>
+          </Select>
+        </label>
+        <label className="space-y-1">
+          <span className="block text-xs font-medium text-muted-foreground">Bunk</span>
+          <Select name="bunk" defaultValue={bunkId ?? ""}>
           <option value="">All bunks</option>
           {(bunks ?? [])
             .filter((b) => !divisionId || b.division_id === divisionId)
@@ -78,11 +95,14 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
                 {b.name}
               </option>
             ))}
-        </Select>
-        <Button type="submit" variant="secondary">
-          Show
-        </Button>
-      </form>
+          </Select>
+        </label>
+        <noscript>
+          <Button type="submit" variant="secondary">
+            Show
+          </Button>
+        </noscript>
+      </ListFilters>
       {!preset && <p className="text-sm text-muted-foreground">No list layouts are set up for your role yet. Ask an admin.</p>}
       {list && <ListGroups columns={list.columns} groups={list.groups} />}
     </div>

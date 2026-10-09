@@ -145,22 +145,22 @@ export function MissingBoard({
           ))}
           {canAct && section !== "no_show" && (
             <>
-              <Button size="sm" variant="outline" className="h-8" disabled={pending} onClick={() => setDlg({ kind: "note", row: r })}>
+              <Button size="sm" variant="outline" className="h-10 sm:h-8" disabled={pending} onClick={() => setDlg({ kind: "note", row: r })}>
                 <MessageSquare /> Note
               </Button>
-              <Button size="sm" variant="outline" className="h-8" disabled={pending} onClick={() => setDlg({ kind: "later", row: r })}>
+              <Button size="sm" variant="outline" className="h-10 sm:h-8" disabled={pending} onClick={() => setDlg({ kind: "later", row: r })}>
                 <Clock /> Later
               </Button>
-              <Button size="sm" variant="outline" className="h-8" disabled={pending} onClick={() => setDlg({ kind: "not_coming", row: r })}>
+              <Button size="sm" variant="outline" className="h-10 sm:h-8" disabled={pending} onClick={() => setDlg({ kind: "not_coming", row: r })}>
                 <UserX /> Not coming
               </Button>
-              <Button size="sm" className="h-8 bg-status-present text-white hover:bg-status-present/90" disabled={pending} onClick={() => run(() => checkInNow(r.id))}>
+              <Button size="sm" className="h-10 bg-status-present text-white sm:h-8 hover:bg-status-present/90" disabled={pending} onClick={() => run(() => checkInNow(r.id))}>
                 <UserCheck /> Check in
               </Button>
             </>
           )}
           {canAct && section === "no_show" && (
-            <Button size="sm" variant="outline" className="h-8" disabled={pending} onClick={() => run(() => undoNotComing(r.id))}>
+            <Button size="sm" variant="outline" className="h-10 sm:h-8" disabled={pending} onClick={() => run(() => undoNotComing(r.id))}>
               Coming after all
             </Button>
           )}

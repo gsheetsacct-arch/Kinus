@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { getCampContext } from "@/lib/data/camp";
 
+export const metadata = { title: "Home" };
+
 async function setupSteps(user: CurrentUser, sessionId: string | null) {
   const supabase = await createClient();
   const [imports, profiles, scopes, staffRole, office, divisions] = await Promise.all([
