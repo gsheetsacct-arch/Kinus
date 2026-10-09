@@ -785,6 +785,9 @@ isOneToOne: false
 "can_access_division":
 { Args: { "p_division_id": string,"p_needed": Database["public"]['Enums']["access_level"] }; Returns: boolean
                            },
+"can_view_group":
+{ Args: { "p_group": string }; Returns: boolean
+                           },
 "can_view_field_group":
 { Args: { "p_camper_id": string,"p_group": string }; Returns: boolean
                            },
@@ -815,11 +818,20 @@ isOneToOne: false
 "level_rank":
 { Args: { "l": Database["public"]['Enums']["access_level"] }; Returns: number
                            },
+"my_bunks":
+{ Args: Record<PropertyKey, never>; Returns: string[]
+                           },
 "my_level":
 { Args: Record<PropertyKey, never>; Returns: Database["public"]['Enums']["access_level"]
                            },
+"my_level_rank":
+{ Args: Record<PropertyKey, never>; Returns: number
+                           },
 "my_role":
 { Args: Record<PropertyKey, never>; Returns: Database["public"]['Enums']["staff_role"]
+                           },
+"my_whole_divisions":
+{ Args: Record<PropertyKey, never>; Returns: string[]
                            },
 "next_camper_code":
 { Args: Record<PropertyKey, never>; Returns: string
