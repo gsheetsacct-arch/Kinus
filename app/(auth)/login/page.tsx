@@ -1,4 +1,5 @@
 import { Tent } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
 import { HashSession } from "./hash-session";
 import { LoginForm } from "./login-form";
 
@@ -6,6 +7,10 @@ export const metadata = { title: "Sign in" };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string }> }) {
   const { next, error } = await searchParams;
+  const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  const {
+    data: { user },
+  } = await (await createClient()).auth.getUser();
   return (
     <main className="grid min-h-dvh lg:grid-cols-[1.1fr_1fr]">
       <section className="relative hidden overflow-hidden bg-primary text-primary-foreground lg:flex lg:flex-col lg:justify-between lg:p-12">
@@ -34,8 +39,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <h2 className="text-2xl font-semibold">Sign in</h2>
           <p className="mb-6 mt-1 text-sm text-muted-foreground">Use the email your invitation was sent to.</p>
           {error && <p className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{decodeURIComponent(error)}</p>}
-          <HashSession />
-          <LoginForm next={next ?? "/"} />
+          <HashSession next={safeNext} signedIn={Boolean(user)} />
+          <LoginForm next={safeNext} />
         </div>
       </section>
     </main>

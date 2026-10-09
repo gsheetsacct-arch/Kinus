@@ -29,7 +29,7 @@ const admin = createClient(url, key, { auth: { persistSession: false } });
 await admin.from("settings").upsert({ key: "bootstrap_owner", value: { email } });
 const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
   data: { full_name: fullName ?? email, global_role: "owner" },
-  redirectTo: `${appUrl}/auth/callback?next=/set-password`,
+  redirectTo: `${appUrl}/login?next=/set-password`,
 });
 if (error) {
   if (/already/i.test(error.message)) {

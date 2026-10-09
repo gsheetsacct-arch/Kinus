@@ -10,7 +10,12 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) return NextResponse.redirect(`${origin}${next.startsWith("/") ? next : "/"}`);
-    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`);
+    const msg = /code verifier|both auth code and code verifier/i.test(error.message)
+      ? "That sign-in link was opened in a different browser than the one that asked for it. Request a new link here."
+      : error.message;
+    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(msg)}`);
   }
-  return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent("The link is missing its code. Request a new one.")}`);
+  // No code: the session may be in the URL #fragment (implicit flow). The browser keeps
+  // the fragment across this redirect and the login page completes the sign-in.
+  return NextResponse.redirect(`${origin}/login?next=${encodeURIComponent(next)}`);
 }

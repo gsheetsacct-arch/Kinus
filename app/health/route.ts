@@ -2,8 +2,13 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /** Public, no secrets: tells you whether the app can reach Supabase and whether the schema is applied. */
-export async function GET() {
-  const out: Record<string, unknown> = { app: "ok", time: new Date().toISOString() };
+export async function GET(request: Request) {
+  const out: Record<string, unknown> = {
+    app: "ok",
+    time: new Date().toISOString(),
+    addressYouUsed: new URL(request.url).host,
+    canonicalAddress: process.env.APP_URL ?? "not set (add APP_URL in Vercel → Settings → Environment Variables)",
+  };
   try {
     const admin = createAdminClient();
     const { error } = await admin.from("settings").select("key").limit(1);

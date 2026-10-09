@@ -1,8 +1,10 @@
 "use server";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { createClient as createPlainClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { serverEnv } from "@/lib/env";
+import { publicEnv } from "@/lib/env";
+import { appUrl } from "@/lib/auth/app-url";
 import { fail, ok, type ActionResult } from "@/lib/actions/result";
 
 const credentials = z.object({ email: z.string().email(), password: z.string().min(6), next: z.string().optional() });
@@ -20,13 +22,17 @@ export async function signInWithPassword(formData: FormData): Promise<ActionResu
 export async function sendMagicLink(formData: FormData): Promise<ActionResult> {
   const email = z.string().email().safeParse(formData.get("email"));
   if (!email.success) return fail("Enter a valid email.");
-  const supabase = await createClient();
+  // Implicit flow: the link itself carries the session, so it works when opened on a
+  // phone or another browser, unlike a PKCE link tied to the browser that asked for it.
+  const supabase = createPlainClient(publicEnv.NEXT_PUBLIC_SUPABASE_URL, publicEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    auth: { flowType: "implicit", persistSession: false, autoRefreshToken: false },
+  });
   const { error } = await supabase.auth.signInWithOtp({
     email: email.data,
-    options: { shouldCreateUser: false, emailRedirectTo: `${serverEnv().APP_URL}/auth/callback` },
+    options: { shouldCreateUser: false, emailRedirectTo: `${await appUrl()}/login` },
   });
-  if (error) return fail(error.message);
-  return ok("Check your email for a sign-in link.");
+  if (error) return fail(/rate limit|security purposes/i.test(error.message) ? "Too many links requested. Wait a minute and try again." : error.message);
+  return ok("Check your email for a sign-in link. It works on any device.");
 }
 
 export async function setPassword(formData: FormData): Promise<ActionResult> {

@@ -3,12 +3,12 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { serverEnv } from "@/lib/env";
+import { appUrl } from "@/lib/auth/app-url";
 import { requireAdmin, requireDirector } from "@/lib/auth/current-user";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 
 const ROLES = ["owner", "admin", "director", "logistics", "office", "staff"] as const;
-const redirectTo = () => `${serverEnv().APP_URL}/auth/callback?next=/set-password`;
+const redirectTo = async () => `${await appUrl()}/login?next=/set-password`;
 
 const invite = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address."),
@@ -22,7 +22,7 @@ export async function inviteUser(fd: FormData): Promise<ActionResult> {
     const d = invite.parse(Object.fromEntries(fd));
     if (d.global_role === "owner" && me.role !== "owner") return fail("Only an owner can make someone an owner.");
     const admin = createAdminClient();
-    const { data, error } = await admin.auth.admin.inviteUserByEmail(d.email, { data: { full_name: d.full_name, global_role: d.global_role }, redirectTo: redirectTo() });
+    const { data, error } = await admin.auth.admin.inviteUserByEmail(d.email, { data: { full_name: d.full_name, global_role: d.global_role }, redirectTo: await redirectTo() });
     if (error) {
       if (/already been registered|already exists/i.test(error.message)) return fail("Someone with that email already has an account. Find them in the list.");
       throw error;
@@ -39,7 +39,7 @@ export async function sendSignInLink(fd: FormData): Promise<ActionResult> {
   await requireAdmin();
   const email = String(fd.get("email"));
   const admin = createAdminClient();
-  const { error } = await admin.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: redirectTo() } });
+  const { error } = await admin.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: await redirectTo() } });
   if (error) return fail(error.message);
   return ok(`Sign-in link emailed to ${email}. It lets them choose a new password.`);
 }

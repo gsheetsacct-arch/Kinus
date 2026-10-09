@@ -1,9 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { authRedirect } from "@/lib/auth/redirects";
 
 const PUBLIC_PATHS = ["/login", "/auth", "/set-password", "/api/webhooks", "/api/cron", "/health"];
 
 export async function updateSession(request: NextRequest) {
+  const url = new URL(request.nextUrl.pathname + request.nextUrl.search, `${request.nextUrl.protocol}//${request.headers.get("host") ?? request.nextUrl.host}`);
+  const redirectTo = authRedirect(url, { canonical: process.env.APP_URL, production: process.env.VERCEL_ENV === "production" });
+  if (redirectTo) return NextResponse.redirect(redirectTo, 307);
+
   let response = NextResponse.next({ request });
   const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     cookies: {
@@ -31,11 +36,7 @@ export async function updateSession(request: NextRequest) {
     url.searchParams.set("next", path);
     return NextResponse.redirect(url);
   }
-  if (user && path === "/login") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    url.search = "";
-    return NextResponse.redirect(url);
-  }
+  // Signed-in people on /login are sent on by the page itself: only the browser can
+  // see a sign-in token in the #fragment, and that must be handled first.
   return response;
 }

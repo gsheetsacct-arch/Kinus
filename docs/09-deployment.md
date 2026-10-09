@@ -19,8 +19,8 @@ Supabase, Vercel and GitHub web UIs.
 1. **Supabase project** exists and is linked to the Vercel project through the
    Vercel ↔ Supabase integration. That integration already sets
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and
-   `SUPABASE_SERVICE_ROLE_KEY` on Vercel; the app derives `APP_URL` from Vercel
-   itself, so no further Vercel env vars are needed for phase 1.
+   `SUPABASE_SERVICE_ROLE_KEY` on Vercel. The only variable to add yourself is
+   `APP_URL` (step 3).
 
 2. **Apply the schema.** Two ways; pick one.
 
@@ -45,9 +45,17 @@ Supabase, Vercel and GitHub web UIs.
    *Setup — apply schema, create owner* → *Run workflow*. Re-run it any time to
    apply new migrations; it skips what is already applied.
 
-3. **Auth settings** (Supabase → Authentication → URL Configuration):
-   - Site URL = the Vercel production URL
-   - Redirect URLs: add `https://<your-vercel-domain>/**`
+3. **Pick one address and tell Kinus.** A Vercel project answers on several
+   addresses (for example `kinus.vercel.app` and `kinus-<team>.vercel.app`), and
+   sign-ins are stored per address. In Vercel → Settings → Environment Variables
+   add `APP_URL` = `https://kinus.vercel.app` (Production) and redeploy. Kinus then
+   forwards every other production address to that one, and emailed links use it.
+   `/health` shows which address is set.
+   **Auth settings** (Supabase → Authentication → URL Configuration):
+   - Site URL = that same address
+   - Redirect URLs: add `https://kinus.vercel.app/**`. The Supabase–Vercel
+     integration manages this list too and adds Vercel's own project address;
+     that is fine, because Kinus forwards it.
    Under Authentication → Sign In / Providers → Email keep the provider on and
    turn *Allow new users to sign up* **off** (staff are invited, never self-register).
 
@@ -84,9 +92,10 @@ Generated TypeScript types (`lib/supabase/database.types.ts`) are committed;
 regenerate after a schema change with
 `supabase gen types typescript --db-url <url> --schema public > lib/supabase/database.types.ts`.
 
-Auth email templates: the defaults work. Invites sent from the dashboard arrive
-on `/login`, which completes the sign-in and continues to `/set-password`; links
-produced by the app go through `/auth/callback`. Optionally point the templates at
+Auth email templates: the defaults work. Invitations and sign-in links carry the
+session in the link itself (Supabase's implicit flow), so they work when opened on
+a phone or a different browser than the one that asked. They land on `/login`,
+which completes the sign-in and continues to `/set-password` for invitations. Optionally point the templates at
 `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite` (resp.
 `type=magiclink`) for a fully server-side flow.
 
@@ -127,7 +136,7 @@ produced by the app go through `/auth/callback`. Optionally point the templates 
 | `RESEND_WEBHOOK_SECRET` | server only | delivery events |
 | `EMAIL_FROM` | server | `Kinus Tags <tags@your-domain>` |
 | `CRON_SECRET` | server | |
-| `APP_URL` | server | links in emails; derived from Vercel's production URL when unset |
+| `APP_URL` | server | the one address staff use, e.g. `https://kinus.vercel.app`. Other production addresses redirect to it; emailed links use it. If unset, links use the address the sender is on. |
 
 - Custom domain (e.g. `kinus.your-domain`), HTTPS automatic. PWA requires HTTPS,
   which previews and prod both have.
