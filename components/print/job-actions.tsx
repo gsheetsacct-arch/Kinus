@@ -6,6 +6,7 @@ import { CheckCheck, FileDown, Printer, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cancelJobs, markPrinted, resendJob } from "@/app/(app)/print/actions";
+import { fitPreview } from "@/lib/print/fit-preview";
 
 /**
  * The job's tags in a frame, printable from here. With autoPrint (right after "Print a
@@ -36,7 +37,11 @@ export function JobPreview({ id, autoPrint }: { id: string; autoPrint: boolean }
         className="h-[60vh] w-full rounded-xl border bg-muted"
         onLoad={() => {
           const doc = frame.current?.contentDocument;
-          const wait = () => (doc?.body?.getAttribute("data-fitted") ? setReady(true) : setTimeout(wait, 100));
+          const wait = () => {
+            if (!doc?.body?.getAttribute("data-fitted")) return void setTimeout(wait, 100);
+            fitPreview(frame.current);
+            setReady(true);
+          };
           wait();
         }}
       />

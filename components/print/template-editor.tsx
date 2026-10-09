@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import type { Layer, SheetLayout, TemplateSpec } from "@/lib/print/types";
 import { previewTemplate, saveTemplate } from "@/app/(app)/print/actions";
+import { fitPreview } from "@/lib/print/fit-preview";
 
 export type EditorTemplate = TemplateSpec & { show_on_card: boolean; auto_on_first_checkin: boolean };
 type MergeKey = { key: string; label: string };
@@ -74,6 +75,7 @@ export function TemplateEditor({ initial, fields, background }: { initial: Edito
   const [camper, setCamper] = React.useState("");
   const [saving, startSave] = React.useTransition();
   const [dirty, setDirty] = React.useState(false);
+  const frame = React.useRef<HTMLIFrameElement>(null);
 
   const update = (patch: Partial<EditorTemplate>) => {
     setT((cur) => ({ ...cur, ...patch }));
@@ -232,6 +234,16 @@ export function TemplateEditor({ initial, fields, background }: { initial: Edito
                           <Num label="Rounded corners (mm)" value={l.radius ?? 0} onChange={(n) => setLayer(l.id, { radius: n })} />
                         </div>
                       )}
+                      {(l.type === "text" || l.type === "barcode") && (
+                        <label className="flex items-center gap-2 text-sm">
+                          <span className="text-xs text-muted-foreground">Direction</span>
+                          <Select value={String(l.rotate ?? 0)} onChange={(e) => setLayer(l.id, { rotate: Number(e.target.value) as 0 | 90 | -90 })} className="h-9 w-56">
+                            <option value="0">Across</option>
+                            <option value="-90">Up the side (bottom to top)</option>
+                            <option value="90">Down the side (top to bottom)</option>
+                          </Select>
+                        </label>
+                      )}
                       <div className="grid grid-cols-4 gap-2">
                         <Num label="Left" value={l.x} onChange={(n) => setLayer(l.id, { x: n })} />
                         <Num label="Top" value={l.y} onChange={(n) => setLayer(l.id, { y: n })} />
@@ -291,7 +303,7 @@ export function TemplateEditor({ initial, fields, background }: { initial: Edito
             {saving ? "Saving…" : dirty || !t.id ? "Save template" : "Saved"}
           </Button>
         </div>
-        <iframe title="Preview" srcDoc={html} className="h-[420px] w-full rounded-xl border bg-muted" />
+        <iframe ref={frame} title="Preview" srcDoc={html} onLoad={() => fitPreview(frame.current)} className="h-[420px] w-full rounded-xl border bg-muted" />
       </div>
     </div>
   );

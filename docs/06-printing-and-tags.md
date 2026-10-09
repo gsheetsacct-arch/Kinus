@@ -64,6 +64,31 @@ export). The office opens it as the data source in Publisher and runs the merge
 there. Good for the first big print run before the program, and as a fallback if a
 template has not been converted yet.
 
+**Converted so far** (originals in [`docs/templates/`](templates/), migration `0010`):
+
+| Publisher file | Kinus template | Notes |
+|---|---|---|
+| `labels_4x6_template.pub` | Label 4×6 (Hebrew name) | 152.4 × 101.6 mm, one per label |
+| `labels_small_template.pub` | Label 4×6 (English name) | same layout, English name instead of Hebrew |
+
+Publisher field → Kinus field:
+
+| Publisher | Kinus | Reads |
+|---|---|---|
+| «ppa#hebrew_name», «ppa#hebrew_last_name» | `{{HEB_FIRST}}`, `{{HEB_LAST}}` | export columns `ppa.hebrew_name`, `ppa.hebrew_last_name` |
+| «ppa#first_name», «ppa#last_name» | `{{FIRST}}`, `{{LAST}}` | the camper's name |
+| «F88», «F89» «F90» | `{{FROM}}` | `ppa.city`, `ppa.state` `ppa.country`, tidied when a part is empty. These were unnamed columns 88–90 in the spreadsheet; city/state/country is a best guess from the layout |
+| «bunk hebrew» | `{{BUNK_HEBREW}}` | `group_types.hebrew_bunks`, else the bunk, without "Bunk " |
+| «F15» | `{{BUNK_BIG}}` | the bunk without "Bunk ". Unnamed column 15 in the spreadsheet: change BUNK_BIG under Print → Fields if it was something else (e.g. a bunk number via a conversion table) |
+| «group_types#division» | `{{DIVISION}}` | |
+| «ppa#t-shirt_size» | `{{TSHIRT}}` | converted (Youth Large → YL) |
+| «ppa#yarmulka_size» | `{{YARMULKA}}` | export column `ppa.yarmulka_size` |
+| «camper_id» | barcode `{{BARCODE}}` up the left side | scannable at check-in |
+
+Any column of the registration export can be used in a field as
+`{{source.<column header>}}` (Publisher's `#` and the export's `.` are the same), and
+`{{a|b}}` takes the first that isn't empty.
+
 Template model (path A), stored as JSON on `print_templates`:
 
 ```json

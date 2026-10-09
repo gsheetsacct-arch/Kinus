@@ -7,9 +7,17 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 const PAPER: Record<SheetLayout["paper"], [number, number]> = { letter: [215.9, 279.4], a4: [210, 297] };
 const safeColor = (c: string | undefined, fallback: string) => (c && /^#[0-9a-f]{3,8}$|^[a-z]+$/i.test(c.trim()) ? c.trim() : fallback);
 
-function layerHtml(l: Layer, values: Record<string, string>): string {
+/**
+ * One part of a tag. A turned part (rotate ±90) keeps its box (x, y, w, h) as seen on the
+ * tag; its content is laid out across the turned box and then rotated into place.
+ */
+function layerHtml(l: Layer, values: Record<string, string>, at?: string): string {
   const get = (k: string) => values[k] ?? "";
-  const pos = `left:${l.x}mm;top:${l.y}mm;width:${l.w}mm;height:${l.h}mm;`;
+  if ((l.type === "text" || l.type === "barcode") && l.rotate) {
+    const inner = `left:50%;top:50%;width:${l.h}mm;height:${l.w}mm;transform:translate(-50%,-50%) rotate(${l.rotate}deg);`;
+    return `<div class="l" style="left:${l.x}mm;top:${l.y}mm;width:${l.w}mm;height:${l.h}mm;overflow:visible">${layerHtml({ ...l, rotate: 0, w: l.h, h: l.w }, values, inner)}</div>`;
+  }
+  const pos = at ?? `left:${l.x}mm;top:${l.y}mm;width:${l.w}mm;height:${l.h}mm;`;
   switch (l.type) {
     case "box": {
       const color = safeColor(fill(l.fill ?? "", get), "transparent");
@@ -72,7 +80,7 @@ body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-w
 .bc{display:flex;flex-direction:column}.bc .bars{flex:1;min-height:0}.bc svg{width:100%;height:100%;display:block}
 .bc-text{font-size:7pt;text-align:center;letter-spacing:0.5pt;line-height:1.2;padding-top:0.4mm}
 .qr svg{width:100%;height:100%;display:block}
-@media screen{body{background:#e2e8f0;padding:8mm;display:flex;flex-wrap:wrap;gap:6mm;align-items:flex-start}.tag,.sheet{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}}
+@media screen{body{background:#e2e8f0;padding:8mm;display:flex;flex-wrap:wrap;gap:6mm;align-items:flex-start}.tag,.sheet{flex-shrink:0;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}}
 @media print{body{display:block}}
 </style></head><body>${body}<script>
 (function(){function fit(){document.querySelectorAll("[data-fit]").forEach(function(el){var s=parseFloat(getComputedStyle(el).fontSize);var span=el.firstElementChild;var guard=60;while(guard-->0&&s>4&&(span.scrollWidth>el.clientWidth+0.5||el.scrollHeight>el.clientHeight+0.5)){s-=0.5;el.style.fontSize=s+"px";}});document.body.setAttribute("data-fitted","1");}

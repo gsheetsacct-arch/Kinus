@@ -24,14 +24,14 @@ const TILES: { status: CamperStatus; label: string; tone: string }[] = [
   { status: "present", label: "Here", tone: "text-status-present" },
   { status: "out", label: "Out, coming back", tone: "text-amber-600 dark:text-amber-400" },
   { status: "expected", label: "Not here yet", tone: "text-muted-foreground" },
-  { status: "departed", label: "Went home", tone: "text-status-departed" },
+  { status: "departed", label: "Not coming back", tone: "text-status-departed" },
   { status: "no_show", label: "No-show", tone: "text-status-no-show" },
 ];
 const BULK: { event: AttendanceEventType; label: string }[] = [
   { event: "arrival", label: "Check in" },
   { event: "leave", label: "Out · coming back" },
   { event: "return", label: "Back in" },
-  { event: "pickup", label: "Going home" },
+  { event: "pickup", label: "Not coming back" },
   { event: "no_show", label: "No-show" },
 ];
 const SCOPE_KEY = "kinus:board-scope";
@@ -236,7 +236,7 @@ export function StatusBoard({
                 {total.present} of {expectedHere} here
                 {total.out > 0 && ` · ${total.out} out`}
                 {total.expected > 0 && ` · ${total.expected} not yet`}
-                {total.departed > 0 && ` · ${total.departed} went home`}
+                {total.departed > 0 && ` · ${total.departed} not coming back`}
               </span>
               <span className="ml-auto hidden h-1.5 w-28 overflow-hidden rounded-full bg-muted sm:block" aria-hidden>
                 <span className="block h-full bg-status-present" style={{ width: `${expectedHere ? (100 * total.present) / expectedHere : 0}%` }} />

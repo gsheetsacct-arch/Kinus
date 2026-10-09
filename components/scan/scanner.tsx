@@ -36,11 +36,16 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
   const [flash, setFlash] = React.useState<Flash | null>(null);
   const [recent, setRecent] = React.useState<Recent[]>([]);
   const [card, setCard] = React.useState<string | null>(null);
+  // the camera is on unless this device turned it off (a desk with a USB scanner)
   const [camera, setCamera] = React.useState(false);
   const [sound, setSound] = React.useState(true);
   const [, setTick] = React.useState(0);
   const input = React.useRef<HTMLInputElement>(null);
   const lastHit = React.useRef<{ id: string; at: number } | null>(null);
+  const focusBox = React.useCallback(() => {
+    if (window.matchMedia("(pointer: fine)").matches) input.current?.focus();
+  }, []);
+  React.useEffect(focusBox, [focusBox]);
   const byCode = React.useMemo(() => new Map(roster.map((r) => [r.code, r])), [roster]);
   const index = React.useMemo(() => roster.map((r) => ({ r, n: normalizeName(`${r.first} ${r.last}`), f: normalizeName(r.first), l: normalizeName(r.last) })), [roster]);
 
@@ -52,6 +57,7 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
       if (m && (canScan || m === "lookup")) setMode(m);
       if (o) setOutKind(o);
       setSound(localStorage.getItem("kinus:sound") !== "off");
+      setCamera(localStorage.getItem("kinus:camera") !== "off");
     } catch {}
   }, [canScan]);
   const choose = (m: ScanMode) => {
@@ -59,7 +65,7 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
     try {
       localStorage.setItem("kinus:scan-mode", m);
     } catch {}
-    input.current?.focus();
+    focusBox();
   };
   const chooseOut = (o: OutKind) => {
     setOutKind(o);
@@ -111,9 +117,9 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
         show({ tone: "already", title: o.name, detail });
         setRecent((x) => [{ key: now, camperId: o.camperId, name: o.name, verb: o.message, tone: "already" as const, at: now }, ...x].slice(0, 8));
       }
-      input.current?.focus();
+      focusBox();
     },
-    [mode, outKind, show],
+    [mode, outKind, show, focusBox],
   );
 
   const handleText = React.useCallback(
@@ -132,6 +138,7 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
     },
     [byCode, act, show],
   );
+  const onCameraCode = React.useCallback((t: string) => void handleText(t, "scan"), [handleText]);
 
   // USB/Bluetooth scanners type fast and press Enter; catch them even when the box isn't focused
   React.useEffect(() => {
@@ -214,7 +221,7 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
             {(
               [
                 ["back", "Coming back later"],
-                ["home", "Going home"],
+                ["home", "Not coming back"],
               ] as const
             ).map(([k, label]) => (
               <button
@@ -232,7 +239,6 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
           <Input
             ref={input}
             id="scan-input"
-            autoFocus
             autoComplete="off"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -251,7 +257,7 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
             {mode === "in" && "Scanning checks the camper in."}
-            {mode === "out" && (outKind === "home" ? "Scanning checks the camper out to go home." : "Scanning checks the camper out; they'll come back.")}
+            {mode === "out" && (outKind === "home" ? "Scanning checks the camper out for the day: not coming back." : "Scanning checks the camper out; they'll come back.")}
             {mode === "lookup" && "Scanning opens the camper. Nothing is recorded."}
           </span>
           <span className="flex gap-1">
@@ -269,12 +275,22 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
             >
               {sound ? <Volume2 /> : <VolumeX />}
             </Button>
-            <Button variant={camera ? "default" : "outline"} size="sm" onClick={() => setCamera((c) => !c)}>
+            <Button
+              variant={camera ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                const v = !camera;
+                setCamera(v);
+                try {
+                  localStorage.setItem("kinus:camera", v ? "on" : "off");
+                } catch {}
+              }}
+            >
               {camera ? <CameraOff /> : <CameraIcon />} {camera ? "Stop camera" : "Camera"}
             </Button>
           </span>
         </div>
-        {camera && <Camera onCode={(t) => handleText(t, "scan")} onError={(m) => (toast.error(m), setCamera(false))} />}
+        {camera && <Camera onCode={onCameraCode} />}
       </div>
 
       {matches.length > 0 && (

@@ -72,3 +72,44 @@ describe("renderDocument", () => {
     expect(sheet).toContain("@page{size:215.9mm 279.4mm");
   });
 });
+
+describe("export columns, alternatives and turned parts", () => {
+  const camper = {
+    first_name: "Levi",
+    last_name: "Cohen",
+    bunk_name: "Bunk Chof",
+    source_data: { "ppa.hebrew_name": "לוי יצחק", "ppa.city": "Melbourne", "ppa.state": "", "ppa.country": "Australia", "group_types.hebrew_bunks": "" },
+  };
+  it("reads any export column, Publisher-style (#) or not", async () => {
+    const { sourceValues, fill } = await import("../merge");
+    const get = sourceValues(camper);
+    expect(get("source.ppa.hebrew_name")).toBe("לוי יצחק");
+    expect(get("source.PPA#Hebrew_Name")).toBe("לוי יצחק");
+    expect(get("source.ppa.missing")).toBe("");
+    expect(fill("{{source.group_types.hebrew_bunks|bunk}}", get)).toBe("Bunk Chof");
+  });
+  it("tidies an address with a missing part", async () => {
+    const { mergeValues } = await import("../merge");
+    const from = { key: "FROM", label: "From", source_field: "{{source.ppa.city}}, {{source.ppa.state}} {{source.ppa.country}}", transforms: FROM_TIDY };
+    expect(mergeValues(camper as never, [from], new Map()).FROM).toBe("Melbourne, Australia");
+    const full = { ...camper, source_data: { "ppa.city": "Toronto", "ppa.state": "ON", "ppa.country": "Canada" } };
+    expect(mergeValues(full as never, [from], new Map()).FROM).toBe("Toronto, ON Canada");
+    const none = { ...camper, source_data: {} };
+    expect(mergeValues(none as never, [from], new Map()).FROM).toBe("");
+  });
+  it("turns a barcode a quarter turn inside its box", async () => {
+    const { renderDocument } = await import("../render");
+    const html = renderDocument({ name: "t", kind: "other", page_width_mm: 152.4, page_height_mm: 101.6, sheet_layout: null, layers: [{ id: "b", type: "barcode", text: "KN{{CODE}}", x: 2, y: 5, w: 12, h: 90, rotate: -90 }] }, [{ values: { CODE: "100016" }, copies: 1 }]);
+    expect(html).toContain("left:2mm;top:5mm;width:12mm;height:90mm;overflow:visible");
+    expect(html).toContain("width:90mm;height:12mm;transform:translate(-50%,-50%) rotate(-90deg)");
+    expect(html).toContain("KN100016");
+  });
+});
+
+// the same steps migration 0010 gives {{FROM}}
+const FROM_TIDY = [
+  { type: "replace" as const, pattern: "\\s*,\\s*(?=,|$)", replacement: "", flags: "g" },
+  { type: "replace" as const, pattern: "^\\s*,\\s*", replacement: "", flags: "" },
+  { type: "replace" as const, pattern: ",\\s+", replacement: ", ", flags: "g" },
+  { type: "replace" as const, pattern: "\\s{2,}", replacement: " ", flags: "g" },
+];

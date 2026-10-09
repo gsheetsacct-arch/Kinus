@@ -3,9 +3,21 @@ import type { MergeField, Transform, ValueMap } from "./types";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
-/** Every camper value a merge field can start from, as plain strings. */
-export function sourceValues(c: CamperLike & { division_color?: string | null }): (key: string) => string {
+/** "ppa#Hebrew_Name" and "ppa.hebrew_name" are the same column (Publisher shows "." as "#"). */
+const columnKey = (k: string) => k.trim().toLowerCase().replace(/#/g, ".");
+
+/**
+ * Every camper value a merge field can start from, as plain strings. Besides the fields
+ * Kinus keeps, any column of the registration export works as "source.<column header>"
+ * (e.g. source.ppa.hebrew_name), read from the camper's row in the latest import.
+ */
+export function sourceValues(c: CamperLike & { division_color?: string | null; source_data?: unknown }): (key: string) => string {
+  let columns: Map<string, string> | null = null;
   return (key) => {
+    if (key.startsWith("source.")) {
+      columns ??= new Map(Object.entries((c.source_data ?? {}) as Record<string, unknown>).map(([k, v]) => [columnKey(k), v === null || v === undefined ? "" : String(v).trim()]));
+      return columns.get(columnKey(key.slice(7))) ?? "";
+    }
     if (key === "division_color") return c.division_color ?? "#64748b";
     const v = getFieldValue(c, key);
     if (v === null || v === undefined) return "";
@@ -14,9 +26,18 @@ export function sourceValues(c: CamperLike & { division_color?: string | null })
   };
 }
 
-/** "{{a}} {{b}}" over a lookup function; unknown keys become empty. */
+/**
+ * "{{a}} {{b}}" over a lookup function; unknown keys become empty. "{{a|b}}" is the first
+ * of a, b that isn't empty (e.g. the Hebrew bunk name, else the bunk).
+ */
 export function fill(template: string, get: (key: string) => string): string {
-  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, k: string) => get(k) ?? "");
+  return template.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, k: string) => {
+    for (const alt of k.split("|")) {
+      const v = get(alt.trim()) ?? "";
+      if (v !== "") return v;
+    }
+    return "";
+  });
 }
 
 export function applyTransforms(value: string, transforms: Transform[], maps: Map<string, ValueMap>): string {

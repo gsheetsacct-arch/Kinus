@@ -15,8 +15,8 @@ export function decide(mode: Exclude<ScanMode, "lookup">, outKind: OutKind, stat
     return { kind: "act", event: "arrival", verb: status === "departed" ? "Checked in again" : "Checked in", tone: "in" };
   }
   if (status === "expected" || status === "no_show") return { kind: "blocked", message: "Hasn't checked in yet" };
-  if (status === "departed") return { kind: "already", message: "Already went home" };
-  if (outKind === "home") return { kind: "act", event: "pickup", verb: "Going home", tone: "home" };
+  if (status === "departed") return { kind: "already", message: "Already checked out, not coming back" };
+  if (outKind === "home") return { kind: "act", event: "pickup", verb: "Checked out · not coming back", tone: "home" };
   if (status === "out") return { kind: "already", message: "Already checked out" };
   return { kind: "act", event: "leave", verb: "Checked out · coming back", tone: "out" };
 }
@@ -37,12 +37,12 @@ export function cardActions(status: CamperStatus): { event: AttendanceEventType;
     case "present":
       return [
         { event: "leave", label: "Check out · coming back", tone: "out" },
-        { event: "pickup", label: "Going home", tone: "home" },
+        { event: "pickup", label: "Not coming back", tone: "home" },
       ];
     case "out":
       return [
         { event: "return", label: "Back in", tone: "in" },
-        { event: "pickup", label: "Going home", tone: "home" },
+        { event: "pickup", label: "Not coming back", tone: "home" },
       ];
     case "departed":
       return [{ event: "arrival", label: "Check in again", tone: "in" }];

@@ -21,13 +21,16 @@ export async function GET(request: Request) {
       const { error: staff } = await admin.from("profiles").select("role, all_areas").limit(1);
       const { error: fast } = staff ? { error: null } : await admin.rpc("my_level_rank");
       const { error: followups } = staff || fast ? { error: null } : await admin.from("camper_followups").select("camper_id").limit(1);
+      const labels = staff || fast || followups ? null : (await admin.from("print_templates").select("id").eq("id", "d0000000-0000-0000-0000-000000000003").maybeSingle()).data;
       out.schema = staff
         ? "OUT OF DATE: run migrations from 0006 on (staff sign-in fails until then)"
         : fast
           ? "OUT OF DATE: run migrations 0007 (camps) and 0008 (faster pages)"
           : followups
             ? "OUT OF DATE: run migration 0009 (campers not here yet)"
-            : "applied";
+            : !labels
+              ? "OUT OF DATE: run migration 0010 (the 4×6 Publisher labels)"
+              : "applied";
       const [{ count: profiles }, { data: session }] = await Promise.all([
         admin.from("profiles").select("id", { count: "exact", head: true }),
         admin.from("sessions").select("name").eq("is_active", true).maybeSingle(),

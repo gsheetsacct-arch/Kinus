@@ -62,7 +62,7 @@ export async function recordFromCard(camperId: string, event: AttendanceEventTyp
   const supabase = await createClient();
   const { data: c } = await supabase.from("campers_board").select("id, display_name, session_id").eq("id", camperId).maybeSingle();
   if (!c?.id) return { ok: false, error: "This camper isn't in your area." };
-  const verb = event === "arrival" ? "Checked in" : event === "return" ? "Back in" : event === "pickup" ? "Going home" : "Checked out · coming back";
+  const verb = event === "arrival" ? "Checked in" : event === "return" ? "Back in" : event === "pickup" ? "Checked out · not coming back" : "Checked out · coming back";
   const tone = event === "pickup" ? "home" : event === "leave" ? "out" : "in";
   return record(c.id, c.display_name ?? "", c.session_id!, event, "manual", verb, tone, note);
 }

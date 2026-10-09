@@ -25,7 +25,7 @@ export const STATUS_LABEL: Record<CamperStatus, string> = {
   expected: "Expected",
   present: "Present",
   out: "Out",
-  departed: "Departed",
+  departed: "Not coming back",
   no_show: "No-show",
 };
 
@@ -33,7 +33,7 @@ export const EVENT_LABEL: Record<AttendanceEventType, string> = {
   arrival: "Checked in",
   leave: "Checked out · coming back",
   return: "Back in",
-  pickup: "Went home",
+  pickup: "Checked out · not coming back",
   no_show: "Marked no-show",
   correction: "Status corrected",
 };
