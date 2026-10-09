@@ -10,13 +10,14 @@ export type PrintCamper = CamperLike & { id: string; division_color: string | nu
 
 export async function loadMergeSetup(db: DB): Promise<{ fields: MergeField[]; maps: Map<string, ValueMap> }> {
   const [{ data: fields }, { data: maps }, { data: entries }] = await Promise.all([
-    db.from("merge_fields").select("key, label, source_field, transforms").order("sort_order").order("key"),
+    // "*": works before and after the merge-list switch (migration 0012) exists
+    db.from("merge_fields").select("*").order("sort_order").order("key"),
     db.from("value_maps").select("id, name, source_field"),
     db.from("value_map_entries").select("map_id, source_value, output_value"),
   ]);
   const m = new Map<string, ValueMap>();
   for (const v of maps ?? []) m.set(v.id, { ...v, entries: (entries ?? []).filter((e) => e.map_id === v.id) });
-  return { fields: (fields ?? []).map((f) => ({ ...f, transforms: (f.transforms as Transform[]) ?? [] })), maps: m };
+  return { fields: (fields ?? []).map((f) => ({ key: f.key, label: f.label, source_field: f.source_field, transforms: (f.transforms as Transform[]) ?? [], enabled: (f as { enabled?: boolean }).enabled ?? true })), maps: m };
 }
 
 export function toSpec(t: Database["public"]["Tables"]["print_templates"]["Row"]): TemplateSpec {

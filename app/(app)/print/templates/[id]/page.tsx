@@ -8,7 +8,9 @@ import { TemplateEditor, type EditorTemplate } from "@/components/print/template
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/current-user";
 import { isAdmin } from "@/lib/auth/permissions";
-import { toSpec } from "@/lib/print/data";
+import { backgroundDataUrl, toSpec } from "@/lib/print/data";
+import { embeddedFontCss } from "@/lib/print/fonts";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { deleteTemplate, uploadBackground } from "../../actions";
 
 export const metadata = { title: "Template" };
@@ -20,7 +22,8 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
   const [user, { id }] = await Promise.all([requireUser(), params]);
   if (!isAdmin(user)) redirect("/print");
   const supabase = await createClient();
-  const { data: fields } = await supabase.from("merge_fields").select("key, label").order("sort_order").order("key");
+  const { data: fieldRows } = await supabase.from("merge_fields").select("*").order("sort_order").order("key");
+  const fields = (fieldRows ?? []).map((f) => ({ key: f.key, label: f.label, enabled: (f as { enabled?: boolean }).enabled ?? true }));
   let initial = BLANK;
   if (id !== "new") {
     if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
@@ -28,6 +31,8 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
     if (!t) notFound();
     initial = { ...toSpec(t), show_on_card: t.show_on_card, auto_on_first_checkin: t.auto_on_first_checkin };
   }
+  // the background and the print fonts, so the canvas looks and measures like the print
+  const backgroundUrl = initial.background_path ? await backgroundDataUrl(createAdminClient(), initial.background_path) : null;
   const background = initial.id ? (
     <section className="space-y-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)]">
       <h2 className="font-semibold">Background image</h2>
@@ -80,7 +85,8 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
           ) : undefined
         }
       />
-      <TemplateEditor key={initial.id ?? "new"} initial={initial} fields={fields ?? []} background={background} />
+      <style dangerouslySetInnerHTML={{ __html: embeddedFontCss() }} />
+      <TemplateEditor key={initial.id ?? "new"} initial={initial} fields={fields} background={background} backgroundUrl={backgroundUrl} />
     </div>
   );
 }
