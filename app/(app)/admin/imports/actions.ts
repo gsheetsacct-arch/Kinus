@@ -8,6 +8,7 @@ import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { parseFile, findLostText, applyMapping, matchAndDiff, resolveMultiValues, type ColumnMap, type MappingOptions, type ExistingCamper, type ParsedCamper } from "@/lib/import";
 import type { Json } from "@/lib/supabase/database.types";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 type J = NonNullable<Json>;
 
@@ -72,22 +73,28 @@ export async function uploadImport(fd: FormData): Promise<ActionResult> {
 
 async function loadExisting(sessionId: string): Promise<{ existing: ExistingCamper[]; known: { name: string; bunks: string[] }[] }> {
   const admin = createAdminClient();
-  const [{ data: campers, error }, { data: divisions }, { data: bunks }, { data: contacts }] = await Promise.all([
-    admin.from("campers").select("*").eq("session_id", sessionId).is("archived_at", null),
+  const [campers, { data: divisions }, { data: bunks }, contacts] = await Promise.all([
+    fetchAll((from, to) => admin.from("campers").select("*").eq("session_id", sessionId).is("archived_at", null).order("id").range(from, to)),
     admin.from("divisions").select("id, name").eq("session_id", sessionId),
-    admin.from("bunks").select("id, division_id, name"),
-    admin.from("camper_contacts").select("camper_id, role, slot, name, phone, phone_e164, email, source, campers!inner(session_id)").eq("campers.session_id", sessionId),
+    admin.from("bunks").select("id, division_id, name, divisions!inner(session_id)").eq("divisions.session_id", sessionId),
+    fetchAll((from, to) =>
+      admin
+        .from("camper_contacts")
+        .select("camper_id, role, slot, name, phone, phone_e164, email, source, campers!inner(session_id)")
+        .eq("campers.session_id", sessionId)
+        .order("id")
+        .range(from, to),
+    ),
   ]);
-  if (error) throw error;
   const dName = new Map((divisions ?? []).map((d) => [d.id, d.name]));
   const bName = new Map((bunks ?? []).map((b) => [b.id, b.name]));
   const byCamper = new Map<string, ExistingCamper["contacts"]>();
-  for (const c of contacts ?? []) {
+  for (const c of contacts) {
     const list = byCamper.get(c.camper_id) ?? [];
     list.push({ role: c.role, slot: c.slot, name: c.name, phone: c.phone, phone_e164: c.phone_e164, email: c.email, source: c.source });
     byCamper.set(c.camper_id, list);
   }
-  const existing: ExistingCamper[] = (campers ?? []).map((c) => ({
+  const existing: ExistingCamper[] = campers.map((c) => ({
     id: c.id,
     source_id: c.source_id,
     first_name: c.first_name,
@@ -152,19 +159,19 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
       await admin.from("import_mappings").insert({ name: d.preset_name, column_map: columnMap, options: mappingOptions as unknown as J, created_by: me.id });
     }
 
-    const { data: rawRows, error: e2 } = await admin.from("import_rows").select("id, row_number, raw").eq("import_id", imp.id).order("row_number");
-    if (e2) throw e2;
-    const parsedRows = (rawRows ?? []).map((r) => ({ id: r.id, rowNumber: r.row_number, parsed: applyMapping(r.raw as Record<string, string>, columnMap, mappingOptions) }));
+    const rawRows = await fetchAll((from, to) => admin.from("import_rows").select("id, row_number, raw").eq("import_id", imp.id).order("row_number").range(from, to));
+    const parsedRows = rawRows.map((r) => ({ id: r.id, rowNumber: r.row_number, parsed: applyMapping(r.raw as Record<string, string>, columnMap, mappingOptions) }));
     const { existing, known } = await loadExisting(imp.session_id);
     resolveMultiValues(parsedRows, known);
     const result = matchAndDiff(parsedRows, existing, known, { takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on" });
 
+    const rawByRow = new Map(rawRows.map((r) => [r.row_number, r]));
     for (let i = 0; i < result.rows.length; i += 200) {
       const chunk = result.rows.slice(i, i + 200).map((r) => ({
-        id: parsedRows.find((p) => p.rowNumber === r.rowNumber)!.id,
+        id: rawByRow.get(r.rowNumber)!.id,
         import_id: imp.id,
         row_number: r.rowNumber,
-        raw: (rawRows ?? []).find((x) => x.row_number === r.rowNumber)!.raw as J,
+        raw: rawByRow.get(r.rowNumber)!.raw as J,
         parsed: r.parsed as unknown as J,
         matched_camper_id: r.matchedCamperId,
         match_method: r.matchMethod,
@@ -225,8 +232,8 @@ export async function resolveConflict(fd: FormData): Promise<ActionResult> {
     const { error: e2 } = await admin.from("import_rows").update({ ...update, warnings: [] }).eq("id", rowId);
     if (e2) throw e2;
     // refresh counts
-    const { data: rows } = await admin.from("import_rows").select("action").eq("import_id", row.import_id);
-    const count = (a: string) => (rows ?? []).filter((r) => r.action === a).length;
+    const rows = await fetchAll((from, to) => admin.from("import_rows").select("action").eq("import_id", row.import_id).order("id").range(from, to));
+    const count = (a: string) => rows.filter((r) => r.action === a).length;
     const { data: impRow } = await admin.from("imports").select("summary").eq("id", row.import_id).single();
     await admin
       .from("imports")

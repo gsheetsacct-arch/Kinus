@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import type { ContactLike } from "@/lib/fields";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 type DB = SupabaseClient<Database>;
 export type CamperVisible = Database["public"]["Views"]["campers_visible"]["Row"];
@@ -23,24 +24,33 @@ export async function listCampers(supabase: DB, f: CamperFilter): Promise<Camper
     ids = (data ?? []).map((r) => r.id);
     if (ids.length === 0) return [];
   }
-  let query = supabase.from("campers_visible").select("*").eq("session_id", f.sessionId);
-  if (!f.includeArchived) query = query.is("archived_at", null);
-  if (f.divisionId) query = query.eq("division_id", f.divisionId);
-  if (f.bunkId) query = query.eq("bunk_id", f.bunkId);
-  if (f.status) query = query.eq("status", f.status as NonNullable<CamperVisible["status"]>);
-  if (ids) query = query.in("id", ids);
-  const { data: campers, error } = await query.order("last_name").order("first_name");
-  if (error) throw error;
-  const rows = campers ?? [];
-  const [{ data: divisions }, { data: bunks }, { data: contacts }] = await Promise.all([
+  const rows = await fetchAll<CamperVisible>((from, to) => {
+    let query = supabase.from("campers_visible").select("*").eq("session_id", f.sessionId);
+    if (!f.includeArchived) query = query.is("archived_at", null);
+    if (f.divisionId) query = query.eq("division_id", f.divisionId);
+    if (f.bunkId) query = query.eq("bunk_id", f.bunkId);
+    if (f.status) query = query.eq("status", f.status as NonNullable<CamperVisible["status"]>);
+    if (ids) query = query.in("id", ids);
+    return query.order("last_name").order("first_name").order("id").range(from, to);
+  });
+  const [{ data: divisions }, { data: bunks }, contacts] = await Promise.all([
     supabase.from("divisions").select("id, name").eq("session_id", f.sessionId),
-    supabase.from("bunks").select("id, name"),
-    supabase.from("camper_contacts").select("camper_id, role, slot, name, phone, phone_e164, email, campers!inner(session_id)").eq("campers.session_id", f.sessionId),
+    supabase.from("bunks").select("id, name, divisions!inner(session_id)").eq("divisions.session_id", f.sessionId),
+    fetchAll((from, to) => {
+      // Only the contacts of the campers in this list: filter by the same division/bunk.
+      let q = supabase
+        .from("camper_contacts")
+        .select("camper_id, role, slot, name, phone, phone_e164, email, campers!inner(session_id, division_id, bunk_id)")
+        .eq("campers.session_id", f.sessionId);
+      if (f.divisionId) q = q.eq("campers.division_id", f.divisionId);
+      if (f.bunkId) q = q.eq("campers.bunk_id", f.bunkId);
+      return q.order("id").range(from, to);
+    }),
   ]);
   const dName = new Map((divisions ?? []).map((d) => [d.id, d.name]));
   const bName = new Map((bunks ?? []).map((b) => [b.id, b.name]));
   const byCamper = new Map<string, ContactLike[]>();
-  for (const c of contacts ?? []) {
+  for (const c of contacts) {
     const list = byCamper.get(c.camper_id) ?? [];
     list.push({ role: c.role, slot: c.slot, name: c.name, phone: c.phone, phone_e164: c.phone_e164, email: c.email });
     byCamper.set(c.camper_id, list);

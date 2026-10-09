@@ -16,6 +16,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
 import { DIVISION_COLORS, LANGUAGES } from "@/lib/labels";
 import { cn } from "@/lib/utils";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { deleteBunk, deleteDivision, mergeBunk, moveBunk, moveDivision, removeEmpty, saveBunk, saveDivision } from "./actions";
 
 export const metadata = { title: "Divisions & bunks" };
@@ -87,14 +88,14 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
     );
   }
   const supabase = await createClient();
-  const [{ data: divisions }, { data: bunks }, { data: campers }] = await Promise.all([
+  const [{ data: divisions }, { data: bunks }, campers] = await Promise.all([
     supabase.from("divisions").select("id, name, language, color, sort_order").eq("session_id", session.id).order("sort_order").order("name"),
     supabase.from("bunks").select("id, division_id, name, sort_order, divisions!inner(session_id)").eq("divisions.session_id", session.id).order("sort_order").order("name"),
-    supabase.from("campers").select("division_id, bunk_id").eq("session_id", session.id).is("archived_at", null),
+    fetchAll((from, to) => supabase.from("campers").select("division_id, bunk_id").eq("session_id", session.id).is("archived_at", null).order("id").range(from, to)),
   ]);
   const divs = divisions ?? [];
   const campersIn = (divisionId: string, bunkId?: string | null) =>
-    (campers ?? []).filter((c) => c.division_id === divisionId && (bunkId === undefined || c.bunk_id === bunkId)).length;
+    campers.filter((c) => c.division_id === divisionId && (bunkId === undefined || c.bunk_id === bunkId)).length;
   const bunksOf = (divisionId: string) => (bunks ?? []).filter((b) => b.division_id === divisionId);
   const empty = divs.filter((d) => campersIn(d.id) === 0);
   const selected = divs.find((d) => d.id === selectedId) ?? divs[0];

@@ -8,6 +8,7 @@ import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { isAdmin, type CurrentUser } from "@/lib/auth/permissions";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
 import { cn } from "@/lib/utils";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 async function setupSteps(user: CurrentUser, sessionId: string | null) {
   const supabase = await createClient();
@@ -48,7 +49,9 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const { denied } = await searchParams;
   const supabase = await createClient();
   const divisions = session ? ((await supabase.from("divisions").select("id, name, color, sort_order").eq("session_id", session.id).order("sort_order")).data ?? []) : [];
-  const campers = session ? ((await supabase.from("campers_visible").select("id, division_id, status").eq("session_id", session.id).is("archived_at", null)).data ?? []) : [];
+  const campers = session
+    ? await fetchAll((from, to) => supabase.from("campers_visible").select("id, division_id, status").eq("session_id", session.id).is("archived_at", null).order("id").range(from, to))
+    : [];
   const perDivision = divisions.map((d) => ({ ...d, count: campers.filter((c) => c.division_id === d.id).length })).filter((d) => d.count > 0);
   const steps = isAdmin(user) ? await setupSteps(user, session?.id ?? null) : [];
   const remaining = steps.filter((s) => !s.done);

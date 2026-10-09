@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 const done = (msg: string, redirect?: string) => {
   revalidatePath("/", "layout");
@@ -164,13 +165,13 @@ export async function removeEmpty(): Promise<ActionResult> {
   const session = await getActiveSession();
   if (!session) return fail("No active session.");
   const supabase = await createClient();
-  const [{ data: divisions }, { data: campers }, { data: scopes }] = await Promise.all([
+  const [{ data: divisions }, campers, { data: scopes }] = await Promise.all([
     supabase.from("divisions").select("id, bunks(id)").eq("session_id", session.id),
-    supabase.from("campers").select("division_id, bunk_id").eq("session_id", session.id),
+    fetchAll((from, to) => supabase.from("campers").select("division_id, bunk_id").eq("session_id", session.id).order("id").range(from, to)),
     supabase.from("staff_scopes").select("division_id, bunk_id"),
   ]);
-  const usedBunks = new Set([...(campers ?? []).map((c) => c.bunk_id), ...(scopes ?? []).map((s) => s.bunk_id)].filter(Boolean));
-  const usedDivs = new Set([...(campers ?? []).map((c) => c.division_id), ...(scopes ?? []).map((s) => s.division_id)].filter(Boolean));
+  const usedBunks = new Set([...campers.map((c) => c.bunk_id), ...(scopes ?? []).map((s) => s.bunk_id)].filter(Boolean));
+  const usedDivs = new Set([...campers.map((c) => c.division_id), ...(scopes ?? []).map((s) => s.division_id)].filter(Boolean));
   const bunkIds = (divisions ?? []).flatMap((d) => (d.bunks as { id: string }[]).map((b) => b.id)).filter((id) => !usedBunks.has(id));
   if (bunkIds.length) {
     const { error } = await supabase.from("bunks").delete().in("id", bunkIds);

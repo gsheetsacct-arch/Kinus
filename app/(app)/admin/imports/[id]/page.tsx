@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
 import { IMPORT_STATUS } from "@/lib/labels";
 import { formatDateTime } from "@/lib/utils";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import type { FieldChange, ParsedCamper, Candidate } from "@/lib/import";
 import { applyImportAction, archiveMissing, cancelImport, resolveConflict } from "../actions";
 
@@ -76,8 +77,9 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
   const { data: imp } = await supabase.from("imports").select("*, profiles:uploaded_by(full_name)").eq("id", id).maybeSingle();
   if (!imp) notFound();
   if (imp.status === "uploaded") redirect(`/admin/imports/${id}/map`);
-  const { data: rowsRaw } = await supabase.from("import_rows").select("id, row_number, action, matched_camper_id, match_method, parsed, changes, warnings").eq("import_id", id).order("row_number");
-  const rows = (rowsRaw ?? []) as unknown as Row[];
+  const rows = (await fetchAll((from, to) =>
+    supabase.from("import_rows").select("id, row_number, action, matched_camper_id, match_method, parsed, changes, warnings").eq("import_id", id).order("row_number").range(from, to),
+  )) as unknown as Row[];
   const by = (a: string) => rows.filter((r) => r.action === a);
   const summary = (imp.summary ?? {}) as { missingList?: Candidate[]; newDivisions?: string[]; newBunks?: string[]; revertedAt?: string };
   const options = (imp.options ?? {}) as { partialWarning?: string[]; divisionsInFile?: string[]; lostTextOverride?: boolean; lostTextCells?: number };
@@ -87,9 +89,11 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
   const previewed = imp.status === "previewed";
   const { data: latest } = await supabase.from("imports").select("id").eq("session_id", imp.session_id).eq("status", "applied").order("applied_at", { ascending: false }).limit(1).maybeSingle();
   const isLatest = latest?.id === imp.id;
-  const { data: candidateCampers } = conflicts.length
-    ? await supabase.from("campers_visible").select("id, display_name, camper_code").eq("session_id", imp.session_id).is("archived_at", null).order("last_name")
-    : { data: [] };
+  const candidateCampers = conflicts.length
+    ? await fetchAll((from, to) =>
+        supabase.from("campers_visible").select("id, display_name, camper_code").eq("session_id", imp.session_id).is("archived_at", null).order("last_name").order("id").range(from, to),
+      )
+    : [];
 
   // "Division / Bunk" strings → { division: [bunks] }
   const newStructure = new Map<string, string[]>();
