@@ -64,7 +64,7 @@ export). The office opens it as the data source in Publisher and runs the merge
 there. Good for the first big print run before the program, and as a fallback if a
 template has not been converted yet.
 
-**Converted so far** (originals in [`docs/templates/`](templates/), migration `0010`):
+**Converted so far** (originals in [`docs/templates/`](templates/), migrations `0010` and `0011`):
 
 | Publisher file | Kinus template | Notes |
 |---|---|---|
@@ -83,7 +83,7 @@ Publisher field → Kinus field:
 | «group_types#division» | `{{DIVISION}}` | |
 | «ppa#t-shirt_size» | `{{TSHIRT}}` | converted (Youth Large → YL) |
 | «ppa#yarmulka_size» | `{{YARMULKA}}` | export column `ppa.yarmulka_size` |
-| «camper_id» | barcode `{{BARCODE}}` up the left side | scannable at check-in |
+| «camper_id» | `{{CODE}}` up the left side, small and grey | the camper number (migration 0011) |
 
 Any column of the registration export can be used in a field as
 `{{source.<column header>}}` (Publisher's `#` and the export's `.` are the same), and
