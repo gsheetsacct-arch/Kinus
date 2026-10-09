@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/auth/current-user";
 import { ACCESS_LEVELS, STAFF_ROLES, areaLabel } from "@/lib/labels";
 import { areaNames, loadAreaTree } from "@/lib/data/areas";
@@ -20,7 +21,7 @@ export default async function AccountPage() {
   const me = await requireUser();
   const supabase = await createClient();
   const session = await getActiveSession();
-  const [{ data: profile }, tree] = await Promise.all([supabase.from("profiles").select("full_name, phone, email").eq("id", me.id).single(), loadAreaTree(supabase, session?.id)]);
+  const [{ data: profile }, tree] = await Promise.all([createAdminClient().from("profiles").select("full_name, phone, email").eq("id", me.id).single(), loadAreaTree(supabase, session?.id)]);
   const names = areaNames(tree);
 
   return (

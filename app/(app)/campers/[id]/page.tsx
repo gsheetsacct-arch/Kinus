@@ -61,7 +61,6 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
     .map((d) => ({ ...d, bunks: [...(d.bunks as { id: string; name: string; sort_order: number }[])].sort((a, b) => a.sort_order - b.sort_order) }));
   const groups = visibleFieldGroups(user, fv ?? []);
   const canEdit = c.division_id ? canAccessBunk(user, c.division_id, c.bunk_id, "edit") : isAdmin(user);
-  const canEditSensitive = canEdit && groups.has("medical") && groups.has("address") && groups.has("parent_notes");
 
   return (
     <div>
@@ -274,7 +273,6 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
           <TabsContent value="edit">
             <ActionForm action={updateCamper} className="grid max-w-3xl gap-4 rounded-xl border bg-card p-5 shadow-[var(--shadow-card)] sm:grid-cols-2">
               <input type="hidden" name="id" value={c.id!} />
-              <input type="hidden" name="can_edit_sensitive" value={canEditSensitive ? "1" : "0"} />
               <div className="space-y-1.5">
                 <Label htmlFor="first_name">First name</Label>
                 <Input id="first_name" name="first_name" defaultValue={c.first_name ?? ""} dir="auto" required />
@@ -310,7 +308,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
                   <Input id="tshirt_size" name="tshirt_size" defaultValue={c.tshirt_size ?? ""} />
                 </div>
               </div>
-              {canEditSensitive && (
+              {groups.has("address") && (
                 <>
                   <div className="space-y-1.5">
                     <Label htmlFor="local_address">Local address</Label>
@@ -320,6 +318,10 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
                     <Label htmlFor="local_address_cross_streets">Cross streets</Label>
                     <Input id="local_address_cross_streets" name="local_address_cross_streets" defaultValue={c.local_address_cross_streets ?? ""} dir="auto" />
                   </div>
+                </>
+              )}
+              {groups.has("medical") && (
+                <>
                   {(
                     [
                       ["has_allergies", "Has allergies?"],
@@ -344,16 +346,20 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
                     <Label htmlFor="medical_notes">Medical notes</Label>
                     <Textarea id="medical_notes" name="medical_notes" defaultValue={c.medical_notes ?? ""} dir="auto" />
                   </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <Label htmlFor="notes_from_parents">Notes from parents</Label>
-                    <Textarea id="notes_from_parents" name="notes_from_parents" defaultValue={c.notes_from_parents ?? ""} dir="auto" />
-                  </div>
                 </>
               )}
-              <div className="space-y-1 sm:col-span-2">
-                <Label htmlFor="staff_notes">Staff notes</Label>
-                <Textarea id="staff_notes" name="staff_notes" defaultValue={c.staff_notes ?? ""} dir="auto" />
-              </div>
+              {groups.has("parent_notes") && (
+                <div className="space-y-1 sm:col-span-2">
+                  <Label htmlFor="notes_from_parents">Notes from parents</Label>
+                  <Textarea id="notes_from_parents" name="notes_from_parents" defaultValue={c.notes_from_parents ?? ""} dir="auto" />
+                </div>
+              )}
+              {groups.has("staff_notes") && (
+                <div className="space-y-1 sm:col-span-2">
+                  <Label htmlFor="staff_notes">Staff notes</Label>
+                  <Textarea id="staff_notes" name="staff_notes" defaultValue={c.staff_notes ?? ""} dir="auto" />
+                </div>
+              )}
               <div className="sm:col-span-2">
                 <Button type="submit">Save changes</Button>
               </div>

@@ -10,7 +10,7 @@ import { LEVEL_RANK, effectiveLevel, isAdmin, seesAllCamp, visibleFieldGroups } 
 import { loadAreaTree } from "@/lib/data/areas";
 import { loadBoard } from "@/lib/data/board";
 import { getCampContext } from "@/lib/data/camp";
-import { loadFollowups, loadRules } from "@/lib/data/missing";
+import { campStarted, loadFollowups, loadRules } from "@/lib/data/missing";
 import { defaultScope } from "@/lib/attendance/board";
 
 export const metadata = { title: "Not here yet" };
@@ -27,6 +27,7 @@ export default async function MissingPage() {
     loadRules(supabase),
     loadFollowups(supabase, session.id),
   ]);
+  const started = await campStarted(session.id);
   const rows = await loadBoard(supabase, session.id, visibleFieldGroups(user, fv ?? []).has("contacts"), camp.divisionIds);
   const campTree = { groups: tree.groups, divisions: tree.divisions.filter((d) => !camp.divisionIds || camp.divisionIds.includes(d.id)) };
   const rule = [rules.percent ? `${rules.percent}% of their bunk is here` : null, rules.after_time ? `it's past ${rules.after_time}` : null].filter(Boolean).join(" or ");
@@ -49,6 +50,7 @@ export default async function MissingPage() {
         rows={rows}
         followups={followups}
         rules={rules}
+        campStarted={started}
         tree={campTree}
         defaultScope={seesAllCamp(user) ? { kind: "all" } : defaultScope(user.coverage, campTree)}
         campLabel={camp.camps.length > 1 ? (camp.current ? `All of ${camp.current.name}` : "All camps") : "Everyone"}

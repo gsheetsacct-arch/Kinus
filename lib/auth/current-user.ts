@@ -16,7 +16,8 @@ const loadAccount = cache(async (): Promise<Account> => {
   if (!claims?.sub) return { user: null, problem: "signed_out" };
   const user = { id: claims.sub, email: claims.email ?? "", user_metadata: claims.user_metadata ?? {} };
   const [{ data: profileRow, error: profileError }, { data: areas, error: areasError }] = await Promise.all([
-    supabase.from("profiles").select("id, email, full_name, role, access_level, all_areas, is_active").eq("id", user.id).maybeSingle(),
+    // email comes from the sign-in: staff can't read profile emails (migration 0013)
+    supabase.from("profiles").select("id, full_name, role, access_level, all_areas, is_active").eq("id", user.id).maybeSingle(),
     supabase.from("staff_scopes").select("id, group_id, division_id, bunk_id").eq("user_id", user.id),
   ]);
   // a column or table the app expects is missing: the database is behind the app
@@ -38,7 +39,7 @@ const loadAccount = cache(async (): Promise<Account> => {
   return {
     user: {
       id: profile.id,
-      email: profile.email,
+      email: user.email || ("email" in profile ? String(profile.email) : ""),
       fullName: profile.full_name,
       role: profile.role,
       level: profile.access_level,

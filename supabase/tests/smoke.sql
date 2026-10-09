@@ -1,7 +1,7 @@
 \set ON_ERROR_STOP on
 -- Smoke test: statuses, scope, search, buzzer, audit. Run by supabase/tests/run.sh.
 -- profiles are created by the auth trigger from user metadata
-insert into auth.users (id, email, raw_user_meta_data) values
+insert into auth.users (id, email, raw_app_meta_data) values
  ('00000000-0000-0000-0000-000000000001','dir@x.com','{"full_name":"Director","role":"director","all_areas":true}'),
  ('00000000-0000-0000-0000-000000000002','c@x.com','{"full_name":"Counselor","role":"counselor","access_level":"scan"}');
 insert into sessions (id,name,is_active) values ('10000000-0000-0000-0000-000000000001','Kinus 5787',true);
@@ -25,12 +25,14 @@ select display_name, score from search_campers('10000000-0000-0000-0000-00000000
 select event_type, resulting_status from record_attendance('40000000-0000-0000-0000-000000000001','arrival','scan');
 select event_type, resulting_status from record_attendance('40000000-0000-0000-0000-000000000001','leave','manual','doctor');
 select event_type, resulting_status from record_attendance('40000000-0000-0000-0000-000000000001','return','scan');
-select buzzer_number from assign_buzzer('40000000-0000-0000-0000-000000000001', 17);
-select status from request_page('40000000-0000-0000-0000-000000000001');
+-- buzzers are on hold: not callable through the API
+do $$ begin
+  perform assign_buzzer('40000000-0000-0000-0000-000000000001', 17);
+  raise exception 'buzzer functions should not be callable';
+exception when insufficient_privilege then null; end $$;
 select status, current_buzzer_number from campers_visible;
 select event_type, resulting_status from record_attendance('40000000-0000-0000-0000-000000000001','pickup','scan');
 select status, current_buzzer_number from campers_visible;
-select released_at is not null as released from buzzer_assignments;
 -- out of scope camper must be refused
 -- out of scope camper must be refused
 do $$ begin

@@ -6,7 +6,7 @@ import { Callout } from "@/components/callout";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { canFollowUp, isAdmin, type CurrentUser } from "@/lib/auth/permissions";
-import { flagRows, loadFollowups, loadRules } from "@/lib/data/missing";
+import { campStarted, flagRows, loadFollowups, loadRules } from "@/lib/data/missing";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
 import { cn } from "@/lib/utils";
 import { fetchAll } from "@/lib/supabase/fetch-all";
@@ -61,8 +61,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   // campers who should be here by now (same rules as "Not here yet")
   let toCheck = 0;
   if (session && canFollowUp(user) && campers.some((c) => c.status === "expected")) {
-    const [rules, followups] = await Promise.all([loadRules(supabase), loadFollowups(supabase, session.id)]);
-    const flags = flagRows(campers.map((c) => ({ id: c.id, divisionId: c.division_id, bunkId: c.bunk_id, status: c.status })), rules, followups);
+    const [rules, followups, started] = await Promise.all([loadRules(supabase), loadFollowups(supabase, session.id), campStarted(session.id)]);
+    const flags = flagRows(campers.map((c) => ({ id: c.id, divisionId: c.division_id, bunkId: c.bunk_id, status: c.status })), rules, followups, started);
     toCheck = Object.values(flags).filter((f) => f.kind === "check").length;
   }
   const perDivision = divisions.map((d) => ({ ...d, count: campers.filter((c) => c.division_id === d.id).length })).filter((d) => d.count > 0);

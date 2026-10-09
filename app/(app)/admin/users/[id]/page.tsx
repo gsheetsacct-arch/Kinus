@@ -12,7 +12,7 @@ import { Field } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireDirector } from "@/lib/auth/current-user";
-import { canManageRole, isAdmin } from "@/lib/auth/permissions";
+import { canGrantAreas, canManageRole, isAdmin } from "@/lib/auth/permissions";
 import { ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
 import { encodeArea, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
@@ -32,6 +32,9 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
   ]);
   if (!p) notFound();
   const isSelf = me.id === p.id;
+  // a director of part of camp only opens people inside their part
+  const groupOf = (d: string) => tree.divisions.find((x) => x.id === d)?.group_id ?? null;
+  if (!isAdmin(me) && !isSelf && (p.role === "owner" || p.all_areas || !(areas ?? []).length || !canGrantAreas(me, areas ?? [], false, groupOf))) notFound();
   const manageable = !isSelf && canManageRole(me, p.role);
   const signIn = info.get(p.id);
   const st = statusOf(p.is_active, signIn);

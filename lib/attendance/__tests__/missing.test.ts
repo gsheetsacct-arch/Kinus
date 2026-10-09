@@ -41,3 +41,13 @@ describe("campClock", () => {
     expect(campClock(new Date("2026-07-01T18:05:00Z"), "America/New_York")).toBe("14:05");
   });
 });
+
+describe("campStarted", () => {
+  it("flags a bunk that's entirely late once camp has started elsewhere", () => {
+    const rows = bunk("late", ["expected", "expected"]);
+    const rules = { percent: 75, after_time: "10:00" };
+    expect(missingStates(rows, rules, none, now, "11:00").get("late0")?.kind).toBe("waiting");
+    expect(missingStates(rows, rules, none, now, "11:00", true).get("late0")).toEqual({ kind: "check", reason: "Still not here after 10:00" });
+    expect(missingStates(rows, rules, none, now, "11:00", false).get("late0")?.kind).toBe("waiting");
+  });
+});

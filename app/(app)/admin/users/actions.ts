@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { publicEnv } from "@/lib/env";
 import { appUrl } from "@/lib/auth/app-url";
 import { getActiveSession, requireDirector } from "@/lib/auth/current-user";
-import { canGrantAreas, canManageRole, type AccessLevel, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
+import { canGrantAreas, canManageRole, isAdmin, type AccessLevel, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
 import { STAFF_ROLES } from "@/lib/labels";
 import { decodeArea, loadAreaTree, type AreaValue } from "@/lib/data/areas";
 import { planRows, readRows, type BulkPlanRow } from "@/lib/staff/bulk";
@@ -24,6 +24,28 @@ async function divisionGroupLookup() {
   const { data } = session ? await admin.from("divisions").select("id, group_id").eq("session_id", session.id) : { data: [] };
   const map = new Map((data ?? []).map((d) => [d.id, d.group_id]));
   return (id: string) => map.get(id) ?? null;
+}
+
+/**
+ * Whether `me` may manage these people at all: their role ranks below mine, and (for a
+ * director of part of camp) everything they look after is inside my area. Directors over
+ * all of camp and owners manage anyone below them.
+ */
+async function assertCanManage(me: CurrentUser, ids: string[]): Promise<{ id: string; email: string; role: StaffRole; access_level: AccessLevel; all_areas: boolean; full_name: string }[]> {
+  const admin = createAdminClient();
+  const [{ data: people }, { data: areas }] = await Promise.all([
+    admin.from("profiles").select("id, email, role, access_level, all_areas, full_name").in("id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]),
+    admin.from("staff_scopes").select("user_id, group_id, division_id, bunk_id").in("user_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]),
+  ]);
+  const lookup = isAdmin(me) ? null : await divisionGroupLookup();
+  for (const p of people ?? []) {
+    if (!canManageRole(me, p.role)) throw new Error(`You can't change ${p.full_name}.`);
+    if (!lookup) continue;
+    const theirs = (areas ?? []).filter((a) => a.user_id === p.id).map(({ group_id, division_id, bunk_id }) => ({ group_id, division_id, bunk_id }));
+    // someone over all of camp, or not placed anywhere yet, isn't inside an area director's part
+    if (p.all_areas || !theirs.length || !canGrantAreas(me, theirs, false, lookup)) throw new Error(`${p.full_name} works outside your area. Ask a director over all of camp.`);
+  }
+  return people ?? [];
 }
 
 /** Checks that `me` may give this role/area/level to someone (and may touch them at all). */
@@ -76,6 +98,7 @@ export async function savePerson(fd: FormData): Promise<ActionResult> {
       return fail("Choose where they work: all of camp, or at least one camp, division or bunk.");
     const admin = createAdminClient();
     if (d.id) {
+      await assertCanManage(me, [d.id]);
       const { data: target } = await admin.from("profiles").select("id, role").eq("id", d.id).single();
       await assertCanAssign(me, target, { role: d.role, allAreas, areas });
       await writeAccess(d.id, { role: d.role, level, allAreas, areas, full_name: d.full_name, phone: d.phone || null });
@@ -194,13 +217,8 @@ function generatePassword() {
 async function targets(me: CurrentUser, fd: FormData) {
   const ids = fd.getAll("ids").map(String).filter(Boolean);
   if (!ids.length) throw new Error("Select at least one person.");
-  const admin = createAdminClient();
-  const { data } = await admin.from("profiles").select("id, email, role, access_level, all_areas, full_name").in("id", ids);
-  for (const p of data ?? []) {
-    if (p.id === me.id) throw new Error("Your own account is selected. Leave yourself out.");
-    if (!canManageRole(me, p.role)) throw new Error(`You can't change ${p.full_name}.`);
-  }
-  return data ?? [];
+  if (ids.includes(me.id)) throw new Error("Your own account is selected. Leave yourself out.");
+  return assertCanManage(me, ids);
 }
 
 export async function bulkSetAccess(fd: FormData): Promise<ActionResult> {
@@ -277,8 +295,15 @@ async function sendLink(email: string): Promise<string | null> {
 }
 
 export async function sendSignInLink(fd: FormData): Promise<ActionResult> {
-  await requireDirector();
+  const me = await requireDirector();
   const email = String(fd.get("email"));
+  const { data: target } = await createAdminClient().from("profiles").select("id").eq("email", email).maybeSingle();
+  if (!target) return fail("No staff account with that email.");
+  try {
+    await assertCanManage(me, [target.id]);
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
   const err = await sendLink(email);
   return err ? fail(err) : ok(`Sign-in link emailed to ${email}. It also lets them choose a new password.`);
 }
@@ -289,8 +314,11 @@ export async function setUserPassword(fd: FormData): Promise<ActionResult> {
   const pw = String(fd.get("password") ?? "");
   if (pw.length < 8) return fail("Use at least 8 characters.");
   const admin = createAdminClient();
-  const { data: target } = await admin.from("profiles").select("role").eq("id", id).maybeSingle();
-  if (!target || !canManageRole(me, target.role)) return fail("You can't set this person's password.");
+  try {
+    if (!(await assertCanManage(me, [id])).length) return fail("You can't set this person's password.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
   const { error } = await admin.auth.admin.updateUserById(id, { password: pw, email_confirm: true });
   if (error) return fail(error.message);
   return ok("Password set. Share it with them privately; they can change it under Your account.");
@@ -302,8 +330,11 @@ export async function setActive(fd: FormData): Promise<ActionResult> {
   const active = fd.get("active") === "true";
   if (id === me.id) return fail("You can't deactivate yourself.");
   const admin = createAdminClient();
-  const { data: target } = await admin.from("profiles").select("role").eq("id", id).maybeSingle();
-  if (!target || !canManageRole(me, target.role)) return fail("You can't change this person.");
+  try {
+    if (!(await assertCanManage(me, [id])).length) return fail("You can't change this person.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
   const { error } = await admin.from("profiles").update({ is_active: active }).eq("id", id);
   if (error) return fail(error.message);
   revalidatePath("/admin/users");

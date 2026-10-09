@@ -60,6 +60,7 @@ export function StatusBoard({
   canScan,
   templates,
   rules,
+  campStarted: started,
   followups,
 }: {
   rows: BoardRow[];
@@ -71,6 +72,8 @@ export function StatusBoard({
   canScan: boolean;
   templates: TemplateButton[];
   rules: MissingRules;
+  /** Someone in the session has arrived (session-wide). */
+  campStarted: boolean;
   followups: Record<string, Followup>;
 }) {
   const [rows, setRows] = React.useState(initialRows);
@@ -132,7 +135,7 @@ export function StatusBoard({
   const scoped = React.useMemo(() => rows.filter((r) => inScope(r, scope, tree)), [rows, scope, tree]);
   const counts = countStatuses(scoped);
   // who should be checked up on, recomputed as check-ins arrive
-  const flags = React.useMemo(() => (now ? missingStates(scoped, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE)) : new Map<string, MissingState>()), [scoped, rules, followups, now]);
+  const flags = React.useMemo(() => (now ? missingStates(scoped, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE), started) : new Map<string, MissingState>()), [scoped, rules, followups, now, started]);
   const toCheck = [...flags.values()].filter((f) => f.kind === "check").length;
   const shown = React.useMemo(() => {
     const out = scoped.filter((r) => (!status || r.status === status) && (!q.trim() || matchScore(index.get(r.id)!, q) > 0));

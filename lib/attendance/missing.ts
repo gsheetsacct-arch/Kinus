@@ -21,9 +21,10 @@ const arrived = (s: CamperStatus) => s === "present" || s === "out" || s === "de
 /**
  * Which campers still expected should be checked up on: most of their bunk (or
  * division, without a bunk) is already here, or it's past the cut-off time. Nothing is
- * flagged before the first camper of the session has arrived.
+ * flagged by time before the first camper of the session has arrived (`campStarted`;
+ * without it, judged from the rows given).
  */
-export function missingStates(rows: Row[], rules: MissingRules, followups: Map<string, Followup>, now: Date, campClock: string): Map<string, MissingState> {
+export function missingStates(rows: Row[], rules: MissingRules, followups: Map<string, Followup>, now: Date, campClock: string, campStarted?: boolean): Map<string, MissingState> {
   const groups = new Map<string, { total: number; arrived: number }>();
   for (const r of rows) {
     const k = r.bunkId ?? r.divisionId ?? "none";
@@ -32,7 +33,8 @@ export function missingStates(rows: Row[], rules: MissingRules, followups: Map<s
     if (arrived(r.status)) g.arrived++;
     groups.set(k, g);
   }
-  const anyArrived = rows.some((r) => arrived(r.status));
+  // whether camp has started is a session-wide fact: a bunk that's all late still counts
+  const anyArrived = campStarted ?? rows.some((r) => arrived(r.status));
   const pastTime = Boolean(rules.after_time && anyArrived && campClock >= rules.after_time);
   const out = new Map<string, MissingState>();
   for (const r of rows) {

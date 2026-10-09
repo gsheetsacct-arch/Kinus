@@ -8,7 +8,7 @@ insert into bunks (id, division_id, name) values
 insert into campers (id, session_id, first_name, last_name, division_id, bunk_id) values
   ('40000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'A', 'Mine', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001'),
   ('40000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'B', 'Other', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000002');
-insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-0000-0000-000000000003', 'c@x.com', '{"full_name":"Counselor","role":"counselor"}');
+insert into auth.users (id, email, raw_app_meta_data) values ('00000000-0000-0000-0000-000000000003', 'c@x.com', '{"full_name":"Counselor","role":"counselor"}');
 insert into staff_scopes (user_id, division_id, bunk_id) values ('00000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001');
 do $$ begin
   if (select value->>'percent' from settings where key = 'missing_rules') <> '75' then raise exception 'default rule missing'; end if;

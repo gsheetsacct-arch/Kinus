@@ -1,6 +1,6 @@
 \set ON_ERROR_STOP on
 -- Attendance test: undo window and ownership, bulk actions, board view.
-insert into auth.users (id, email, raw_user_meta_data) values
+insert into auth.users (id, email, raw_app_meta_data) values
  ('00000000-0000-0000-0000-000000000001','dir@x.com','{"full_name":"Director","role":"director","all_areas":true}'),
  ('00000000-0000-0000-0000-000000000002','c@x.com','{"full_name":"Counselor","role":"logistics","all_areas":true}');
 insert into sessions (id,name,is_active) values ('10000000-0000-0000-0000-000000000001','S',true);

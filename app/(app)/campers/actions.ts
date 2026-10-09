@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireAdmin, requireUser } from "@/lib/auth/current-user";
+import { visibleFieldGroups } from "@/lib/auth/permissions";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { parsePhone } from "@/lib/import/mapping";
 import type { Database } from "@/lib/supabase/database.types";
@@ -28,35 +29,32 @@ const edit = z.object({
   has_medications: tri,
   notes_from_parents: opt,
   staff_notes: opt,
-  can_edit_sensitive: z.enum(["1", "0"]).default("0"),
 });
 
 export async function updateCamper(fd: FormData): Promise<ActionResult> {
-  await requireUser();
+  const user = await requireUser();
   try {
     const d = edit.parse(Object.fromEntries(fd));
     const supabase = await createClient();
-    const { data: current } = await supabase.from("campers").select("bunk_id, division_id").eq("id", d.id).maybeSingle();
+    const [{ data: current }, { data: fv }] = await Promise.all([
+      supabase.from("campers").select("bunk_id, division_id").eq("id", d.id).maybeSingle(),
+      supabase.from("field_visibility").select("field_group, roles"),
+    ]);
     if (!current) return fail("You cannot edit this camper.");
+    // only details this person can see are written: the form leaves the rest empty, and
+    // saving those would wipe them
+    const groups = visibleFieldGroups(user, fv ?? []);
     const patch: CamperUpdate = {
       first_name: d.first_name,
       last_name: d.last_name,
       grade: d.grade,
       tshirt_size: d.tshirt_size,
-      staff_notes: d.staff_notes,
     };
-    if (d.can_edit_sensitive === "1") {
-      Object.assign(patch, {
-        local_address: d.local_address,
-        local_address_cross_streets: d.local_address_cross_streets,
-        medical_notes: d.medical_notes,
-        allergies: d.allergies,
-        has_allergies: d.has_allergies,
-        has_epipen: d.has_epipen,
-        has_medications: d.has_medications,
-        notes_from_parents: d.notes_from_parents,
-      });
-    }
+    if (groups.has("staff_notes")) patch.staff_notes = d.staff_notes;
+    if (groups.has("address")) Object.assign(patch, { local_address: d.local_address, local_address_cross_streets: d.local_address_cross_streets });
+    if (groups.has("medical"))
+      Object.assign(patch, { medical_notes: d.medical_notes, allergies: d.allergies, has_allergies: d.has_allergies, has_epipen: d.has_epipen, has_medications: d.has_medications });
+    if (groups.has("parent_notes")) patch.notes_from_parents = d.notes_from_parents;
     // placement: "b:<bunk id>" or "d:<division id>" (in the division, no bunk)
     if (d.placement) {
       const [kind, pid] = d.placement.split(":");
@@ -74,8 +72,9 @@ export async function updateCamper(fd: FormData): Promise<ActionResult> {
         Object.assign(patch, { division_id, bunk_id, bunk_locked_by_staff: true });
       }
     }
-    const { error } = await supabase.from("campers").update(patch).eq("id", d.id);
+    const { data: saved, error } = await supabase.from("campers").update(patch).eq("id", d.id).select("id");
     if (error) throw error;
+    if (!saved?.length) return fail("You can't edit this camper.");
     revalidatePath(`/campers/${d.id}`);
     return ok("Saved.");
   } catch (e) {

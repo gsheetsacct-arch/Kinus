@@ -1,6 +1,6 @@
 \set ON_ERROR_STOP on
 -- Revert test: two imports, undo the newer, then the older; manual edits survive.
-insert into auth.users (id, email, raw_user_meta_data) values
+insert into auth.users (id, email, raw_app_meta_data) values
  ('00000000-0000-0000-0000-000000000001','owner@x.com','{"full_name":"Owner","role":"owner","all_areas":true}');
 insert into sessions (id,name,is_active) values ('10000000-0000-0000-0000-000000000001','Kinus',true);
 set role authenticated; set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001';

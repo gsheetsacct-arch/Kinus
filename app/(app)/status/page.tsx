@@ -9,7 +9,7 @@ import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { LEVEL_RANK, effectiveLevel, isDirector, seesAllCamp, visibleFieldGroups } from "@/lib/auth/permissions";
 import { loadAreaTree } from "@/lib/data/areas";
 import { loadBoard } from "@/lib/data/board";
-import { loadFollowups, loadRules } from "@/lib/data/missing";
+import { campStarted, loadFollowups, loadRules } from "@/lib/data/missing";
 import { getCampContext } from "@/lib/data/camp";
 import { defaultScope } from "@/lib/attendance/board";
 
@@ -26,10 +26,11 @@ export default async function StatusPage() {
     loadAreaTree(supabase, session.id),
     supabase.from("print_templates").select("id, name").eq("show_on_card", true).order("sort_order").order("name"),
   ]);
-  const [rows, rules, followups] = await Promise.all([
+  const [rows, rules, followups, started] = await Promise.all([
     loadBoard(supabase, session.id, visibleFieldGroups(user, fv ?? []).has("contacts"), camp.divisionIds),
     loadRules(supabase),
     loadFollowups(supabase, session.id),
+    campStarted(session.id),
   ]);
   const inCamp = (id: string | null) => !camp.divisionIds || (id !== null && camp.divisionIds.includes(id));
   const campTree = { groups: tree.groups, divisions: tree.divisions.filter((d) => inCamp(d.id)) };
@@ -47,6 +48,7 @@ export default async function StatusPage() {
         canScan={LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan}
         templates={templates ?? []}
         rules={rules}
+        campStarted={started}
         followups={followups}
       />
     </div>

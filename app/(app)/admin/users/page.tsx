@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { StaffTable, type StaffRow } from "@/components/staff/staff-table";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireDirector } from "@/lib/auth/current-user";
-import { canManageRole, isAdmin, type StaffRole } from "@/lib/auth/permissions";
+import { canGrantAreas, canManageRole, isAdmin, type StaffRole } from "@/lib/auth/permissions";
 import { ROLE_ORDER, areaLabel } from "@/lib/labels";
 import { areaNames, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
@@ -25,7 +25,14 @@ export default async function UsersPage() {
     signInInfo(),
   ]);
   const names = areaNames(tree);
-  const rows: StaffRow[] = (profiles ?? []).map((p) => {
+  const groupOf = (id: string) => tree.divisions.find((d) => d.id === id)?.group_id ?? null;
+  // a director of part of camp sees the people inside their part (and themselves)
+  const inMyArea = (p: { id: string; role: StaffRole; all_areas: boolean }) => {
+    if (isAdmin(me) || p.id === me.id) return true;
+    const theirs = (areas ?? []).filter((a) => a.user_id === p.id).map(({ group_id, division_id, bunk_id }) => ({ group_id, division_id, bunk_id }));
+    return p.role !== "owner" && !p.all_areas && theirs.length > 0 && canGrantAreas(me, theirs, false, groupOf);
+  };
+  const rows: StaffRow[] = (profiles ?? []).filter(inMyArea).map((p) => {
     const mine = (areas ?? []).filter((a) => a.user_id === p.id);
     const groupIds = mine.map((a) => a.group_id).filter((x): x is string => Boolean(x));
     const divisionIds = [

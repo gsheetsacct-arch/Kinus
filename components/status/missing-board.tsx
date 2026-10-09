@@ -28,6 +28,7 @@ export function MissingBoard({
   rows,
   followups,
   rules,
+  campStarted: started,
   tree,
   defaultScope,
   campLabel,
@@ -37,6 +38,8 @@ export function MissingBoard({
   rows: BoardRow[];
   followups: Record<string, Followup>;
   rules: MissingRules;
+  /** Someone in the session has arrived (session-wide). */
+  campStarted: boolean;
   tree: ScopeTree;
   defaultScope: BoardScope;
   campLabel: string;
@@ -62,8 +65,8 @@ export function MissingBoard({
 
   const scoped = React.useMemo(() => rows.filter((r) => inScope(r, scope, tree)), [rows, scope, tree]);
   const states = React.useMemo(
-    () => (now ? missingStates(scoped, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE)) : new Map<string, MissingState>()),
-    [scoped, rules, followups, now],
+    () => (now ? missingStates(scoped, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE), started) : new Map<string, MissingState>()),
+    [scoped, rules, followups, now, started],
   );
   const bunkName = React.useMemo(() => new Map(tree.divisions.flatMap((d) => d.bunks.map((b) => [b.id, b.name] as const))), [tree]);
   const divName = React.useMemo(() => new Map(tree.divisions.map((d) => [d.id, d.name] as const)), [tree]);
