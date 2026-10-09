@@ -1,4 +1,5 @@
 "use server";
+import { formatDateTime } from "@/lib/utils";
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -37,7 +38,7 @@ export async function uploadImport(fd: FormData): Promise<ActionResult> {
     const hash = createHash("sha256").update(bytes).digest("hex");
     const admin = createAdminClient();
     const dup = await admin.from("imports").select("id, applied_at, status").eq("session_id", session.id).eq("file_hash", hash).eq("status", "applied").maybeSingle();
-    if (dup.data) return fail(`This exact file was already imported on ${new Date(dup.data.applied_at!).toLocaleString()}. Nothing has changed.`);
+    if (dup.data) return fail(`This exact file was already imported on ${formatDateTime(dup.data.applied_at)}. Nothing has changed.`);
 
     await discardDrafts(session.id);
     const { data: imp, error } = await admin

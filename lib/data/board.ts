@@ -26,27 +26,28 @@ export type BoardRow = {
 const PARENT_LABEL: Record<string, string> = { mother: "Mom", father: "Dad", guardian: "Guardian" };
 
 /** Every camper the user can see in the session, with their last check-in and parent phones (when allowed). */
-export async function loadBoard(supabase: DB, sessionId: string, withPhones: boolean): Promise<BoardRow[]> {
+export async function loadBoard(supabase: DB, sessionId: string, withPhones: boolean, divisionIds: string[] | null = null): Promise<BoardRow[]> {
+  if (divisionIds && !divisionIds.length) return [];
   const [rows, contacts] = await Promise.all([
-    fetchAll((from, to) =>
-      supabase
+    fetchAll((from, to) => {
+      let q = supabase
         .from("campers_board")
         .select("id, display_name, first_name, last_name, camper_code, division_id, bunk_id, status, last_event_at, last_event_by, last_event_type, last_event_note, has_medical_flag")
         .eq("session_id", sessionId)
-        .is("archived_at", null)
-        .order("id")
-        .range(from, to),
-    ),
+        .is("archived_at", null);
+      if (divisionIds) q = q.in("division_id", divisionIds);
+      return q.order("id").range(from, to);
+    }),
     withPhones
-      ? fetchAll((from, to) =>
-          supabase
+      ? fetchAll((from, to) => {
+          let q = supabase
             .from("camper_contacts")
-            .select("camper_id, role, slot, phone, phone_e164, campers!inner(session_id)")
+            .select("camper_id, role, slot, phone, phone_e164, campers!inner(session_id, division_id)")
             .eq("campers.session_id", sessionId)
-            .in("role", ["mother", "father", "guardian"])
-            .order("id")
-            .range(from, to),
-        )
+            .in("role", ["mother", "father", "guardian"]);
+          if (divisionIds) q = q.in("campers.division_id", divisionIds);
+          return q.order("id").range(from, to);
+        })
       : Promise.resolve([]),
   ]);
   const phones = new Map<string, (BoardPhone & { order: number })[]>();

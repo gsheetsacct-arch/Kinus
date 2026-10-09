@@ -106,7 +106,8 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
         setRecent((x) => [{ key: now, camperId: o.camperId, name: o.name, verb: o.verb, tone: o.tone, eventId: o.eventId, at: now }, ...x].slice(0, 8));
       } else {
         feedback("already");
-        const detail = `${o.message}${o.since ? ` · ${formatTime(o.since)}${o.by ? ` by ${o.by}` : ""}` : ""}`;
+        // "Already checked in · 9:42 by Sarah" helps; for "hasn't checked in yet" the last event would mislead
+        const detail = `${o.message}${o.kind === "already" && o.since ? ` · ${formatTime(o.since)}${o.by ? ` by ${o.by}` : ""}` : ""}`;
         show({ tone: "already", title: o.name, detail });
         setRecent((x) => [{ key: now, camperId: o.camperId, name: o.name, verb: o.message, tone: "already" as const, at: now }, ...x].slice(0, 8));
       }

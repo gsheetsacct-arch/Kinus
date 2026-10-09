@@ -34,7 +34,7 @@ function SessionFields({ s }: { s?: { id: string; name: string; starts_on: strin
   );
 }
 
-const fmt = (d: string | null) => (d ? new Date(d + "T00:00:00").toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" }) : null);
+const fmt = (d: string | null) => (d ? new Date(d + "T00:00:00").toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" }) : null);
 
 export default async function SessionsPage() {
   await requireAdmin();

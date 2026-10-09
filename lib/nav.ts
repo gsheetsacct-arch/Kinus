@@ -8,6 +8,7 @@ export function buildNav(user: CurrentUser): NavItem[] {
   const nav: NavItem[] = [
     { href: "/", label: "Home", icon: "LayoutGrid", description: "Overview and next steps", section: "main" },
     { href: "/scan", label: "Check in", icon: "ScanLine", description: "Scan or search to check campers in and out", section: "main", mobile: true },
+    { href: "/status", label: "Who's here", icon: "Activity", description: "Live status by bunk or division", section: "main", mobile: true },
     { href: "/campers", label: "Campers", icon: "Users", description: "Find any camper", section: "main", mobile: true },
     { href: "/lists", label: "Lists", icon: "ListChecks", description: "Bunk and division lists to print", section: "main" },
   ];
