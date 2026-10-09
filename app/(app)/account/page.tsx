@@ -8,7 +8,9 @@ import { Field } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/current-user";
-import { GLOBAL_ROLES, scopeSummary } from "@/lib/labels";
+import { ACCESS_LEVELS, STAFF_ROLES, areaLabel } from "@/lib/labels";
+import { areaNames, loadAreaTree } from "@/lib/data/areas";
+import { getActiveSession } from "@/lib/auth/current-user";
 import { signOut } from "@/app/(auth)/actions";
 import { changeMyPassword, updateMyProfile } from "./actions";
 
@@ -17,13 +19,9 @@ export const metadata = { title: "Your account" };
 export default async function AccountPage() {
   const me = await requireUser();
   const supabase = await createClient();
-  const [{ data: profile }, { data: divisions }, { data: bunks }] = await Promise.all([
-    supabase.from("profiles").select("full_name, phone, email").eq("id", me.id).single(),
-    supabase.from("divisions").select("id, name"),
-    supabase.from("bunks").select("id, name"),
-  ]);
-  const dName = (id: string) => divisions?.find((d) => d.id === id)?.name ?? "A division from another session";
-  const bName = (id: string | null) => (id ? (bunks?.find((b) => b.id === id)?.name ?? "?") : null);
+  const session = await getActiveSession();
+  const [{ data: profile }, tree] = await Promise.all([supabase.from("profiles").select("full_name, phone, email").eq("id", me.id).single(), loadAreaTree(supabase, session?.id)]);
+  const names = areaNames(tree);
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -57,19 +55,17 @@ export default async function AccountPage() {
       <Section title="What you can access">
         <div className="space-y-3 text-sm">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="primary">{GLOBAL_ROLES[me.role].label}</Badge>
-            <span className="text-muted-foreground">{GLOBAL_ROLES[me.role].description}</span>
+            <Badge variant="primary">{STAFF_ROLES[me.role].label}</Badge>
+            <span className="text-muted-foreground">{STAFF_ROLES[me.role].description}</span>
           </div>
-          {me.scopes.length > 0 && (
-            <ul className="space-y-1.5">
-              {me.scopes.map((s) => (
-                <li key={s.id} className="rounded-lg border bg-background px-3 py-2" dir="auto">
-                  {scopeSummary({ division_name: dName(s.division_id), bunk_name: bName(s.bunk_id), scope_role: s.scope_role, access_level: s.access_level })}
-                </li>
-              ))}
-            </ul>
-          )}
-          {me.role === "staff" && me.scopes.length === 0 && <p className="text-muted-foreground">You haven&apos;t been given access to a division yet. Ask an admin.</p>}
+          <p>
+            <span className="text-muted-foreground">Where: </span>
+            <span dir="auto">{me.role === "owner" || me.allAreas ? "All of camp" : me.areas.length ? me.areas.map((a) => areaLabel(a, names)).join(", ") : "Nowhere yet. Ask a director to add you."}</span>
+          </p>
+          <p>
+            <span className="text-muted-foreground">What you can do: </span>
+            {ACCESS_LEVELS[me.role === "owner" ? "edit" : me.level].description}
+          </p>
         </div>
       </Section>
       <form action={signOut}>

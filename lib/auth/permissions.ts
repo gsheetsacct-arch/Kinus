@@ -1,106 +1,103 @@
 import type { Database } from "@/lib/supabase/database.types";
 
-export type GlobalRole = Database["public"]["Enums"]["global_role"];
-export type ScopeRole = Database["public"]["Enums"]["scope_role"];
+export type StaffRole = Database["public"]["Enums"]["staff_role"];
 export type AccessLevel = Database["public"]["Enums"]["access_level"];
 
-export type Scope = {
-  id: string;
-  division_id: string;
-  bunk_id: string | null;
-  scope_role: ScopeRole;
-  access_level: AccessLevel;
-};
+/** One area row: a whole group, a whole division, or one bunk. */
+export type Area = { id: string; group_id: string | null; division_id: string | null; bunk_id: string | null };
 
-export type FieldVisibilityRow = {
-  field_group: string;
-  global_roles: GlobalRole[];
-  scope_roles: ScopeRole[];
-};
+export type FieldVisibilityRow = { field_group: string; roles: StaffRole[] };
 
 export type CurrentUser = {
   id: string;
   email: string;
   fullName: string;
-  role: GlobalRole;
-  scopes: Scope[];
+  role: StaffRole;
+  level: AccessLevel;
+  allAreas: boolean;
+  areas: Area[];
+  /** Areas expanded to divisions (groups resolved), for quick checks. */
+  coverage: { division_id: string; bunk_id: string | null }[];
 };
 
 export const LEVEL_RANK: Record<AccessLevel, number> = { view: 1, scan: 2, edit: 3 };
+const ROLE_RANK: Record<StaffRole, number> = { owner: 9, director: 8, division_head: 6, head_counselor: 5, office: 4, logistics: 4, counselor: 3, scanner: 2 };
 
-/** Mirrors `global_level()` in the database. */
-export function globalLevel(role: GlobalRole): AccessLevel | null {
-  switch (role) {
-    case "owner":
-    case "admin":
-    case "director":
-      return "edit";
-    case "logistics":
-      return "scan";
-    case "office":
-      return "view";
-    default:
-      return null;
-  }
-}
-
-export const isAdmin = (u: CurrentUser) => u.role === "owner" || u.role === "admin";
-export const isDirectorOrAbove = (u: CurrentUser) => isAdmin(u) || u.role === "director";
-export const hasGlobalView = (u: CurrentUser) => globalLevel(u.role) !== null;
-
-export function canAccessDivision(u: CurrentUser, divisionId: string, needed: AccessLevel): boolean {
-  const g = globalLevel(u.role);
-  if (g && LEVEL_RANK[g] >= LEVEL_RANK[needed]) return true;
-  return u.scopes.some((s) => s.division_id === divisionId && LEVEL_RANK[s.access_level] >= LEVEL_RANK[needed]);
-}
+export const effectiveLevel = (u: CurrentUser): AccessLevel => (u.role === "owner" ? "edit" : u.level);
+export const isOwner = (u: CurrentUser) => u.role === "owner";
+/** Camp-wide setup (imports, sessions, settings, templates). */
+export const isAdmin = (u: CurrentUser) => u.role === "owner" || (u.role === "director" && u.allAreas);
+/** Directors of any area: staff for their area, bulk actions, corrections. */
+export const isDirector = (u: CurrentUser) => u.role === "owner" || u.role === "director";
+export const seesAllCamp = (u: CurrentUser) => u.role === "owner" || u.allAreas;
+export const roleRank = (r: StaffRole) => ROLE_RANK[r];
 
 export function canAccessBunk(u: CurrentUser, divisionId: string, bunkId: string | null, needed: AccessLevel): boolean {
-  const g = globalLevel(u.role);
-  if (g && LEVEL_RANK[g] >= LEVEL_RANK[needed]) return true;
-  return u.scopes.some(
-    (s) =>
-      s.division_id === divisionId &&
-      (s.bunk_id === null || s.bunk_id === bunkId) &&
-      LEVEL_RANK[s.access_level] >= LEVEL_RANK[needed],
-  );
+  if (LEVEL_RANK[effectiveLevel(u)] < LEVEL_RANK[needed]) return false;
+  if (seesAllCamp(u)) return true;
+  return u.coverage.some((c) => c.division_id === divisionId && (c.bunk_id === null || c.bunk_id === bunkId));
+}
+
+export function canAccessDivision(u: CurrentUser, divisionId: string, needed: AccessLevel): boolean {
+  if (LEVEL_RANK[effectiveLevel(u)] < LEVEL_RANK[needed]) return false;
+  return seesAllCamp(u) || u.coverage.some((c) => c.division_id === divisionId);
 }
 
 /** Division ids the user can see at all (null = everything). */
 export function visibleDivisionIds(u: CurrentUser): string[] | null {
-  if (hasGlobalView(u)) return null;
-  return [...new Set(u.scopes.map((s) => s.division_id))];
+  if (seesAllCamp(u)) return null;
+  return [...new Set(u.coverage.map((c) => c.division_id))];
 }
 
-/** The scope roles the user holds in a division (for field visibility and list presets). */
-export function scopeRolesIn(u: CurrentUser, divisionId: string | null, bunkId: string | null): ScopeRole[] {
-  return u.scopes
-    .filter((s) => divisionId !== null && s.division_id === divisionId && (s.bunk_id === null || s.bunk_id === bunkId))
-    .map((s) => s.scope_role);
+/** Field groups this user's role may see (for campers they can see). Mirrors can_view_field_group(). */
+export function visibleFieldGroups(u: CurrentUser, rows: FieldVisibilityRow[]): Set<string> {
+  return new Set(rows.filter((r) => u.role === "owner" || r.roles.includes(u.role)).map((r) => r.field_group));
 }
 
-/** Field groups this user may see for a camper in the given division/bunk. Mirrors `can_view_field_group()`. */
-export function visibleFieldGroups(
-  u: CurrentUser,
-  rows: FieldVisibilityRow[],
-  divisionId: string | null,
-  bunkId: string | null,
-): Set<string> {
-  const roles = scopeRolesIn(u, divisionId, bunkId);
-  const out = new Set<string>();
-  for (const r of rows) {
-    if (r.global_roles.includes(u.role) || roles.some((sr) => r.scope_roles.includes(sr))) out.add(r.field_group);
-  }
-  return out;
-}
-
-/** Which list-preset audiences this user may use. */
+/** Which list-layout audiences this user may pick from. */
 export function presetAudiencesFor(u: CurrentUser): string[] {
-  if (isDirectorOrAbove(u)) return ["counselor", "head_counselor", "division_head", "director", "office", "custom"];
-  if (u.role === "office" || u.role === "logistics") return ["office", "counselor", "head_counselor", "custom"];
-  const roles = new Set(u.scopes.map((s) => s.scope_role));
-  const out = new Set<string>(["custom"]);
-  if (roles.has("division_head")) ["division_head", "head_counselor", "counselor"].forEach((a) => out.add(a));
-  if (roles.has("head_counselor")) ["head_counselor", "counselor"].forEach((a) => out.add(a));
-  if (roles.has("counselor") || roles.has("scanner")) out.add("counselor");
-  return [...out];
+  switch (u.role) {
+    case "owner":
+    case "director":
+      return ["counselor", "head_counselor", "division_head", "director", "office", "custom"];
+    case "division_head":
+      return ["division_head", "head_counselor", "counselor", "custom"];
+    case "head_counselor":
+      return ["head_counselor", "counselor", "custom"];
+    case "office":
+    case "logistics":
+      return ["office", "counselor", "head_counselor", "custom"];
+    default:
+      return ["counselor", "custom"];
+  }
+}
+
+/**
+ * Whether `me` may give `areas` to someone: admins anything; area directors only
+ * areas inside their own (a bunk/division of theirs, or one of their groups).
+ */
+export function canGrantAreas(
+  me: CurrentUser,
+  areas: { group_id: string | null; division_id: string | null; bunk_id: string | null }[],
+  allAreas: boolean,
+  divisionGroup: (divisionId: string) => string | null,
+): boolean {
+  if (isAdmin(me)) return true;
+  if (!isDirector(me) || allAreas) return false;
+  const myGroups = new Set(me.areas.map((a) => a.group_id).filter(Boolean));
+  return areas.every((a) => {
+    if (a.group_id) return myGroups.has(a.group_id);
+    if (!a.division_id) return false;
+    const g = divisionGroup(a.division_id);
+    if (g && myGroups.has(g)) return true;
+    return me.coverage.some((c) => c.division_id === a.division_id && (c.bunk_id === null || c.bunk_id === a.bunk_id));
+  });
+}
+
+/** Area directors may manage people below director rank; admins anyone but owners (owners: anyone). */
+export function canManageRole(me: CurrentUser, role: StaffRole): boolean {
+  if (me.role === "owner") return true;
+  if (isAdmin(me)) return role !== "owner";
+  if (isDirector(me)) return roleRank(role) < roleRank("director");
+  return false;
 }

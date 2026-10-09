@@ -40,7 +40,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
   const c = await getCamper(supabase, id);
   if (!c) notFound();
   const [{ data: fv }, { data: events }, { data: history }, { data: bunks }] = await Promise.all([
-    supabase.from("field_visibility").select("field_group, global_roles, scope_roles"),
+    supabase.from("field_visibility").select("field_group, roles"),
     supabase.from("attendance_events").select("id, event_type, method, occurred_at, note, resulting_status, profiles:recorded_by(full_name)").eq("camper_id", id).order("occurred_at", { ascending: false }).limit(100),
     supabase.rpc("camper_history", { p_camper_id: id }),
     supabase.from("divisions").select("id, name, bunks(id, name, sort_order)").eq("session_id", c.session_id!).order("sort_order"),
@@ -48,7 +48,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
   const placeable = (bunks ?? [])
     .filter((d) => canAccessBunk(user, d.id, null, "edit") || d.id === c.division_id)
     .map((d) => ({ ...d, bunks: [...(d.bunks as { id: string; name: string; sort_order: number }[])].sort((a, b) => a.sort_order - b.sort_order) }));
-  const groups = visibleFieldGroups(user, fv ?? [], c.division_id, c.bunk_id);
+  const groups = visibleFieldGroups(user, fv ?? []);
   const canEdit = c.division_id ? canAccessBunk(user, c.division_id, c.bunk_id, "edit") : isAdmin(user);
   const canEditSensitive = canEdit && groups.has("medical") && groups.has("address") && groups.has("parent_notes");
 

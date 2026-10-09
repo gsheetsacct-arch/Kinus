@@ -20,14 +20,14 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
     getPresetsFor(supabase, user),
     supabase.from("divisions").select("id, name").eq("session_id", session.id).order("sort_order"),
     supabase.from("bunks").select("id, division_id, name").order("sort_order"),
-    supabase.from("field_visibility").select("field_group, global_roles, scope_roles"),
+    supabase.from("field_visibility").select("field_group, roles"),
   ]);
   const allowed = visibleDivisionIds(user);
   const divs = (divisions ?? []).filter((d) => !allowed || allowed.includes(d.id));
-  // a counselor with exactly one bunk scope gets it preselected
-  const onlyScope = user.scopes.length === 1 && !allowed?.length ? null : user.scopes.length === 1 ? user.scopes[0] : null;
-  const divisionId = sp.division ?? onlyScope?.division_id ?? (divs.length === 1 ? divs[0].id : undefined);
-  const bunkId = sp.bunk ?? onlyScope?.bunk_id ?? undefined;
+  // someone with exactly one place (e.g. a counselor's bunk) gets it preselected
+  const only = !allowed ? null : user.coverage.length === 1 ? user.coverage[0] : null;
+  const divisionId = sp.division ?? only?.division_id ?? (divs.length === 1 ? divs[0].id : undefined);
+  const bunkId = sp.bunk ?? only?.bunk_id ?? undefined;
   const preset = presets.find((p) => p.id === sp.preset) ?? presets.find((p) => p.is_default) ?? presets[0];
   const list = preset ? await buildList(supabase, user, preset, { sessionId: session.id, divisionId: divisionId || undefined, bunkId: bunkId || undefined }, fv ?? []) : null;
   const qs = new URLSearchParams({ ...(preset ? { preset: preset.id } : {}), ...(divisionId ? { division: divisionId } : {}), ...(bunkId ? { bunk: bunkId } : {}) }).toString();
@@ -68,7 +68,7 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
           <option value="">All bunks</option>
           {(bunks ?? [])
             .filter((b) => !divisionId || b.division_id === divisionId)
-            .filter((b) => !allowed || user.scopes.some((s) => s.division_id === b.division_id && (s.bunk_id === null || s.bunk_id === b.id)))
+            .filter((b) => !allowed || user.coverage.some((s) => s.division_id === b.division_id && (s.bunk_id === null || s.bunk_id === b.id)))
             .map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}

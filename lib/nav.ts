@@ -1,5 +1,5 @@
 import type { CurrentUser } from "@/lib/auth/permissions";
-import { isAdmin, isDirectorOrAbove } from "@/lib/auth/permissions";
+import { isAdmin, isDirector } from "@/lib/auth/permissions";
 
 export type NavIcon = "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser";
 export type NavItem = { href: string; label: string; icon: NavIcon; description: string; section: "main" | "admin" };
@@ -10,7 +10,7 @@ export function buildNav(user: CurrentUser): NavItem[] {
     { href: "/campers", label: "Campers", icon: "Users", description: "Find any camper", section: "main" },
     { href: "/lists", label: "Lists", icon: "ListChecks", description: "Bunk and division lists to print", section: "main" },
   ];
-  if (isDirectorOrAbove(user)) nav.push({ href: "/admin/users", label: "Staff", icon: "UserCog", description: "Invite people and choose what they can see", section: "main" });
+  if (isDirector(user)) nav.push({ href: "/admin/users", label: "Staff", icon: "UserCog", description: "Invite people and choose what they can see", section: "main" });
   if (isAdmin(user)) {
     nav.push(
       { href: "/admin/imports", label: "Import roster", icon: "Upload", description: "Upload the registration export", section: "admin" },

@@ -27,6 +27,12 @@ isOneToOne: false
       foreignKeyName: "attendance_events_camper_id_fkey"
       columns: ["camper_id"]
 isOneToOne: false
+      referencedRelation: "campers_board"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "attendance_events_camper_id_fkey"
+      columns: ["camper_id"]
+isOneToOne: false
       referencedRelation: "campers_visible"
       referencedColumns: ["id"]
     },{
@@ -105,6 +111,12 @@ isOneToOne: false
       foreignKeyName: "buzzer_assignments_camper_id_fkey"
       columns: ["camper_id"]
 isOneToOne: false
+      referencedRelation: "campers_board"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "buzzer_assignments_camper_id_fkey"
+      columns: ["camper_id"]
+isOneToOne: false
       referencedRelation: "campers_visible"
       referencedColumns: ["id"]
     },{
@@ -169,6 +181,12 @@ isOneToOne: false
       foreignKeyName: "camper_contacts_camper_id_fkey"
       columns: ["camper_id"]
 isOneToOne: false
+      referencedRelation: "campers_board"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "camper_contacts_camper_id_fkey"
+      columns: ["camper_id"]
+isOneToOne: false
       referencedRelation: "campers_visible"
       referencedColumns: ["id"]
     }
@@ -211,19 +229,45 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"divisions": {
+                },"division_groups": {
                   Row: {
-                    "color": string | null,"created_at": string,"id": string,"language": Database["public"]['Enums']["division_language"],"name": string,"session_id": string,"sort_order": number
+                    "created_at": string,"id": string,"name": string,"session_id": string,"sort_order": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "color"?: string | null,"created_at"?: string,"id"?: string,"language"?: Database["public"]['Enums']["division_language"],"name": string,"session_id": string,"sort_order"?: number
+                    "created_at"?: string,"id"?: string,"name": string,"session_id": string,"sort_order"?: number
                   }
                   Update: {
-                    "color"?: string | null,"created_at"?: string,"id"?: string,"language"?: Database["public"]['Enums']["division_language"],"name"?: string,"session_id"?: string,"sort_order"?: number
+                    "created_at"?: string,"id"?: string,"name"?: string,"session_id"?: string,"sort_order"?: number
                   }
                   Relationships: [
                     {
+      foreignKeyName: "division_groups_session_id_fkey"
+      columns: ["session_id"]
+isOneToOne: false
+      referencedRelation: "sessions"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"divisions": {
+                  Row: {
+                    "color": string | null,"created_at": string,"group_id": string | null,"id": string,"language": Database["public"]['Enums']["division_language"],"name": string,"session_id": string,"sort_order": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "color"?: string | null,"created_at"?: string,"group_id"?: string | null,"id"?: string,"language"?: Database["public"]['Enums']["division_language"],"name": string,"session_id": string,"sort_order"?: number
+                  }
+                  Update: {
+                    "color"?: string | null,"created_at"?: string,"group_id"?: string | null,"id"?: string,"language"?: Database["public"]['Enums']["division_language"],"name"?: string,"session_id"?: string,"sort_order"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "divisions_group_id_fkey"
+      columns: ["group_id"]
+isOneToOne: false
+      referencedRelation: "division_groups"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "divisions_session_id_fkey"
       columns: ["session_id"]
 isOneToOne: false
@@ -233,14 +277,14 @@ isOneToOne: false
                   ]
                 },"field_visibility": {
                   Row: {
-                    "field_group": string,"global_roles": (Database["public"]['Enums']["global_role"])[],"scope_roles": (Database["public"]['Enums']["scope_role"])[]
+                    "field_group": string,"roles": (Database["public"]['Enums']["staff_role"])[]
                   }
                   ComputedFields: never
                   Insert: {
-                    "field_group": string,"global_roles"?: (Database["public"]['Enums']["global_role"])[],"scope_roles"?: (Database["public"]['Enums']["scope_role"])[]
+                    "field_group": string,"roles"?: (Database["public"]['Enums']["staff_role"])[]
                   }
                   Update: {
-                    "field_group"?: string,"global_roles"?: (Database["public"]['Enums']["global_role"])[],"scope_roles"?: (Database["public"]['Enums']["scope_role"])[]
+                    "field_group"?: string,"roles"?: (Database["public"]['Enums']["staff_role"])[]
                   }
                   Relationships: [
                     
@@ -288,6 +332,12 @@ isOneToOne: false
       columns: ["matched_camper_id"]
 isOneToOne: false
       referencedRelation: "campers"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "import_rows_matched_camper_id_fkey"
+      columns: ["matched_camper_id"]
+isOneToOne: false
+      referencedRelation: "campers_board"
       referencedColumns: ["id"]
     },{
       foreignKeyName: "import_rows_matched_camper_id_fkey"
@@ -417,6 +467,12 @@ isOneToOne: false
       foreignKeyName: "print_job_items_camper_id_fkey"
       columns: ["camper_id"]
 isOneToOne: false
+      referencedRelation: "campers_board"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "print_job_items_camper_id_fkey"
+      columns: ["camper_id"]
+isOneToOne: false
       referencedRelation: "campers_visible"
       referencedColumns: ["id"]
     },{
@@ -487,14 +543,14 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "created_at": string,"email": string,"full_name": string,"global_role": Database["public"]['Enums']["global_role"],"id": string,"is_active": boolean,"phone": string | null
+                    "access_level": Database["public"]['Enums']["access_level"],"all_areas": boolean,"created_at": string,"email": string,"full_name": string,"id": string,"is_active": boolean,"phone": string | null,"role": Database["public"]['Enums']["staff_role"]
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"email": string,"full_name": string,"global_role"?: Database["public"]['Enums']["global_role"],"id": string,"is_active"?: boolean,"phone"?: string | null
+                    "access_level"?: Database["public"]['Enums']["access_level"],"all_areas"?: boolean,"created_at"?: string,"email": string,"full_name": string,"id": string,"is_active"?: boolean,"phone"?: string | null,"role"?: Database["public"]['Enums']["staff_role"]
                   }
                   Update: {
-                    "created_at"?: string,"email"?: string,"full_name"?: string,"global_role"?: Database["public"]['Enums']["global_role"],"id"?: string,"is_active"?: boolean,"phone"?: string | null
+                    "access_level"?: Database["public"]['Enums']["access_level"],"all_areas"?: boolean,"created_at"?: string,"email"?: string,"full_name"?: string,"id"?: string,"is_active"?: boolean,"phone"?: string | null,"role"?: Database["public"]['Enums']["staff_role"]
                   }
                   Relationships: [
                     
@@ -535,14 +591,14 @@ isOneToOne: false
                   ]
                 },"staff_scopes": {
                   Row: {
-                    "access_level": Database["public"]['Enums']["access_level"],"bunk_id": string | null,"created_at": string,"created_by": string | null,"division_id": string,"id": string,"scope_role": Database["public"]['Enums']["scope_role"],"user_id": string
+                    "bunk_id": string | null,"created_at": string,"created_by": string | null,"division_id": string | null,"group_id": string | null,"id": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "access_level"?: Database["public"]['Enums']["access_level"],"bunk_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"division_id": string,"id"?: string,"scope_role": Database["public"]['Enums']["scope_role"],"user_id": string
+                    "bunk_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"division_id"?: string | null,"group_id"?: string | null,"id"?: string,"user_id": string
                   }
                   Update: {
-                    "access_level"?: Database["public"]['Enums']["access_level"],"bunk_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"division_id"?: string,"id"?: string,"scope_role"?: Database["public"]['Enums']["scope_role"],"user_id"?: string
+                    "bunk_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"division_id"?: string | null,"group_id"?: string | null,"id"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -562,6 +618,12 @@ isOneToOne: false
       columns: ["division_id"]
 isOneToOne: false
       referencedRelation: "divisions"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "staff_scopes_group_id_fkey"
+      columns: ["group_id"]
+isOneToOne: false
+      referencedRelation: "division_groups"
       referencedColumns: ["id"]
     },{
       foreignKeyName: "staff_scopes_user_id_fkey"
@@ -608,7 +670,39 @@ isOneToOne: false
                 }
           }
           Views: {
-            "campers_visible": {
+            "campers_board": {
+                  Row: {
+                    "allergies": string | null,"archived_at": string | null,"bunk_id": string | null,"bunk_preferences": (string)[] | null,"camper_code": string | null,"current_buzzer_number": number | null,"display_name": string | null,"division_id": string | null,"first_name": string | null,"grade": string | null,"has_allergies": boolean | null,"has_epipen": boolean | null,"has_medical_flag": boolean | null,"has_medications": boolean | null,"id": string | null,"in_latest_import": boolean | null,"last_event_at": string | null,"last_event_by": string | null,"last_event_id": string | null,"last_event_method": Database["public"]['Enums']["attendance_method"] | null,"last_event_note": string | null,"last_event_type": Database["public"]['Enums']["attendance_event_type"] | null,"last_name": string | null,"local_address": string | null,"local_address_cross_streets": string | null,"medical_notes": string | null,"notes_from_parents": string | null,"session_id": string | null,"source_id": string | null,"staff_notes": string | null,"status": Database["public"]['Enums']["camper_status"] | null,"tshirt_size": string | null,"updated_at": string | null
+                  }
+                  ComputedFields: never
+                  Relationships: [
+                    {
+      foreignKeyName: "campers_bunk_id_fkey"
+      columns: ["bunk_id"]
+isOneToOne: false
+      referencedRelation: "bunks"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "campers_division_id_fkey"
+      columns: ["division_id"]
+isOneToOne: false
+      referencedRelation: "divisions"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "campers_last_event_fk"
+      columns: ["last_event_id"]
+isOneToOne: false
+      referencedRelation: "attendance_events"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "campers_session_id_fkey"
+      columns: ["session_id"]
+isOneToOne: false
+      referencedRelation: "sessions"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"campers_visible": {
                   Row: {
                     "allergies": string | null,"archived_at": string | null,"bunk_id": string | null,"bunk_preferences": (string)[] | null,"camper_code": string | null,"current_buzzer_number": number | null,"display_name": string | null,"division_id": string | null,"first_name": string | null,"grade": string | null,"has_allergies": boolean | null,"has_epipen": boolean | null,"has_medical_flag": boolean | null,"has_medications": boolean | null,"id": string | null,"in_latest_import": boolean | null,"last_event_id": string | null,"last_name": string | null,"local_address": string | null,"local_address_cross_streets": string | null,"medical_notes": string | null,"notes_from_parents": string | null,"session_id": string | null,"source_id": string | null,"staff_notes": string | null,"status": Database["public"]['Enums']["camper_status"] | null,"tshirt_size": string | null,"updated_at": string | null
                   }
@@ -652,6 +746,9 @@ isOneToOne: false
             "apply_import":
 { Args: { "p_import_id": string }; Returns: Json
                            },
+"area_covers":
+{ Args: { "p_bunk_id": string,"p_division_id": string }; Returns: boolean
+                           },
 "assign_buzzer":
 { Args: { "p_camper_id": string,"p_number": number }; Returns: {
               "assigned_at": string,
@@ -669,9 +766,17 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"bulk_attendance":
+{ Args: { "p_camper_ids": (string)[],"p_event_type": Database["public"]['Enums']["attendance_event_type"],"p_note"?: string }; Returns: Json
+                           },
 "camper_history":
 { Args: { "p_camper_id": string }; Returns: {
               "action": string,"actor_id": string,"at": string,"diff": Json,"source": string
+            }[]
+                           },
+"camper_print_status":
+{ Args: { "p_camper_id": string }; Returns: {
+              "printed_at": string,"requested_at": string,"requested_by_name": string,"status": Database["public"]['Enums']["print_status"],"template_id": string
             }[]
                            },
 "can_access_camper":
@@ -686,6 +791,9 @@ isOneToOne: false
 "dearmor":
 { Args: { "": string }; Returns: string
                            },
+"division_palette_color":
+{ Args: { "p_index": number }; Returns: string
+                           },
 "ensure_bunk":
 { Args: { "p_division_id": string,"p_name": string }; Returns: string
                            },
@@ -698,8 +806,8 @@ isOneToOne: false
 "gen_salt":
 { Args: { "": string }; Returns: string
                            },
-"global_level":
-{ Args: Record<PropertyKey, never>; Returns: Database["public"]['Enums']["access_level"]
+"has_all_areas":
+{ Args: Record<PropertyKey, never>; Returns: boolean
                            },
 "is_admin":
 { Args: Record<PropertyKey, never>; Returns: boolean
@@ -707,8 +815,11 @@ isOneToOne: false
 "level_rank":
 { Args: { "l": Database["public"]['Enums']["access_level"] }; Returns: number
                            },
+"my_level":
+{ Args: Record<PropertyKey, never>; Returns: Database["public"]['Enums']["access_level"]
+                           },
 "my_role":
-{ Args: Record<PropertyKey, never>; Returns: Database["public"]['Enums']["global_role"]
+{ Args: Record<PropertyKey, never>; Returns: Database["public"]['Enums']["staff_role"]
                            },
 "next_camper_code":
 { Args: Record<PropertyKey, never>; Returns: string
@@ -779,10 +890,30 @@ isOneToOne: false
                            },
 "unaccent":
 { Args: { "": string }; Returns: string
-                           }
+                           },
+"undo_attendance":
+{ Args: { "p_event_id": string }; Returns: {
+              "camper_id": string,
+"corrects_event_id": string | null,
+"created_at": string,
+"device_label": string | null,
+"event_type": Database["public"]['Enums']["attendance_event_type"],
+"id": string,
+"method": Database["public"]['Enums']["attendance_method"],
+"note": string | null,
+"occurred_at": string,
+"recorded_by": string | null,
+"resulting_status": Database["public"]['Enums']["camper_status"]
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "attendance_events"
+        isOneToOne: true
+        isSetofReturn: false
+      } }
           }
           Enums: {
-            "access_level": "view"|"scan"|"edit","attendance_event_type": "arrival"|"leave"|"return"|"pickup"|"no_show"|"correction","attendance_method": "scan"|"manual"|"bulk","camper_status": "expected"|"present"|"out"|"departed"|"no_show","contact_role": "mother"|"father"|"guardian"|"emergency"|"host"|"authorized_pickup","division_language": "he"|"fr"|"en","global_role": "owner"|"admin"|"director"|"logistics"|"office"|"staff","import_row_action": "add"|"update"|"unchanged"|"conflict"|"skip","import_status": "uploaded"|"previewed"|"applied"|"cancelled"|"failed"|"reverted","page_status": "queued"|"sent"|"failed"|"manual","print_kind": "name_tag"|"luggage_tag"|"other","print_status": "queued"|"rendering"|"sent"|"printed"|"failed"|"cancelled","record_source": "import"|"manual","scope_role": "division_head"|"head_counselor"|"counselor"|"scanner"
+            "access_level": "view"|"scan"|"edit","attendance_event_type": "arrival"|"leave"|"return"|"pickup"|"no_show"|"correction","attendance_method": "scan"|"manual"|"bulk","camper_status": "expected"|"present"|"out"|"departed"|"no_show","contact_role": "mother"|"father"|"guardian"|"emergency"|"host"|"authorized_pickup","division_language": "he"|"fr"|"en","import_row_action": "add"|"update"|"unchanged"|"conflict"|"skip","import_status": "uploaded"|"previewed"|"applied"|"cancelled"|"failed"|"reverted","page_status": "queued"|"sent"|"failed"|"manual","print_kind": "name_tag"|"luggage_tag"|"other","print_status": "queued"|"rendering"|"sent"|"printed"|"failed"|"cancelled"|"ready","record_source": "import"|"manual","staff_role": "owner"|"director"|"division_head"|"head_counselor"|"counselor"|"scanner"|"office"|"logistics"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -898,7 +1029,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "access_level": ["view", "scan", "edit"],"attendance_event_type": ["arrival", "leave", "return", "pickup", "no_show", "correction"],"attendance_method": ["scan", "manual", "bulk"],"camper_status": ["expected", "present", "out", "departed", "no_show"],"contact_role": ["mother", "father", "guardian", "emergency", "host", "authorized_pickup"],"division_language": ["he", "fr", "en"],"global_role": ["owner", "admin", "director", "logistics", "office", "staff"],"import_row_action": ["add", "update", "unchanged", "conflict", "skip"],"import_status": ["uploaded", "previewed", "applied", "cancelled", "failed", "reverted"],"page_status": ["queued", "sent", "failed", "manual"],"print_kind": ["name_tag", "luggage_tag", "other"],"print_status": ["queued", "rendering", "sent", "printed", "failed", "cancelled"],"record_source": ["import", "manual"],"scope_role": ["division_head", "head_counselor", "counselor", "scanner"]
+            "access_level": ["view", "scan", "edit"],"attendance_event_type": ["arrival", "leave", "return", "pickup", "no_show", "correction"],"attendance_method": ["scan", "manual", "bulk"],"camper_status": ["expected", "present", "out", "departed", "no_show"],"contact_role": ["mother", "father", "guardian", "emergency", "host", "authorized_pickup"],"division_language": ["he", "fr", "en"],"import_row_action": ["add", "update", "unchanged", "conflict", "skip"],"import_status": ["uploaded", "previewed", "applied", "cancelled", "failed", "reverted"],"page_status": ["queued", "sent", "failed", "manual"],"print_kind": ["name_tag", "luggage_tag", "other"],"print_status": ["queued", "rendering", "sent", "printed", "failed", "cancelled", "ready"],"record_source": ["import", "manual"],"staff_role": ["owner", "director", "division_head", "head_counselor", "counselor", "scanner", "office", "logistics"]
           }
         }
 } as const

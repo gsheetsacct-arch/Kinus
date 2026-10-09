@@ -16,6 +16,7 @@ const division = z.object({
   name: z.string().trim().min(1, "Give the division a name."),
   language: z.enum(["he", "fr", "en"]),
   color: z.string().trim().optional(),
+  group_id: z.guid().optional().or(z.literal("")),
 });
 
 export async function saveDivision(fd: FormData): Promise<ActionResult> {
@@ -25,7 +26,7 @@ export async function saveDivision(fd: FormData): Promise<ActionResult> {
   try {
     const d = division.parse(Object.fromEntries(fd));
     const supabase = await createClient();
-    const row = { name: d.name, language: d.language, color: d.color || null };
+    const row = { name: d.name, language: d.language, color: d.color || null, ...(fd.has("group_id") ? { group_id: d.group_id || null } : {}) };
     if (d.id) {
       const { error } = await supabase.from("divisions").update(row).eq("id", d.id);
       if (error) throw error;
@@ -183,4 +184,45 @@ export async function removeEmpty(): Promise<ActionResult> {
     if (error) return fail(error.message);
   }
   return done(`Removed ${divIds.length} empty ${divIds.length === 1 ? "division" : "divisions"} and ${bunkIds.length} empty ${bunkIds.length === 1 ? "bunk" : "bunks"}.`, "/admin/divisions");
+}
+
+const groupSchema = z.object({ id: z.guid().optional().or(z.literal("")), name: z.string().trim().min(1, "Give the group a name.") });
+
+/** Creates or renames a group and sets exactly which divisions belong to it. */
+export async function saveGroup(fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const session = await getActiveSession();
+  if (!session) return fail("Activate a session first.");
+  try {
+    const d = groupSchema.parse(Object.fromEntries(fd));
+    const members = fd.getAll("division_ids").map(String);
+    const supabase = await createClient();
+    let id = d.id;
+    if (id) {
+      const { error } = await supabase.from("division_groups").update({ name: d.name }).eq("id", id);
+      if (error) throw error;
+    } else {
+      const { count } = await supabase.from("division_groups").select("id", { count: "exact", head: true }).eq("session_id", session.id);
+      const { data, error } = await supabase.from("division_groups").insert({ session_id: session.id, name: d.name, sort_order: (count ?? 0) + 1 }).select("id").single();
+      if (error) throw error;
+      id = data.id;
+    }
+    const off = await supabase.from("divisions").update({ group_id: null }).eq("group_id", id!).not("id", "in", `(${members.length ? members.join(",") : "00000000-0000-0000-0000-000000000000"})`);
+    if (off.error) throw off.error;
+    if (members.length) {
+      const on = await supabase.from("divisions").update({ group_id: id! }).in("id", members);
+      if (on.error) throw on.error;
+    }
+    return done(d.id ? "Group saved." : `Group "${d.name}" created.`);
+  } catch (e) {
+    return fail(/duplicate/.test(errorMessage(e)) ? "A group with that name already exists." : errorMessage(e));
+  }
+}
+
+export async function deleteGroup(fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.from("division_groups").delete().eq("id", String(fd.get("id")));
+  if (error) return fail(error.message);
+  return done("Group removed. Its divisions are unchanged.");
 }

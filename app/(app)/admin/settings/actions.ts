@@ -5,8 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 
-const GLOBAL = ["owner", "admin", "director", "logistics", "office", "staff"] as const;
-const SCOPE = ["division_head", "head_counselor", "counselor", "scanner"] as const;
+const ROLES = ["director", "division_head", "head_counselor", "counselor", "scanner", "office", "logistics"] as const;
 
 export async function saveFieldVisibility(fd: FormData): Promise<ActionResult> {
   await requireAdmin();
@@ -14,13 +13,12 @@ export async function saveFieldVisibility(fd: FormData): Promise<ActionResult> {
   const groups = fd.getAll("group").map(String);
   try {
     for (const g of groups) {
-      const global_roles = GLOBAL.filter((r) => r === "owner" || fd.get(`${g}:g:${r}`) === "on");
-      const scope_roles = SCOPE.filter((r) => fd.get(`${g}:s:${r}`) === "on");
-      const { error } = await supabase.from("field_visibility").update({ global_roles: [...global_roles], scope_roles: [...scope_roles] }).eq("field_group", g);
+      const roles = ["owner" as const, ...ROLES.filter((r) => fd.get(`${g}:${r}`) === "on")];
+      const { error } = await supabase.from("field_visibility").update({ roles }).eq("field_group", g);
       if (error) throw error;
     }
     revalidatePath("/admin/settings");
-    return ok("Field visibility saved.");
+    return ok("Saved.");
   } catch (e) {
     return fail(errorMessage(e));
   }

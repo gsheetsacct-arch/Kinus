@@ -28,7 +28,7 @@ if (!url || !key) {
 const admin = createClient(url, key, { auth: { persistSession: false } });
 await admin.from("settings").upsert({ key: "bootstrap_owner", value: { email } });
 const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-  data: { full_name: fullName ?? email, global_role: "owner" },
+  data: { full_name: fullName ?? email, role: "owner", all_areas: true },
   redirectTo: `${appUrl}/login?next=/set-password`,
 });
 if (error) {
@@ -36,7 +36,7 @@ if (error) {
     const { data: users } = await admin.auth.admin.listUsers({ perPage: 1000 });
     const u = users?.users.find((x) => x.email?.toLowerCase() === email.toLowerCase());
     if (u) {
-      await admin.from("profiles").upsert({ id: u.id, email, full_name: fullName ?? email, global_role: "owner" });
+      await admin.from("profiles").upsert({ id: u.id, email, full_name: fullName ?? email, role: "owner", all_areas: true, access_level: "edit" });
       console.log(`Existing user ${email} is now owner.`);
       process.exit(0);
     }

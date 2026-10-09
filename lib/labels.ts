@@ -1,21 +1,17 @@
 /** Plain-language names and explanations for everything a new user sees. */
-import type { AccessLevel, GlobalRole, ScopeRole } from "@/lib/auth/permissions";
+import type { AccessLevel, StaffRole } from "@/lib/auth/permissions";
 
-export const GLOBAL_ROLES: Record<GlobalRole, { label: string; description: string }> = {
-  owner: { label: "Owner", description: "Everything, including managing other admins." },
-  admin: { label: "Admin", description: "Everything: imports, staff, divisions, settings." },
-  director: { label: "Director", description: "Sees and edits every camper. Can give staff access." },
-  logistics: { label: "Logistics", description: "Sees every camper and can check them in and out." },
-  office: { label: "Office", description: "Sees every camper and their contacts, and handles printing." },
-  staff: { label: "Staff", description: "Only sees the divisions or bunks you assign them." },
+export const STAFF_ROLES: Record<StaffRole, { label: string; description: string; defaultLevel: AccessLevel; audience: string }> = {
+  owner: { label: "Owner", description: "Everything, everywhere, including other owners.", defaultLevel: "edit", audience: "director" },
+  director: { label: "Director", description: "Runs camp, or part of it: campers, staff and corrections. Over all of camp they also handle imports and settings.", defaultLevel: "edit", audience: "director" },
+  division_head: { label: "Division head", description: "Runs a division. Gets the most detailed lists.", defaultLevel: "edit", audience: "division_head" },
+  head_counselor: { label: "Head counselor", description: "Oversees counselors. Sees medical details.", defaultLevel: "scan", audience: "head_counselor" },
+  counselor: { label: "Counselor", description: "Looks after a bunk. Gets the bunk list.", defaultLevel: "scan", audience: "counselor" },
+  scanner: { label: "Check-in helper", description: "Only helps check campers in and out.", defaultLevel: "scan", audience: "counselor" },
+  office: { label: "Office", description: "Sees campers and contacts, and handles printing.", defaultLevel: "view", audience: "office" },
+  logistics: { label: "Logistics", description: "Checks campers in and out, buses and pickup.", defaultLevel: "scan", audience: "office" },
 };
-
-export const SCOPE_ROLES: Record<ScopeRole, { label: string; description: string }> = {
-  division_head: { label: "Division head", description: "Runs the division. Gets the most detailed lists." },
-  head_counselor: { label: "Head counselor", description: "Oversees counselors. Sees medical details." },
-  counselor: { label: "Counselor", description: "Looks after a bunk. Gets the bunk list." },
-  scanner: { label: "Check-in helper", description: "Only helps check campers in and out." },
-};
+export const ROLE_ORDER: StaffRole[] = ["director", "division_head", "head_counselor", "counselor", "scanner", "office", "logistics", "owner"];
 
 export const ACCESS_LEVELS: Record<AccessLevel, { label: string; description: string }> = {
   view: { label: "View only", description: "See campers, where they are, and contacts." },
@@ -53,6 +49,9 @@ export const IMPORT_STATUS: Record<string, { label: string; variant: "outline" |
 
 export const DIVISION_COLORS = ["#2563eb", "#0891b2", "#059669", "#65a30d", "#ca8a04", "#ea580c", "#dc2626", "#db2777", "#9333ea", "#475569"];
 
-export function scopeSummary(s: { division_name: string; bunk_name: string | null; scope_role: ScopeRole; access_level: AccessLevel }) {
-  return `${s.division_name} · ${s.bunk_name ?? "all bunks"} · ${SCOPE_ROLES[s.scope_role].label} · ${ACCESS_LEVELS[s.access_level].label}`;
+/** "Main camp", "Division 2", "Division 2 · Bunk Chof" */
+export function areaLabel(a: { group_id: string | null; division_id: string | null; bunk_id: string | null }, names: { group: (id: string) => string; division: (id: string) => string; bunk: (id: string) => string }) {
+  if (a.group_id) return names.group(a.group_id);
+  if (a.bunk_id) return `${names.division(a.division_id!)} · ${names.bunk(a.bunk_id)}`;
+  return names.division(a.division_id!);
 }

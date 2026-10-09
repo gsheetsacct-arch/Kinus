@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { FIELD_BY_KEY, UNGATED_GROUPS, getFieldValue } from "@/lib/fields";
-import { presetAudiencesFor, visibleDivisionIds, visibleFieldGroups, type CurrentUser, type FieldVisibilityRow } from "@/lib/auth/permissions";
+import { presetAudiencesFor, visibleFieldGroups, type CurrentUser, type FieldVisibilityRow } from "@/lib/auth/permissions";
 import { listCampers, type CamperRow } from "./campers";
 import { STATUS_LABEL } from "@/lib/attendance/machine";
 
@@ -33,12 +33,9 @@ export async function buildList(
   fv: FieldVisibilityRow[],
 ): Promise<BuiltList> {
   const campers = await listCampers(supabase, { sessionId: scope.sessionId, divisionId: scope.divisionId, bunkId: scope.bunkId });
-  const allowedDivs = visibleDivisionIds(user);
   const { data: divisions } = await supabase.from("divisions").select("id, name").eq("session_id", scope.sessionId);
-  const divIds = (divisions ?? []).map((d) => d.id).filter((id) => !allowedDivs || allowedDivs.includes(id));
-  // a column is shown if the user may see its group in at least one division in scope
-  const groupsAnywhere = new Set<string>();
-  for (const id of scope.divisionId ? [scope.divisionId] : divIds) for (const g of visibleFieldGroups(user, fv, id, scope.bunkId ?? null)) groupsAnywhere.add(g);
+  // sensitive columns only appear for roles allowed to see them (the data is masked anyway)
+  const groupsAnywhere = visibleFieldGroups(user, fv);
   const columns = preset.columns
     .map((k) => FIELD_BY_KEY[k])
     .filter((f): f is NonNullable<typeof f> => Boolean(f))

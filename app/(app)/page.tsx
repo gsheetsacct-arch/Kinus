@@ -16,7 +16,7 @@ async function setupSteps(user: CurrentUser, sessionId: string | null) {
     sessionId ? supabase.from("imports").select("id", { count: "exact", head: true }).eq("session_id", sessionId).eq("status", "applied") : Promise.resolve({ count: 0 }),
     supabase.from("profiles").select("id", { count: "exact", head: true }),
     supabase.from("staff_scopes").select("id", { count: "exact", head: true }),
-    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("global_role", "staff").eq("is_active", true),
+    supabase.from("profiles").select("id, all_areas, role").eq("is_active", true).eq("all_areas", false).neq("role", "owner"),
     supabase.from("settings").select("value").eq("key", "office_email").maybeSingle(),
     sessionId ? supabase.from("divisions").select("name").eq("session_id", sessionId) : Promise.resolve({ data: [] as { name: string }[] }),
   ]);
@@ -33,9 +33,9 @@ async function setupSteps(user: CurrentUser, sessionId: string | null) {
     },
     { done: (profiles.count ?? 0) > 1, title: "Invite your staff", description: "Head counselors, division heads, office and logistics.", href: "/admin/users", cta: "Staff" },
     {
-      done: (staffRole.count ?? 0) === 0 ? (profiles.count ?? 0) > 1 : (scopes.count ?? 0) > 0,
+      done: (profiles.count ?? 0) > 1 && ((staffRole.data ?? []).length === 0 || (scopes.count ?? 0) > 0),
       title: "Give counselors their bunks",
-      description: "Staff only see the divisions or bunks you assign on their page.",
+      description: "People who aren't over all of camp only see the groups, divisions or bunks you give them.",
       href: "/admin/users",
       cta: "Staff",
     },
@@ -70,7 +70,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       <PageHeader title={`${greeting}, ${user.fullName.split(" ")[0]}`} description={session ? session.name : "No active session yet"} />
       {denied && <Callout tone="warning">That page needs {denied} access. Ask an admin if you think you should have it.</Callout>}
       {!session && !isAdmin(user) && <Callout>Camp hasn&apos;t been set up yet. An admin needs to create this year&apos;s session.</Callout>}
-      {user.role === "staff" && user.scopes.length === 0 && <Callout tone="warning">You don&apos;t have access to any division or bunk yet. Ask an admin to add you.</Callout>}
+      {!user.allAreas && user.role !== "owner" && user.areas.length === 0 && <Callout tone="warning">You haven&apos;t been given a division or bunk yet. Ask a director to add you.</Callout>}
 
       {steps.length > 0 && remaining.length > 0 && (
         <Section title="Getting started" description={`${steps.length - remaining.length} of ${steps.length} done`} bodyClassName="p-0">

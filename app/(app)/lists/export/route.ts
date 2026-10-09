@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   const presets = await getPresetsFor(supabase, user);
   const preset = presets.find((p) => p.id === sp.get("preset")) ?? presets[0];
   if (!preset) return new NextResponse("No preset", { status: 404 });
-  const { data: fv } = await supabase.from("field_visibility").select("field_group, global_roles, scope_roles");
+  const { data: fv } = await supabase.from("field_visibility").select("field_group, roles");
   const list = await buildList(supabase, user, preset, { sessionId: session.id, divisionId: sp.get("division") || undefined, bunkId: sp.get("bunk") || undefined }, fv ?? []);
   const lines: string[] = [];
   const groupCol = preset.group_by ? [preset.group_by] : [];

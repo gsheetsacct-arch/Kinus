@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
-import { BunkPicker } from "@/app/(app)/admin/users/[id]/bunk-picker";
+import { BunkPicker } from "@/components/bunk-picker";
 import { createWalkIn } from "../actions";
 
 export default async function NewCamperPage() {
