@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, ListChecks, Upload, ArrowRight, Layers, Check, Circle } from "lucide-react";
+import { Users, ListChecks, Upload, ArrowRight, Layers, Check, Circle, ScanLine } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/section";
 import { Callout } from "@/components/callout";
@@ -9,6 +9,7 @@ import { isAdmin, type CurrentUser } from "@/lib/auth/permissions";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
 import { cn } from "@/lib/utils";
 import { fetchAll } from "@/lib/supabase/fetch-all";
+import { getCampContext } from "@/lib/data/camp";
 
 async function setupSteps(user: CurrentUser, sessionId: string | null) {
   const supabase = await createClient();
@@ -44,22 +45,26 @@ async function setupSteps(user: CurrentUser, sessionId: string | null) {
 }
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
-  const user = await requireUser();
-  const session = await getActiveSession();
-  const { denied } = await searchParams;
+  const [user, session, camp, { denied }] = await Promise.all([requireUser(), getActiveSession(), getCampContext(), searchParams]);
   const supabase = await createClient();
-  const divisions = session ? ((await supabase.from("divisions").select("id, name, color, sort_order").eq("session_id", session.id).order("sort_order")).data ?? []) : [];
-  const campers = session
-    ? await fetchAll((from, to) => supabase.from("campers_visible").select("id, division_id, status").eq("session_id", session.id).is("archived_at", null).order("id").range(from, to))
-    : [];
+  const inCamp = (id: string | null) => !camp.divisionIds || (id !== null && camp.divisionIds.includes(id));
+  const [divisionRows, allCampers, steps] = await Promise.all([
+    session ? supabase.from("divisions").select("id, name, color, sort_order").eq("session_id", session.id).order("sort_order").then((r) => r.data ?? []) : Promise.resolve([]),
+    session
+      ? fetchAll((from, to) => supabase.from("campers").select("id, division_id, status").eq("session_id", session.id).is("archived_at", null).order("id").range(from, to))
+      : Promise.resolve([]),
+    isAdmin(user) ? setupSteps(user, session?.id ?? null) : Promise.resolve([]),
+  ]);
+  const divisions = divisionRows.filter((d) => inCamp(d.id));
+  const campers = allCampers.filter((c) => inCamp(c.division_id));
   const perDivision = divisions.map((d) => ({ ...d, count: campers.filter((c) => c.division_id === d.id).length })).filter((d) => d.count > 0);
-  const steps = isAdmin(user) ? await setupSteps(user, session?.id ?? null) : [];
   const remaining = steps.filter((s) => !s.done);
   const next = remaining[0];
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
   const quick = [
+    { href: "/scan", label: "Check in", desc: "Scan tags or search to check campers in and out", icon: ScanLine },
     { href: "/campers", label: "Find a camper", desc: "Search by name, code or parent's phone", icon: Users },
     { href: "/lists", label: "Print a list", desc: "Bunk and division lists, or CSV", icon: ListChecks },
     ...(isAdmin(user) ? [{ href: "/admin/imports/new", label: "Import the export", desc: "When registrations change", icon: Upload }] : []),
@@ -67,7 +72,10 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   return (
     <div className="space-y-8">
-      <PageHeader title={`${greeting}, ${user.fullName.split(" ")[0]}`} description={session ? session.name : "No active session yet"} />
+      <PageHeader
+        title={`${greeting}, ${user.fullName.split(" ")[0]}`}
+        description={session ? [session.name, camp.camps.length > 1 ? (camp.current ? `${camp.current.name} camp` : "All camps") : null].filter(Boolean).join(" · ") : "No active session yet"}
+      />
       {denied && <Callout tone="warning">That page needs {denied} access. Ask an admin if you think you should have it.</Callout>}
       {!session && !isAdmin(user) && <Callout>Camp hasn&apos;t been set up yet. An admin needs to create this year&apos;s session.</Callout>}
       {!user.allAreas && user.role !== "owner" && user.areas.length === 0 && <Callout tone="warning">You haven&apos;t been given a division or bunk yet. Ask a director to add you.</Callout>}
@@ -117,7 +125,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         <h2 className="text-base font-semibold">Shortcuts</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {quick.map((q) => (
-            <Link key={q.href} href={q.href} className="group flex items-center gap-4 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] transition-colors hover:border-primary/40 hover:bg-primary-soft/40">
+            <Link key={q.href} href={q.href} className="group flex min-w-0 items-center gap-4 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] transition-colors hover:border-primary/40 hover:bg-primary-soft/40">
               <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
                 <q.icon className="size-5" />
               </span>
@@ -138,7 +146,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {perDivision.map((d) => (
-              <Link key={d.id} href={`/campers?division=${d.id}`} className="flex items-center justify-between rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] hover:border-primary/40">
+              <Link key={d.id} href={`/campers?division=${d.id}`} className="flex min-w-0 items-center justify-between rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] hover:border-primary/40">
                 <span className="flex min-w-0 items-center gap-3">
                   <span className="h-10 w-1.5 shrink-0 rounded-full" style={{ background: d.color ?? "var(--primary)" }} />
                   <span className="min-w-0">

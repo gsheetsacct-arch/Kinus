@@ -186,7 +186,7 @@ export async function removeEmpty(): Promise<ActionResult> {
   return done(`Removed ${divIds.length} empty ${divIds.length === 1 ? "division" : "divisions"} and ${bunkIds.length} empty ${bunkIds.length === 1 ? "bunk" : "bunks"}.`, "/admin/divisions");
 }
 
-const groupSchema = z.object({ id: z.guid().optional().or(z.literal("")), name: z.string().trim().min(1, "Give the group a name.") });
+const groupSchema = z.object({ id: z.guid().optional().or(z.literal("")), name: z.string().trim().min(1, "Give the camp a name.") });
 
 /** Creates or renames a group and sets exactly which divisions belong to it. */
 export async function saveGroup(fd: FormData): Promise<ActionResult> {
@@ -213,9 +213,9 @@ export async function saveGroup(fd: FormData): Promise<ActionResult> {
       const on = await supabase.from("divisions").update({ group_id: id! }).in("id", members);
       if (on.error) throw on.error;
     }
-    return done(d.id ? "Group saved." : `Group "${d.name}" created.`);
+    return done(d.id ? "Camp saved." : `Camp "${d.name}" created.`);
   } catch (e) {
-    return fail(/duplicate/.test(errorMessage(e)) ? "A group with that name already exists." : errorMessage(e));
+    return fail(/duplicate/.test(errorMessage(e)) ? "A camp with that name already exists." : errorMessage(e));
   }
 }
 
@@ -224,5 +224,5 @@ export async function deleteGroup(fd: FormData): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.from("division_groups").delete().eq("id", String(fd.get("id")));
   if (error) return fail(error.message);
-  return done("Group removed. Its divisions are unchanged.");
+  return done("Camp removed. Its divisions are unchanged.");
 }

@@ -19,7 +19,7 @@ const HEADERS: Record<keyof Omit<BulkInputRow, "line">, string[]> = {
   name: ["name", "full name", "fullname", "staff", "person"],
   email: ["email", "e-mail", "mail", "email address"],
   role: ["role", "position", "job", "title"],
-  where: ["division", "group", "where", "area", "divisions"],
+  where: ["division", "group", "camp", "where", "area", "divisions"],
   bunk: ["bunk", "bunks", "group/bunk", "cabin"],
   level: ["level", "access", "can"],
 };
@@ -125,7 +125,7 @@ export function matchAreas(where: string, bunk: string, tree: AreaTree): { allAr
       }
       continue;
     }
-    errors.push(`No division or group called “${w}”.${suggest(w, [...tree.groups.map((x) => x.name), ...tree.divisions.map((x) => x.name)])}`);
+    errors.push(`No camp or division called “${w}”.${suggest(w, [...tree.groups.map((x) => x.name), ...tree.divisions.map((x) => x.name)])}`);
   }
   for (const b of bunks) {
     const pool = divisionsHere.length ? divisionsHere : tree.divisions;
@@ -159,7 +159,7 @@ export function planRows(rows: BulkInputRow[], tree: AreaTree, defaults: { role:
     if (r.level && !lvl) errors.push(`Unknown level “${r.level}”. Use view, check in/out, or edit.`);
     const a = matchAreas(r.where, r.bunk, tree);
     errors.push(...a.errors);
-    if (!a.allAreas && !a.areas.length && !a.errors.length && role !== "office" && role !== "logistics") errors.push("Say where they work: a division, group, bunk, or “All”.");
+    if (!a.allAreas && !a.areas.length && !a.errors.length && role !== "office" && role !== "logistics") errors.push("Say where they work: a camp, division, bunk, or “All”.");
     const level = lvl ?? (defaults.level !== "role" ? defaults.level : null);
     const everywhere = a.allAreas || (!a.areas.length && !a.errors.length && (role === "office" || role === "logistics"));
     return { line: r.line, name: r.name, email: r.email, role, level, allAreas: everywhere, areas: a.areas, areaText: everywhere ? "All of camp" : a.areas.length ? a.text : "—", errors };

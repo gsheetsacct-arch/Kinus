@@ -4,6 +4,9 @@ import { usePathname } from "next/navigation";
 import { Users, ListChecks, Settings, LogOut, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid, Tent, Menu, CircleUser, ScanLine, Activity, Printer } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import type { NavItem } from "@/lib/nav";
+import { CampSwitcher, type CampOption } from "./camp-switcher";
+import { NavigationProgress } from "./navigation-progress";
+import { Suspense } from "react";
 
 const ICONS = { Users, ListChecks, Settings, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid, CircleUser, ScanLine, Activity, Printer };
 
@@ -12,12 +15,16 @@ export function AppShell({
   nav,
   user,
   sessionName,
+  camps,
+  currentCamp,
   signOutAction,
   children,
 }: {
   nav: NavItem[];
   user: { fullName: string; roleLabel: string };
   sessionName: string | null;
+  camps: CampOption[];
+  currentCamp: string | null;
   signOutAction: () => Promise<void>;
   children: React.ReactNode;
 }) {
@@ -25,7 +32,8 @@ export function AppShell({
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/"));
   const main = nav.filter((n) => n.section === "main");
   const admin = nav.filter((n) => n.section === "admin");
-  const mobileMain = main.filter((n) => n.mobile).slice(0, 3);
+  // three tabs: the ones marked for phones first, topped up with the next everyday pages
+  const mobileMain = [...main.filter((n) => n.mobile), ...main.filter((n) => !n.mobile && n.href !== "/")].slice(0, 3);
   const moreActive = !mobileMain.some((n) => isActive(n.href)) && pathname !== "/";
 
   const NavLink = ({ n }: { n: NavItem }) => {
@@ -47,6 +55,9 @@ export function AppShell({
 
   return (
     <div className="flex min-h-dvh">
+      <Suspense>
+        <NavigationProgress />
+      </Suspense>
       <aside className="no-print sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-card md:flex">
         <div className="flex items-center gap-3 px-5 py-5">
           <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
@@ -59,6 +70,7 @@ export function AppShell({
             <div className="truncate text-xs text-muted-foreground">{sessionName ?? "No active session"}</div>
           </div>
         </div>
+        <CampSwitcher camps={camps} current={currentCamp} className="mx-3 mb-3" />
         <nav className="flex-1 space-y-1 overflow-y-auto px-3">
           {main.map((n) => (
             <NavLink key={n.href} n={n} />
@@ -94,8 +106,9 @@ export function AppShell({
               <Tent className="size-4" />
             </span>
             Kinus
-            {sessionName && <span className="truncate text-xs font-normal text-muted-foreground">· {sessionName}</span>}
+            {sessionName && camps.length < 2 && <span className="truncate text-xs font-normal text-muted-foreground">· {sessionName}</span>}
           </Link>
+          <CampSwitcher camps={camps} current={currentCamp} className="ml-auto max-w-40" />
           <Link href="/account" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold" title="Your account" aria-label="Your account">
             {initials(user.fullName)}
           </Link>

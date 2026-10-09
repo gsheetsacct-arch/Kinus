@@ -23,10 +23,11 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  // Do not run code between createServerClient and getUser(): it refreshes the session.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Do not run code between createServerClient and getClaims(): it refreshes the session.
+  // getClaims() verifies the token locally (asymmetric signing keys) instead of asking
+  // the Auth server on every request; with legacy keys it falls back to that call.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims ?? null;
 
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(p + "/"));

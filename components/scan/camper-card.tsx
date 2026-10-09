@@ -36,6 +36,7 @@ export function CamperCard({
   onAction,
   compact,
   embedded,
+  initial,
 }: {
   camperId: string;
   templates: TemplateButton[];
@@ -44,12 +45,19 @@ export function CamperCard({
   compact?: boolean;
   /** On the camper's own page: no name header, contacts or "full details" link. */
   embedded?: boolean;
+  /** Already loaded by the page: shown at once, no extra request. */
+  initial?: CardData | null;
 }) {
-  const [card, setCard] = React.useState<CardData | null | undefined>(undefined);
+  const [card, setCard] = React.useState<CardData | null | undefined>(initial);
   const [pending, start] = React.useTransition();
   const [printOpts, setPrintOpts] = React.useState<TemplateButton | null>(null);
   const reload = React.useCallback(() => loadCard(camperId).then(setCard), [camperId]);
+  const first = React.useRef(initial !== undefined);
   React.useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
     setCard(undefined);
     reload();
   }, [reload]);

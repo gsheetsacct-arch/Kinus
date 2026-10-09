@@ -13,9 +13,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createClient } from "@/lib/supabase/server";
-import { requireUser } from "@/lib/auth/current-user";
+import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { LEVEL_RANK, canAccessBunk, effectiveLevel, isAdmin, isDirector, visibleFieldGroups } from "@/lib/auth/permissions";
 import { CamperCard } from "@/components/scan/camper-card";
+import { loadCard } from "@/app/(app)/scan/actions";
 import { CorrectStatus } from "@/components/scan/correct-status";
 import { EVENT_LABEL } from "@/lib/attendance/machine";
 import { getCamper } from "@/lib/data/campers";
@@ -39,18 +40,22 @@ export const maxDuration = 60;
 const yn = (b: boolean | null | undefined) => (b === null || b === undefined ? null : b ? "Yes" : "No");
 
 export default async function CamperPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requireUser();
-  const { id } = await params;
+  const [user, session, { id }] = await Promise.all([requireUser(), getActiveSession(), params]);
   const supabase = await createClient();
-  const c = await getCamper(supabase, id);
-  if (!c) notFound();
-  const [{ data: fv }, { data: events }, { data: history }, { data: bunks }, { data: templates }] = await Promise.all([
+  // everything at once: one round trip to the database instead of three
+  const divisionsFor = (sessionId: string) => supabase.from("divisions").select("id, name, bunks(id, name, sort_order)").eq("session_id", sessionId).order("sort_order");
+  const [c, { data: fv }, { data: events }, { data: history }, activeBunks, { data: templates }, card] = await Promise.all([
+    getCamper(supabase, id),
     supabase.from("field_visibility").select("field_group, roles"),
     supabase.from("attendance_events").select("id, event_type, method, occurred_at, note, resulting_status, profiles:recorded_by(full_name)").eq("camper_id", id).order("occurred_at", { ascending: false }).limit(100),
     supabase.rpc("camper_history", { p_camper_id: id }),
-    supabase.from("divisions").select("id, name, bunks(id, name, sort_order)").eq("session_id", c.session_id!).order("sort_order"),
+    session ? divisionsFor(session.id) : Promise.resolve({ data: [] }),
     supabase.from("print_templates").select("id, name").eq("show_on_card", true).order("sort_order").order("name"),
+    loadCard(id),
   ]);
+  if (!c) notFound();
+  // a camper from another year: offer that year's bunks
+  const bunks = c.session_id === session?.id ? activeBunks.data : (await divisionsFor(c.session_id!)).data;
   const placeable = (bunks ?? [])
     .filter((d) => canAccessBunk(user, d.id, null, "edit") || d.id === c.division_id)
     .map((d) => ({ ...d, bunks: [...(d.bunks as { id: string; name: string; sort_order: number }[])].sort((a, b) => a.sort_order - b.sort_order) }));
@@ -91,7 +96,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
             {isDirector(user) && <CorrectStatus camperId={c.id!} status={c.status!} />}
           </CardHeader>
           <CardContent>
-            <CamperCard camperId={c.id!} templates={templates ?? []} canScan={LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan} embedded />
+            <CamperCard camperId={c.id!} initial={card} templates={templates ?? []} canScan={LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan} embedded />
           </CardContent>
         </Card>
       )}

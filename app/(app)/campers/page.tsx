@@ -1,15 +1,13 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
-import { StatusBadge } from "@/components/status-badge";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CampersBrowser } from "@/components/campers/campers-browser";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { isAdmin, visibleDivisionIds } from "@/lib/auth/permissions";
-import { listCampers } from "@/lib/data/campers";
+import { isAdmin, visibleFieldGroups } from "@/lib/auth/permissions";
+import { listCamperIndex } from "@/lib/data/campers";
+import { loadAreaTree } from "@/lib/data/areas";
+import { getCampContext } from "@/lib/data/camp";
 
 export const metadata = { title: "Campers" };
 
@@ -19,19 +17,23 @@ export default async function CampersPage({ searchParams }: { searchParams: Prom
   const sp = await searchParams;
   if (!session) return <p className="text-muted-foreground">No active session.</p>;
   const supabase = await createClient();
-  const [{ data: divisions }, { data: bunks }] = await Promise.all([
-    supabase.from("divisions").select("id, name, color").eq("session_id", session.id).order("sort_order"),
-    supabase.from("bunks").select("id, division_id, name").order("sort_order"),
-  ]);
-  const allowed = visibleDivisionIds(user);
-  const divs = (divisions ?? []).filter((d) => !allowed || allowed.includes(d.id));
-  const campers = await listCampers(supabase, { sessionId: session.id, divisionId: sp.division, bunkId: sp.bunk, status: sp.status, q: sp.q, includeArchived: sp.archived === "1" });
+  const [camp, tree, { data: fv }] = await Promise.all([getCampContext(), loadAreaTree(supabase, session.id), supabase.from("field_visibility").select("field_group, roles")]);
+  const archived = sp.archived === "1";
+  const rows = await listCamperIndex(supabase, {
+    sessionId: session.id,
+    divisionIds: camp.divisionIds,
+    includeArchived: archived,
+    withPhones: visibleFieldGroups(user, fv ?? []).has("contacts"),
+  });
+  const divisions = tree.divisions.filter((d) => !camp.divisionIds || camp.divisionIds.includes(d.id));
+  const rest = new URLSearchParams(Object.entries(sp).filter(([k, v]) => k !== "archived" && v) as [string, string][]);
+  if (!archived) rest.set("archived", "1");
 
   return (
     <div>
       <PageHeader
         title="Campers"
-        description={`${campers.length} ${campers.length === 1 ? "camper" : "campers"}${sp.q || sp.division || sp.bunk || sp.status ? " match your search" : ""}`}
+        description={camp.current && camp.camps.length > 1 ? `${camp.current.name} camp` : undefined}
         actions={
           isAdmin(user) ? (
             <Button asChild variant="outline" size="sm">
@@ -40,111 +42,13 @@ export default async function CampersPage({ searchParams }: { searchParams: Prom
           ) : undefined
         }
       />
-      <form className="no-print mb-6 grid gap-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] md:grid-cols-[1fr_180px_160px_140px_auto]" method="get">
-        <Input name="q" defaultValue={sp.q ?? ""} placeholder="Name in any language, camper code, or parent phone" dir="auto" />
-        <Select name="division" defaultValue={sp.division ?? ""}>
-          <option value="">All divisions</option>
-          {divs.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </Select>
-        <Select name="bunk" defaultValue={sp.bunk ?? ""}>
-          <option value="">All bunks</option>
-          {(bunks ?? [])
-            .filter((b) => !sp.division || b.division_id === sp.division)
-            .map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-        </Select>
-        <Select name="status" defaultValue={sp.status ?? ""}>
-          <option value="">Any status</option>
-          <option value="expected">Expected</option>
-          <option value="present">Present</option>
-          <option value="out">Out</option>
-          <option value="departed">Departed</option>
-          <option value="no_show">No-show</option>
-        </Select>
-        <div className="flex gap-2">
-          <Button type="submit" className="flex-1">
-            Search
-          </Button>
-          {(sp.q || sp.division || sp.bunk || sp.status) && (
-            <Button asChild variant="ghost">
-              <Link href="/campers">Clear</Link>
-            </Button>
-          )}
-        </div>
-      </form>
-      <div className="space-y-2 md:hidden">
-        {campers.map((c) => (
-          <Link key={c.id} href={`/campers/${c.id}`} className="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-[var(--shadow-card)]">
-            <div className="min-w-0 flex-1">
-              <div className="truncate font-medium" dir="auto">
-                {c.display_name}
-              </div>
-              <div className="truncate text-xs text-muted-foreground" dir="auto">
-                {[c.division_name, c.bunk_name ?? "unassigned", c.grade ? `Grade ${c.grade}` : null].filter(Boolean).join(" · ")}
-              </div>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {c.has_medical_flag && <Badge variant="warning">medical</Badge>}
-                {c.in_latest_import === false && <Badge variant="outline">not in export</Badge>}
-                {c.archived_at && <Badge variant="secondary">archived</Badge>}
-              </div>
-            </div>
-            <StatusBadge status={c.status!} />
-          </Link>
-        ))}
-        {!campers.length && <p className="py-8 text-center text-sm text-muted-foreground">No campers match.</p>}
-      </div>
-      <div className="hidden md:block">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Code</TableHead>
-            <TableHead>Division</TableHead>
-            <TableHead>Bunk</TableHead>
-            <TableHead>Grade</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {campers.map((c) => (
-            <TableRow key={c.id}>
-              <TableCell>
-                <Link href={`/campers/${c.id}`} className="font-medium hover:underline" dir="auto">
-                  {c.display_name}
-                </Link>
-                {c.archived_at && <Badge variant="secondary" className="ml-2">archived</Badge>}
-              </TableCell>
-              <TableCell className="font-mono text-xs">{c.camper_code}</TableCell>
-              <TableCell dir="auto">{c.division_name ?? "—"}</TableCell>
-              <TableCell dir="auto">{c.bunk_name ?? <span className="text-muted-foreground">unassigned</span>}</TableCell>
-              <TableCell>{c.grade ?? ""}</TableCell>
-              <TableCell>
-                <StatusBadge status={c.status!} />
-              </TableCell>
-              <TableCell className="space-x-1 text-right">
-                {c.has_medical_flag && <Badge variant="warning">medical</Badge>}
-                {c.in_latest_import === false && <Badge variant="outline">not in latest export</Badge>}
-              </TableCell>
-            </TableRow>
-          ))}
-          {!campers.length && (
-            <TableRow>
-              <TableCell colSpan={7} className="text-muted-foreground">
-                No campers match.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-      </div>
+      <CampersBrowser
+        key={camp.current?.id ?? "all"}
+        rows={rows}
+        divisions={divisions}
+        initial={{ q: sp.q ?? "", division: divisions.some((d) => d.id === sp.division) ? sp.division : "", bunk: sp.bunk ?? "", status: sp.status ?? "", sort: sp.sort ?? "name" }}
+        archivedHref={isAdmin(user) || archived ? `/campers${rest.size ? `?${rest}` : ""}` : null}
+      />
     </div>
   );
 }

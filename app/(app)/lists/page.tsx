@@ -7,6 +7,8 @@ import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { visibleDivisionIds } from "@/lib/auth/permissions";
 import { buildList, getPresetsFor } from "@/lib/data/lists";
 import { PrintButton } from "./print-button";
+import { ListGroups } from "@/components/lists/list-groups";
+import { getCampContext } from "@/lib/data/camp";
 
 export const metadata = { title: "Lists" };
 
@@ -16,20 +18,22 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   if (!session) return <p className="text-muted-foreground">No active session.</p>;
   const supabase = await createClient();
-  const [presets, { data: divisions }, { data: bunks }, { data: fv }] = await Promise.all([
+  const [camp, presets, { data: divisions }, { data: bunks }, { data: fv }] = await Promise.all([
+    getCampContext(),
     getPresetsFor(supabase, user),
     supabase.from("divisions").select("id, name").eq("session_id", session.id).order("sort_order"),
     supabase.from("bunks").select("id, division_id, name").order("sort_order"),
     supabase.from("field_visibility").select("field_group, roles"),
   ]);
   const allowed = visibleDivisionIds(user);
-  const divs = (divisions ?? []).filter((d) => !allowed || allowed.includes(d.id));
+  const divs = (divisions ?? []).filter((d) => (!allowed || allowed.includes(d.id)) && (!camp.divisionIds || camp.divisionIds.includes(d.id)));
   // someone with exactly one place (e.g. a counselor's bunk) gets it preselected
   const only = !allowed ? null : user.coverage.length === 1 ? user.coverage[0] : null;
-  const divisionId = sp.division ?? only?.division_id ?? (divs.length === 1 ? divs[0].id : undefined);
-  const bunkId = sp.bunk ?? only?.bunk_id ?? undefined;
+  const asked = divs.some((d) => d.id === sp.division) ? sp.division : undefined;
+  const divisionId = asked ?? (only && divs.some((d) => d.id === only.division_id) ? only.division_id : undefined) ?? (divs.length === 1 ? divs[0].id : undefined);
+  const bunkId = (asked ? sp.bunk : undefined) ?? (only?.division_id === divisionId ? only?.bunk_id : undefined) ?? undefined;
   const preset = presets.find((p) => p.id === sp.preset) ?? presets.find((p) => p.is_default) ?? presets[0];
-  const list = preset ? await buildList(supabase, user, preset, { sessionId: session.id, divisionId: divisionId || undefined, bunkId: bunkId || undefined }, fv ?? []) : null;
+  const list = preset ? await buildList(supabase, user, preset, { sessionId: session.id, divisionId: divisionId || undefined, bunkId: bunkId || undefined, divisionIds: camp.divisionIds }, fv ?? []) : null;
   const qs = new URLSearchParams({ ...(preset ? { preset: preset.id } : {}), ...(divisionId ? { division: divisionId } : {}), ...(bunkId ? { bunk: bunkId } : {}) }).toString();
 
   return (
@@ -57,7 +61,7 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
           ))}
         </Select>
         <Select name="division" defaultValue={divisionId ?? ""}>
-          <option value="">All divisions</option>
+          <option value="">{camp.current && camp.camps.length > 1 ? `All of ${camp.current.name}` : "All divisions"}</option>
           {divs.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
@@ -80,52 +84,7 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
         </Button>
       </form>
       {!preset && <p className="text-sm text-muted-foreground">No list layouts are set up for your role yet. Ask an admin.</p>}
-      {list &&
-        list.groups.map((g, gi) => (
-          <section key={g.title || "all"} className={`rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] print:border-0 print:p-0 print:shadow-none ${gi > 0 ? "print-page-break mt-6" : ""}`}>
-            {g.title && (
-              <h2 className="mb-2 text-lg font-semibold" dir="auto">
-                {g.title} <span className="text-sm font-normal text-muted-foreground">({g.rows.length})</span>
-              </h2>
-            )}
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground">
-                  <th className="w-6 py-1 pr-2">#</th>
-                  {list.columns.map((c) => (
-                    <th key={c.key} className="py-1 pr-3 font-medium">
-                      {c.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {g.rows.map((r, i) => (
-                  <tr key={r.camper.id} className="border-b border-dashed align-top">
-                    <td className="py-1 pr-2 text-xs text-muted-foreground">{i + 1}</td>
-                    {r.cells.map((v, ci) => (
-                      <td key={ci} className="py-1 pr-3" dir="auto">
-                        {list.columns[ci].key === "display_name" ? (
-                          <Link href={`/campers/${r.camper.id}`} className="print:no-underline hover:underline">
-                            {String(v ?? "")}
-                          </Link>
-                        ) : typeof v === "boolean" ? (
-                          v ? "Yes" : "No"
-                        ) : list.columns[ci].key.endsWith(".phone") && v ? (
-                          <a href={`tel:${v}`} className="underline print:no-underline">
-                            {String(v)}
-                          </a>
-                        ) : (
-                          String(v ?? "")
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        ))}
+      {list && <ListGroups columns={list.columns} groups={list.groups} />}
     </div>
   );
 }

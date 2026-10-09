@@ -42,7 +42,7 @@ export function decodeArea(v: string): AreaValue | null {
 }
 
 export function areaNames(tree: AreaTree) {
-  const group = (id: string) => tree.groups.find((g) => g.id === id)?.name ?? "A group from another session";
+  const group = (id: string) => tree.groups.find((g) => g.id === id)?.name ?? "A camp from another session";
   const division = (id: string) => tree.divisions.find((d) => d.id === id)?.name ?? "A division from another session";
   const bunk = (id: string) => tree.divisions.flatMap((d) => d.bunks).find((b) => b.id === id)?.name ?? "?";
   return { group, division, bunk };

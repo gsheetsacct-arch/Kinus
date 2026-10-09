@@ -73,7 +73,7 @@ export function AreaPicker({ tree, defaultAll, defaultAreas, lockAll }: { tree: 
       <div className="grid gap-2 sm:grid-cols-2">
         {[
           { v: true, label: "All of camp", desc: "Every division, including ones added later." },
-          { v: false, label: "Only some of camp", desc: "Pick groups, divisions or bunks." },
+          { v: false, label: "Only some of camp", desc: "Pick camps, divisions or bunks." },
         ].map((o) => (
           <label
             key={String(o.v)}
@@ -103,7 +103,7 @@ export function AreaPicker({ tree, defaultAll, defaultAreas, lockAll }: { tree: 
                   <span className="text-sm font-semibold" dir="auto">
                     {g.name}
                   </span>
-                  <span className="text-xs text-muted-foreground">group · {divs.length} divisions</span>
+                  <span className="text-xs text-muted-foreground">whole camp · {divs.length} divisions</span>
                 </label>
                 {divs.map((d) => (
                   <Division key={d.id} d={d} indent />

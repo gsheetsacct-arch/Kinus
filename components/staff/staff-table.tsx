@@ -103,7 +103,7 @@ export function StaffTable({ rows, tree, roles, actions, lockAll }: { rows: Staf
           <option value="all">All of camp</option>
           {tree.groups.map((g) => (
             <option key={g.id} value={`g:${g.id}`}>
-              {g.name} (group)
+              {g.name} (camp)
             </option>
           ))}
           {tree.divisions.map((d) => (

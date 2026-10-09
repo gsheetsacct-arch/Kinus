@@ -18,7 +18,7 @@ export default async function BulkAddPage() {
     "Name\tEmail\tRole\tDivision\tBunk",
     `Levi Cohen\tlevi@example.com\tCounselor\t${d?.name ?? "Division 2"}\t${d?.bunks[0]?.name ?? "Bunk Chof"}`,
     `Shmuli Levin\tshmuli@example.com\tHead counselor\t${d?.name ?? "Division 2"}\t`,
-    `Rivky Katz\trivky@example.com\tDirector\t${tree.groups[0]?.name ?? "Main camp"}\t`,
+    `Rivky Katz\trivky@example.com\tDirector\t${tree.groups[0]?.name ?? "American"}\t`,
     "Office desk\toffice@example.com\tOffice\tAll\t",
   ].join("\n");
   return (

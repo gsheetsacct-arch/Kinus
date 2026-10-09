@@ -61,3 +61,52 @@ do $$ begin
   if (select count(*) from campers) <> 4 then raise exception 'owner sees %', (select count(*) from campers); end if;
   if not is_admin() then raise exception 'owner not admin'; end if;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- contacts, check-ins, editing and deactivated accounts (policies from 0008)
+-- ---------------------------------------------------------------------------
+reset role;
+insert into camper_contacts (camper_id, role, slot, name, phone) values
+ ('40000000-0000-0000-0000-000000000001','mother',1,'Mom of Main1','7185550001'),
+ ('40000000-0000-0000-0000-000000000003','mother',1,'Mom of French','7185550003');
+update field_visibility set roles = '{owner,director,counselor}' where field_group = 'contacts';
+update field_visibility set roles = '{owner,director}' where field_group = 'medical';
+update campers set medical_notes = 'peanuts', has_allergies = true;
+set role authenticated;
+-- counselor: contacts of their own bunk only; no medical details; can't edit at scan level
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003';
+do $$ declare n int; begin
+  if (select string_agg(name, ',') from camper_contacts) <> 'Mom of Main1' then raise exception 'counselor contacts: %', (select string_agg(name, ',') from camper_contacts); end if;
+  if (select count(*) from campers_visible where medical_notes is not null) <> 0 then raise exception 'counselor saw medical notes'; end if;
+  if (select count(*) from campers_visible where has_medical_flag) <> 1 then raise exception 'counselor lost the medical flag'; end if;
+  update campers set staff_notes = 'x' where id = '40000000-0000-0000-0000-000000000001';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'scan-level counselor edited a camper'; end if;
+end $$;
+-- French division head (edit): sees no contacts (role not allowed), may edit French only
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000004';
+do $$ declare n int; begin
+  if (select count(*) from camper_contacts) <> 0 then raise exception 'division head saw contacts without permission'; end if;
+  update campers set staff_notes = 'ok' where id in ('40000000-0000-0000-0000-000000000003','40000000-0000-0000-0000-000000000001');
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'division head edited % campers', n; end if;
+end $$;
+-- group director: sees the check-in recorded earlier, and medical details
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000002';
+do $$ begin
+  if (select count(*) from attendance_events) <> 2 then raise exception 'director sees % events', (select count(*) from attendance_events); end if;
+  if (select count(*) from campers_visible where medical_notes = 'peanuts') <> 3 then raise exception 'director medical: %', (select count(*) from campers_visible where medical_notes = 'peanuts'); end if;
+end $$;
+-- counselor can't see events of campers outside their bunk
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003';
+do $$ begin
+  if (select count(*) from attendance_events) <> 0 then raise exception 'counselor sees others'' events'; end if;
+end $$;
+-- deactivated: nothing at all, even with areas
+reset role;
+update profiles set is_active = false where id = '00000000-0000-0000-0000-000000000003';
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003';
+do $$ begin
+  if (select count(*) from campers) <> 0 or (select count(*) from camper_contacts) <> 0 then raise exception 'deactivated user still sees campers'; end if;
+end $$;

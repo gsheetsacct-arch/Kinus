@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { FIELD_BY_KEY, UNGATED_GROUPS, getFieldValue } from "@/lib/fields";
 import { presetAudiencesFor, visibleFieldGroups, type CurrentUser, type FieldVisibilityRow } from "@/lib/auth/permissions";
-import { listCampers, type CamperRow } from "./campers";
+import { listCampers } from "./campers";
 import { STATUS_LABEL } from "@/lib/attendance/machine";
 
 type DB = SupabaseClient<Database>;
@@ -12,7 +12,7 @@ export type ListPreset = { id: string; name: string; audience: string; columns: 
 export type BuiltList = {
   preset: ListPreset;
   columns: { key: string; label: string }[];
-  groups: { title: string; rows: { camper: CamperRow; cells: (string | boolean | null)[] }[] }[];
+  groups: { title: string; rows: { id: string; cells: (string | boolean | null)[] }[] }[];
   scopeLabel: string;
 };
 
@@ -29,20 +29,27 @@ export async function buildList(
   supabase: DB,
   user: CurrentUser,
   preset: ListPreset,
-  scope: { sessionId: string; divisionId?: string; bunkId?: string },
+  scope: { sessionId: string; divisionId?: string; bunkId?: string; divisionIds?: string[] | null },
   fv: FieldVisibilityRow[],
 ): Promise<BuiltList> {
-  const campers = await listCampers(supabase, { sessionId: scope.sessionId, divisionId: scope.divisionId, bunkId: scope.bunkId });
-  const { data: divisions } = await supabase.from("divisions").select("id, name").eq("session_id", scope.sessionId);
   // sensitive columns only appear for roles allowed to see them (the data is masked anyway)
   const groupsAnywhere = visibleFieldGroups(user, fv);
+  const sortKeys = preset.sort.length ? preset.sort : [{ field: "last_name", dir: "asc" }];
+  const shownColumns = preset.columns
+    .map((k) => FIELD_BY_KEY[k])
+    .filter((f): f is NonNullable<typeof f> => Boolean(f))
+    .filter((f) => UNGATED_GROUPS.includes(f.group) || groupsAnywhere.has(f.group));
+  const fields = [...new Set([...shownColumns.map((f) => f.key), ...sortKeys.map((s) => s.field), ...(preset.group_by ? [preset.group_by] : [])])].filter((k) => FIELD_BY_KEY[k]);
+  const [campers, { data: divisions }] = await Promise.all([
+    listCampers(supabase, { sessionId: scope.sessionId, divisionId: scope.divisionId, bunkId: scope.bunkId, divisionIds: scope.divisionIds, fields }),
+    supabase.from("divisions").select("id, name").eq("session_id", scope.sessionId),
+  ]);
   const columns = preset.columns
     .map((k) => FIELD_BY_KEY[k])
     .filter((f): f is NonNullable<typeof f> => Boolean(f))
     .filter((f) => UNGATED_GROUPS.includes(f.group) || groupsAnywhere.has(f.group))
     .map((f) => ({ key: f.key, label: f.label }));
 
-  const sortKeys = preset.sort.length ? preset.sort : [{ field: "last_name", dir: "asc" }];
   const sorted = [...campers].sort((a, b) => {
     for (const s of sortKeys) {
       const r = cmp(getFieldValue(a, s.field), getFieldValue(b, s.field));
@@ -56,7 +63,7 @@ export async function buildList(
     const title = groupKey ? String(getFieldValue(c, groupKey) ?? (groupKey === "bunk" ? "Unassigned" : "—")) : "";
     if (!groupsMap.has(title)) groupsMap.set(title, { title, rows: [] });
     groupsMap.get(title)!.rows.push({
-      camper: c,
+      id: c.id!,
       cells: columns.map((col) => {
         const v = getFieldValue(c, col.key);
         if (col.key === "status" && typeof v === "string") return STATUS_LABEL[v as keyof typeof STATUS_LABEL] ?? v;
@@ -71,6 +78,6 @@ export async function buildList(
     preset,
     columns,
     groups: [...groupsMap.values()],
-    scopeLabel: [divName, bunkName].filter(Boolean).join(" · ") || "All divisions",
+    scopeLabel: [divName, bunkName].filter(Boolean).join(" · ") || (scope.divisionIds ? "Whole camp" : "All divisions"),
   };
 }

@@ -25,10 +25,10 @@ function GroupFields({ g, divisions }: { g?: { id: string; name: string }; divis
   return (
     <>
       {g && <input type="hidden" name="id" value={g.id} />}
-      <Field label="Group name" htmlFor="group-name" hint="For example “Main camp”. Give a director this group and they get all its divisions, including ones you add to it later.">
+      <Field label="Camp name" htmlFor="group-name" hint="For example “American”, “Hebrew” or “French”. Everyone picks the camp they work in at the top of the menu; give a director this camp and they get all its divisions, including ones added later.">
         <Input id="group-name" name="name" defaultValue={g?.name ?? ""} required dir="auto" />
       </Field>
-      <Field label="Divisions in this group">
+      <Field label="Divisions in this camp">
         <div className="grid gap-1.5 sm:grid-cols-2">
           {divisions.map((d) => (
             <label key={d.id} className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm has-[:checked]:border-primary/50 has-[:checked]:bg-primary-soft/40">
@@ -47,9 +47,9 @@ function DivisionFields({ d, groups }: { d?: { id: string; name: string; languag
     <>
       {d && <input type="hidden" name="id" value={d.id} />}
       {groups.length > 0 && (
-        <Field label="Group" htmlFor="division-group">
+        <Field label="Camp" htmlFor="division-group">
           <Select id="division-group" name="group_id" defaultValue={d?.group_id ?? ""}>
-            <option value="">Not in a group</option>
+            <option value="">Not in a camp</option>
             {groups.map((g) => (
               <option key={g.id} value={g.id}>
                 {g.name}
@@ -154,13 +154,13 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
     <FormDialog
       trigger={
         <Button variant="ghost" className="w-full">
-          <FolderPlus /> New group of divisions
+          <FolderPlus /> New camp
         </Button>
       }
-      title="New group"
-      description="Group divisions that are run together, so you can give someone access to all of them at once."
+      title="New camp"
+      description="A camp is run on its own, like Hebrew or French: it has its own divisions, and people switch to it at the top of the menu."
       action={saveGroup}
-      submitLabel="Create group"
+      submitLabel="Create camp"
     >
       <GroupFields divisions={divs} />
     </FormDialog>
@@ -227,21 +227,21 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
                             Edit
                           </Button>
                         }
-                        title={`Edit group ${g.name}`}
+                        title={`Edit camp ${g.name}`}
                         action={saveGroup}
                       >
                         <GroupFields g={g} divisions={divs} />
                       </FormDialog>
                       <FormDialog
                         trigger={
-                          <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" aria-label={`Remove group ${g.name}`}>
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" aria-label={`Remove camp ${g.name}`}>
                             <Trash2 className="size-3.5" />
                           </Button>
                         }
-                        title={`Remove the group ${g.name}?`}
-                        description={`Its divisions stay as they are.${people ? ` ${people} ${people === 1 ? "person has" : "people have"} access through this group and will lose it.` : ""}`}
+                        title={`Remove the camp ${g.name}?`}
+                        description={`Its divisions stay as they are.${people ? ` ${people} ${people === 1 ? "person has" : "people have"} access through this camp and will lose it.` : ""}`}
                         action={deleteGroup}
-                        submitLabel="Remove group"
+                        submitLabel="Remove camp"
                         destructive
                       >
                         <input type="hidden" name="id" value={g.id} />
@@ -255,7 +255,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
                 );
               })}
               {groups.length > 0 && ungrouped.length > 0 && (
-                <div className="border-b bg-muted/60 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Not in a group</div>
+                <div className="border-b bg-muted/60 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Not in a camp</div>
               )}
               {ungrouped.map((d) => (
                 <DivisionLink key={d.id} d={d} />

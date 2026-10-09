@@ -5,6 +5,7 @@ create or replace function auth.uid() returns uuid language sql stable as $$ sel
 create schema if not exists storage;
 create table storage.buckets (id text primary key, name text, public boolean);
 do $$ begin if not exists (select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if; end $$;
+do $$ begin if not exists (select 1 from pg_roles where rolname='anon') then create role anon nologin; end if; end $$;
 grant usage on schema public to authenticated;
 alter default privileges in schema public grant all on tables to authenticated;
 alter default privileges in schema public grant all on sequences to authenticated;

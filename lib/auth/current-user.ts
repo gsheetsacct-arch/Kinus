@@ -11,10 +11,10 @@ type Account = { user: CurrentUser; problem?: never } | { user: null; problem: A
 /** Loads the signed-in user's profile and areas once per request. */
 const loadAccount = cache(async (): Promise<Account> => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { user: null, problem: "signed_out" };
+  const { data: auth } = await supabase.auth.getClaims();
+  const claims = auth?.claims;
+  if (!claims?.sub) return { user: null, problem: "signed_out" };
+  const user = { id: claims.sub, email: claims.email ?? "", user_metadata: claims.user_metadata ?? {} };
   const [{ data: profileRow, error: profileError }, { data: areas, error: areasError }] = await Promise.all([
     supabase.from("profiles").select("id, email, full_name, role, access_level, all_areas, is_active").eq("id", user.id).maybeSingle(),
     supabase.from("staff_scopes").select("id, group_id, division_id, bunk_id").eq("user_id", user.id),

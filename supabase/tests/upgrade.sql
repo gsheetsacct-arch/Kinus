@@ -12,3 +12,12 @@ begin
   select role, access_level into r from profiles where email = 'nobody@x.test';
   assert r.role = 'counselor' and r.access_level = 'scan', format('no scopes -> counselor/scan: %s', r);
 end $$;
+
+-- 0007: existing divisions were put into camps, American first.
+do $$
+begin
+  assert (select string_agg(g.name, ',' order by g.sort_order) from division_groups g where g.session_id = 'a1000000-0000-0000-0000-000000000001') = 'American,Hebrew,French',
+    (select string_agg(g.name || ':' || g.sort_order, ',') from division_groups g);
+  assert (select string_agg(d.name, ',' order by d.name) from divisions d join division_groups g on g.id = d.group_id where g.name = 'American') = 'Bar Mitzvah Program,Division 1';
+  assert not exists (select 1 from divisions where group_id is null), 'every division has a camp';
+end $$;

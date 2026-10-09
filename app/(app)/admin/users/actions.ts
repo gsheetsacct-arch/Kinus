@@ -73,7 +73,7 @@ export async function savePerson(fd: FormData): Promise<ActionResult> {
     const allAreas = d.all_areas === "on";
     const level = d.access_level ?? STAFF_ROLES[d.role].defaultLevel;
     if (d.role !== "owner" && !allAreas && areas.length === 0 && d.role !== "office" && d.role !== "logistics")
-      return fail("Choose where they work: all of camp, or at least one group, division or bunk.");
+      return fail("Choose where they work: all of camp, or at least one camp, division or bunk.");
     const admin = createAdminClient();
     if (d.id) {
       const { data: target } = await admin.from("profiles").select("id, role").eq("id", d.id).single();

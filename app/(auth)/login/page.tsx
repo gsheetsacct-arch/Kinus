@@ -8,9 +8,8 @@ export const metadata = { title: "Sign in" };
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string }> }) {
   const { next, error } = await searchParams;
   const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
-  const {
-    data: { user },
-  } = await (await createClient()).auth.getUser();
+  const { data } = await (await createClient()).auth.getClaims();
+  const user = data?.claims?.sub ? data.claims : null;
   return (
     <main className="grid min-h-dvh lg:grid-cols-[1.1fr_1fr]">
       <section className="relative hidden overflow-hidden bg-primary text-primary-foreground lg:flex lg:flex-col lg:justify-between lg:p-12">

@@ -66,7 +66,7 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
               htmlFor="text"
               hint={
                 <>
-                  Copy the rows straight from Excel or Google Sheets. Columns: <strong>Name, Email, Role, Division or group, Bunk</strong> (a header row is fine, in any order). Role, division and bunk can be left
+                  Copy the rows straight from Excel or Google Sheets. Columns: <strong>Name, Email, Role, Camp or division, Bunk</strong> (a header row is fine, in any order). Role, division and bunk can be left
                   empty where they don&apos;t apply. Write <em>All</em> for all of camp.
                 </>
               }
