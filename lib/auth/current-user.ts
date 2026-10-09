@@ -4,20 +4,30 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin, isDirector, type CurrentUser } from "./permissions";
 
-/** Loads the signed-in user's profile and areas once per request. Null when signed out. */
-export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
+/** Why a signed-in person can't use the app (shown instead of sending them back to sign-in). */
+export type AccountProblem = "database" | "inactive" | "no_profile";
+type Account = { user: CurrentUser; problem?: never } | { user: null; problem: AccountProblem | "signed_out" };
+
+/** Loads the signed-in user's profile and areas once per request. */
+const loadAccount = cache(async (): Promise<Account> => {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return null;
-  const [{ data: profileRow }, { data: areas }] = await Promise.all([
+  if (!user) return { user: null, problem: "signed_out" };
+  const [{ data: profileRow, error: profileError }, { data: areas, error: areasError }] = await Promise.all([
     supabase.from("profiles").select("id, email, full_name, role, access_level, all_areas, is_active").eq("id", user.id).maybeSingle(),
     supabase.from("staff_scopes").select("id, group_id, division_id, bunk_id").eq("user_id", user.id),
   ]);
+  // a column or table the app expects is missing: the database is behind the app
+  if (profileError || areasError) {
+    console.error("Loading the signed-in profile failed", profileError ?? areasError);
+    return { user: null, problem: "database" };
+  }
   let profile = profileRow;
   if (!profile) profile = await healMissingProfile(user.id, user.email ?? "", (user.user_metadata ?? {}) as Record<string, string>);
-  if (!profile || !profile.is_active) return null;
+  if (!profile) return { user: null, problem: "no_profile" };
+  if (!profile.is_active) return { user: null, problem: "inactive" };
   const rows = areas ?? [];
   const groupIds = rows.map((a) => a.group_id).filter((x): x is string => Boolean(x));
   const grouped = groupIds.length ? ((await supabase.from("divisions").select("id, group_id").in("group_id", groupIds)).data ?? []) : [];
@@ -26,21 +36,34 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     ...grouped.map((d) => ({ division_id: d.id, bunk_id: null })),
   ];
   return {
-    id: profile.id,
-    email: profile.email,
-    fullName: profile.full_name,
-    role: profile.role,
-    level: profile.access_level,
-    allAreas: profile.all_areas,
-    areas: rows,
-    coverage,
+    user: {
+      id: profile.id,
+      email: profile.email,
+      fullName: profile.full_name,
+      role: profile.role,
+      level: profile.access_level,
+      allAreas: profile.all_areas,
+      areas: rows,
+      coverage,
+    },
   };
 });
 
+/** The signed-in user, or null when signed out or their account can't be used. */
+export const getCurrentUser = async (): Promise<CurrentUser | null> => (await loadAccount()).user;
+
+/** What stops a signed-in person from using the app, if anything. */
+export const getAccountProblem = async (): Promise<AccountProblem | null> => {
+  const a = await loadAccount();
+  return a.user || a.problem === "signed_out" ? null : a.problem;
+};
+
 export async function requireUser(): Promise<CurrentUser> {
-  const u = await getCurrentUser();
-  if (!u) redirect("/login");
-  return u;
+  const a = await loadAccount();
+  if (a.user) return a.user;
+  // Signed in but unusable: explain, never bounce to /login (which forwards signed-in people back here).
+  if (a.problem !== "signed_out") redirect(`/no-access?reason=${a.problem}`);
+  redirect("/login");
 }
 
 /** Camp-wide setup: owner, or a director over all of camp. */

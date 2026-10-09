@@ -17,7 +17,9 @@ export async function GET(request: Request) {
       out.schema = /relation .* does not exist|schema cache/i.test(error.message) ? "NOT APPLIED — run the migrations (docs/09-deployment.md §9.2)" : `error: ${error.message}`;
     } else {
       out.database = "ok";
-      out.schema = "applied";
+      // the newest migration adds division_groups and profiles.role; older databases lack them
+      const { error: latest } = await admin.from("profiles").select("role, all_areas").limit(1);
+      out.schema = latest ? "OUT OF DATE: run the newest migration in supabase/migrations (staff sign-in fails until then)" : "applied";
       const [{ count: profiles }, { data: session }] = await Promise.all([
         admin.from("profiles").select("id", { count: "exact", head: true }),
         admin.from("sessions").select("name").eq("is_active", true).maybeSingle(),

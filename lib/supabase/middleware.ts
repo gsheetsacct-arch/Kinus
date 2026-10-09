@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { authRedirect } from "@/lib/auth/redirects";
 
-const PUBLIC_PATHS = ["/login", "/auth", "/set-password", "/api/webhooks", "/api/cron", "/health"];
+const PUBLIC_PATHS = ["/login", "/no-access", "/auth", "/set-password", "/api/webhooks", "/api/cron", "/health"];
 
 export async function updateSession(request: NextRequest) {
   const url = new URL(request.nextUrl.pathname + request.nextUrl.search, `${request.nextUrl.protocol}//${request.headers.get("host") ?? request.nextUrl.host}`);
