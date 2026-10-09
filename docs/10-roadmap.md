@@ -18,20 +18,25 @@ something usable.
 - Camper detail page; search; lists with the five default presets + preset editor.
 - **Milestone: the roster is in, staff have logins, lists print.**
 
-### Phase 2 — Operations (5–7 days)
-- Scan screen (Check in / Check out / Lookup, camera + hardware scanner + search +
-  browse), flashes and undo, status machine, status board with realtime, bulk
-  actions, corrections.
-- Merge fields and value maps (editor seeded from roster values); Publisher
-  data-source export.
-- Conversion of your Publisher templates to native templates; HTML renderer; PDF
-  via Chromium; batch job; one-tap request from the card; auto-request on first
-  check-in; office email; print queue page; mark printed.
-- PWA shell with cached roster.
+### Phase 2 — Operations — **done**
+- Scan screen (Check in / Check out / Lookup, camera + hardware scanner + search),
+  flashes and undo, status machine, status board with realtime, bulk actions,
+  corrections.
+- Merge fields and value maps (editor with live examples); Publisher data-source
+  export (CSV).
+- HTML renderer; PDF via Chromium; batches; one-tap request from the card;
+  auto-request on first check-in; office email; print queue; mark printed;
+  template editor with background images.
+- Camps (American / Hebrew / French) with a switcher; speed work for ~1,000 campers;
+  loading states everywhere.
+- Still to do from this phase: **converting your Publisher templates** (waiting for
+  the files: export the design without merge fields as PNG, and tell me which
+  fields go where) and the **PWA shell** (moved to phase 3).
 - **Milestone: a full dry run of arrival, a mid-day checkout, pickup, and tag
   requests from the card.**
 
 ### Phase 3 — Hardening (2–4 days)
+- PWA shell (installable, cached roster for spotty Wi-Fi at the gate).
 - Health page, daily summary email, Resend webhooks, Playwright test of the
   check-in/out flow, load check with a 600-camper fixture, staff walkthrough.
 - **Milestone: ready for the program.**

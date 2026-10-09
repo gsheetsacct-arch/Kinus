@@ -136,8 +136,14 @@ which completes the sign-in and continues to `/set-password` for invitations. Op
 | `RESEND_WEBHOOK_SECRET` | server only | delivery events |
 | `EMAIL_FROM` | server | `Kinus Tags <tags@your-domain>` |
 | `CRON_SECRET` | server | |
+| `NEXT_PUBLIC_CAMP_TIMEZONE` | client+server | optional, default `America/New_York`: every time shown in the app is camp time |
 | `APP_URL` | server | the one address staff use, e.g. `https://kinus.vercel.app`. Other production addresses redirect to it; emailed links use it. If unset, links use the address the sender is on. |
 
+- **Function region = database region.** Every page talks to Supabase several
+  times; if Vercel's functions run far from the database each trip adds ~70–150 ms.
+  Vercel → Project → Settings → Functions → Function Region: pick the region of
+  your Supabase project (Supabase → Project Settings → General shows it; e.g.
+  `us-east-1` ↔ Vercel `iad1` Washington, D.C.).
 - Custom domain (e.g. `kinus.your-domain`), HTTPS automatic. PWA requires HTTPS,
   which previews and prod both have.
 - Vercel Firewall: rate-limit `/login` and `/api/*`; optional IP allow-list is
