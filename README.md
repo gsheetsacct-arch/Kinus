@@ -25,7 +25,14 @@ What works today:
 - Lists from presets (counselor / head counselor / division head / office / bus),
   grouped by bunk, printable, CSV export; preset editor; field-visibility matrix
 
-## Running it
+## Setting it up (no local tools needed)
+
+Supabase, Vercel and GitHub are all configured in the browser. Migrations are
+applied by Supabase's GitHub integration or by the **Setup** GitHub Actions
+workflow; the first owner is invited from the Supabase dashboard or by that same
+workflow. Step by step: [docs/09-deployment.md §9.2](docs/09-deployment.md#92-first-time-setup-entirely-in-the-browser-once).
+
+## Developing locally (optional)
 
 ```bash
 cp .env.example .env.local        # fill in the Supabase keys
@@ -35,8 +42,6 @@ npm test                          # import engine unit tests
 npm run typecheck && npm run lint
 supabase/tests/run.sh postgresql://postgres:postgres@localhost:5432   # schema + RLS + import tests
 ```
-
-First-time setup is in [docs/09-deployment.md](docs/09-deployment.md#92-supabase-setup-once).
 
 ## Documents
 

@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ActionForm } from "@/components/action-form";
 import { sendMagicLink, signInWithPassword } from "../actions";
+import { HashSession } from "./hash-session";
 
 export const metadata = { title: "Sign in" };
 
@@ -11,6 +12,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { next, error } = await searchParams;
   return (
     <main className="flex min-h-dvh items-center justify-center bg-muted/40 p-4">
+      <HashSession />
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="text-2xl">Kinus</CardTitle>

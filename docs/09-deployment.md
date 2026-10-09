@@ -11,60 +11,100 @@
 Two Supabase projects (staging, prod) rather than Supabase branching: simpler,
 cheaper, and staging can hold a scrubbed copy of the roster for testing imports.
 
-## 9.2 Supabase setup (once)
+## 9.2 First-time setup, entirely in the browser (once)
 
-1. Create projects `kinus-staging`, `kinus-prod` (region closest to Crown Heights:
-   `us-east-1`).
-2. Enable extensions `unaccent`, `pg_trgm` (the migration does it; they are
-   available on Supabase).
-3. Auth: enable Email provider; disable public sign-ups (invite only); set site URL
-   and redirect URLs to the Vercel domains; set JWT expiry 3600 s; custom SMTP
-   through Resend so invite/magic-link emails come from your domain.
-4. Storage: buckets `imports`, `templates`, `print-output` (created by migration),
-   all private; a policy allowing admins to read/write `imports` and `templates`,
-   office+admins to read `print-output`.
-5. Realtime: enable for `attendance_events`, `campers`, `print_jobs`, `page_requests`
-   (`alter publication supabase_realtime add table …`, add to migration 0002).
-6. Create the first owner:
-   ```bash
-   npm run bootstrap-owner -- you@example.com "Your Name"
-   ```
-   (reads `.env.local`; stores the email in `settings.bootstrap_owner` and sends a
-   Supabase invite that lands on `/set-password`). Every later staff member is
-   invited from **Staff → Invite** inside the app.
-7. Database backups: Supabase daily backups (Pro plan) plus a nightly
-   `pg_dump` GitHub Action to a private artifact during the program week.
+Nothing here needs a computer with tools installed; everything happens in the
+Supabase, Vercel and GitHub web UIs.
 
-Migrations: Supabase CLI. `supabase/migrations/*.sql` are applied by CI
-(`supabase db push`) on merge to `main` (prod) and on PR (staging) — see
-`.github/workflows/db-*.yml`; they need the `SUPABASE_ACCESS_TOKEN` and
-`SUPABASE_DB_PASSWORD` secrets and the `SUPABASE_PROJECT_REF` variable on the
-`staging` / `production` GitHub environments. For the very first deploy you can
-also run `supabase link && supabase db push` from your machine.
+1. **Supabase project** exists and is linked to the Vercel project through the
+   Vercel ↔ Supabase integration. That integration already sets
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and
+   `SUPABASE_SERVICE_ROLE_KEY` on Vercel; the app derives `APP_URL` from Vercel
+   itself, so no further Vercel env vars are needed for phase 1.
+
+2. **Apply the schema.** Two ways; pick one.
+
+   **A. Supabase's GitHub integration (simplest).** Supabase dashboard →
+   Integrations → GitHub → connect the repository. Settings:
+   - *Working directory* (the folder that contains `supabase/`): leave blank or `.`
+     — the `supabase/` folder is at the repository root.
+   - *Production branch*: the branch the code lives on. Until a `main` branch
+     exists that is `claude/gracious-noether-nc1kf8`.
+   - *Deploy to production*: on. Every push to that branch then applies any new
+     file in `supabase/migrations/` automatically.
+   This integration is part of Supabase Branching (Pro plan). If it is not
+   available on your plan, use B.
+
+   **B. The repo's Setup workflow.** Collect three values from Supabase
+   (Project Settings): the *Connect* → **Direct connection** URI with the password
+   filled in (percent-encode special characters: `@` → `%40`, `#` → `%23`),
+   *Data API* → **Project URL**, and *API keys* → **service_role**. Put them in
+   GitHub → repository Settings → Secrets and variables → Actions as secrets
+   `SUPABASE_DB_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, plus a
+   variable `APP_URL` = the Vercel production URL. Then GitHub → Actions →
+   *Setup — apply schema, create owner* → *Run workflow*. Re-run it any time to
+   apply new migrations; it skips what is already applied.
+
+3. **Auth settings** (Supabase → Authentication → URL Configuration):
+   - Site URL = the Vercel production URL
+   - Redirect URLs: add `https://<your-vercel-domain>/**`
+   Under Authentication → Sign In / Providers → Email keep the provider on and
+   turn *Allow new users to sign up* **off** (staff are invited, never self-register).
+
+4. **Create the first owner.** Two ways:
+   - With the Setup workflow (B above): run it with your email and name; you get
+     the invitation email.
+   - In the dashboard: SQL Editor → run
+     ```sql
+     insert into settings (key, value) values ('bootstrap_owner', '{"email": "you@example.com"}')
+     on conflict (key) do update set value = excluded.value;
+     ```
+     then Authentication → Users → **Invite user** with the same email. The
+     profile trigger makes that account the owner. Open the email, set a
+     password, and you are in.
+
+5. Invite everyone else from **Staff → Invite** inside the app.
+
+Supabase extensions `unaccent` and `pg_trgm` are enabled by the migration.
+Storage buckets `imports`, `templates`, `print-output` are created by it as well.
+
+Later, for a staging copy: create a second Supabase project, add its connection
+string as the `SUPABASE_DB_URL` secret on a GitHub environment named `staging`,
+and run *DB → staging*.
+
+Backups: Supabase daily backups (Pro plan) plus a nightly `pg_dump` GitHub Action
+to a private artifact during the program week.
+
+Migrations: `supabase/migrations/*.sql`, applied either by Supabase's GitHub
+integration or by the workflows below with `supabase db push --db-url`. Both record
+what they applied in `supabase_migrations.schema_migrations`, so they can coexist
+and re-runs only apply new files.
 
 Generated TypeScript types (`lib/supabase/database.types.ts`) are committed;
 regenerate after a schema change with
 `supabase gen types typescript --db-url <url> --schema public > lib/supabase/database.types.ts`.
 
-Auth email templates: point the **Invite user** and **Magic link** templates at
+Auth email templates: the defaults work. Invites sent from the dashboard arrive
+on `/login`, which completes the sign-in and continues to `/set-password`; links
+produced by the app go through `/auth/callback`. Optionally point the templates at
 `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite` (resp.
-`type=magiclink`) or leave the defaults, which go through `/auth/callback`;
-both routes exist.
+`type=magiclink`) for a fully server-side flow.
 
 ## 9.3 GitHub
 
-- Repo `gsheetsacct-arch/Kinus`, default branch `main`, PRs required, squash merge.
+- Repo `gsheetsacct-arch/Kinus`. Current working branch:
+  `claude/gracious-noether-nc1kf8` (no `main` yet). Vercel deploys whichever
+  branch is set as its production branch.
 - Workflows:
-  - `ci.yml`: install, typecheck, lint, unit tests (Vitest), Playwright smoke on a
-    Supabase local instance (service container) — runs on every PR.
-  - `db-staging.yml`: `supabase db push` to staging on PR open/update (link via
-    `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD_STAGING`).
-  - `db-prod.yml`: `supabase db push` to prod on push to `main`, *before* Vercel
-    builds (Vercel deploy is triggered by a deploy hook at the end of this job rather
-    than by the Git integration, so code never ships ahead of its schema).
-  - `backup.yml`: nightly dump during the program window.
-- Secrets live in GitHub Environments (`staging`, `production`) with required
-  reviewers on `production`.
+  - `ci.yml`: typecheck, lint, unit tests, build, and the SQL suite (schema +
+    RLS + import) against a Postgres service — on every PR and push.
+  - `setup.yml`: manual; applies migrations and invites the first owner.
+  - `db-prod.yml`: `supabase db push --db-url` on every push to `main` that
+    touches `supabase/migrations/`; also runnable manually. Not needed when the
+    Supabase GitHub integration is on.
+  - `db-staging.yml`: manual, for an optional staging project.
+- Secrets live in repository secrets (or GitHub Environments `staging` /
+  `production` for the DB workflows).
 
 ## 9.4 Vercel
 
@@ -87,7 +127,7 @@ both routes exist.
 | `RESEND_WEBHOOK_SECRET` | server only | delivery events |
 | `EMAIL_FROM` | server | `Kinus Tags <tags@your-domain>` |
 | `CRON_SECRET` | server | |
-| `APP_URL` | server | links in emails |
+| `APP_URL` | server | links in emails; derived from Vercel's production URL when unset |
 
 - Custom domain (e.g. `kinus.your-domain`), HTTPS automatic. PWA requires HTTPS,
   which previews and prod both have.
