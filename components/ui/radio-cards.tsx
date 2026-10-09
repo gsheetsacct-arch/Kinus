@@ -7,12 +7,14 @@ export function RadioCards({
   defaultValue,
   columns = 1,
   disabled,
+  onChange,
 }: {
   name: string;
   options: { value: string; label: string; description?: string }[];
   defaultValue?: string;
   columns?: 1 | 2 | 3;
   disabled?: boolean;
+  onChange?: (value: string) => void;
 }) {
   return (
     <div className={cn("grid gap-2", columns === 2 && "sm:grid-cols-2", columns === 3 && "sm:grid-cols-3")}>
@@ -25,7 +27,7 @@ export function RadioCards({
             disabled && "pointer-events-none opacity-60",
           )}
         >
-          <input type="radio" name={name} value={o.value} defaultChecked={defaultValue === o.value} className="mt-0.5 size-4 accent-[var(--primary)]" disabled={disabled} />
+          <input type="radio" name={name} value={o.value} defaultChecked={defaultValue === o.value} onChange={onChange ? () => onChange(o.value) : undefined} className="mt-0.5 size-4 accent-[var(--primary)]" disabled={disabled} />
           <span>
             <span className="block font-medium">{o.label}</span>
             {o.description && <span className="mt-0.5 block text-xs text-muted-foreground">{o.description}</span>}

@@ -13,3 +13,13 @@ describe("camp time", () => {
     expect(formatWhen("2026-06-01T13:42:00Z", now)).toBe("Jun 1, 9:42 AM");
   });
 });
+
+import { startOfCampDay } from "../print/batch";
+describe("startOfCampDay", () => {
+  it("is midnight in camp time", () => {
+    expect(startOfCampDay(new Date("2026-07-03T15:00:00Z"))).toBe("2026-07-03T04:00:00.000Z");
+    // 1am UTC is still the previous evening in New York
+    expect(startOfCampDay(new Date("2026-07-04T01:00:00Z"))).toBe("2026-07-03T04:00:00.000Z");
+    expect(startOfCampDay(new Date("2026-01-10T12:00:00Z"))).toBe("2026-01-10T05:00:00.000Z");
+  });
+});
