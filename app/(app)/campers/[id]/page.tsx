@@ -14,7 +14,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/current-user";
-import { canAccessBunk, isAdmin, visibleFieldGroups } from "@/lib/auth/permissions";
+import { LEVEL_RANK, canAccessBunk, effectiveLevel, isAdmin, isDirector, visibleFieldGroups } from "@/lib/auth/permissions";
+import { CamperCard } from "@/components/scan/camper-card";
+import { CorrectStatus } from "@/components/scan/correct-status";
+import { EVENT_LABEL } from "@/lib/attendance/machine";
 import { getCamper } from "@/lib/data/campers";
 import { formatDateTime } from "@/lib/utils";
 import { addContact, archiveCamper, removeContact, updateCamper } from "../actions";
@@ -31,6 +34,8 @@ function Field({ label, value, dir }: { label: string; value: React.ReactNode; d
     </div>
   );
 }
+export const maxDuration = 60;
+
 const yn = (b: boolean | null | undefined) => (b === null || b === undefined ? null : b ? "Yes" : "No");
 
 export default async function CamperPage({ params }: { params: Promise<{ id: string }> }) {
@@ -39,11 +44,12 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
   const supabase = await createClient();
   const c = await getCamper(supabase, id);
   if (!c) notFound();
-  const [{ data: fv }, { data: events }, { data: history }, { data: bunks }] = await Promise.all([
+  const [{ data: fv }, { data: events }, { data: history }, { data: bunks }, { data: templates }] = await Promise.all([
     supabase.from("field_visibility").select("field_group, roles"),
     supabase.from("attendance_events").select("id, event_type, method, occurred_at, note, resulting_status, profiles:recorded_by(full_name)").eq("camper_id", id).order("occurred_at", { ascending: false }).limit(100),
     supabase.rpc("camper_history", { p_camper_id: id }),
     supabase.from("divisions").select("id, name, bunks(id, name, sort_order)").eq("session_id", c.session_id!).order("sort_order"),
+    supabase.from("print_templates").select("id, name").eq("show_on_card", true).order("sort_order").order("name"),
   ]);
   const placeable = (bunks ?? [])
     .filter((d) => canAccessBunk(user, d.id, null, "edit") || d.id === c.division_id)
@@ -74,11 +80,21 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
         }
       />
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <StatusBadge status={c.status!} className="text-base" />
         {c.has_medical_flag && <Badge variant="warning">medical flag</Badge>}
         {c.in_latest_import === false && <Badge variant="outline">not in latest export</Badge>}
         {c.archived_at && <Badge variant="secondary">archived</Badge>}
       </div>
+      {!c.archived_at && (
+        <Card className="mb-6">
+          <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
+            <CardTitle>Where they are</CardTitle>
+            {isDirector(user) && <CorrectStatus camperId={c.id!} status={c.status!} />}
+          </CardHeader>
+          <CardContent>
+            <CamperCard camperId={c.id!} templates={templates ?? []} canScan={LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan} embedded />
+          </CardContent>
+        </Card>
+      )}
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -193,7 +209,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
               {events.map((e) => (
                 <li key={e.id} className="flex flex-wrap gap-2 rounded-md border px-3 py-2">
                   <span className="w-36 text-muted-foreground">{formatDateTime(e.occurred_at)}</span>
-                  <span className="font-medium">{e.event_type}</span>
+                  <span className="font-medium">{EVENT_LABEL[e.event_type] ?? e.event_type}</span>
                   <StatusBadge status={e.resulting_status} />
                   <span className="text-muted-foreground">by {(e.profiles as { full_name: string } | null)?.full_name ?? "system"} · {e.method}</span>
                   {e.note && <span dir="auto">“{e.note}”</span>}

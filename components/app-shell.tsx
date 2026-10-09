@@ -1,11 +1,11 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, ListChecks, Settings, LogOut, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid, Tent, Menu, CircleUser } from "lucide-react";
+import { Users, ListChecks, Settings, LogOut, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid, Tent, Menu, CircleUser, ScanLine, Activity, Printer } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import type { NavItem } from "@/lib/nav";
 
-const ICONS = { Users, ListChecks, Settings, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid, CircleUser };
+const ICONS = { Users, ListChecks, Settings, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid, CircleUser, ScanLine, Activity, Printer };
 
 
 export function AppShell({
@@ -25,7 +25,7 @@ export function AppShell({
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/"));
   const main = nav.filter((n) => n.section === "main");
   const admin = nav.filter((n) => n.section === "admin");
-  const mobileMain = main.slice(0, 3);
+  const mobileMain = main.filter((n) => n.mobile).slice(0, 3);
   const moreActive = !mobileMain.some((n) => isActive(n.href)) && pathname !== "/";
 
   const NavLink = ({ n }: { n: NavItem }) => {

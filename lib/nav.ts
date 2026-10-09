@@ -1,15 +1,17 @@
 import type { CurrentUser } from "@/lib/auth/permissions";
 import { isAdmin, isDirector } from "@/lib/auth/permissions";
 
-export type NavIcon = "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser";
-export type NavItem = { href: string; label: string; icon: NavIcon; description: string; section: "main" | "admin" };
+export type NavIcon = "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer";
+export type NavItem = { href: string; label: string; icon: NavIcon; description: string; section: "main" | "admin"; mobile?: boolean };
 
 export function buildNav(user: CurrentUser): NavItem[] {
   const nav: NavItem[] = [
     { href: "/", label: "Home", icon: "LayoutGrid", description: "Overview and next steps", section: "main" },
-    { href: "/campers", label: "Campers", icon: "Users", description: "Find any camper", section: "main" },
+    { href: "/scan", label: "Check in", icon: "ScanLine", description: "Scan or search to check campers in and out", section: "main", mobile: true },
+    { href: "/campers", label: "Campers", icon: "Users", description: "Find any camper", section: "main", mobile: true },
     { href: "/lists", label: "Lists", icon: "ListChecks", description: "Bunk and division lists to print", section: "main" },
   ];
+
   if (isDirector(user)) nav.push({ href: "/admin/users", label: "Staff", icon: "UserCog", description: "Invite people and choose what they can see", section: "main" });
   if (isAdmin(user)) {
     nav.push(

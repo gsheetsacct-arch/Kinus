@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { ChevronRight, CircleUser, LogOut, Users, ListChecks, Settings, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid } from "lucide-react";
+import { ChevronRight, CircleUser, LogOut, Users, ListChecks, Settings, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid, ScanLine, Activity, Printer } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { requireUser } from "@/lib/auth/current-user";
 import { buildNav, type NavItem } from "@/lib/nav";
 import { signOut } from "@/app/(auth)/actions";
 
 export const metadata = { title: "More" };
-const ICONS = { Users, ListChecks, Settings, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid, CircleUser };
+const ICONS = { Users, ListChecks, Settings, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid, CircleUser, ScanLine, Activity, Printer };
 
 function Group({ title, items }: { title: string; items: NavItem[] }) {
   if (!items.length) return null;

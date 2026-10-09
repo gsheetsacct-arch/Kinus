@@ -101,3 +101,6 @@ export function canManageRole(me: CurrentUser, role: StaffRole): boolean {
   if (isDirector(me)) return roleRank(role) < roleRank("director");
   return false;
 }
+
+/** The print area (queue, batches, templates). Everyone else requests tags from a camper card. */
+export const canUsePrintArea = (u: CurrentUser) => ["owner", "director", "division_head", "office", "logistics"].includes(u.role);
