@@ -27,6 +27,7 @@ const FLASH: Record<Flash["tone"], string> = {
   error: "bg-destructive text-white",
 };
 const UNDO_MS = 30000;
+const MODE_KEEP_MS = 3 * 60 * 60 * 1000;
 
 export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[]; templates: TemplateButton[]; canScan: boolean }) {
   const [mode, setMode] = React.useState<ScanMode>(canScan ? "in" : "lookup");
@@ -52,10 +53,9 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
   // remember choices on this device
   React.useEffect(() => {
     try {
-      const m = localStorage.getItem("kinus:scan-mode") as ScanMode | null;
-      const o = localStorage.getItem("kinus:scan-out") as OutKind | null;
-      if (m && (canScan || m === "lookup")) setMode(m);
-      if (o) setOutKind(o);
+      // a mode chosen recently (the same shift) carries over; the next morning starts on Check in
+      const saved = JSON.parse(localStorage.getItem("kinus:scan-mode") ?? "null") as { m: ScanMode; at: number } | null;
+      if (saved && Date.now() - saved.at < MODE_KEEP_MS && (canScan || saved.m === "lookup")) setMode(saved.m);
       setSound(localStorage.getItem("kinus:sound") !== "off");
       setCamera(localStorage.getItem("kinus:camera") !== "off");
     } catch {}
@@ -63,16 +63,12 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
   const choose = (m: ScanMode) => {
     setMode(m);
     try {
-      localStorage.setItem("kinus:scan-mode", m);
+      localStorage.setItem("kinus:scan-mode", JSON.stringify({ m, at: Date.now() }));
     } catch {}
     focusBox();
   };
-  const chooseOut = (o: OutKind) => {
-    setOutKind(o);
-    try {
-      localStorage.setItem("kinus:scan-out", o);
-    } catch {}
-  };
+  // "Not coming back" is never remembered: each time it's a choice made on purpose
+  const chooseOut = (o: OutKind) => setOutKind(o);
 
   // keep statuses fresh while the screen is open
   React.useEffect(() => {
@@ -170,6 +166,14 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
           .map((x) => x.r)
       : [];
 
+  const setCameraOn = (v: boolean) => {
+    setCamera(v);
+    try {
+      localStorage.setItem("kinus:camera", v ? "on" : "off");
+    } catch {}
+  };
+  const turnOffCamera = () => setCameraOn(false);
+
   const undo = async (r: Recent) => {
     if (!r.eventId) return;
     const res = await undoScan(r.eventId);
@@ -184,7 +188,8 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <div className={cn("space-y-3 rounded-2xl border bg-card p-3 shadow-[var(--shadow-card)] ring-4", tint)}>
-        <div className="grid grid-cols-3 gap-2" role="tablist" aria-label="What a scan does">
+        {!canScan && <p className="px-1 text-sm text-muted-foreground">Scan a tag or type a name to look a camper up. Your account can look campers up but not check them in.</p>}
+        <div className={cn("grid grid-cols-3 gap-2", !canScan && "hidden")} role="tablist" aria-label="What a scan does">
           {(
             [
               ["in", "Check in", LogIn],
@@ -248,53 +253,14 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
               if (handleText(q, "scan")) return;
               if (matches.length === 1) act(matches[0], "manual");
             }}
-            placeholder="Scan a tag, or type a name or code"
+            placeholder="Scan a tag or type a name"
             className="h-14 pl-11 text-lg"
             dir="auto"
             aria-label="Scan or search"
           />
         </div>
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>
-            {mode === "in" && "Scanning checks the camper in."}
-            {mode === "out" && (outKind === "home" ? "Scanning checks the camper out for the day: not coming back." : "Scanning checks the camper out; they'll come back.")}
-            {mode === "lookup" && "Scanning opens the camper. Nothing is recorded."}
-          </span>
-          <span className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                const v = !sound;
-                setSound(v);
-                try {
-                  localStorage.setItem("kinus:sound", v ? "on" : "off");
-                } catch {}
-              }}
-              aria-label={sound ? "Turn sound off" : "Turn sound on"}
-            >
-              {sound ? <Volume2 /> : <VolumeX />}
-            </Button>
-            <Button
-              variant={camera ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                const v = !camera;
-                setCamera(v);
-                try {
-                  localStorage.setItem("kinus:camera", v ? "on" : "off");
-                } catch {}
-              }}
-            >
-              {camera ? <CameraOff /> : <CameraIcon />} {camera ? "Stop camera" : "Camera"}
-            </Button>
-          </span>
-        </div>
-        {camera && <Camera onCode={onCameraCode} />}
-      </div>
-
       {matches.length > 0 && (
-        <ul className="divide-y overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-card)]">
+        <ul className="divide-y overflow-hidden rounded-xl border bg-card">
           {matches.map((r) => (
             <li key={r.id}>
               <button onClick={() => act(r, "manual")} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/50">
@@ -313,6 +279,39 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
         </ul>
       )}
       {needle.length >= 2 && !matches.length && !parseScan(q) && <p className="px-1 text-sm text-muted-foreground">No camper in your area matches “{q}”.</p>}
+
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span className={cn(mode === "out" && "rounded-md px-2 py-1 text-sm font-semibold", mode === "out" && (outKind === "home" ? "bg-status-departed text-white" : "bg-status-out text-amber-950"))}>
+            {mode === "in" && "Scanning a tag or tapping a name checks the camper in."}
+            {mode === "out" && (outKind === "home" ? "You're checking campers OUT for the day: not coming back." : "You're checking campers OUT: they'll come back.")}
+            {mode === "lookup" && "Scanning a tag or tapping a name opens the camper. Nothing is recorded."}
+          </span>
+          <span className="flex gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const v = !sound;
+                setSound(v);
+                try {
+                  localStorage.setItem("kinus:sound", v ? "on" : "off");
+                } catch {}
+              }}
+              aria-label={sound ? "Turn sound off" : "Turn sound on"}
+            >
+              {sound ? <Volume2 /> : <VolumeX />}
+            </Button>
+            <Button variant={camera ? "default" : "outline"} size="sm" onClick={() => (camera ? turnOffCamera() : setCameraOn(true))}>
+              {camera ? <CameraOff /> : <CameraIcon />} {camera ? "Stop camera" : "Camera"}
+            </Button>
+          </span>
+        </div>
+        {camera && (
+          <div className={cn(q.trim() && "hidden")}>
+            <Camera onCode={onCameraCode} onTurnOff={turnOffCamera} />
+          </div>
+        )}
+      </div>
 
       {mode === "lookup" && card && (
         <div className="rounded-2xl border bg-card p-5 shadow-[var(--shadow-card)]">

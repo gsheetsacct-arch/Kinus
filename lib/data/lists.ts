@@ -1,3 +1,4 @@
+import { formatPhone } from "@/lib/utils";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { FIELD_BY_KEY, UNGATED_GROUPS, getFieldValue } from "@/lib/fields";
@@ -67,6 +68,7 @@ export async function buildList(
       cells: columns.map((col) => {
         const v = getFieldValue(c, col.key);
         if (col.key === "status" && typeof v === "string") return STATUS_LABEL[v as keyof typeof STATUS_LABEL] ?? v;
+        if (col.key.endsWith(".phone") && typeof v === "string") return formatPhone(v);
         return v;
       }),
     });

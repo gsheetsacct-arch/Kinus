@@ -40,3 +40,13 @@ export function initials(name: string) {
     .map((p) => p[0]?.toUpperCase())
     .join("");
 }
+
+/** "+17185550018" → "(718) 555-0018"; other countries as stored. */
+export function formatPhone(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const us = raw.replace(/[^\d+]/g, "").match(/^(?:\+?1)?(\d{3})(\d{3})(\d{4})$/);
+  return us ? `(${us[1]}) ${us[2]}-${us[3]}` : raw;
+}
+
+/** What a tel: link needs: digits and a leading plus. */
+export const telHref = (raw: string) => `tel:${raw.replace(/[^\d+]/g, "")}`;

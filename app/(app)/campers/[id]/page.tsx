@@ -20,7 +20,7 @@ import { loadCard } from "@/app/(app)/scan/actions";
 import { CorrectStatus } from "@/components/scan/correct-status";
 import { EVENT_LABEL } from "@/lib/attendance/machine";
 import { getCamper } from "@/lib/data/campers";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, formatPhone } from "@/lib/utils";
 import { addContact, archiveCamper, removeContact, updateCamper } from "../actions";
 
 const ROLE_LABEL: Record<string, string> = { mother: "Mother", father: "Father", guardian: "Guardian", emergency: "Emergency", host: "Host", authorized_pickup: "Authorized pickup" };
@@ -165,7 +165,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
                     </span>
                     {(k.phone_e164 ?? k.phone) && (
                       <a href={`tel:${k.phone_e164 ?? k.phone}`} className="inline-flex items-center gap-1 underline">
-                        <Phone className="size-3.5" /> {k.phone}
+                        <Phone className="size-3.5" /> {formatPhone(k.phone)}
                       </a>
                     )}
                     {k.email && (

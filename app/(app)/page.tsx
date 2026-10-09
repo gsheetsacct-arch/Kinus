@@ -4,8 +4,9 @@ import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/section";
 import { Callout } from "@/components/callout";
 import { createClient } from "@/lib/supabase/server";
+import { loadAreaTree } from "@/lib/data/areas";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { canFollowUp, isAdmin, type CurrentUser } from "@/lib/auth/permissions";
+import { canFollowUp, isAdmin, seesAllCamp, type CurrentUser } from "@/lib/auth/permissions";
 import { campStarted, flagRows, loadFollowups, loadRules } from "@/lib/data/missing";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
 import { cn } from "@/lib/utils";
@@ -50,7 +51,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const supabase = await createClient();
   const inCamp = (id: string | null) => !camp.divisionIds || (id !== null && camp.divisionIds.includes(id));
   const [divisionRows, allCampers, steps] = await Promise.all([
-    session ? supabase.from("divisions").select("id, name, color, sort_order").eq("session_id", session.id).order("sort_order").then((r) => r.data ?? []) : Promise.resolve([]),
+    loadAreaTree(supabase, session?.id).then((t) => t.divisions),
     session
       ? fetchAll((from, to) => supabase.from("campers").select("id, division_id, bunk_id, status").eq("session_id", session.id).is("archived_at", null).order("id").range(from, to))
       : Promise.resolve([]),
@@ -65,7 +66,15 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     const flags = flagRows(campers.map((c) => ({ id: c.id, divisionId: c.division_id, bunkId: c.bunk_id, status: c.status })), rules, followups, started);
     toCheck = Object.values(flags).filter((f) => f.kind === "check").length;
   }
-  const perDivision = divisions.map((d) => ({ ...d, count: campers.filter((c) => c.division_id === d.id).length })).filter((d) => d.count > 0);
+  // a division card where they see the whole division, else a card per bunk they have
+  const wholeDivision = (id: string) => seesAllCamp(user) || user.coverage.some((c) => c.division_id === id && c.bunk_id === null);
+  const areas = divisions.flatMap((d) => {
+    const count = (bunkId?: string) => campers.filter((c) => c.division_id === d.id && (!bunkId || c.bunk_id === bunkId)).length;
+    if (wholeDivision(d.id)) return [{ key: d.id, name: d.name, sub: null as string | null, color: d.color, count: count(), where: `d:${d.id}` }];
+    return d.bunks.map((b) => ({ key: b.id, name: b.name, sub: d.name, color: d.color, count: count(b.id), where: `b:${d.id}:${b.id}` }));
+  }).filter((a) => a.count > 0);
+  const areaLabel = areas.length === 1 ? areas[0].name : "Campers";
+  const tile = "rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] transition-colors hover:border-primary/40 hover:bg-primary-soft/30";
   const remaining = steps.filter((s) => !s.done);
   const next = remaining[0];
   const hour = new Date().getHours();
@@ -131,15 +140,15 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         <section className="space-y-3">
           <h2 className="text-base font-semibold">Right now</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <div className="rounded-xl border bg-card p-4 shadow-[var(--shadow-card)]">
-              <div className="text-xs font-medium text-muted-foreground">Campers</div>
+            <Link href="/status?status=all" className={tile}>
+              <div className="text-xs font-medium text-muted-foreground">{areaLabel}</div>
               <div className="mt-1 text-3xl font-semibold">{campers.length}</div>
-            </div>
+            </Link>
             {(["present", "expected", "out", "departed", "no_show"] as CamperStatus[]).map((s) => (
-              <div key={s} className="rounded-xl border bg-card p-4 shadow-[var(--shadow-card)]">
+              <Link key={s} href={`/status?status=${s}`} className={tile}>
                 <div className="text-xs font-medium text-muted-foreground">{STATUS_LABEL[s]}</div>
                 <div className="mt-1 text-3xl font-semibold">{campers.filter((c) => c.status === s).length}</div>
-              </div>
+              </Link>
             ))}
           </div>
         </section>
@@ -163,21 +172,24 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </div>
       </section>
 
-      {perDivision.length > 0 && (
+      {areas.length > 1 && (
         <section className="space-y-3">
           <h2 className="flex items-center gap-2 text-base font-semibold">
-            <Layers className="size-4 text-muted-foreground" /> Divisions
+            <Layers className="size-4 text-muted-foreground" /> {areas.some((a) => a.sub) ? "Your bunks" : "Divisions"}
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {perDivision.map((d) => (
-              <Link key={d.id} href={`/campers?division=${d.id}`} className="flex min-w-0 items-center justify-between rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] hover:border-primary/40">
+            {areas.map((d) => (
+              <Link key={d.key} href={`/status?status=all&where=${d.where}`} className="flex min-w-0 items-center justify-between rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] hover:border-primary/40">
                 <span className="flex min-w-0 items-center gap-3">
                   <span className="h-10 w-1.5 shrink-0 rounded-full" style={{ background: d.color ?? "var(--primary)" }} />
                   <span className="min-w-0">
                     <span className="block truncate font-medium" dir="auto">
                       {d.name}
                     </span>
-                    <span className="block text-xs text-muted-foreground">{d.count} campers</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {d.sub ? `${d.sub} · ` : ""}
+                      {d.count} {d.count === 1 ? "camper" : "campers"}
+                    </span>
                   </span>
                 </span>
                 <ArrowRight className="size-4 shrink-0 text-muted-foreground" />

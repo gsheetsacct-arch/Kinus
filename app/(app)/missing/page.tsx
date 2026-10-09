@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { canFollowUp } from "@/lib/auth/permissions";
 import Link from "next/link";
 import { UserSearch } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
@@ -18,6 +20,8 @@ export const dynamic = "force-dynamic";
 
 export default async function MissingPage() {
   const [user, session, camp] = await Promise.all([requireUser(), getActiveSession(), getCampContext()]);
+  // counselors see their bunk on Who's here; following up is for the people over them
+  if (!canFollowUp(user)) redirect("/status");
   if (!session) return <EmptyState icon={UserSearch} title="No active session" description="Camp hasn't been set up yet." action={<Button asChild><Link href="/">Home</Link></Button>} />;
   const supabase = await createClient();
   const [{ data: fv }, tree, { data: templates }, rules, followups] = await Promise.all([
@@ -56,6 +60,7 @@ export default async function MissingPage() {
         campLabel={camp.camps.length > 1 ? (camp.current ? `All of ${camp.current.name}` : "All camps") : "Everyone"}
         canAct={LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan}
         templates={templates ?? []}
+        serverNow={new Date().toISOString()}
       />
     </div>
   );

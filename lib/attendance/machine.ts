@@ -21,12 +21,13 @@ export function nextStatus(current: CamperStatus, event: AttendanceEventType, fo
   }
 }
 
+/** The one name for each status, on every page (tiles, badges, filters, buttons, lists). */
 export const STATUS_LABEL: Record<CamperStatus, string> = {
-  expected: "Expected",
-  present: "Present",
-  out: "Out",
+  expected: "Not here yet",
+  present: "Here",
+  out: "Out, coming back",
   departed: "Not coming back",
-  no_show: "No-show",
+  no_show: "Not coming",
 };
 
 export const EVENT_LABEL: Record<AttendanceEventType, string> = {
@@ -34,6 +35,6 @@ export const EVENT_LABEL: Record<AttendanceEventType, string> = {
   leave: "Checked out · coming back",
   return: "Back in",
   pickup: "Checked out · not coming back",
-  no_show: "Marked no-show",
+  no_show: "Marked not coming",
   correction: "Status corrected",
 };

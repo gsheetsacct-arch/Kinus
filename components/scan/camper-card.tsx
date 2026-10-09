@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { AlertTriangle, ChevronRight, Phone, Printer, Settings2 } from "lucide-react";
+import { AlertTriangle, ChevronRight, MoreHorizontal, Phone, Printer, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -10,8 +10,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { StatusBadge } from "@/components/status-badge";
 import { cardActions } from "@/lib/attendance/scan";
 import type { AttendanceEventType, CamperStatus } from "@/lib/attendance/machine";
-import { cn, formatTime } from "@/lib/utils";
-import { loadCard, recordFromCard, requestTag, type CardData, type ScanOutcome } from "@/app/(app)/scan/actions";
+import { cn, formatPhone, formatTime } from "@/lib/utils";
+import { loadCard, recordFromCard, requestTag, undoScan, type CardData, type ScanOutcome } from "@/app/(app)/scan/actions";
 
 export type TemplateButton = { id: string; name: string };
 const TONE: Record<string, string> = {
@@ -19,6 +19,7 @@ const TONE: Record<string, string> = {
   out: "bg-status-out text-amber-950 hover:bg-status-out/90",
   home: "bg-status-departed text-white hover:bg-status-departed/90",
 };
+const UNDO_MS = 30000;
 const PRINT_LABEL: Record<string, string> = {
   queued: "Sending…",
   rendering: "Sending…",
@@ -51,6 +52,11 @@ export function CamperCard({
   const [card, setCard] = React.useState<CardData | null | undefined>(initial);
   const [pending, start] = React.useTransition();
   const [printOpts, setPrintOpts] = React.useState<TemplateButton | null>(null);
+  // "Not coming back" asks once more; after any change the buttons rest a moment, so a
+  // second tap doesn't land on the button that just appeared under the finger
+  const [confirming, setConfirming] = React.useState<AttendanceEventType | null>(null);
+  const [resting, setResting] = React.useState(false);
+  const [done, setDone] = React.useState<Extract<ScanOutcome, { ok: true; kind: "act" }> | null>(null);
   const reload = React.useCallback(() => loadCard(camperId).then(setCard), [camperId]);
   const first = React.useRef(initial !== undefined);
   React.useEffect(() => {
@@ -67,12 +73,28 @@ export function CamperCard({
 
   const act = (event: AttendanceEventType) =>
     start(async () => {
+      setConfirming(null);
+      setResting(true);
+      setTimeout(() => setResting(false), 1200);
       const r = await recordFromCard(card.id, event);
       if (!r.ok) return void toast.error(r.error);
       if (r.kind === "act") {
         onAction?.(r);
-        toast.success(`${r.name}: ${r.verb}${r.autoPrinted.length ? ` · ${r.autoPrinted.join(", ")} sent to print` : ""}`);
+        // said on the card itself, with Undo: a notice would cover the name, and a pop-up
+        // card blocks taps on it
+        setDone(r);
+        setTimeout(() => setDone((d) => (d === r ? null : d)), UNDO_MS);
       }
+      reload();
+    });
+  const undo = () =>
+    start(async () => {
+      if (!done) return;
+      const u = await undoScan(done.eventId);
+      if (!u.ok) return void toast.error(u.error);
+      toast.success(`Undone: ${done.name}`);
+      onAction?.({ ...done, status: u.status });
+      setDone(null);
       reload();
     });
   const print = (t: TemplateButton, opts: { copies?: number; deliverTo?: string } = {}) =>
@@ -87,9 +109,9 @@ export function CamperCard({
   return (
     <div className={cn("space-y-4", pending && "opacity-70")}>
       {!embedded && (
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="truncate text-2xl font-semibold" dir="auto">
+        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+          <div className="min-w-0 flex-1 basis-48">
+            <h2 className="break-words text-2xl font-semibold" dir="auto">
               {card.name}
             </h2>
             <p className="text-sm text-muted-foreground" dir="auto">
@@ -108,10 +130,40 @@ export function CamperCard({
           <AlertTriangle className="size-4" /> Medical flag: allergies, EpiPen or medications.
         </p>
       )}
-      {canScan && (
+      {canScan && done && (
+        <div className="flex items-center gap-3 rounded-xl border bg-muted/50 px-3 py-2 text-sm">
+          <span className="min-w-0 flex-1">
+            Done: {done.verb}
+            {done.autoPrinted.length > 0 && ` · ${done.autoPrinted.join(", ")} sent to print`}
+          </span>
+          <Button size="sm" variant="outline" className="h-9" disabled={pending} onClick={undo}>
+            <Undo2 /> Undo
+          </Button>
+        </div>
+      )}
+      {canScan && confirming && (
+        <div className="space-y-2 rounded-xl border border-status-departed/40 p-3">
+          <p className="text-sm font-medium">Check {card.name} out for the day: not coming back today?</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" size="lg" onClick={() => setConfirming(null)}>
+              Cancel
+            </Button>
+            <Button size="lg" className={TONE.home} disabled={pending} onClick={() => act(confirming)}>
+              Not coming back
+            </Button>
+          </div>
+        </div>
+      )}
+      {canScan && !confirming && (
         <div className="grid gap-2 sm:grid-cols-2">
           {cardActions(card.status).map((a) => (
-            <Button key={a.event + a.label} size="xl" className={cn("w-full", TONE[a.tone])} disabled={pending} onClick={() => act(a.event)}>
+            <Button
+              key={a.event + a.label}
+              size="xl"
+              className={cn("h-auto min-h-14 w-full whitespace-normal px-4 py-2 leading-tight", TONE[a.tone])}
+              disabled={pending || resting}
+              onClick={() => (a.tone === "home" ? setConfirming(a.event) : act(a.event))}
+            >
               {a.label}
             </Button>
           ))}
@@ -119,7 +171,7 @@ export function CamperCard({
       )}
       {templates.length > 0 && (
         <div className="space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Print</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Send to the office to print</div>
           <div className="flex flex-wrap gap-2">
             {templates.map((t) => {
               const p = card.prints[t.id];
@@ -129,8 +181,8 @@ export function CamperCard({
                     type="button"
                     disabled={pending}
                     onClick={() => print(t)}
-                    className="flex items-center gap-2 bg-card px-3 py-2 text-sm font-medium hover:bg-muted"
-                    title={`Send a ${t.name} to the office`}
+                    className="flex min-h-10 items-center gap-2 bg-card px-3 py-2 text-left text-sm font-medium hover:bg-muted"
+                    aria-label={`Send ${t.name} to the office to print`}
                   >
                     <Printer className="size-4" /> {t.name}
                     {p && (
@@ -139,8 +191,8 @@ export function CamperCard({
                       </span>
                     )}
                   </button>
-                  <button type="button" className="border-l bg-card px-2 text-muted-foreground hover:bg-muted" onClick={() => setPrintOpts(t)} aria-label={`More options for ${t.name}`}>
-                    <Settings2 className="size-4" />
+                  <button type="button" className="border-l bg-card px-2.5 text-muted-foreground hover:bg-muted" onClick={() => setPrintOpts(t)} aria-label={`Copies or send ${t.name} somewhere else`} title="Copies / send to…">
+                    <MoreHorizontal className="size-4" />
                   </button>
                 </span>
               );
@@ -160,7 +212,7 @@ export function CamperCard({
                 <span className="min-w-0 flex-1 truncate" dir="auto">
                   {k.name ?? ""}
                 </span>
-                <span className="font-medium">{k.phone}</span>
+                <span className="shrink-0 font-medium">{formatPhone(k.phone)}</span>
               </a>
             ))}
         </div>

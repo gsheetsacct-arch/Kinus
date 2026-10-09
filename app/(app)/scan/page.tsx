@@ -9,7 +9,7 @@ import { LEVEL_RANK, effectiveLevel } from "@/lib/auth/permissions";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { loadAreaTree } from "@/lib/data/areas";
 
-export const metadata = { title: "Scan" };
+export const metadata = { title: "Check in" };
 export const maxDuration = 60;
 
 export default async function ScanPage() {

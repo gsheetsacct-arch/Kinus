@@ -2,16 +2,17 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Clock, MessageSquare, Phone, UserCheck, UserX } from "lucide-react";
+import { AlertTriangle, Clock, MessageSquare, Phone, Search, UserCheck, UserX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CamperCard, type TemplateButton } from "@/components/scan/camper-card";
 import { decodeScope, inScope, scopeExists, type BoardScope } from "@/lib/attendance/board";
-import { campClock, missingStates, type Followup, type MissingRules, type MissingState } from "@/lib/attendance/missing";
+import { campClock, missingStates, type Followup, type MissingRules } from "@/lib/attendance/missing";
 import type { BoardRow } from "@/lib/data/board";
+import { matchScore, searchEntry } from "@/lib/search";
 import { campDateTimeToIso, campToday } from "@/lib/time";
-import { CAMP_TIME_ZONE, cn, formatWhen } from "@/lib/utils";
+import { CAMP_TIME_ZONE, cn, formatPhone, formatWhen } from "@/lib/utils";
 import { checkInNow, clearFollowup, markNotComing, saveFollowup, undoNotComing } from "@/app/(app)/missing/actions";
 import { ScopeSelect, useScope, type ScopeTree } from "./scope-select";
 
@@ -19,7 +20,7 @@ type Section = "check" | "later" | "waiting" | "no_show";
 const SECTIONS: { key: Section; title: string; hint: string; tone: string }[] = [
   { key: "check", title: "Check up on", hint: "Should be here by now. Call home, then note what you heard.", tone: "border-amber-300 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/20" },
   { key: "later", title: "Coming later", hint: "Flag paused until the time given.", tone: "" },
-  { key: "waiting", title: "Not here yet", hint: "Nothing unusual yet.", tone: "" },
+  { key: "waiting", title: "Waiting", hint: "Not here yet, nothing unusual so far.", tone: "" },
   { key: "no_show", title: "Not coming", hint: "Marked not coming. Tap “Coming after all” if that changes.", tone: "" },
 ];
 type Dlg = { kind: "later" | "note" | "not_coming"; row: BoardRow } | null;
@@ -34,6 +35,7 @@ export function MissingBoard({
   campLabel,
   canAct,
   templates,
+  serverNow,
 }: {
   rows: BoardRow[];
   followups: Record<string, Followup>;
@@ -45,16 +47,21 @@ export function MissingBoard({
   campLabel: string;
   canAct: boolean;
   templates: TemplateButton[];
+  /** The server's clock, so the flags are right on first paint (not "0" until the page wakes up). */
+  serverNow: string;
 }) {
   const router = useRouter();
   const [scope, chooseScope] = useScope("kinus:missing-scope", defaultScope, (s) => scopeExists(s, tree), decodeScope);
-  const [now, setNow] = React.useState<Date | null>(null);
+  const [now, setNow] = React.useState<Date>(() => new Date(serverNow));
+  const [ready, setReady] = React.useState(false);
+  const [q, setQ] = React.useState("");
   const [dlg, setDlg] = React.useState<Dlg>(null);
   const [open, setOpen] = React.useState<string | null>(null);
   const [pending, start] = React.useTransition();
 
   React.useEffect(() => {
     setNow(new Date());
+    setReady(true);
     // new arrivals and other people's notes show up by themselves
     const t = setInterval(() => {
       setNow(new Date());
@@ -65,23 +72,26 @@ export function MissingBoard({
 
   const scoped = React.useMemo(() => rows.filter((r) => inScope(r, scope, tree)), [rows, scope, tree]);
   const states = React.useMemo(
-    () => (now ? missingStates(scoped, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE), started) : new Map<string, MissingState>()),
+    () => missingStates(scoped, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE), started),
     [scoped, rules, followups, now, started],
   );
+  const index = React.useMemo(() => new Map(rows.map((r) => [r.id, searchEntry(r.name, r.code, r.phones.map((p) => p.tel))])), [rows]);
   const bunkName = React.useMemo(() => new Map(tree.divisions.flatMap((d) => d.bunks.map((b) => [b.id, b.name] as const))), [tree]);
   const divName = React.useMemo(() => new Map(tree.divisions.map((d) => [d.id, d.name] as const)), [tree]);
   const bunkOrder = React.useMemo(() => new Map(tree.divisions.flatMap((d, i) => d.bunks.map((b, j) => [b.id, i * 1000 + j] as const))), [tree]);
   const bySection = React.useMemo(() => {
     const out: Record<Section, BoardRow[]> = { check: [], later: [], waiting: [], no_show: [] };
     for (const r of scoped) {
+      if (q.trim() && matchScore(index.get(r.id)!, q) <= 0) continue;
       if (r.status === "no_show") out.no_show.push(r);
       else if (r.status === "expected") out[states.get(r.id)?.kind ?? "waiting"].push(r);
     }
     const order = (r: BoardRow) => bunkOrder.get(r.bunkId ?? "") ?? 1e9;
     for (const k of Object.keys(out) as Section[]) out[k].sort((a, b) => order(a) - order(b) || a.last.localeCompare(b.last));
     return out;
-  }, [scoped, states, bunkOrder]);
+  }, [scoped, states, bunkOrder, q, index]);
   const arrived = scoped.filter((r) => r.status === "present" || r.status === "out" || r.status === "departed").length;
+  const notHere = scoped.filter((r) => r.status === "expected").length;
   const expectedTotal = scoped.length - bySection.no_show.length;
   const showPlace = scope.kind !== "bunk";
 
@@ -129,7 +139,7 @@ export function MissingBoard({
         </button>
         <span className="flex flex-wrap items-center gap-1.5">
           {r.phones.slice(0, 2).map((p, i) => (
-            <a key={`${p.label}-${i}`} href={`tel:${p.tel}`} className="inline-flex h-8 items-center gap-1 rounded-md border px-2 text-xs font-medium hover:bg-muted" title={`Call ${p.label}: ${p.phone}`}>
+            <a key={`${p.label}-${i}`} href={`tel:${p.tel}`} className="inline-flex h-9 items-center gap-1 rounded-md border px-2.5 text-xs font-medium hover:bg-muted sm:h-8" title={`Call ${p.label}: ${formatPhone(p.phone)}`}>
               <Phone className="size-3.5" /> {p.label}
             </a>
           ))}
@@ -145,7 +155,7 @@ export function MissingBoard({
                 <UserX /> Not coming
               </Button>
               <Button size="sm" className="h-8 bg-status-present text-white hover:bg-status-present/90" disabled={pending} onClick={() => run(() => checkInNow(r.id))}>
-                <UserCheck /> Arrived
+                <UserCheck /> Check in
               </Button>
             </>
           )}
@@ -160,11 +170,11 @@ export function MissingBoard({
   };
 
   return (
-    <div className={cn("space-y-5", pending && "opacity-80")} data-ready={now ? "" : undefined}>
+    <div className={cn("space-y-5", pending && "opacity-80")} data-ready={ready ? "" : undefined}>
       <div className="flex flex-wrap items-center gap-3">
         <ScopeSelect value={scope} onChange={chooseScope} rows={rows} tree={tree} campLabel={campLabel} />
         <span className="text-sm text-muted-foreground">
-          {arrived} of {expectedTotal} arrived
+          {arrived} of {expectedTotal} arrived · {notHere} not here yet
         </span>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -179,7 +189,17 @@ export function MissingBoard({
           </a>
         ))}
       </div>
-      {expectedTotal > 0 && bySection.check.length + bySection.later.length + bySection.waiting.length === 0 && (
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a camper" className="pl-9 pr-9" dir="auto" aria-label="Find a camper" />
+        {q && (
+          <button type="button" onClick={() => setQ("")} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Clear">
+            <X className="size-4" />
+          </button>
+        )}
+      </div>
+      {q.trim() && SECTIONS.every((x) => !bySection[x.key].length) && <p className="px-1 text-sm text-muted-foreground">Nobody on this page matches “{q}”.</p>}
+      {!q.trim() && expectedTotal > 0 && bySection.check.length + bySection.later.length + bySection.waiting.length === 0 && (
         <p className="rounded-xl border bg-card px-4 py-8 text-center text-sm text-muted-foreground">Everyone expected here has arrived.</p>
       )}
       {SECTIONS.map((s) =>
@@ -240,9 +260,11 @@ function FollowupDialog({
   const [note, setNote] = React.useState("");
   const [date, setDate] = React.useState("");
   const [time, setTime] = React.useState("");
+  const [until, setUntil] = React.useState("");
   React.useEffect(() => {
     if (!dlg) return;
     setNote(dlg.kind === "not_coming" ? "" : (followup?.note ?? ""));
+    setUntil("");
     const now = new Date();
     setDate(campToday(now));
     setTime(new Date(now.getTime() + 2 * 3600000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: CAMP_TIME_ZONE }));
@@ -257,6 +279,7 @@ function FollowupDialog({
     { label: "This evening", until: campDateTimeToIso(campToday(), "18:00") },
     { label: "Tomorrow morning", until: campDateTimeToIso(tomorrow, "09:00") },
   ].filter((q) => new Date(q.until) > new Date());
+  const laterIso = until === "custom" ? (date && time ? campDateTimeToIso(date, time) : "") : until;
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -271,37 +294,43 @@ function FollowupDialog({
             {dlg.kind === "not_coming" && "They're taken off the not-here-yet list and counted as not coming. You can undo this."}
           </DialogDescription>
         </DialogHeader>
+        <label className="space-y-1.5 text-sm">
+          <span className="block font-medium">{dlg.kind === "not_coming" ? "Why (optional)" : dlg.kind === "later" ? "Note (optional)" : "Note"}</span>
+          <Input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={dlg.kind === "not_coming" ? "e.g. sick this week, cancelled" : "e.g. Called mom: flight lands at 3"}
+            dir="auto"
+            autoFocus
+          />
+        </label>
         {dlg.kind === "later" && (
-          <div className="space-y-3">
+          <div className="space-y-2 text-sm">
+            <span className="block font-medium">Expect them</span>
             <div className="flex flex-wrap gap-2">
-              {quick.map((q) => (
-                <Button key={q.label} variant="outline" size="sm" disabled={pending} onClick={() => onLater(id, q.until, note)}>
-                  {q.label}
+              {quick.map((x) => (
+                <Button key={x.label} type="button" variant={until === x.until ? "default" : "outline"} size="sm" aria-pressed={until === x.until} onClick={() => setUntil(x.until)}>
+                  {x.label}
                 </Button>
               ))}
-            </div>
-            <div className="flex flex-wrap items-end gap-2">
-              <label className="space-y-1">
-                <span className="block text-xs text-muted-foreground">Day</span>
-                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-9" />
-              </label>
-              <label className="space-y-1">
-                <span className="block text-xs text-muted-foreground">Time</span>
-                <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-9 w-32" />
-              </label>
-              <Button size="sm" disabled={pending || !date || !time} onClick={() => onLater(id, campDateTimeToIso(date, time), note)}>
-                Set
+              <Button type="button" variant={until === "custom" ? "default" : "outline"} size="sm" aria-pressed={until === "custom"} onClick={() => setUntil("custom")}>
+                Pick a time
               </Button>
             </div>
+            {until === "custom" && (
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="space-y-1">
+                  <span className="block text-xs text-muted-foreground">Day</span>
+                  <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-10" />
+                </label>
+                <label className="space-y-1">
+                  <span className="block text-xs text-muted-foreground">Time</span>
+                  <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-10 w-32" />
+                </label>
+              </div>
+            )}
           </div>
         )}
-        <Input
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder={dlg.kind === "not_coming" ? "Why (e.g. sick this week, cancelled)" : "e.g. Called mom: flight lands at 3"}
-          aria-label={dlg.kind === "not_coming" ? "Reason" : "Note"}
-          dir="auto"
-        />
         <DialogFooter className="sm:justify-between">
           {dlg.kind !== "not_coming" && followup ? (
             <Button variant="ghost" className="text-muted-foreground" disabled={pending} onClick={() => onClear(id)}>
@@ -317,6 +346,11 @@ function FollowupDialog({
             {dlg.kind === "note" && (
               <Button disabled={pending || !note.trim()} onClick={() => onNote(id, note)}>
                 Save note
+              </Button>
+            )}
+            {dlg.kind === "later" && (
+              <Button disabled={pending || !laterIso} onClick={() => laterIso && onLater(id, laterIso, note)}>
+                Save
               </Button>
             )}
             {dlg.kind === "not_coming" && (

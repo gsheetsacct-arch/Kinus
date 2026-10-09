@@ -11,14 +11,15 @@ import { loadAreaTree } from "@/lib/data/areas";
 import { loadBoard } from "@/lib/data/board";
 import { campStarted, loadFollowups, loadRules } from "@/lib/data/missing";
 import { getCampContext } from "@/lib/data/camp";
-import { defaultScope } from "@/lib/attendance/board";
+import { decodeScope, defaultScope } from "@/lib/attendance/board";
+import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
 
 export const metadata = { title: "Who's here" };
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export default async function StatusPage() {
-  const [user, session, camp] = await Promise.all([requireUser(), getActiveSession(), getCampContext()]);
+export default async function StatusPage({ searchParams }: { searchParams: Promise<{ status?: string; where?: string }> }) {
+  const [user, session, camp, sp] = await Promise.all([requireUser(), getActiveSession(), getCampContext(), searchParams]);
   if (!session) return <EmptyState icon={Activity} title="No active session" description="Camp hasn't been set up yet." action={<Button asChild><Link href="/">Home</Link></Button>} />;
   const supabase = await createClient();
   const [{ data: fv }, tree, { data: templates }] = await Promise.all([
@@ -50,6 +51,8 @@ export default async function StatusPage() {
         rules={rules}
         campStarted={started}
         followups={followups}
+        linkScope={decodeScope(sp.where)}
+        linkStatus={sp.status === "all" ? "" : sp.status && sp.status in STATUS_LABEL ? (sp.status as CamperStatus) : undefined}
       />
     </div>
   );

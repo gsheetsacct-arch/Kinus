@@ -1,4 +1,5 @@
 "use client";
+import { telHref } from "@/lib/utils";
 import Link from "next/link";
 import type { BuiltList } from "@/lib/data/lists";
 
@@ -41,7 +42,7 @@ export function ListGroups({ columns, groups }: Pick<BuiltList, "columns" | "gro
                         </td>
                       ) : phoneCols.has(ci) && v ? (
                         <td key={ci}>
-                          <a href={`tel:${v}`}>{String(v)}</a>
+                          <a href={telHref(String(v))}>{String(v)}</a>
                         </td>
                       ) : (
                         <td key={ci}>{typeof v === "boolean" ? (v ? "Yes" : "No") : String(v ?? "")}</td>
