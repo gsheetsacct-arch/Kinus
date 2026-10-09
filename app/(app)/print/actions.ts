@@ -13,7 +13,7 @@ import { createPrintJob, processPrintJob } from "@/lib/print/jobs";
 import { batchCamperIds, BATCH_WHICH, type BatchWhich } from "@/lib/print/batch";
 import { renderDocument } from "@/lib/print/render";
 import { loadMergeSetup, loadPrintCampers } from "@/lib/print/data";
-import { mergeValues, SAMPLE_VALUES } from "@/lib/print/merge";
+import { mergeValues, SAMPLE_CAMPER } from "@/lib/print/merge";
 import type { Layer, SheetLayout, TemplateSpec, Transform } from "@/lib/print/types";
 import { parseScan } from "@/lib/attendance/scan";
 
@@ -249,22 +249,12 @@ export async function uploadBackground(fd: FormData): Promise<ActionResult> {
   }
 }
 
-/** Live preview for the editor: a sample camper, or a real one. */
-export async function previewTemplate(spec: TemplateSpec, camperId?: string | null): Promise<string> {
+/** The exact print rendering for the editor's "Print preview", for the same camper as the canvas. */
+export async function previewTemplate(spec: TemplateSpec, who: { kind: "sample" } | { kind: "code"; code: string } | { kind: "longest" }): Promise<string> {
   await requirePrinter();
+  const r = await previewValues(who);
+  const values = "error" in r ? await sampleValues() : r.values;
   const admin = createAdminClient();
-  const setup = await loadMergeSetup(admin);
-  let values = SAMPLE_VALUES;
-  const code = camperId ? parseScan(camperId) : null;
-  if (code) {
-    const supabase = await createClient();
-    const session = await getActiveSession();
-    const { data: visible } = await supabase.from("campers").select("id").eq("camper_code", code).eq("session_id", session?.id ?? "").maybeSingle();
-    if (visible) {
-      const [c] = await loadPrintCampers(admin, [visible.id]);
-      if (c) values = mergeValues(c, setup.fields, setup.maps);
-    }
-  }
   let background: string | null = null;
   if (spec.background_path) {
     const { backgroundDataUrl } = await import("@/lib/print/data");
@@ -380,3 +370,55 @@ export async function deleteValueMap(fd: FormData): Promise<ActionResult> {
 }
 
 export type { Layer, SheetLayout };
+
+/** Every field filled from the made-up sample camper. */
+async function sampleValues(): Promise<Record<string, string>> {
+  const setup = await loadMergeSetup(createAdminClient());
+  return mergeValues(SAMPLE_CAMPER as never, setup.fields, setup.maps);
+}
+
+/**
+ * Merge values for the editor's canvas: the built-in sample, a camper by code, or the
+ * camper with the longest name (to check long names still fit).
+ */
+export async function previewValues(who: { kind: "sample" } | { kind: "code"; code: string } | { kind: "longest" }): Promise<{ values: Record<string, string>; label: string } | { error: string }> {
+  await requirePrinter();
+  const session = await getActiveSession();
+  if (who.kind === "sample" || !session) return { values: await sampleValues(), label: "a sample camper" };
+  const supabase = await createClient();
+  let id: string | null = null;
+  if (who.kind === "code") {
+    const code = parseScan(who.code);
+    if (!code) return { error: "Type a 6-digit camper code." };
+    id = (await supabase.from("campers").select("id").eq("session_id", session.id).eq("camper_code", code).maybeSingle()).data?.id ?? null;
+    if (!id) return { error: `No camper ${code} in your area.` };
+  } else {
+    const { fetchAll } = await import("@/lib/supabase/fetch-all");
+    const camp = await getCampContext();
+    const rows = await fetchAll((from, to) => {
+      let q = supabase.from("campers").select("id, display_name").eq("session_id", session.id).is("archived_at", null);
+      if (camp.divisionIds) q = q.in("division_id", camp.divisionIds);
+      return q.order("id").range(from, to);
+    });
+    id = rows.reduce<{ id: string; n: number } | null>((best, r) => ((r.display_name?.length ?? 0) > (best?.n ?? -1) ? { id: r.id, n: r.display_name?.length ?? 0 } : best), null)?.id ?? null;
+    if (!id) return { values: await sampleValues(), label: "a sample camper (no campers yet)" };
+  }
+  const admin = createAdminClient();
+  const [setup, [c]] = await Promise.all([loadMergeSetup(admin), loadPrintCampers(admin, [id])]);
+  if (!c) return { error: "Camper not found." };
+  return { values: mergeValues(c, setup.fields, setup.maps), label: `${c.first_name} ${c.last_name}${who.kind === "longest" ? " (longest name)" : ""}` };
+}
+
+/** Put a field on the merge list or take it off (it keeps printing where a template uses it). */
+export async function setFieldEnabled(id: string, enabled: boolean): Promise<ActionResult> {
+  try {
+    await requireAdminUser();
+    const supabase = await createClient();
+    const { error } = await supabase.from("merge_fields").update({ enabled }).eq("id", id);
+    if (error) throw /enabled/.test(error.message) ? new Error("Run migration 0012 in Supabase first.") : error;
+    revalidatePath("/print/fields");
+    return ok(enabled ? "On the merge list." : "Taken off the merge list.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}

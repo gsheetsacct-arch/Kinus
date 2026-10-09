@@ -12,9 +12,11 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { applyTransforms, fill } from "@/lib/print/merge";
 import type { Transform, ValueMap } from "@/lib/print/types";
-import { deleteField, deleteValueMap, saveField, saveValueMap } from "@/app/(app)/print/actions";
+import { deleteField, deleteValueMap, saveField, saveValueMap, setFieldEnabled } from "@/app/(app)/print/actions";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 
-type FieldRow = { id: string; key: string; label: string; source_field: string; transforms: Transform[] };
+type FieldRow = { id: string; key: string; label: string; source_field: string; transforms: Transform[]; enabled: boolean };
 type Source = { key: string; label: string };
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -29,6 +31,8 @@ function describeTransform(t: Transform, maps: ValueMap[]): string {
 
 export function FieldsEditor({ fields, maps, catalog, sample, sampleName }: { fields: FieldRow[]; maps: ValueMap[]; catalog: Source[]; sample: Record<string, string>; sampleName: string }) {
   const [editing, setEditing] = React.useState<FieldRow | "new" | null>(null);
+  const router = useRouter();
+  const [pending, start] = React.useTransition();
   const mapById = React.useMemo(() => new Map(maps.map((m) => [m.id, m])), [maps]);
   const raw = (source: string) => (source.includes("{{") ? fill(source, (k) => sample[k] ?? "") : (sample[source] ?? ""));
   const example = (f: Pick<FieldRow, "source_field" | "transforms">) => applyTransforms(raw(f.source_field), f.transforms, mapById);
@@ -46,28 +50,60 @@ export function FieldsEditor({ fields, maps, catalog, sample, sampleName }: { fi
             <Plus /> New field
           </Button>
         </div>
-        <div className="overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-card)]">
-          <ul className="divide-y">
-            {fields.map((f) => (
-              <li key={f.id}>
-                <button type="button" onClick={() => setEditing(f)} className="grid w-full gap-1 px-4 py-3 text-left hover:bg-muted/50 md:grid-cols-[180px_minmax(0,1fr)_minmax(0,220px)] md:items-center md:gap-4">
-                  <span>
-                    <span className="block font-mono text-sm font-semibold">{`{{${f.key}}}`}</span>
-                    <span className="block text-xs text-muted-foreground">{f.label}</span>
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    From {f.source_field.includes("{{") ? <span className="font-mono">{f.source_field}</span> : sourceLabel(f.source_field)}
-                    {f.transforms.length > 0 && <>, then {f.transforms.map((t) => describeTransform(t, maps)).join(", then ")}</>}
-                  </span>
-                  <span className="flex items-center gap-2 truncate text-sm" dir="auto">
-                    <ArrowRight className="size-3.5 shrink-0 text-muted-foreground md:hidden" />
-                    {example(f) || <span className="text-muted-foreground">(empty)</span>}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {(
+          [
+            [true, "On the merge list", "Offered when designing tags, and in the data for Publisher."],
+            [false, "Not on the list", "Available to switch on. A template that already uses one still prints it."],
+          ] as const
+        ).map(([on, title, hint]) => {
+          const list = fields.filter((f) => f.enabled === on);
+          if (!list.length) return null;
+          return (
+            <div key={title} className="space-y-1.5">
+              <div className="flex flex-wrap items-baseline gap-x-2 px-1">
+                <h3 className="text-sm font-semibold">
+                  {title} ({list.length})
+                </h3>
+                <span className="text-xs text-muted-foreground">{hint}</span>
+              </div>
+              <div className={cn("overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-card)]", !on && "opacity-80")}>
+                <ul className="divide-y">
+                  {list.map((f) => (
+                    <li key={f.id} className="flex items-center gap-2 pr-4">
+                      <button type="button" onClick={() => setEditing(f)} className="grid min-w-0 flex-1 gap-1 px-4 py-3 text-left hover:bg-muted/50 md:grid-cols-[180px_minmax(0,1fr)_minmax(0,200px)] md:items-center md:gap-4">
+                        <span>
+                          <span className="block font-mono text-sm font-semibold">{`{{${f.key}}}`}</span>
+                          <span className="block text-xs text-muted-foreground">{f.label}</span>
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          From {f.source_field.includes("{{") ? <span className="font-mono">{f.source_field}</span> : sourceLabel(f.source_field)}
+                          {f.transforms.length > 0 && <>, then {f.transforms.map((t) => describeTransform(t, maps)).join(", then ")}</>}
+                        </span>
+                        <span className="flex items-center gap-2 truncate text-sm" dir="auto">
+                          <ArrowRight className="size-3.5 shrink-0 text-muted-foreground md:hidden" />
+                          {example(f) || <span className="text-muted-foreground">(empty)</span>}
+                        </span>
+                      </button>
+                      <Switch
+                        checked={f.enabled}
+                        disabled={pending}
+                        onCheckedChange={(v) =>
+                          start(async () => {
+                            const r = await setFieldEnabled(f.id, v);
+                            if (!r.ok) return void toast.error(r.error);
+                            toast.success(`{{${f.key}}}: ${r.message}`);
+                            router.refresh();
+                          })
+                        }
+                        aria-label={`{{${f.key}}} on the merge list`}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          );
+        })}
       </section>
 
       <section className="space-y-3">

@@ -2,6 +2,7 @@ import { code128Svg, qrSvg } from "./barcode";
 import { embeddedFontCss } from "./fonts";
 import { fill } from "./merge";
 import type { Layer, PrintItem, SheetLayout, TemplateSpec } from "./types";
+import { DEFAULT_MIN_PT, PX_PER_PT } from "./render-constants";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const PAPER: Record<SheetLayout["paper"], [number, number]> = { letter: [215.9, 279.4], a4: [210, 297] };
@@ -26,7 +27,8 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
     case "text": {
       const text = fill(l.text, get);
       const style = `${pos}font-size:${l.size}pt;font-weight:${l.weight ?? 400};text-align:${l.align ?? "left"};color:${safeColor(l.color, "#111111")};justify-content:${l.align === "center" ? "center" : l.align === "right" ? "flex-end" : "flex-start"};`;
-      return `<div class="l t${l.wrap ? " wrap" : ""}" ${l.fit !== false ? "data-fit" : ""} style="${style}"><span dir="auto">${esc(text)}</span></div>`;
+      const fitAttr = l.fit !== false ? `data-fit data-min="${((l.minSize ?? DEFAULT_MIN_PT) * PX_PER_PT).toFixed(2)}"` : "";
+      return `<div class="l t${l.wrap ? " wrap" : ""}" ${fitAttr} style="${style}"><span dir="auto">${esc(text)}</span></div>`;
     }
     case "barcode": {
       const text = fill(l.text, get);
@@ -83,7 +85,7 @@ body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-w
 @media screen{body{background:#e2e8f0;padding:8mm;display:flex;flex-wrap:wrap;gap:6mm;align-items:flex-start}.tag,.sheet{flex-shrink:0;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}}
 @media print{body{display:block}}
 </style></head><body>${body}<script>
-(function(){function fit(){document.querySelectorAll("[data-fit]").forEach(function(el){var s=parseFloat(getComputedStyle(el).fontSize);var span=el.firstElementChild;var guard=60;while(guard-->0&&s>4&&(span.scrollWidth>el.clientWidth+0.5||el.scrollHeight>el.clientHeight+0.5)){s-=0.5;el.style.fontSize=s+"px";}});document.body.setAttribute("data-fitted","1");}
+(function(){function fit(){document.querySelectorAll("[data-fit]").forEach(function(el){var span=el.firstElementChild;var min=parseFloat(el.getAttribute("data-min"))||8;var s=parseFloat(getComputedStyle(el).fontSize);var over=function(){return span.scrollWidth>el.clientWidth+0.5||el.scrollHeight>el.clientHeight+0.5};if(!over())return;var r=Math.min(el.clientWidth/Math.max(span.scrollWidth,1),el.clientHeight/Math.max(el.scrollHeight,1));s=Math.max(min,Math.floor(s*Math.min(1,r)*2)/2);el.style.fontSize=s+"px";var guard=80;while(guard-->0&&s>min&&over()){s=Math.max(min,s-0.5);el.style.fontSize=s+"px";}});document.body.setAttribute("data-fitted","1");}
 if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fit)}else{window.addEventListener("load",fit)}})();
 </script></body></html>`;
 }

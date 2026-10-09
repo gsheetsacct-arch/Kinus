@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
   // a spreadsheet travels: leave out details this person's role can't see
   const allowed = visibleFieldGroups(user, fv ?? []);
   const hidden = new Set(setup.fields.filter((f) => sourcesOf(f.source_field).some((k) => { const g = groupOf(k); return !UNGATED_GROUPS.includes(g as never) && !allowed.has(g); })).map((f) => f.key));
-  const keys = setup.fields.map((f) => f.key);
+  // only fields on the merge list
+  const keys = setup.fields.filter((f) => f.enabled !== false).map((f) => f.key);
   const lines = [keys.join(",")];
   for (const c of campers) {
     const v = mergeValues(c, setup.fields, setup.maps);

@@ -434,14 +434,14 @@ isOneToOne: false
                   ]
                 },"merge_fields": {
                   Row: {
-                    "created_at": string,"id": string,"key": string,"label": string,"sort_order": number,"source_field": string,"transforms": NonNullable<Json>
+                    "created_at": string,"enabled": boolean,"id": string,"key": string,"label": string,"sort_order": number,"source_field": string,"transforms": NonNullable<Json>
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"id"?: string,"key": string,"label": string,"sort_order"?: number,"source_field": string,"transforms"?: NonNullable<Json>
+                    "created_at"?: string,"enabled"?: boolean,"id"?: string,"key": string,"label": string,"sort_order"?: number,"source_field": string,"transforms"?: NonNullable<Json>
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"key"?: string,"label"?: string,"sort_order"?: number,"source_field"?: string,"transforms"?: NonNullable<Json>
+                    "created_at"?: string,"enabled"?: boolean,"id"?: string,"key"?: string,"label"?: string,"sort_order"?: number,"source_field"?: string,"transforms"?: NonNullable<Json>
                   }
                   Relationships: [
                     

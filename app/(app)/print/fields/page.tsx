@@ -18,7 +18,7 @@ export default async function FieldsPage() {
   const supabase = await createClient();
   const admin = createAdminClient();
   const [{ data: fields }, setup, sampleRow] = await Promise.all([
-    supabase.from("merge_fields").select("id, key, label, source_field, transforms, sort_order").order("sort_order").order("key"),
+    supabase.from("merge_fields").select("*").order("sort_order").order("key"),
     loadMergeSetup(admin),
     // a real camper, to show what each field turns into
     session
@@ -46,10 +46,10 @@ export default async function FieldsPage() {
     <div>
       <PageHeader
         title="Fields & conversions"
-        description="The «fields» you can put on a tag, and how camper details are turned into them, like “Youth Small” → YS or “Division 2” → 2. The same names work as Publisher merge fields."
+        description="The «fields» you can put on a tag, and how camper details are turned into them, like “Youth Small” → YS or “Division 2” → 2. Only fields on the merge list are offered in templates and in the data for Publisher."
       />
       <FieldsEditor
-        fields={(fields ?? []).map((f) => ({ ...f, transforms: (f.transforms as never) ?? [] }))}
+        fields={(fields ?? []).map((f) => ({ id: f.id, key: f.key, label: f.label, source_field: f.source_field, transforms: (f.transforms as never) ?? [], enabled: (f as { enabled?: boolean }).enabled ?? true }))}
         maps={[...setup.maps.values()].map((m) => ({ id: m.id, name: m.name, source_field: m.source_field, entries: m.entries }))}
         catalog={unique}
         sample={sample}

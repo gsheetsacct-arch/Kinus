@@ -122,9 +122,25 @@ Template model (path A), stored as JSON on `print_templates`:
 
 ## 6.4 Template editor (admin)
 
-Phase 1: form-based — upload background, set size, a list of layers with numeric
-position fields, flags above, and a **live preview** rendered by the same engine
-with a chosen camper. Phase 2 (optional): drag-to-position on the preview.
+A canvas of the tag at real proportions (Print → Templates):
+
+- Click a part to select it, drag to move, pull the handles to resize; arrow keys
+  nudge 0.5 mm (Shift: 5 mm), Delete removes. Parts snap to a 0.5 mm grid and to the
+  tag's centre lines and edges, and stay on the tag.
+- "+ Add a field" drops a text box with that field; also plain text, barcode, QR and
+  a colour block (division colour or any colour).
+- Text size is a **target**: short text prints at that size, longer text shrinks to
+  stay inside its box, never below "never smaller than". The panel says what happens
+  for the camper shown ("Shrinks to 21 pt for this camper"), and warns when it
+  doesn't fit at all. Give long fields a wider box rather than a smaller size.
+- Show it with a sample camper, the camper with the longest name, or any camper by
+  code; "Print preview" shows the exact print rendering for the same camper.
+- The canvas uses the print fonts, so what fits on screen fits on paper.
+
+Fields: only fields **on the merge list** (Print → Fields & conversions) are offered
+in the editor and included in the data for Publisher. Contact details start off the
+list. A template that already uses an off-list field still prints it, and the editor
+says so.
 
 ## 6.5 Rendering pipeline
 

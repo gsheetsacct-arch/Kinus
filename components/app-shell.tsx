@@ -32,8 +32,8 @@ export function AppShell({
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/"));
   const main = nav.filter((n) => n.section === "main");
   const admin = nav.filter((n) => n.section === "admin");
-  // three tabs: the ones marked for phones first, topped up with the next everyday pages
-  const mobileMain = [...main.filter((n) => n.mobile), ...main.filter((n) => !n.mobile && n.href !== "/")].slice(0, 3);
+  // four tabs and More: the ones marked for phones first, topped up with the next everyday pages
+  const mobileMain = [...main.filter((n) => n.mobile), ...main.filter((n) => !n.mobile && n.href !== "/")].slice(0, 4);
   const moreActive = !mobileMain.some((n) => isActive(n.href)) && pathname !== "/";
 
   const NavLink = ({ n }: { n: NavItem }) => {
@@ -114,22 +114,24 @@ export function AppShell({
           </Link>
         </header>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-28 md:px-8 md:py-8 md:pb-10">{children}</main>
-        <nav className="no-print fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+        <nav
+          style={{ gridTemplateColumns: `repeat(${mobileMain.length + 1}, minmax(0, 1fr))` }}
+          className="no-print fixed inset-x-0 bottom-0 z-40 grid border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
           {mobileMain.map((n) => {
             const Icon = ICONS[n.icon];
             const active = isActive(n.href);
             return (
-              <Link key={n.href} href={n.href} className={cn("flex flex-col items-center gap-1 py-2 text-[11px] font-medium", active ? "text-primary" : "text-muted-foreground")}>
-                <span className={cn("flex h-7 w-12 items-center justify-center rounded-full", active && "bg-primary-soft")}>
-                  <Icon className="size-5" />
+              <Link key={n.href} href={n.href} className={cn("flex min-w-0 flex-col items-center gap-0.5 px-0.5 py-1.5 text-[10px] font-medium leading-tight", active ? "text-primary" : "text-muted-foreground")}>
+                <span className={cn("flex h-6 w-10 items-center justify-center rounded-full", active && "bg-primary-soft")}>
+                  <Icon className="size-[18px]" />
                 </span>
-                {n.label}
+                <span className="max-w-full truncate">{n.label}</span>
               </Link>
             );
           })}
-          <Link href="/more" className={cn("flex flex-col items-center gap-1 py-2 text-[11px] font-medium", moreActive ? "text-primary" : "text-muted-foreground")}>
-            <span className={cn("flex h-7 w-12 items-center justify-center rounded-full", moreActive && "bg-primary-soft")}>
-              <Menu className="size-5" />
+          <Link href="/more" className={cn("flex min-w-0 flex-col items-center gap-0.5 px-0.5 py-1.5 text-[10px] font-medium leading-tight", moreActive ? "text-primary" : "text-muted-foreground")}>
+            <span className={cn("flex h-6 w-10 items-center justify-center rounded-full", moreActive && "bg-primary-soft")}>
+              <Menu className="size-[18px]" />
             </span>
             More
           </Link>
