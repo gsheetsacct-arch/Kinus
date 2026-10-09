@@ -1,7 +1,7 @@
 name: DB → staging
+# Optional: only if a separate staging Supabase project exists (secret on the "staging" environment).
 on:
-  pull_request:
-    paths: ["supabase/migrations/**"]
+  workflow_dispatch:
 jobs:
   push:
     runs-on: ubuntu-latest
@@ -11,12 +11,6 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
-      - run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+      - run: supabase db push --db-url "$SUPABASE_DB_URL" --include-all
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      - run: supabase db push
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}

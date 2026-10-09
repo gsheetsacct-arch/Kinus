@@ -1,0 +1,45 @@
+name: Setup — apply schema, create owner
+# Run this from GitHub: Actions → "Setup — apply schema, create owner" → Run workflow.
+# Needs repository secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_DB_URL             Supabase → Connect → "Direct connection" URI, with the password filled in
+#   SUPABASE_URL                Supabase → Project Settings → Data API → Project URL (https://xxxx.supabase.co)
+#   SUPABASE_SERVICE_ROLE_KEY   Supabase → Project Settings → API keys → service_role
+# and a repository variable:
+#   APP_URL                     your Vercel production URL, e.g. https://kinus.vercel.app
+on:
+  workflow_dispatch:
+    inputs:
+      owner_email:
+        description: "Email of the first owner (leave blank to only apply the schema)"
+        required: false
+        type: string
+      owner_name:
+        description: "Owner's full name"
+        required: false
+        type: string
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Apply migrations
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --include-all
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      - uses: actions/setup-node@v4
+        if: inputs.owner_email != ''
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: inputs.owner_email != ''
+      - name: Invite the first owner
+        if: inputs.owner_email != ''
+        run: node scripts/bootstrap-owner.mjs "${{ inputs.owner_email }}" "${{ inputs.owner_name || inputs.owner_email }}"
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          APP_URL: ${{ vars.APP_URL }}
