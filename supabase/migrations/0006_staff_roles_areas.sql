@@ -83,6 +83,11 @@ alter table staff_scopes drop constraint if exists staff_scopes_user_id_division
 alter table staff_scopes drop column scope_role, drop column access_level;
 alter table staff_scopes add column group_id uuid references division_groups(id) on delete cascade;
 alter table staff_scopes alter column division_id drop not null;
+-- the old unique key let the same division (no bunk) be given twice, e.g. as head
+-- counselor and as division head; the role now lives on the profile, so keep one row
+delete from staff_scopes a using staff_scopes b
+ where a.user_id = b.user_id and a.division_id = b.division_id
+   and a.bunk_id is not distinct from b.bunk_id and a.ctid > b.ctid;
 alter table staff_scopes add constraint staff_area_target check (
   (group_id is not null and division_id is null and bunk_id is null) or (group_id is null and division_id is not null));
 create unique index staff_area_unique on staff_scopes (user_id,
