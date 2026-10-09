@@ -7,7 +7,7 @@ export function BunkPicker({ divisions, bunks }: { divisions: { id: string; name
   const [division, setDivision] = React.useState(divisions[0]?.id ?? "");
   return (
     <>
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         <Label htmlFor="division_id">Division</Label>
         <Select id="division_id" name="division_id" value={division} onChange={(e) => setDivision(e.target.value)} required>
           {divisions.map((d) => (
@@ -17,10 +17,10 @@ export function BunkPicker({ divisions, bunks }: { divisions: { id: string; name
           ))}
         </Select>
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         <Label htmlFor="bunk_id">Bunk</Label>
         <Select id="bunk_id" name="bunk_id" defaultValue="">
-          <option value="">All bunks in the division</option>
+          <option value="">All bunks in this division</option>
           {bunks
             .filter((b) => b.division_id === division)
             .map((b) => (

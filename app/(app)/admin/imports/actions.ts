@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
-import { parseFile, findLostText, applyMapping, matchAndDiff, type ColumnMap, type MappingOptions, type ExistingCamper, type ParsedCamper } from "@/lib/import";
+import { parseFile, findLostText, applyMapping, matchAndDiff, resolveMultiValues, type ColumnMap, type MappingOptions, type ExistingCamper, type ParsedCamper } from "@/lib/import";
 import type { Json } from "@/lib/supabase/database.types";
 
 type J = NonNullable<Json>;
@@ -28,9 +28,9 @@ export async function uploadImport(fd: FormData): Promise<ActionResult> {
     if (parsed.headers.length === 0 || parsed.rows.length === 0) return fail("The file has no data rows.");
     const lost = findLostText(parsed.headers, parsed.rows);
     if (lost.length && !override) {
-      const sample = lost.slice(0, 5).map((h) => `row ${h.row}, ${h.column}: "${h.value}"`).join("; ");
+      const sample = lost.slice(0, 3).map((h) => `row ${h.row}: "${h.value}"`).join("; ");
       return fail(
-        `This file has text that was replaced by "?" (${lost.length} cells, e.g. ${sample}). That happens when the export is re-saved without Unicode (WPS/Excel "ANSI"). Upload the original download or an .xlsx. Tick "import anyway" if these are real question marks.`,
+        `${lost.length} ${lost.length === 1 ? "cell has" : "cells have"} text replaced by "???" (${sample}). This happens when the file was opened and saved again in WPS or Excel. Upload the original download instead, or tick "The ??? are real" under More options.`,
       );
     }
     const hash = createHash("sha256").update(bytes).digest("hex");
@@ -38,6 +38,7 @@ export async function uploadImport(fd: FormData): Promise<ActionResult> {
     const dup = await admin.from("imports").select("id, applied_at, status").eq("session_id", session.id).eq("file_hash", hash).eq("status", "applied").maybeSingle();
     if (dup.data) return fail(`This exact file was already imported on ${new Date(dup.data.applied_at!).toLocaleString()}. Nothing has changed.`);
 
+    await discardDrafts(session.id);
     const { data: imp, error } = await admin
       .from("imports")
       .insert({
@@ -112,7 +113,7 @@ async function loadExisting(sessionId: string): Promise<{ existing: ExistingCamp
 }
 
 const previewSchema = z.object({
-  id: z.string().uuid(),
+  id: z.guid(),
   takeBunksFromFile: z.enum(["on"]).optional(),
   emptyMeansUnknown: z.enum(["on"]).optional(),
   phoneDefaultRegion: z.string().trim().length(2).default("US"),
@@ -127,6 +128,9 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     const { data: imp, error } = await admin.from("imports").select("*").eq("id", d.id).single();
     if (error) throw error;
     if (imp.status === "applied") return fail("This import was already applied.");
+    if (imp.status === "cancelled" || imp.status === "reverted") return fail("This import was discarded. Start a new one.");
+    const active = await getActiveSession();
+    if (!active || active.id !== imp.session_id) return fail("This draft belongs to another session. Start a new import in the active session.");
     const headers = ((imp.options as { headers?: string[] })?.headers ?? []) as string[];
     const columnMap: ColumnMap = {};
     for (const h of headers) {
@@ -152,6 +156,7 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     if (e2) throw e2;
     const parsedRows = (rawRows ?? []).map((r) => ({ id: r.id, rowNumber: r.row_number, parsed: applyMapping(r.raw as Record<string, string>, columnMap, mappingOptions) }));
     const { existing, known } = await loadExisting(imp.session_id);
+    resolveMultiValues(parsedRows, known);
     const result = matchAndDiff(parsedRows, existing, known, { takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on" });
 
     for (let i = 0; i < result.rows.length; i += 200) {
@@ -238,21 +243,54 @@ export async function applyImportAction(fd: FormData): Promise<ActionResult> {
   await requireAdmin();
   const id = String(fd.get("id"));
   const supabase = await createClient();
+  const active = await getActiveSession();
+  const { data: imp } = await supabase.from("imports").select("session_id").eq("id", id).maybeSingle();
+  if (!imp || !active || imp.session_id !== active.id) return fail("This draft belongs to another session. Start a new import in the active session.");
   const { data, error } = await supabase.rpc("apply_import", { p_import_id: id });
   if (error) return fail(errorMessage(error));
+  await discardDrafts(imp.session_id, id);
   const r = data as { added: number; updated: number; missing: number };
   revalidatePath("/", "layout");
-  return ok(`Applied: ${r.added} added, ${r.updated} updated, ${r.missing} flagged as not in export.`, `/admin/imports/${id}`);
+  return ok(`Done: ${r.added} added, ${r.updated} updated, ${r.missing} marked “not in the latest export”.`, `/admin/imports/${id}`);
+}
+
+/** Undoes the latest applied import of the session: back to how things were before it. */
+export async function revertImportAction(fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const id = String(fd.get("id"));
+  const supabase = await createClient();
+  const { data: imp } = await supabase.from("imports").select("session_id").eq("id", id).maybeSingle();
+  if (!imp) return fail("Import not found.");
+  const { data, error } = await supabase.rpc("revert_import", { p_import_id: id });
+  if (error) return fail(errorMessage(error));
+  await discardDrafts(imp.session_id);
+  const r = data as { removed: number; archived: number; restored: number; keptFields: number };
+  const parts = [
+    r.removed ? `${r.removed} campers it added were removed` : null,
+    r.archived ? `${r.archived} were archived because they already had check-ins` : null,
+    r.restored ? `${r.restored} campers were put back how they were` : null,
+    r.keptFields ? `${r.keptFields} later edits by staff were kept` : null,
+  ].filter(Boolean);
+  revalidatePath("/", "layout");
+  return ok(`Import undone. ${parts.join("; ") || "Nothing needed changing"}.`, `/admin/imports/${id}`);
+}
+
+/** Drafts are previews of a moment in time; once anything is applied or undone they are stale. */
+async function discardDrafts(sessionId: string, exceptId?: string) {
+  const admin = createAdminClient();
+  let q = admin.from("imports").update({ status: "cancelled" }).eq("session_id", sessionId).in("status", ["uploaded", "previewed"]);
+  if (exceptId) q = q.neq("id", exceptId);
+  await q;
 }
 
 export async function cancelImport(fd: FormData): Promise<ActionResult> {
   await requireAdmin();
   const id = String(fd.get("id"));
   const admin = createAdminClient();
-  const { error } = await admin.from("imports").update({ status: "cancelled" }).eq("id", id).neq("status", "applied");
+  const { error } = await admin.from("imports").update({ status: "cancelled" }).eq("id", id).in("status", ["uploaded", "previewed"]);
   if (error) return fail(error.message);
   revalidatePath("/admin/imports");
-  return ok("Import cancelled.", "/admin/imports");
+  return ok("Draft discarded. Nothing was changed.", "/admin/imports");
 }
 
 export async function archiveMissing(fd: FormData): Promise<ActionResult> {

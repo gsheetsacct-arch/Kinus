@@ -97,7 +97,10 @@ function diffOne(parsed: ParsedCamper, ex: ExistingCamper, opts: DiffOptions): {
   const newDiv = normText(parsed.division_name);
   const oldDiv = normText(ex.division_name);
   const divisionChanged = newDiv !== null && newDiv !== oldDiv;
-  if (divisionChanged) {
+  const placementLocked = ex.bunk_locked_by_staff && !opts.takeBunksFromFile;
+  if (divisionChanged && placementLocked) {
+    warnings.push(`the file places them in ${newDiv}${parsed.bunk_name ? ` / ${parsed.bunk_name}` : ""}; kept the placement staff set (${oldDiv ?? "—"}${ex.bunk_name ? ` / ${ex.bunk_name}` : ""})`);
+  } else if (divisionChanged) {
     changes.push({ field: "division", old: oldDiv, new: newDiv });
     // apply re-resolves the bunk inside the new division from parsed.bunk_name
     if (normText(parsed.bunk_name) !== normText(ex.bunk_name)) {

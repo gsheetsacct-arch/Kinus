@@ -43,8 +43,11 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
     supabase.from("field_visibility").select("field_group, global_roles, scope_roles"),
     supabase.from("attendance_events").select("id, event_type, method, occurred_at, note, resulting_status, profiles:recorded_by(full_name)").eq("camper_id", id).order("occurred_at", { ascending: false }).limit(100),
     supabase.rpc("camper_history", { p_camper_id: id }),
-    c.division_id ? supabase.from("bunks").select("id, name").eq("division_id", c.division_id).order("sort_order") : Promise.resolve({ data: [] }),
+    supabase.from("divisions").select("id, name, bunks(id, name, sort_order)").eq("session_id", c.session_id!).order("sort_order"),
   ]);
+  const placeable = (bunks ?? [])
+    .filter((d) => canAccessBunk(user, d.id, null, "edit") || d.id === c.division_id)
+    .map((d) => ({ ...d, bunks: [...(d.bunks as { id: string; name: string; sort_order: number }[])].sort((a, b) => a.sort_order - b.sort_order) }));
   const groups = visibleFieldGroups(user, fv ?? [], c.division_id, c.bunk_id);
   const canEdit = c.division_id ? canAccessBunk(user, c.division_id, c.bunk_id, "edit") : isAdmin(user);
   const canEditSensitive = canEdit && groups.has("medical") && groups.has("address") && groups.has("parent_notes");
@@ -52,6 +55,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
   return (
     <div>
       <PageHeader
+        back={{ href: "/campers", label: "Campers" }}
         title={c.display_name ?? ""}
         description={[c.division_name, c.bunk_name ?? "unassigned", c.grade ? `Grade ${c.grade}` : null].filter(Boolean).join(" · ")}
         actions={
@@ -82,7 +86,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
           <TabsTrigger value="history">History</TabsTrigger>
           {canEdit && <TabsTrigger value="edit">Edit</TabsTrigger>}
         </TabsList>
-        <TabsContent value="overview" className="grid gap-4 lg:grid-cols-2">
+        <TabsContent value="overview" className="grid gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle>Details</CardTitle>
@@ -162,7 +166,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
                 ))}
                 {!c.contacts.length && <p className="text-sm text-muted-foreground">No contacts on file.</p>}
                 {canEdit && (
-                  <ActionForm action={addContact} className="mt-3 grid gap-2 sm:grid-cols-[150px_1fr_1fr_1fr_auto]" resetOnSuccess>
+                  <ActionForm action={addContact} className="mt-4 grid gap-2 border-t pt-4 sm:grid-cols-[160px_1fr_1fr_1fr_auto]" resetOnSuccess>
                     <input type="hidden" name="camper_id" value={c.id!} />
                     <Select name="role" defaultValue="authorized_pickup" className="h-9">
                       {Object.entries(ROLE_LABEL).map(([k, v]) => (
@@ -247,61 +251,72 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
         </TabsContent>
         {canEdit && (
           <TabsContent value="edit">
-            <ActionForm action={updateCamper} className="grid max-w-3xl gap-3 sm:grid-cols-2">
+            <ActionForm action={updateCamper} className="grid max-w-3xl gap-4 rounded-xl border bg-card p-5 shadow-[var(--shadow-card)] sm:grid-cols-2">
               <input type="hidden" name="id" value={c.id!} />
               <input type="hidden" name="can_edit_sensitive" value={canEditSensitive ? "1" : "0"} />
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <Label htmlFor="first_name">First name</Label>
                 <Input id="first_name" name="first_name" defaultValue={c.first_name ?? ""} dir="auto" required />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <Label htmlFor="last_name">Last name</Label>
                 <Input id="last_name" name="last_name" defaultValue={c.last_name ?? ""} dir="auto" required />
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="bunk_id">Bunk</Label>
-                <Select id="bunk_id" name="bunk_id" defaultValue={c.bunk_id ?? ""}>
-                  <option value="">Unassigned</option>
-                  {(bunks ?? []).map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="placement">Division and bunk</Label>
+                <Select id="placement" name="placement" defaultValue={c.bunk_id ? `b:${c.bunk_id}` : c.division_id ? `d:${c.division_id}` : ""}>
+                  {!c.division_id && <option value="">Not in a division</option>}
+                  {placeable.map((d) => (
+                    <optgroup key={d.id} label={d.name}>
+                      <option value={`d:${d.id}`}>{d.name} · no bunk yet</option>
+                      {d.bunks.map((b) => (
+                        <option key={b.id} value={`b:${b.id}`}>
+                          {d.name} · {b.name}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </Select>
-                <p className="text-xs text-muted-foreground">Changing the bunk here locks it against future imports.</p>
+                <p className="text-xs text-muted-foreground">If you move a camper here, future imports keep your choice instead of the export&apos;s.</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <Label htmlFor="grade">Grade</Label>
                   <Input id="grade" name="grade" defaultValue={c.grade ?? ""} />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <Label htmlFor="tshirt_size">T-shirt</Label>
                   <Input id="tshirt_size" name="tshirt_size" defaultValue={c.tshirt_size ?? ""} />
                 </div>
               </div>
               {canEditSensitive && (
                 <>
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <Label htmlFor="local_address">Local address</Label>
                     <Input id="local_address" name="local_address" defaultValue={c.local_address ?? ""} dir="auto" />
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <Label htmlFor="local_address_cross_streets">Cross streets</Label>
                     <Input id="local_address_cross_streets" name="local_address_cross_streets" defaultValue={c.local_address_cross_streets ?? ""} dir="auto" />
                   </div>
-                  {(["has_allergies", "has_epipen", "has_medications"] as const).map((k) => (
-                    <div key={k} className="space-y-1">
-                      <Label htmlFor={k}>{k.replace("has_", "").replace("_", " ")}</Label>
+                  {(
+                    [
+                      ["has_allergies", "Has allergies?"],
+                      ["has_epipen", "Needs an EpiPen?"],
+                      ["has_medications", "Takes medications?"],
+                    ] as const
+                  ).map(([k, label]) => (
+                    <div key={k} className="space-y-1.5">
+                      <Label htmlFor={k}>{label}</Label>
                       <Select id={k} name={k} defaultValue={c[k] === null || c[k] === undefined ? "" : c[k] ? "true" : "false"}>
-                        <option value="">unknown</option>
-                        <option value="true">yes</option>
-                        <option value="false">no</option>
+                        <option value="">Not known</option>
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
                       </Select>
                     </div>
                   ))}
                   <div className="space-y-1 sm:col-span-2">
-                    <Label htmlFor="allergies">Allergies</Label>
+                    <Label htmlFor="allergies">Allergies (details)</Label>
                     <Input id="allergies" name="allergies" defaultValue={c.allergies ?? ""} dir="auto" />
                   </div>
                   <div className="space-y-1 sm:col-span-2">

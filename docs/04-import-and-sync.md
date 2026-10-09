@@ -107,6 +107,15 @@ Typed parsing rules:
 - Bunk: first non-empty value among `bunkColumnPriority`, matched within the
   camper's division; unknown → created and listed under "New bunks".
 
+### Step 3b — Campers listed in several divisions or bunks
+The registration export sometimes lists more than one division or bunk for a camper,
+joined with a comma (`Division 3,Bar Mitzvah Program`, `Bunk Yud,Bunk Yud Beis`).
+Kinus keeps one division and one bunk per camper and never creates comma-joined
+divisions. It picks the pair the data supports: a listed bunk that already belongs
+to one of the listed divisions, either in Kinus or on other rows of the same file.
+Otherwise it takes the first value. Every such camper appears under **Worth a look**
+in the review, with the reason, and can be moved on their camper page.
+
 ### Step 4 — Match rows to existing campers
 In order:
 1. `source_id` equals an existing camper's `source_id` in this session → match.
@@ -159,6 +168,19 @@ source is set to `import:<id>` for the transaction so every row change in
 
 Nothing operational is touched: status, attendance events, buzzer assignments,
 print jobs, staff notes, manual contacts, `camper_code`.
+
+### Undo (revert to the previous import)
+The latest applied import of a session can be undone (`revert_import()`), and then
+the one before it, and so on. Using the audit trail it removes campers the import
+added (archives them instead if they already have check-ins), restores every field
+and contact it changed, and removes divisions and bunks it created once they are
+empty. A field staff changed by hand after the import is left as staff set it.
+Applying or undoing an import discards any other open drafts in that session,
+since their preview no longer matches the data.
+
+Imports belong to the session that was active when they were uploaded. A draft
+from another session cannot be applied, and deleting a session deletes its imports
+and their files.
 
 ### Step 8 — Report
 The import page becomes a permanent record: who, when, file, summary, and the full

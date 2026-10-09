@@ -31,7 +31,7 @@ export default async function CampersPage({ searchParams }: { searchParams: Prom
     <div>
       <PageHeader
         title="Campers"
-        description={`${campers.length} shown`}
+        description={`${campers.length} ${campers.length === 1 ? "camper" : "campers"}${sp.q || sp.division || sp.bunk || sp.status ? " match your search" : ""}`}
         actions={
           isAdmin(user) ? (
             <Button asChild variant="outline" size="sm">
@@ -40,8 +40,8 @@ export default async function CampersPage({ searchParams }: { searchParams: Prom
           ) : undefined
         }
       />
-      <form className="no-print mb-4 grid gap-2 rounded-xl border bg-card p-3 shadow-[var(--shadow-card)] sm:grid-cols-[1fr_180px_160px_140px_auto]" method="get">
-        <Input name="q" defaultValue={sp.q ?? ""} placeholder="Name (any language), code, or phone" dir="auto" autoFocus />
+      <form className="no-print mb-6 grid gap-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] md:grid-cols-[1fr_180px_160px_140px_auto]" method="get">
+        <Input name="q" defaultValue={sp.q ?? ""} placeholder="Name in any language, camper code, or parent phone" dir="auto" />
         <Select name="division" defaultValue={sp.division ?? ""}>
           <option value="">All divisions</option>
           {divs.map((d) => (
@@ -68,9 +68,16 @@ export default async function CampersPage({ searchParams }: { searchParams: Prom
           <option value="departed">Departed</option>
           <option value="no_show">No-show</option>
         </Select>
-        <Button type="submit" variant="secondary">
-          Filter
-        </Button>
+        <div className="flex gap-2">
+          <Button type="submit" className="flex-1">
+            Search
+          </Button>
+          {(sp.q || sp.division || sp.bunk || sp.status) && (
+            <Button asChild variant="ghost">
+              <Link href="/campers">Clear</Link>
+            </Button>
+          )}
+        </div>
       </form>
       <div className="space-y-2 md:hidden">
         {campers.map((c) => (

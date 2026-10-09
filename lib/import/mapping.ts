@@ -26,6 +26,9 @@ export type ParsedCamper = {
   last_name: string;
   division_name: string | null;
   bunk_name: string | null;
+  /** Every division / bunk the export listed for this camper (comma-separated values). */
+  division_candidates: string[];
+  bunk_candidates: string[];
   grade: string | null;
   tshirt_size: string | null;
   bunk_preferences: string[];
@@ -81,6 +84,12 @@ export const TARGET_OPTIONS: { value: string; label: string }[] = [
   ]),
 ];
 
+/** "Division 3,Division 2" → ["Division 3", "Division 2"]; de-duplicated, order kept. */
+export function splitList(v: string | null): string[] {
+  if (!v) return [];
+  return [...new Set(v.split(",").map((x) => x.replace(/\s+/g, " ").trim()).filter(Boolean))];
+}
+
 const CONTACT_RE = /^contact\[(\w+)(?:,(\d+))?\]\.(name|first_name|last_name|phone|email)$/;
 const PREF_RE = /^bunk_preferences\[(\d+)\]$/;
 
@@ -107,6 +116,8 @@ export function applyMapping(row: Record<string, string>, map: ColumnMap, opts: 
     last_name: "",
     division_name: null,
     bunk_name: null,
+    division_candidates: [],
+    bunk_candidates: [],
     grade: null,
     tshirt_size: null,
     bunk_preferences: [],
@@ -138,7 +149,8 @@ export function applyMapping(row: Record<string, string>, map: ColumnMap, opts: 
   for (const col of bunkCols) {
     const v = normText(row[col]);
     if (v) {
-      out.bunk_name = v;
+      out.bunk_candidates = splitList(v);
+      out.bunk_name = out.bunk_candidates[0] ?? null;
       break;
     }
   }
@@ -177,7 +189,8 @@ export function applyMapping(row: Record<string, string>, map: ColumnMap, opts: 
         out.last_name = text ?? "";
         break;
       case "division":
-        out.division_name = text;
+        out.division_candidates = splitList(text);
+        out.division_name = out.division_candidates[0] ?? null;
         break;
       case "has_allergies":
       case "has_epipen":

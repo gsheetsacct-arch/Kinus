@@ -7,7 +7,7 @@ import { FIELD_BY_KEY } from "@/lib/fields";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 
 const schema = z.object({
-  id: z.string().uuid().optional().or(z.literal("")),
+  id: z.guid().optional().or(z.literal("")),
   name: z.string().trim().min(1),
   audience: z.enum(["counselor", "head_counselor", "division_head", "director", "office", "custom"]),
   group_by: z.enum(["bunk", "division", ""]),
@@ -20,7 +20,7 @@ export async function savePreset(fd: FormData): Promise<ActionResult> {
   try {
     const d = schema.parse(Object.fromEntries(fd));
     const columns = fd.getAll("columns").map(String).filter((k) => FIELD_BY_KEY[k]);
-    if (columns.length === 0) return fail("Pick at least one column.");
+    if (columns.length === 0) return fail("Tick at least one column.");
     const supabase = await createClient();
     const row = {
       name: d.name,
@@ -34,7 +34,7 @@ export async function savePreset(fd: FormData): Promise<ActionResult> {
     if (error) throw error;
     revalidatePath("/admin/presets");
     revalidatePath("/lists");
-    return ok("Preset saved.", "/admin/presets");
+    return ok("Layout saved.", "/admin/presets");
   } catch (e) {
     return fail(errorMessage(e));
   }
@@ -46,5 +46,5 @@ export async function deletePreset(fd: FormData): Promise<ActionResult> {
   const { error } = await supabase.from("list_presets").delete().eq("id", String(fd.get("id")));
   if (error) return fail(error.message);
   revalidatePath("/admin/presets");
-  return ok("Preset deleted.");
+  return ok("Layout deleted.", "/admin/presets");
 }

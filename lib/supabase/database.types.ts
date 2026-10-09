@@ -760,6 +760,12 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"restore_fields":
+{ Args: { "p_diff": Json,"p_row_id": string,"p_table": string }; Returns: number
+                           },
+"revert_import":
+{ Args: { "p_import_id": string }; Returns: Json
+                           },
 "search_campers":
 { Args: { "p_limit"?: number,"p_q": string,"p_session_id": string }; Returns: {
               "bunk_id": string,"camper_code": string,"display_name": string,"division_id": string,"id": string,"score": number,"status": Database["public"]['Enums']["camper_status"]
@@ -776,7 +782,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "access_level": "view"|"scan"|"edit","attendance_event_type": "arrival"|"leave"|"return"|"pickup"|"no_show"|"correction","attendance_method": "scan"|"manual"|"bulk","camper_status": "expected"|"present"|"out"|"departed"|"no_show","contact_role": "mother"|"father"|"guardian"|"emergency"|"host"|"authorized_pickup","division_language": "he"|"fr"|"en","global_role": "owner"|"admin"|"director"|"logistics"|"office"|"staff","import_row_action": "add"|"update"|"unchanged"|"conflict"|"skip","import_status": "uploaded"|"previewed"|"applied"|"cancelled"|"failed","page_status": "queued"|"sent"|"failed"|"manual","print_kind": "name_tag"|"luggage_tag"|"other","print_status": "queued"|"rendering"|"sent"|"printed"|"failed"|"cancelled","record_source": "import"|"manual","scope_role": "division_head"|"head_counselor"|"counselor"|"scanner"
+            "access_level": "view"|"scan"|"edit","attendance_event_type": "arrival"|"leave"|"return"|"pickup"|"no_show"|"correction","attendance_method": "scan"|"manual"|"bulk","camper_status": "expected"|"present"|"out"|"departed"|"no_show","contact_role": "mother"|"father"|"guardian"|"emergency"|"host"|"authorized_pickup","division_language": "he"|"fr"|"en","global_role": "owner"|"admin"|"director"|"logistics"|"office"|"staff","import_row_action": "add"|"update"|"unchanged"|"conflict"|"skip","import_status": "uploaded"|"previewed"|"applied"|"cancelled"|"failed"|"reverted","page_status": "queued"|"sent"|"failed"|"manual","print_kind": "name_tag"|"luggage_tag"|"other","print_status": "queued"|"rendering"|"sent"|"printed"|"failed"|"cancelled","record_source": "import"|"manual","scope_role": "division_head"|"head_counselor"|"counselor"|"scanner"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -892,7 +898,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "access_level": ["view", "scan", "edit"],"attendance_event_type": ["arrival", "leave", "return", "pickup", "no_show", "correction"],"attendance_method": ["scan", "manual", "bulk"],"camper_status": ["expected", "present", "out", "departed", "no_show"],"contact_role": ["mother", "father", "guardian", "emergency", "host", "authorized_pickup"],"division_language": ["he", "fr", "en"],"global_role": ["owner", "admin", "director", "logistics", "office", "staff"],"import_row_action": ["add", "update", "unchanged", "conflict", "skip"],"import_status": ["uploaded", "previewed", "applied", "cancelled", "failed"],"page_status": ["queued", "sent", "failed", "manual"],"print_kind": ["name_tag", "luggage_tag", "other"],"print_status": ["queued", "rendering", "sent", "printed", "failed", "cancelled"],"record_source": ["import", "manual"],"scope_role": ["division_head", "head_counselor", "counselor", "scanner"]
+            "access_level": ["view", "scan", "edit"],"attendance_event_type": ["arrival", "leave", "return", "pickup", "no_show", "correction"],"attendance_method": ["scan", "manual", "bulk"],"camper_status": ["expected", "present", "out", "departed", "no_show"],"contact_role": ["mother", "father", "guardian", "emergency", "host", "authorized_pickup"],"division_language": ["he", "fr", "en"],"global_role": ["owner", "admin", "director", "logistics", "office", "staff"],"import_row_action": ["add", "update", "unchanged", "conflict", "skip"],"import_status": ["uploaded", "previewed", "applied", "cancelled", "failed", "reverted"],"page_status": ["queued", "sent", "failed", "manual"],"print_kind": ["name_tag", "luggage_tag", "other"],"print_status": ["queued", "rendering", "sent", "printed", "failed", "cancelled"],"record_source": ["import", "manual"],"scope_role": ["division_head", "head_counselor", "counselor", "scanner"]
           }
         }
 } as const

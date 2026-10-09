@@ -48,11 +48,11 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
           ) : undefined
         }
       />
-      <form method="get" className="no-print mb-4 grid gap-2 sm:grid-cols-[1fr_200px_180px_auto]">
+      <form method="get" className="no-print mb-6 grid gap-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] md:grid-cols-[1fr_200px_180px_auto]">
         <Select name="preset" defaultValue={preset?.id ?? ""}>
           {presets.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.name} ({p.audience.replace("_", " ")})
+              {p.name}
             </option>
           ))}
         </Select>
@@ -79,10 +79,10 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
           Show
         </Button>
       </form>
-      {!preset && <p className="text-sm text-muted-foreground">No list presets are available for your role yet.</p>}
+      {!preset && <p className="text-sm text-muted-foreground">No list layouts are set up for your role yet. Ask an admin.</p>}
       {list &&
         list.groups.map((g, gi) => (
-          <section key={g.title || "all"} className={gi > 0 ? "print-page-break mt-6" : ""}>
+          <section key={g.title || "all"} className={`rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] print:border-0 print:p-0 print:shadow-none ${gi > 0 ? "print-page-break mt-6" : ""}`}>
             {g.title && (
               <h2 className="mb-2 text-lg font-semibold" dir="auto">
                 {g.title} <span className="text-sm font-normal text-muted-foreground">({g.rows.length})</span>

@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import iconv from "iconv-lite";
 import {
+  resolveMultiValues,
+  splitList,
   parseFile,
   decodeText,
   findLostText,
@@ -124,6 +126,8 @@ const parsedFor = (over: Partial<ReturnType<typeof applyMapping>> = {}) => ({
   last_name: "פיש",
   division_name: "Hebrew Division",
   bunk_name: "Group 112",
+  division_candidates: ["Hebrew Division"],
+  bunk_candidates: ["Group 112"],
   grade: "4",
   tshirt_size: "Youth Small",
   bunk_preferences: [],
@@ -203,5 +207,54 @@ describe("matchAndDiff", () => {
     const r = matchAndDiff([{ rowNumber: 2, parsed: parsedFor({ division_name: "French Division", bunk_name: "F1" }) }], [base], known, opts);
     expect(r.rows[0].changes.map((c) => c.field)).toEqual(["division", "bunk"]);
     expect(r.summary.newDivisions).toEqual(["French Division"]);
+  });
+});
+
+describe("multi-value divisions and bunks", () => {
+  it("splits comma-joined values", () => {
+    expect(splitList("Division 3,Division 2")).toEqual(["Division 3", "Division 2"]);
+    expect(splitList("Group 107 עברית, Group 108 עברית")).toEqual(["Group 107 עברית", "Group 108 עברית"]);
+    expect(splitList(" ")).toEqual([]);
+  });
+  const row = (division: string, bunk: string) => {
+    const r = Object.fromEntries(Object.keys(DEFAULT_COLUMN_MAP).map((h) => [h, ""]));
+    Object.assign(r, { "students.id": Math.random().toString(), "students.first_name": "A", "students.last_name": "B", "group_types.division": division, "group_types.bunks": bunk });
+    return { parsed: applyMapping(r, DEFAULT_COLUMN_MAP, DEFAULT_MAPPING_OPTIONS) };
+  };
+  it("places a two-division camper where their bunk lives", () => {
+    const rows = [row("Bar Mitzvah Program", "Bunk Nun Vov"), row("Division 3,Bar Mitzvah Program", "Bunk Nun Vov")];
+    resolveMultiValues(rows, []);
+    expect(rows[1].parsed.division_name).toBe("Bar Mitzvah Program");
+    expect(rows[1].parsed.bunk_name).toBe("Bunk Nun Vov");
+    expect(rows[1].parsed.warnings[0]).toMatch(/Bunk Nun Vov belongs to Bar Mitzvah Program/);
+    expect(rows[0].parsed.warnings).toEqual([]);
+  });
+  it("uses bunks already in the database", () => {
+    const rows = [row("Division 2,Division 1", "Bunk Yud Beis")];
+    resolveMultiValues(rows, [{ name: "Division 1", bunks: ["Bunk Yud Beis"] }]);
+    expect(rows[0].parsed.division_name).toBe("Division 1");
+  });
+  it("picks a known bunk when several are listed, else the first", () => {
+    const rows = [row("Division 1", "Bunk Yud"), row("Division 1", "Bunk Zayin,Bunk Yud")];
+    resolveMultiValues(rows, []);
+    expect(rows[1].parsed.bunk_name).toBe("Bunk Yud");
+    const lone = [row("Division 9,Division 8", "")];
+    resolveMultiValues(lone, []);
+    expect(lone[0].parsed.division_name).toBe("Division 9");
+    expect(lone[0].parsed.warnings[0]).toMatch(/first one listed/);
+  });
+  it("never creates comma-joined divisions", () => {
+    const rows = [row("Division 3,Division 2", "Bunk Mem Gimmel")];
+    resolveMultiValues(rows, []);
+    expect(rows[0].parsed.division_name).not.toContain(",");
+  });
+});
+
+describe("staff-locked placement", () => {
+  it("keeps a locked camper's division and bunk", () => {
+    const locked = { ...base, bunk_locked_by_staff: true };
+    const r = matchAndDiff([{ rowNumber: 2, parsed: parsedFor({ division_name: "French Division", bunk_name: "F1" }) }], [locked], known, opts);
+    expect(r.rows[0].action).toBe("unchanged");
+    expect(r.rows[0].warnings[0]).toMatch(/kept the placement staff set/);
   });
 });

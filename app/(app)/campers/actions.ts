@@ -13,10 +13,10 @@ const opt = z.string().trim().optional().transform((v) => (v ? v : null));
 const tri = z.enum(["", "true", "false"]).optional().transform((v) => (v === "true" ? true : v === "false" ? false : null));
 
 const edit = z.object({
-  id: z.string().uuid(),
+  id: z.guid(),
   first_name: z.string().trim().min(1),
   last_name: z.string().trim().min(1),
-  bunk_id: z.string().optional(),
+  placement: z.string().optional(),
   grade: opt,
   tshirt_size: opt,
   local_address: opt,
@@ -36,7 +36,7 @@ export async function updateCamper(fd: FormData): Promise<ActionResult> {
   try {
     const d = edit.parse(Object.fromEntries(fd));
     const supabase = await createClient();
-    const { data: current } = await supabase.from("campers").select("bunk_id").eq("id", d.id).maybeSingle();
+    const { data: current } = await supabase.from("campers").select("bunk_id, division_id").eq("id", d.id).maybeSingle();
     if (!current) return fail("You cannot edit this camper.");
     const patch: CamperUpdate = {
       first_name: d.first_name,
@@ -57,10 +57,22 @@ export async function updateCamper(fd: FormData): Promise<ActionResult> {
         notes_from_parents: d.notes_from_parents,
       });
     }
-    const newBunk = d.bunk_id === undefined ? undefined : d.bunk_id || null;
-    if (newBunk !== undefined && newBunk !== current.bunk_id) {
-      patch.bunk_id = newBunk;
-      patch.bunk_locked_by_staff = true;
+    // placement: "b:<bunk id>" or "d:<division id>" (in the division, no bunk)
+    if (d.placement) {
+      const [kind, pid] = d.placement.split(":");
+      let division_id = current.division_id;
+      let bunk_id: string | null = null;
+      if (kind === "b") {
+        const { data: b } = await supabase.from("bunks").select("division_id").eq("id", pid).maybeSingle();
+        if (!b) return fail("That bunk no longer exists.");
+        division_id = b.division_id;
+        bunk_id = pid;
+      } else if (kind === "d") {
+        division_id = pid;
+      }
+      if (division_id !== current.division_id || bunk_id !== current.bunk_id) {
+        Object.assign(patch, { division_id, bunk_id, bunk_locked_by_staff: true });
+      }
     }
     const { error } = await supabase.from("campers").update(patch).eq("id", d.id);
     if (error) throw error;
@@ -72,7 +84,7 @@ export async function updateCamper(fd: FormData): Promise<ActionResult> {
 }
 
 const contact = z.object({
-  camper_id: z.string().uuid(),
+  camper_id: z.guid(),
   role: z.enum(["mother", "father", "guardian", "emergency", "host", "authorized_pickup"]),
   name: opt,
   phone: opt,
@@ -127,7 +139,7 @@ export async function archiveCamper(fd: FormData): Promise<ActionResult> {
   return ok(restore ? "Camper restored." : "Camper archived.");
 }
 
-const walkIn = z.object({ first_name: z.string().trim().min(1), last_name: z.string().trim().min(1), division_id: z.string().uuid(), bunk_id: z.string().optional() });
+const walkIn = z.object({ first_name: z.string().trim().min(1), last_name: z.string().trim().min(1), division_id: z.guid(), bunk_id: z.string().optional() });
 
 export async function createWalkIn(fd: FormData): Promise<ActionResult> {
   await requireAdmin();

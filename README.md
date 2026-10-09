@@ -17,9 +17,14 @@ What works today:
 
 - Sign-in (password or emailed link), staff invites, roles and per-division/bunk access
 - Sessions, divisions and bunks (created by import, editable)
-- Roster import: upload → map columns → field-by-field diff preview → apply → report,
-  with conflict resolution, "not in export" flagging, encoding recovery and the
-  lost-text guard
+- Roster import: upload → match columns → field-by-field review → apply → report,
+  with conflict resolution, "not in export" flagging, encoding recovery, the
+  lost-text guard, campers listed in several divisions placed where their bunk
+  belongs, and **undo** of the latest import (back to the previous state)
+- Imports belong to the active session; sessions can be renamed and deleted
+- Your account page: change your name, phone and password; admins can email a
+  sign-in link or set a password for anyone
+- Setup checklist on the home page for new admins
 - Camper search (Hebrew/French/English, accent- and niqqud-insensitive) and detail
   pages with contacts, timeline, change history and scoped editing
 - Lists from presets (counselor / head counselor / division head / office / bus),
