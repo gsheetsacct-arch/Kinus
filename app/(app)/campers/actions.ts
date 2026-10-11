@@ -3,7 +3,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireAdmin, requireUser } from "@/lib/auth/current-user";
-import { visibleFieldGroups } from "@/lib/auth/permissions";
+import { canAccessBunk, canAddWalkIn, visibleFieldGroups } from "@/lib/auth/permissions";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { parsePhone } from "@/lib/import/mapping";
 import type { Database } from "@/lib/supabase/database.types";
@@ -138,16 +139,32 @@ export async function archiveCamper(fd: FormData): Promise<ActionResult> {
   return ok(restore ? "Camper restored." : "Camper archived.");
 }
 
-const walkIn = z.object({ first_name: z.string().trim().min(1), last_name: z.string().trim().min(1), division_id: z.guid(), bunk_id: z.string().optional() });
+const walkIn = z.object({ first_name: z.string().trim().min(1), last_name: z.string().trim().min(1), division_id: z.guid(), bunk_id: z.string().optional(), add_anyway: z.string().optional() });
 
 export async function createWalkIn(fd: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const user = await requireUser();
   const session = await getActiveSession();
   if (!session) return fail("No active session.");
   try {
     const d = walkIn.parse(Object.fromEntries(fd));
-    const supabase = await createClient();
-    const { data, error } = await supabase
+    if (!canAddWalkIn(user) || !canAccessBunk(user, d.division_id, d.bunk_id || null, "edit")) return fail("You can only add walk-ins to a division you can edit.");
+    // the registration desk often types a name that's already there (a sibling, or registered after all)
+    if (!d.add_anyway) {
+      const { data: same } = await createAdminClient()
+        .from("campers")
+        .select("id, divisions(name), bunks(name)")
+        .eq("session_id", session.id)
+        .is("archived_at", null)
+        .ilike("first_name", d.first_name.replace(/[%_]/g, ""))
+        .ilike("last_name", d.last_name.replace(/[%_]/g, ""))
+        .limit(3);
+      if (same?.length) {
+        const where = same.map((s) => [(s.divisions as { name: string } | null)?.name, (s.bunks as { name: string } | null)?.name].filter(Boolean).join(" · ")).join("; ");
+        return fail(`${d.first_name} ${d.last_name} is already registered (${where}). Check it isn't the same child, then tick “Add anyway”.`);
+      }
+    }
+    // inserting campers is an admin right in the database; the check above is the desk's
+    const { data, error } = await createAdminClient()
       .from("campers")
       .insert({ session_id: session.id, first_name: d.first_name, last_name: d.last_name, division_id: d.division_id, bunk_id: d.bunk_id || null, bunk_locked_by_staff: Boolean(d.bunk_id), in_latest_import: false })
       .select("id")

@@ -21,6 +21,8 @@ import { CorrectStatus } from "@/components/scan/correct-status";
 import { EVENT_LABEL } from "@/lib/attendance/machine";
 import { getCamper } from "@/lib/data/campers";
 import { formatDateTime, formatPhone } from "@/lib/utils";
+import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
+import { FIELD_BY_KEY } from "@/lib/fields";
 import { addContact, archiveCamper, removeContact, updateCamper } from "../actions";
 
 export const metadata = { title: "Camper" };
@@ -58,6 +60,18 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
   if (!c) notFound();
   // a camper from another year: offer that year's bunks
   const bunks = c.session_id === session?.id ? activeBunks.data : (await divisionsFor(c.session_id!)).data;
+  // the Changes tab shows names, not ids
+  const placeName = new Map<string, string>((bunks ?? []).flatMap((d) => [[d.id, d.name] as [string, string], ...((d.bunks as { id: string; name: string }[]) ?? []).map((b) => [b.id, b.name] as [string, string])]));
+  const HISTORY_LABEL: Record<string, string> = { division_id: "Division", bunk_id: "Bunk", archived_at: "Archived", in_latest_import: "In latest export", status: "Status" };
+  const historyValue = (k: string, v: unknown) => {
+    if (v === null || v === undefined || v === "") return "—";
+    if ((k === "division_id" || k === "bunk_id") && typeof v === "string") return placeName.get(v) ?? "(removed)";
+    if (k === "status" && typeof v === "string") return STATUS_LABEL[v as CamperStatus] ?? v;
+    if (k === "archived_at" && typeof v === "string") return formatDateTime(v);
+    if (typeof v === "boolean") return v ? "Yes" : "No";
+    if (Array.isArray(v)) return v.join(", ") || "—";
+    return String(v);
+  };
   const placeable = (bunks ?? [])
     .filter((d) => canAccessBunk(user, d.id, null, "edit") || d.id === c.division_id)
     .map((d) => ({ ...d, bunks: [...(d.bunks as { id: string; name: string; sort_order: number }[])].sort((a, b) => a.sort_order - b.sort_order) }));
@@ -243,21 +257,21 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
                     <div className="flex gap-2 text-muted-foreground">
                       <span className="w-36">{formatDateTime(h.at)}</span>
                       <span>
-                        {h.action.toLowerCase()} via {src}
+                        {h.action === "INSERT" ? "added" : h.action === "DELETE" ? "removed" : "changed"} {h.source === "ui" ? "in Kinus" : <>by {src}</>}
                       </span>
                     </div>
                     {h.action === "UPDATE" && (
                       <table className="mt-1 text-xs">
                         <tbody>
                           {Object.entries(diff)
-                            .filter(([k]) => !["last_event_id", "updated_at", "source_data"].includes(k))
+                            .filter(([k]) => !["last_event_id", "updated_at", "source_data", "staff_edited", "bunk_locked_by_staff", "name_normalized", "display_name"].includes(k))
                             .map(([k, v]) => (
                               <tr key={k}>
-                                <td className="pr-3 font-mono text-muted-foreground">{k}</td>
+                                <td className="pr-3 text-muted-foreground">{HISTORY_LABEL[k] ?? FIELD_BY_KEY[k]?.label ?? k}</td>
                                 <td className="pr-3 line-through" dir="auto">
-                                  {String(v.old ?? "")}
+                                  {historyValue(k, v.old)}
                                 </td>
-                                <td dir="auto">{String(v.new ?? "")}</td>
+                                <td dir="auto">{historyValue(k, v.new)}</td>
                               </tr>
                             ))}
                         </tbody>

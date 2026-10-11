@@ -101,7 +101,7 @@ export function PrintQueue({ jobs, show }: { jobs: QueueJob[]; show: string }) {
               />
               <Link href={`/print/jobs/${j.id}`} className="min-w-0 flex-1 basis-60">
                 <span className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium" dir="auto">
+                  <span className="font-medium">
                     {j.who ?? j.note ?? "Batch"}
                   </span>
                   <span className="text-sm text-muted-foreground">
@@ -121,7 +121,7 @@ export function PrintQueue({ jobs, show }: { jobs: QueueJob[]; show: string }) {
                   </span>
                 )}
               </Link>
-              <span className="flex shrink-0 flex-wrap gap-1.5">
+              <span className="flex flex-wrap gap-1.5">
                 {j.status !== "cancelled" && j.status !== "queued" && j.status !== "rendering" && (
                   <Button size="sm" variant={open ? "default" : "outline"} onClick={() => openPrint(j.id)}>
                     <Printer /> Print

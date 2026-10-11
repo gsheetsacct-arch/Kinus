@@ -77,7 +77,7 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
         )}
 
         {unknown.length > 0 && (
-          <Section title="New columns" description="Choose where each goes, or leave “Don't import”." bodyClassName="p-0">
+          <Section title="New columns" description="Choose where each goes, or leave “Don&apos;t import”: the column is still kept with each camper, and tags can use it (e.g. {{source.ppa.hebrew_name}} for a Hebrew name)." bodyClassName="p-0">
             {unknown.map((h) => (
               <ColumnRow key={h} header={h} value="" samples={sampleFor(h)} highlight />
             ))}

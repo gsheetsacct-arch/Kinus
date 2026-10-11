@@ -36,7 +36,9 @@ export async function batchCamperIds(db: DB, sessionId: string, where: BatchWher
       db.from("attendance_events").select("camper_id").eq("event_type", "arrival").gte("occurred_at", startOfCampDay()).order("camper_id").range(from, to),
     );
     const today = new Set(arrivals.map((a) => a.camper_id));
-    ids = ids.filter((id) => today.has(id));
+    // an arrival that was undone (back to "not here yet") doesn't count
+    const stillArrived = new Set(rows.filter((r) => r.status !== "expected" && r.status !== "no_show").map((r) => r.id));
+    ids = ids.filter((id) => today.has(id) && stillArrived.has(id));
   }
   return ids;
 }

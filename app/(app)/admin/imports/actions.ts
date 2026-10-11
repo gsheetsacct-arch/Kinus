@@ -75,7 +75,8 @@ export async function uploadImport(fd: FormData): Promise<ActionResult> {
 async function loadExisting(sessionId: string): Promise<{ existing: ExistingCamper[]; known: { name: string; bunks: string[] }[] }> {
   const admin = createAdminClient();
   const [campers, { data: divisions }, { data: bunks }, contacts] = await Promise.all([
-    fetchAll((from, to) => admin.from("campers").select("*").eq("session_id", sessionId).is("archived_at", null).order("id").range(from, to)),
+    // archived campers too: their registration id is taken, so the file must match them, not add them again
+    fetchAll((from, to) => admin.from("campers").select("*").eq("session_id", sessionId).order("id").range(from, to)),
     admin.from("divisions").select("id, name").eq("session_id", sessionId),
     admin.from("bunks").select("id, division_id, name, divisions!inner(session_id)").eq("divisions.session_id", sessionId),
     fetchAll((from, to) =>
@@ -115,6 +116,8 @@ async function loadExisting(sessionId: string): Promise<{ existing: ExistingCamp
     has_medications: c.has_medications,
     notes_from_parents: c.notes_from_parents,
     contacts: byCamper.get(c.id) ?? [],
+    archived: Boolean(c.archived_at),
+    staff_edited: c.staff_edited ?? [],
   }));
   const known = (divisions ?? []).map((d) => ({ name: d.name, bunks: (bunks ?? []).filter((b) => b.division_id === d.id).map((b) => b.name) }));
   return { existing, known };
@@ -272,10 +275,10 @@ export async function revertImportAction(fd: FormData): Promise<ActionResult> {
   const { data, error } = await supabase.rpc("revert_import", { p_import_id: id });
   if (error) return fail(errorMessage(error));
   await discardDrafts(imp.session_id);
-  const r = data as { removed: number; archived: number; restored: number; keptFields: number };
+  const r = data as { removed: number; keptCheckedIn: number; restored: number; keptFields: number };
   const parts = [
     r.removed ? `${r.removed} campers it added were removed` : null,
-    r.archived ? `${r.archived} were archived because they already had check-ins` : null,
+    r.keptCheckedIn ? `${r.keptCheckedIn} it added stay because they already checked in (marked "not in the latest export")` : null,
     r.restored ? `${r.restored} campers were put back how they were` : null,
     r.keptFields ? `${r.keptFields} later edits by staff were kept` : null,
   ].filter(Boolean);
@@ -306,8 +309,10 @@ export async function archiveMissing(fd: FormData): Promise<ActionResult> {
   const ids = fd.getAll("camper_id").map(String);
   if (!ids.length) return fail("Nothing selected.");
   const supabase = await createClient();
-  const { error } = await supabase.from("campers").update({ archived_at: new Date().toISOString() }).in("id", ids);
-  if (error) return fail(error.message);
+  // recorded as part of the import, so undoing the import brings them back too
+  const { data, error } = await supabase.rpc("archive_missing", { p_import_id: String(fd.get("import_id") ?? ""), p_camper_ids: ids });
+  if (error) return fail(errorMessage(error));
   revalidatePath("/", "layout");
-  return ok(`${ids.length} camper(s) archived.`);
+  const n = Number(data ?? 0);
+  return ok(`${n} ${n === 1 ? "camper" : "campers"} archived.`);
 }

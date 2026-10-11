@@ -104,6 +104,8 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
         </noscript>
       </ListFilters>
       {!preset && <p className="text-sm text-muted-foreground">No list layouts are set up for your role yet. Ask an admin.</p>}
+      {/* wide lists (a division head's 20+ columns) print sideways and a little smaller */}
+      {list && list.columns.length > 10 && <style>{`@media print { @page { size: landscape; margin: 8mm } .list-table { font-size: ${list.columns.length > 16 ? 7 : 8}pt } }`}</style>}
       {list && <ListGroups columns={list.columns} groups={list.groups} />}
     </div>
   );

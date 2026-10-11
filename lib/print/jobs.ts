@@ -9,7 +9,8 @@ import { backgroundDataUrl, byBunkThenName, loadMergeSetup, loadPrintCampers, to
 
 /** Office, directors and admins print for anyone; others need check-in access to the camper. */
 export function canPrintFor(user: CurrentUser, camper: { division_id: string | null; bunk_id: string | null }) {
-  if (user.role === "office" || user.role === "owner") return seesAllCamp(user) || (camper.division_id ? canAccessBunk(user, camper.division_id, camper.bunk_id, "view") : false);
+  // the office and logistics (bus tags) print for anyone in their area, even with view access
+  if (user.role === "office" || user.role === "logistics" || user.role === "owner") return seesAllCamp(user) || (camper.division_id ? canAccessBunk(user, camper.division_id, camper.bunk_id, "view") : false);
   if (user.role === "director") return camper.division_id ? canAccessBunk(user, camper.division_id, camper.bunk_id, "view") : seesAllCamp(user);
   return camper.division_id ? canAccessBunk(user, camper.division_id, camper.bunk_id, "scan") : false;
 }

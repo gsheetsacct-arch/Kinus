@@ -39,13 +39,17 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
   // a request for one camper (or a few) names them; a batch says what it covered (its note)
   const few = (data ?? []).filter((j) => j.item_count <= 3).map((j) => j.id);
   const { data: items } = few.length
-    ? await supabase.from("print_job_items").select("job_id, campers(first_name, last_name, bunks(name))").in("job_id", few)
+    ? await supabase.from("print_job_items").select("job_id, copies, campers(first_name, last_name, camper_code, divisions(name), bunks(name))").in("job_id", few)
     : { data: [] as never[] };
   const whoByJob = new Map<string, string[]>();
+  // Unicode isolates: a Hebrew name or bunk keeps its own direction inside an English line
+  const iso = (t: string) => `\u2068${t}\u2069`;
   for (const it of items ?? []) {
-    const c = it.campers as { first_name: string; last_name: string; bunks: { name: string } | null } | null;
+    const c = it.campers as { first_name: string; last_name: string; camper_code: string; divisions: { name: string } | null; bunks: { name: string } | null } | null;
     if (!c) continue;
-    whoByJob.set(it.job_id, [...(whoByJob.get(it.job_id) ?? []), `${c.first_name} ${c.last_name}${c.bunks ? ` (${c.bunks.name})` : ""}`]);
+    // names repeat across divisions, so say where and the code; copies when more than one
+    const where = [c.divisions?.name, c.bunks?.name].filter(Boolean).join(" · ");
+    whoByJob.set(it.job_id, [...(whoByJob.get(it.job_id) ?? []), `${iso(`${c.first_name} ${c.last_name}`)} (${where ? `${iso(where)} · ` : ""}${c.camper_code})${it.copies > 1 ? ` ×${it.copies}` : ""}`]);
   }
   const jobs: QueueJob[] = (data ?? []).map((j) => ({
     id: j.id,

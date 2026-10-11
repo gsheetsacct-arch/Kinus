@@ -31,6 +31,10 @@ export type ExistingCamper = {
   has_medications: boolean | null;
   notes_from_parents: string | null;
   contacts: ExistingContact[];
+  /** Archived in Kinus: matched by registration id only, and left archived. */
+  archived?: boolean;
+  /** Fields staff changed in Kinus; the file never overwrites them (e.g. medical details a nurse corrected). */
+  staff_edited?: string[];
 };
 
 export type FieldChange = { field: string; old: string | null; new: string | null };
@@ -76,22 +80,42 @@ const TEXT_FIELDS = [
 const BOOL_FIELDS = ["has_allergies", "has_epipen", "has_medications"] as const;
 
 const boolStr = (b: boolean | null | undefined) => (b === null || b === undefined ? null : b ? "true" : "false");
+const LABEL: Record<string, string> = {
+  first_name: "first name",
+  last_name: "last name",
+  grade: "grade",
+  tshirt_size: "T-shirt",
+  local_address: "address",
+  local_address_cross_streets: "cross streets",
+  medical_notes: "medical notes",
+  allergies: "allergy details",
+  notes_from_parents: "notes from parents",
+  has_allergies: "has allergies",
+  has_epipen: "EpiPen",
+  has_medications: "medications",
+};
+const shown = (v: string | null) => (v === "true" ? "Yes" : v === "false" ? "No" : (v ?? "empty"));
 
 function diffOne(parsed: ParsedCamper, ex: ExistingCamper, opts: DiffOptions): { changes: FieldChange[]; warnings: string[] } {
   const changes: FieldChange[] = [];
   const warnings: string[] = [];
   const skipEmpty = opts.emptyMeansUnknown;
+  const staff = new Set(ex.staff_edited ?? []);
+  const change = (field: string, old: string | null, nv: string | null) => {
+    if (staff.has(field)) warnings.push(`kept the ${LABEL[field] ?? field} staff entered in Kinus (${shown(old)}); the file says ${shown(nv)}`);
+    else changes.push({ field, old, new: nv });
+  };
 
   for (const f of TEXT_FIELDS) {
     const nv = normText(parsed[f]);
     const ov = normText(ex[f]);
     if (nv === null && skipEmpty) continue;
-    if (nv !== ov) changes.push({ field: f, old: ov, new: nv });
+    if (nv !== ov) change(f, ov, nv);
   }
   for (const f of BOOL_FIELDS) {
     const nv = parsed[f];
     if (nv === null && skipEmpty) continue;
-    if (nv !== ex[f]) changes.push({ field: f, old: boolStr(ex[f]), new: boolStr(nv) });
+    if (nv !== ex[f]) change(f, boolStr(ex[f]), boolStr(nv));
   }
 
   const newDiv = normText(parsed.division_name);
@@ -159,6 +183,8 @@ export function matchAndDiff(
   const byName = new Map<string, ExistingCamper[]>();
   for (const e of existing) {
     if (e.source_id) bySource.set(e.source_id, e);
+    // an archived camper is only ever the same child by registration id, never by name
+    if (e.archived) continue;
     const k = normalizeName(`${e.first_name} ${e.last_name}`);
     byName.set(k, [...(byName.get(k) ?? []), e]);
   }
@@ -203,6 +229,8 @@ export function matchAndDiff(
 
     if (match) {
       matchedIds.add(match.id);
+      if (match.archived) warnings.push("archived in Kinus, so they stay archived; restore them from their page if they're coming");
+      if (method === "name" && !match.source_id) warnings.push("linked by name to the camper added in Kinus (a walk-in); from now on they're matched by registration id");
       const d = diffOne(parsed, match, opts);
       results.push({
         rowNumber,
@@ -230,7 +258,8 @@ export function matchAndDiff(
     ),
   ];
   const missing = existing
-    .filter((e) => e.division_name && divisionsInFile.includes(e.division_name) && !matchedIds.has(e.id))
+    // walk-ins added at the gate were never in the export, so they aren't "missing" from it
+    .filter((e) => !e.archived && e.source_id && e.division_name && divisionsInFile.includes(e.division_name) && !matchedIds.has(e.id))
     .map((e) => ({ id: e.id, display_name: `${e.first_name} ${e.last_name}`, division_name: e.division_name }));
 
   const count = (a: RowAction) => results.filter((r) => r.action === a).length;

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { CampersBrowser } from "@/components/campers/campers-browser";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { isAdmin, visibleFieldGroups } from "@/lib/auth/permissions";
+import { canAddWalkIn, isAdmin, visibleFieldGroups } from "@/lib/auth/permissions";
 import { listCamperIndex } from "@/lib/data/campers";
 import { loadAreaTree } from "@/lib/data/areas";
 import { getCampContext } from "@/lib/data/camp";
@@ -35,7 +35,7 @@ export default async function CampersPage({ searchParams }: { searchParams: Prom
         title="Campers"
         description={camp.current && camp.camps.length > 1 ? `${camp.current.name} camp` : undefined}
         actions={
-          isAdmin(user) ? (
+          canAddWalkIn(user) ? (
             <Button asChild variant="outline" size="sm">
               <Link href="/campers/new">Add walk-in</Link>
             </Button>

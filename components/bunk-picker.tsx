@@ -20,7 +20,7 @@ export function BunkPicker({ divisions, bunks }: { divisions: { id: string; name
       <div className="space-y-1.5">
         <Label htmlFor="bunk_id">Bunk</Label>
         <Select id="bunk_id" name="bunk_id" defaultValue="">
-          <option value="">All bunks in this division</option>
+          <option value="">No bunk yet</option>
           {bunks
             .filter((b) => b.division_id === division)
             .map((b) => (

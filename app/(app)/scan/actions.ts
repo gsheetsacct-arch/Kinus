@@ -1,4 +1,5 @@
 "use server";
+import { z } from "zod";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -155,11 +156,14 @@ export async function requestTag(camperId: string, templateId: string, opts: { c
   const user = await requireUser();
   const session = await getActiveSession();
   if (!session) return { ok: false, error: "No active session." };
+  const deliverTo = opts.deliverTo?.trim() || undefined;
+  if (deliverTo && !z.email().safeParse(deliverTo).success) return { ok: false, error: `“${deliverTo}” isn't an email address.` };
+  const copies = Math.min(10, Math.max(1, Math.round(Number(opts.copies ?? 1)) || 1));
   try {
-    const job = await createPrintJob(user, { sessionId: session.id, templateId, camperIds: [camperId], copies: opts.copies, deliverTo: opts.deliverTo });
+    const job = await createPrintJob(user, { sessionId: session.id, templateId, camperIds: [camperId], copies, deliverTo });
     const base = await appUrl();
     after(() => processPrintJob(job.id, base));
-    return { ok: true, message: opts.deliverTo ? `Sent to ${opts.deliverTo}.` : "Sent to the office." };
+    return { ok: true, message: `${copies > 1 ? `${copies} copies sent` : "Sent"} to ${deliverTo ?? "the office"}.` };
   } catch (e) {
     return { ok: false, error: errorMessage(e) };
   }

@@ -46,10 +46,12 @@ export async function markPrinted(ids: string[], printed = true): Promise<Action
 export async function cancelJobs(ids: string[]): Promise<ActionResult> {
   try {
     await requirePrinter();
-    const { error } = await createAdminClient().from("print_jobs").update({ status: "cancelled" }).in("id", ids).neq("status", "printed");
+    const { data, error } = await createAdminClient().from("print_jobs").update({ status: "cancelled" }).in("id", ids).neq("status", "printed").select("id");
     if (error) throw error;
     revalidatePath("/print");
-    return ok("Cancelled.");
+    const n = data?.length ?? 0;
+    const kept = ids.length - n;
+    return ok(`${n} cancelled.${kept ? ` ${kept} already printed ${kept === 1 ? "stays" : "stay"} printed.` : ""}`);
   } catch (e) {
     return fail(errorMessage(e));
   }

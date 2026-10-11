@@ -14,7 +14,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
 import { IMPORT_STATUS } from "@/lib/labels";
-import { formatDateTime } from "@/lib/utils";
+import { cn, formatDateTime, formatPhone } from "@/lib/utils";
+import { StatusBadge } from "@/components/status-badge";
+import type { CamperStatus } from "@/lib/attendance/machine";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import type { FieldChange, ParsedCamper, Candidate } from "@/lib/import";
 import { applyImportAction, archiveMissing, cancelImport, resolveConflict } from "../actions";
@@ -45,7 +47,7 @@ const fieldLabel = (f: string) => {
   if (m) return `${m[1] === "emergency" ? `Emergency contact ${m[2]}` : m[1][0].toUpperCase() + m[1].slice(1)} ${m[3] ?? ""}`.trim();
   return FIELD_LABEL[f] ?? f;
 };
-const show = (v: string | null) => (v === "true" ? "Yes" : v === "false" ? "No" : v);
+const show = (v: string | null) => (v === "true" ? "Yes" : v === "false" ? "No" : v && /^\+\d{8,15}$/.test(v) ? formatPhone(v) : v);
 const notes = (r: Row) => r.warnings.filter((w) => !w.startsWith("candidates:"));
 
 function Who({ p }: { p: ParsedCamper | null }) {
@@ -86,6 +88,11 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
   const summary = (imp.summary ?? {}) as { missingList?: Candidate[]; newDivisions?: string[]; newBunks?: string[]; revertedAt?: string };
   const options = (imp.options ?? {}) as { partialWarning?: string[]; divisionsInFile?: string[]; lostTextOverride?: boolean; lostTextCells?: number };
   const missing = summary.missingList ?? [];
+  // where the "not in file" campers are now: archiving someone who's here should be a conscious choice
+  const { data: missingNow } = missing.length
+    ? await supabase.from("campers_visible").select("id, status, archived_at").in("id", missing.slice(0, 1000).map((m) => m.id))
+    : { data: [] as { id: string; status: CamperStatus; archived_at: string | null }[] };
+  const nowOf = new Map((missingNow ?? []).map((m) => [m.id!, m]));
   const flagged = rows.filter((r) => notes(r).length > 0);
   const conflicts = by("conflict");
   const previewed = imp.status === "previewed";
@@ -350,21 +357,34 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
         <TabsContent value="missing">
           {missing.length ? (
             <Section description={`These campers are in ${options.divisionsInFile?.join(", ")} in Kinus but not in this file. ${imp.status === "applied" ? "They are marked “not in the latest export”." : "When you apply, they get marked; nothing is deleted."} Archive anyone who has left the program.`}>
-              <ActionForm action={archiveMissing} className="space-y-3" confirm="Archive the selected campers?" confirmDetail="They disappear from lists and check-in. Their history is kept, and you can restore them from their page." confirmLabel="Archive" danger>
+              <ActionForm
+                action={archiveMissing}
+                className="space-y-3"
+                confirm="Archive the selected campers?"
+                confirmDetail="They disappear from lists and check-in, even if they're at camp right now. Their history is kept; you can restore them from their page, and undoing this import brings them back."
+                confirmLabel="Archive"
+                danger
+              >
+                <input type="hidden" name="import_id" value={imp.id} />
                 <ul className="divide-y rounded-lg border">
-                  {missing.map((m) => (
-                    <li key={m.id}>
-                      <label className="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/40">
-                        <input type="checkbox" name="camper_id" value={m.id} className="size-4" />
-                        <span className="flex-1" dir="auto">
-                          {m.display_name}
-                        </span>
-                        <span className="text-xs text-muted-foreground" dir="auto">
-                          {m.division_name}
-                        </span>
-                      </label>
-                    </li>
-                  ))}
+                  {missing.map((m) => {
+                    const now = nowOf.get(m.id);
+                    const archived = Boolean(now?.archived_at);
+                    const here = now?.status === "present" || now?.status === "out";
+                    return (
+                      <li key={m.id}>
+                        <label className={cn("flex items-center gap-3 px-4 py-2.5 text-sm", archived ? "opacity-60" : "cursor-pointer hover:bg-muted/40")}>
+                          <input type="checkbox" name="camper_id" value={m.id} className="size-4" disabled={archived} />
+                          <span className="min-w-0 flex-1" dir="auto">
+                            {m.display_name}
+                            <span className="ml-2 text-xs text-muted-foreground">{m.division_name}</span>
+                          </span>
+                          {archived ? <Badge variant="secondary">Archived</Badge> : now ? <StatusBadge status={now.status!} /> : null}
+                          {here && !archived && <span className="text-xs font-medium text-amber-700 dark:text-amber-300">at camp now</span>}
+                        </label>
+                      </li>
+                    );
+                  })}
                 </ul>
                 <Button variant="outline" size="sm" type="submit">
                   Archive selected

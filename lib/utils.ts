@@ -53,3 +53,9 @@ export const telHref = (raw: string) => `tel:${raw.replace(/[^\d+]/g, "")}`;
 
 /** "1 bunk", "3 bunks". */
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** Content-Disposition for a download whose name may be Hebrew or French (raw non-ASCII breaks the header). */
+export function attachment(filename: string, kind: "attachment" | "inline" = "attachment") {
+  const ascii = filename.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e]+/g, "_").replace(/["\\]/g, "_").replace(/_+/g, "_");
+  return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}

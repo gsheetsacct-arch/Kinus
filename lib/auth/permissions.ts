@@ -38,6 +38,9 @@ export function canAccessBunk(u: CurrentUser, divisionId: string, bunkId: string
   return u.coverage.some((c) => c.division_id === divisionId && (c.bunk_id === null || c.bunk_id === bunkId));
 }
 
+/** Add a walk-in at the gate or desk: anyone who can edit campers somewhere (the division is checked too). */
+export const canAddWalkIn = (u: CurrentUser) => isAdmin(u) || effectiveLevel(u) === "edit";
+
 export function canAccessDivision(u: CurrentUser, divisionId: string, needed: AccessLevel): boolean {
   if (LEVEL_RANK[effectiveLevel(u)] < LEVEL_RANK[needed]) return false;
   return seesAllCamp(u) || u.coverage.some((c) => c.division_id === divisionId);

@@ -257,4 +257,22 @@ describe("staff-locked placement", () => {
     expect(r.rows[0].action).toBe("unchanged");
     expect(r.rows[0].warnings[0]).toMatch(/kept the placement staff set/);
   });
+  it("never overwrites details staff changed in Kinus", () => {
+    const nurse = { ...base, has_allergies: true, allergies: "Peanuts", staff_edited: ["has_allergies", "allergies"] };
+    const r = matchAndDiff([{ rowNumber: 2, parsed: parsedFor({ has_allergies: false, allergies: null, grade: "5" }) }], [nurse], known, { ...opts, emptyMeansUnknown: false });
+    expect(r.rows[0].changes).toEqual([{ field: "grade", old: "4", new: "5" }]);
+    expect(r.rows[0].warnings.join(" ")).toMatch(/kept the has allergies staff entered in Kinus \(Yes\); the file says No/);
+  });
+  it("matches an archived camper by registration id instead of adding them again", () => {
+    const r = matchAndDiff([{ rowNumber: 2, parsed: parsedFor() }], [{ ...base, archived: true }], known, opts);
+    expect(r.rows[0].action).toBe("unchanged");
+    expect(r.rows[0].matchedCamperId).toBe("c1");
+    expect(r.rows[0].warnings.join(" ")).toMatch(/archived in Kinus/);
+  });
+  it("doesn't count walk-ins or archived campers as missing from the file", () => {
+    const walkIn = { ...base, id: "w1", source_id: null, first_name: "Walk", last_name: "In" };
+    const archived = { ...base, id: "a1", source_id: "9999", archived: true };
+    const r = matchAndDiff([{ rowNumber: 2, parsed: parsedFor() }], [base, walkIn, archived], known, opts);
+    expect(r.summary.missing).toEqual([]);
+  });
 });
