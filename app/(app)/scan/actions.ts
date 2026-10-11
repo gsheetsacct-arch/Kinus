@@ -50,8 +50,10 @@ async function autoPrintOnFirstArrival(camperId: string, sessionId: string): Pro
 export async function scanCamper(camperId: string, mode: "in" | "out", outKind: OutKind, method: "scan" | "manual"): Promise<ScanOutcome> {
   await requireUser();
   const supabase = await createClient();
-  const { data: c } = await supabase.from("campers_board").select("id, display_name, status, session_id, last_event_at, last_event_by").eq("id", camperId).maybeSingle();
+  const { data: c } = await supabase.from("campers_board").select("id, display_name, status, session_id, last_event_at, last_event_by, archived_at").eq("id", camperId).maybeSingle();
   if (!c?.id) return { ok: false, error: "This camper isn't in your area." };
+  // a gate page loaded before the office archived them still has them on its list
+  if (c.archived_at) return { ok: false, error: "This camper was archived. Send them to the office." };
   const d = decide(mode, outKind, c.status!);
   if (d.kind !== "act") return { ok: true, kind: d.kind, camperId: c.id, name: c.display_name ?? "", status: c.status!, message: d.message, since: c.last_event_at, by: c.last_event_by };
   // someone had marked them "not coming": say so, so the helper can tell the head counselor
@@ -70,8 +72,9 @@ export async function scanCamper(camperId: string, mode: "in" | "out", outKind: 
 export async function recordFromCard(camperId: string, event: AttendanceEventType, note?: string): Promise<ScanOutcome> {
   await requireUser();
   const supabase = await createClient();
-  const { data: c } = await supabase.from("campers_board").select("id, display_name, session_id").eq("id", camperId).maybeSingle();
+  const { data: c } = await supabase.from("campers_board").select("id, display_name, session_id, archived_at").eq("id", camperId).maybeSingle();
   if (!c?.id) return { ok: false, error: "This camper isn't in your area." };
+  if (c.archived_at) return { ok: false, error: "This camper is archived. Restore them from their page first." };
   const verb = event === "arrival" ? "Checked in" : event === "return" ? "Back in" : event === "pickup" ? "Checked out · not coming back" : "Checked out · coming back";
   const tone = event === "pickup" ? "home" : event === "leave" ? "out" : "in";
   return record(c.id, c.display_name ?? "", c.session_id!, event, "manual", verb, tone, note);

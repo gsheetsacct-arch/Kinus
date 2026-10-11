@@ -55,7 +55,9 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
             <>
               <PrintButton />
               <Button asChild variant="outline" size="sm">
-                <Link href={`/lists/export?${qs}`}>CSV</Link>
+                <Link href={`/lists/export?${qs}`} prefetch={false}>
+                  CSV
+                </Link>
               </Button>
             </>
           ) : undefined
@@ -105,7 +107,9 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
       </ListFilters>
       {!preset && <p className="text-sm text-muted-foreground">No list layouts are set up for your role yet. Ask an admin.</p>}
       {/* wide lists (a division head's 20+ columns) print sideways and a little smaller */}
-      {list && list.columns.length > 10 && <style>{`@media print { @page { size: landscape; margin: 8mm } .list-table { font-size: ${list.columns.length > 16 ? 7 : 8}pt } }`}</style>}
+      {list && list.columns.length > 10 && (
+        <style>{`@media print { @page { size: landscape; margin: 8mm } .list-table { font-size: ${list.columns.length > 16 ? 6.5 : 8}pt; table-layout: fixed; width: 100% } .list-table th, .list-table td { padding-right: 3px; overflow-wrap: anywhere; } }`}</style>
+      )}
       {list && <ListGroups columns={list.columns} groups={list.groups} />}
     </div>
   );

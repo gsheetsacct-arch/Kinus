@@ -314,5 +314,6 @@ export async function archiveMissing(fd: FormData): Promise<ActionResult> {
   if (error) return fail(errorMessage(error));
   revalidatePath("/", "layout");
   const n = Number(data ?? 0);
-  return ok(`${n} ${n === 1 ? "camper" : "campers"} archived.`);
+  // back to the same page, loaded fresh, so the list shows them as archived straight away
+  return ok(`${n} ${n === 1 ? "camper" : "campers"} archived.`, `/admin/imports/${String(fd.get("import_id") ?? "")}`);
 }

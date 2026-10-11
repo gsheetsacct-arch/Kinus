@@ -1,4 +1,5 @@
 "use server";
+import { plural } from "@/lib/utils";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -140,7 +141,7 @@ export async function createBatch(fd: FormData): Promise<ActionResult> {
       await createAdminClient().from("print_jobs").update({ status: "ready" }).eq("id", job.id);
     }
     revalidatePath("/print");
-    return ok(d.deliver === "email" ? `${ids.length} tags: making the PDF and emailing it.` : `${ids.length} tags ready.`, d.deliver === "here" ? `/print/jobs/${job.id}?print=1` : "/print");
+    return ok(d.deliver === "email" ? `${plural(ids.length, "tag")}: making the PDF and emailing it.` : `${plural(ids.length, "tag")} ready.`, d.deliver === "here" ? `/print/jobs/${job.id}?print=1` : "/print");
   } catch (e) {
     return fail(errorMessage(e));
   }

@@ -107,14 +107,17 @@ export function CamperCard({
       setDone(null);
       reload();
     });
-  const print = (t: TemplateButton, opts: { copies?: number; deliverTo?: string } = {}) =>
-    start(async () => {
-      const r = await requestTag(card.id, t.id, opts);
-      if (!r.ok) return void toast.error(r.error);
-      toast.success(`${t.name}: ${r.message}`);
-      setTimeout(reload, 1500);
-      setTimeout(reload, 6000);
-    });
+  const print = async (t: TemplateButton, opts: { copies?: number; deliverTo?: string } = {}) => {
+    const r = await requestTag(card.id, t.id, opts);
+    if (!r.ok) {
+      toast.error(r.error);
+      return false;
+    }
+    toast.success(`${t.name}: ${r.message}`);
+    setTimeout(reload, 1500);
+    setTimeout(reload, 6000);
+    return true;
+  };
 
   return (
     <div className={cn("space-y-4", pending && "opacity-70")}>
@@ -190,7 +193,7 @@ export function CamperCard({
                   <button
                     type="button"
                     disabled={pending}
-                    onClick={() => print(t)}
+                    onClick={() => start(async () => void (await print(t)))}
                     className="flex min-h-10 items-center gap-2 bg-card px-3 py-2 text-left text-sm font-medium hover:bg-muted"
                     aria-label={`Send ${t.name} to the office to print`}
                   >
@@ -237,7 +240,8 @@ export function CamperCard({
   );
 }
 
-function PrintOptions({ template, onClose, onSend }: { template: TemplateButton | null; onClose: () => void; onSend: (t: TemplateButton, o: { copies: number; deliverTo?: string }) => void }) {
+function PrintOptions({ template, onClose, onSend }: { template: TemplateButton | null; onClose: () => void; onSend: (t: TemplateButton, o: { copies: number; deliverTo?: string }) => Promise<boolean> }) {
+  const [sending, setSending] = React.useState(false);
   const [copies, setCopies] = React.useState(1);
   const [to, setTo] = React.useState("");
   React.useEffect(() => {
@@ -251,7 +255,7 @@ function PrintOptions({ template, onClose, onSend }: { template: TemplateButton 
         </DialogHeader>
         <div className="space-y-4">
           <Field label="Copies" htmlFor="copies">
-            <Input id="copies" type="number" min={1} max={10} value={copies} onChange={(e) => setCopies(Number(e.target.value) || 1)} className="w-24" />
+            <Input id="copies" type="number" min={1} max={10} value={copies} onChange={(e) => setCopies(Number(e.target.value) || 1)} onBlur={() => setCopies((c) => Math.min(10, Math.max(1, Math.round(c))))} className="w-24" />
           </Field>
           <Field label="Send to (leave empty for the office)" htmlFor="send-to" hint="For example if the office printer is down today. Remembered on this device.">
             <Input id="send-to" type="email" value={to} onChange={(e) => setTo(e.target.value)} placeholder="office email" />
@@ -262,16 +266,21 @@ function PrintOptions({ template, onClose, onSend }: { template: TemplateButton 
             Cancel
           </Button>
           <Button
-            onClick={() => {
+            disabled={sending}
+            onClick={async () => {
+              if (!template) return;
+              setSending(true);
+              // stays open with what was typed if the address is wrong
+              const sent = await onSend(template, { copies: Math.min(10, Math.max(1, Math.round(copies))), deliverTo: to.trim() || undefined }).finally(() => setSending(false));
+              if (!sent) return;
               try {
                 if (to) localStorage.setItem("kinus:print-to", to);
                 else localStorage.removeItem("kinus:print-to");
               } catch {}
-              if (template) onSend(template, { copies, deliverTo: to || undefined });
               onClose();
             }}
           >
-            Send
+            {sending ? "Sending…" : "Send"}
           </Button>
         </DialogFooter>
       </DialogContent>
