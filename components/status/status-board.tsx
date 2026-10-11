@@ -41,7 +41,7 @@ const TYPE_TO_CONFIRM = 20;
 const SCOPE_KEY = "kinus:board-scope";
 // undo_attendance() records a correction with the note "Undo"
 const isUndo = (r: Pick<BoardRow, "type" | "note">) => r.type === "correction" && r.note === "Undo";
-const eventLabel = (r: Pick<BoardRow, "type" | "note">) => (isUndo(r) ? "Check-in undone" : r.type ? EVENT_LABEL[r.type] : "");
+const eventLabel = (r: Pick<BoardRow, "type" | "note">) => (isUndo(r) ? "Undone" : r.type ? EVENT_LABEL[r.type] : "");
 
 /** Times differ between server and phone until the page is live: render them after mount. */
 function useNow(serverNow: string) {

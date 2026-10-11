@@ -51,7 +51,7 @@ export function missingStates(rows: Row[], rules: MissingRules, followups: Map<s
     const share = g.total ? (100 * g.arrived) / g.total : 0;
     const wasLater = f?.until ? " · was coming later" : "";
     if (rules.percent > 0 && g.arrived > 0 && share >= rules.percent) {
-      out.set(r.id, { kind: "check", reason: `${g.arrived} of ${g.total} in their ${r.bunkId ? "bunk" : "division"} are here${wasLater}` });
+      out.set(r.id, { kind: "check", reason: `${g.arrived} of ${g.total} in their ${r.bunkId ? "bunk" : "division"} have arrived${wasLater}` });
     } else if (pastTime) {
       out.set(r.id, { kind: "check", reason: (campStarted === "earlier" ? "Still not here since camp started" : `Still not here after ${rules.after_time}`) + wasLater });
     } else if (f?.until) {

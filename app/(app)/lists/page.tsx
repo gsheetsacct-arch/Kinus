@@ -23,7 +23,7 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
     getCampContext(),
     getPresetsFor(supabase, user),
     supabase.from("divisions").select("id, name").eq("session_id", session.id).order("sort_order"),
-    supabase.from("bunks").select("id, division_id, name").order("sort_order"),
+    supabase.from("bunks").select("id, division_id, name, divisions!inner(session_id)").eq("divisions.session_id", session.id).order("sort_order"),
     supabase.from("field_visibility").select("field_group, roles"),
   ]);
   const allowed = visibleDivisionIds(user);

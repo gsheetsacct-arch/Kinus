@@ -21,7 +21,7 @@ export default async function NewCamperPage() {
   const supabase = await createClient();
   const [{ data: divisions }, { data: bunks }] = await Promise.all([
     supabase.from("divisions").select("id, name").eq("session_id", session.id).order("sort_order"),
-    supabase.from("bunks").select("id, division_id, name").order("sort_order"),
+    supabase.from("bunks").select("id, division_id, name, divisions!inner(session_id)").eq("divisions.session_id", session.id).order("sort_order"),
   ]);
   return (
     <div className="max-w-lg">

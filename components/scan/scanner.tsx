@@ -57,8 +57,13 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
   React.useEffect(() => {
     try {
       // a mode chosen recently (the same shift) carries over; the next morning starts on Check in
-      const saved = JSON.parse(localStorage.getItem("kinus:scan-mode") ?? "null") as { m: ScanMode; at: number } | null;
-      if (saved && Date.now() - saved.at < MODE_KEEP_MS && (canScan || saved.m === "lookup")) setMode(saved.m);
+      // the mode (and which kind of check-out) carries over within the same shift, so a phone
+      // that sleeps and reloads mid-pickup keeps checking kids out for good; next day it's Check in
+      const saved = JSON.parse(localStorage.getItem("kinus:scan-mode") ?? "null") as { m: ScanMode; o?: OutKind; at: number } | null;
+      if (saved && Date.now() - saved.at < MODE_KEEP_MS && (canScan || saved.m === "lookup")) {
+        setMode(saved.m);
+        if (saved.m === "out" && saved.o) setOutKind(saved.o);
+      }
       setSound(localStorage.getItem("kinus:sound") !== "off");
       setCamera(localStorage.getItem("kinus:camera") !== "off");
     } catch {}
@@ -66,12 +71,16 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
   const choose = (m: ScanMode) => {
     setMode(m);
     try {
-      localStorage.setItem("kinus:scan-mode", JSON.stringify({ m, at: Date.now() }));
+      localStorage.setItem("kinus:scan-mode", JSON.stringify({ m, o: outKind, at: Date.now() }));
     } catch {}
     focusBox();
   };
-  // "Not coming back" is never remembered: each time it's a choice made on purpose
-  const chooseOut = (o: OutKind) => setOutKind(o);
+  const chooseOut = (o: OutKind) => {
+    setOutKind(o);
+    try {
+      localStorage.setItem("kinus:scan-mode", JSON.stringify({ m: mode, o, at: Date.now() }));
+    } catch {}
+  };
 
   // keep statuses fresh while the screen is open
   React.useEffect(() => {

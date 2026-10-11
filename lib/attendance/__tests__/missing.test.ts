@@ -10,7 +10,7 @@ describe("missingStates", () => {
   it("flags stragglers once most of the bunk is here", () => {
     const rows = [...bunk("a", ["present", "present", "present", "expected"]), ...bunk("b", ["present", "expected", "expected", "expected"])];
     const s = missingStates(rows, { percent: 75, after_time: null }, none, now, "11:00");
-    expect(s.get("a3")).toEqual({ kind: "check", reason: "3 of 4 in their bunk are here" });
+    expect(s.get("a3")).toEqual({ kind: "check", reason: "3 of 4 in their bunk have arrived" });
     expect(s.get("b1")).toEqual({ kind: "waiting" });
   });
   it("counts campers who went out or home as arrived, and leaves no-shows out", () => {
