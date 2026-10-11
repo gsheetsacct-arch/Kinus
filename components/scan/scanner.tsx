@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { normalizeName } from "@/lib/import/normalize";
-import { parseScan, type OutKind, type ScanMode } from "@/lib/attendance/scan";
+import { findScanCode, looksLikeScan, type OutKind, type ScanMode } from "@/lib/attendance/scan";
 import type { CamperStatus } from "@/lib/attendance/machine";
 import { cn, formatTime } from "@/lib/utils";
-import { rosterStatuses, scanCamper, undoScan } from "@/app/(app)/scan/actions";
+import { lookupCode, rosterStatuses, scanCamper, undoScan } from "@/app/(app)/scan/actions";
 import { CamperCard, type TemplateButton } from "./camper-card";
 import { Camera } from "./camera";
 import { feedback } from "./feedback";
@@ -26,7 +26,9 @@ const FLASH: Record<Flash["tone"], string> = {
   already: "bg-slate-600 text-white",
   error: "bg-destructive text-white",
 };
-const UNDO_MS = 30000;
+// the server allows 30 s; the button goes a little earlier so a late tap doesn't fail
+const UNDO_MS = 25000;
+const MAX_RESULTS = 12;
 const MODE_KEEP_MS = 3 * 60 * 60 * 1000;
 
 export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[]; templates: TemplateButton[]; canScan: boolean }) {
@@ -42,13 +44,14 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
   const [sound, setSound] = React.useState(true);
   const [, setTick] = React.useState(0);
   const input = React.useRef<HTMLInputElement>(null);
-  const lastHit = React.useRef<{ id: string; at: number } | null>(null);
+  // campers found on the server after the page loaded (walk-ins added since)
+  const [extra, setExtra] = React.useState<RosterEntry[]>([]);
   const focusBox = React.useCallback(() => {
     if (window.matchMedia("(pointer: fine)").matches) input.current?.focus();
   }, []);
   React.useEffect(focusBox, [focusBox]);
-  const byCode = React.useMemo(() => new Map(roster.map((r) => [r.code, r])), [roster]);
-  const index = React.useMemo(() => roster.map((r) => ({ r, n: normalizeName(`${r.first} ${r.last}`), f: normalizeName(r.first), l: normalizeName(r.last) })), [roster]);
+  const byCode = React.useMemo(() => new Map([...roster, ...extra].map((r) => [r.code, r])), [roster, extra]);
+  const index = React.useMemo(() => [...roster, ...extra].map((r) => ({ r, n: normalizeName(`${r.first} ${r.last}`), f: normalizeName(r.first), l: normalizeName(r.last) })), [roster, extra]);
 
   // remember choices on this device
   React.useEffect(() => {
@@ -92,9 +95,9 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
         setCard(r.id);
         return;
       }
+      // (the camera itself ignores a tag held in view; a repeat scan here is on purpose and
+      // gets "Already checked in" from the server)
       const now = Date.now();
-      if (lastHit.current && lastHit.current.id === r.id && now - lastHit.current.at < 3000) return; // camera re-reads
-      lastHit.current = { id: r.id, at: now };
       const o = await scanCamper(r.id, mode, outKind, method);
       if (!o.ok) {
         feedback("error");
@@ -118,25 +121,50 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
     [mode, outKind, show, focusBox],
   );
 
+  const unreadable = React.useCallback(
+    (text: string) => {
+      feedback("error");
+      show({ tone: "error", title: "Couldn't read that tag", detail: `“${text.trim().slice(0, 24)}”: scan it again, or type the name.` });
+      setQ("");
+    },
+    [show],
+  );
+
   const handleText = React.useCallback(
     (text: string, method: "scan" | "manual") => {
-      const code = parseScan(text);
+      const code = findScanCode(text);
       if (!code) return false;
+      setQ("");
       const r = byCode.get(code);
-      if (!r) {
-        feedback("error");
-        show({ tone: "error", title: `Code ${code}`, detail: "No camper with this code in your area." });
-        setQ("");
+      if (r) {
+        act(r, method);
         return true;
       }
-      act(r, method);
+      // not on this page: a walk-in added since, or a child in the wrong line
+      lookupCode(code)
+        .then((l) => {
+          if (l.found) {
+            setExtra((x) => [...x, l.entry]);
+            setStatuses((st) => ({ ...st, [l.entry.id]: l.entry.status }));
+            act(l.entry, method);
+          } else {
+            feedback("error");
+            show({ tone: "error", title: `Code ${code}`, detail: l.message });
+          }
+        })
+        .catch(() => {
+          feedback("error");
+          show({ tone: "error", title: `Code ${code}`, detail: "Couldn't look this code up. Check the connection and scan again." });
+        });
       return true;
     },
     [byCode, act, show],
   );
   const onCameraCode = React.useCallback((t: string) => void handleText(t, "scan"), [handleText]);
 
-  // USB/Bluetooth scanners type fast and press Enter; catch them even when the box isn't focused
+  // USB/Bluetooth scanners type fast and press Enter; catch them even when the box isn't focused.
+  // Gaps are measured with the keys' own timestamps: a busy phone (camera decoding) delivers
+  // a scan's keys late and bunched, and must not lose the start of the code.
   React.useEffect(() => {
     let buf = "";
     let last = 0;
@@ -144,27 +172,28 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
       if (document.activeElement === input.current) return;
       const t = (e.target as HTMLElement)?.tagName;
       if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
-      const now = Date.now();
-      if (now - last > 80) buf = "";
-      last = now;
+      if (e.timeStamp - last > 1000) buf = "";
+      last = e.timeStamp;
       if (e.key === "Enter") {
-        if (buf.length >= 6 && handleText(buf, "scan")) e.preventDefault();
+        if (buf.length >= 5) {
+          e.preventDefault();
+          if (!handleText(buf, "scan") && looksLikeScan(buf)) unreadable(buf);
+        }
         buf = "";
-      } else if (e.key.length === 1) buf += e.key;
+      } else if (e.key.length === 1) buf = (buf + e.key).slice(-40);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handleText]);
+  }, [handleText, unreadable]);
 
   const needle = normalizeName(q);
-  const matches =
-    needle.length >= 2 && !parseScan(q)
+  const allMatches =
+    needle.length >= 2 && !findScanCode(q)
       ? index
           .filter(({ r, n, f, l }) => n.includes(needle) || f.startsWith(needle) || l.startsWith(needle) || r.code.startsWith(q.trim()))
           .sort((a, b) => Number(b.n.startsWith(needle)) - Number(a.n.startsWith(needle)) || a.r.last.localeCompare(b.r.last))
-          .slice(0, 8)
-          .map((x) => x.r)
       : [];
+  const matches = allMatches.slice(0, MAX_RESULTS).map((x) => x.r);
 
   const setCameraOn = (v: boolean) => {
     setCamera(v);
@@ -252,6 +281,7 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
               e.preventDefault();
               if (handleText(q, "scan")) return;
               if (matches.length === 1) act(matches[0], "manual");
+              else if (!matches.length && looksLikeScan(q)) unreadable(q);
             }}
             placeholder="Scan a tag or type a name"
             className="h-14 pl-11 text-lg"
@@ -278,7 +308,8 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
           ))}
         </ul>
       )}
-      {needle.length >= 2 && !matches.length && !parseScan(q) && <p className="px-1 text-sm text-muted-foreground">No camper in your area matches “{q}”.</p>}
+      {needle.length >= 2 && !matches.length && !findScanCode(q) && <p className="px-1 text-sm text-muted-foreground">No camper in your area matches “{q}”.</p>}
+      {allMatches.length > matches.length && <p className="px-1 text-sm text-muted-foreground">{allMatches.length - matches.length} more match: type more of the name.</p>}
 
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           <span className={cn(mode === "out" && "rounded-md px-2 py-1 text-sm font-semibold", mode === "out" && (outKind === "home" ? "bg-status-departed text-white" : "bg-status-out text-amber-950"))}>

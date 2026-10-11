@@ -19,7 +19,7 @@ const TONE: Record<string, string> = {
   out: "bg-status-out text-amber-950 hover:bg-status-out/90",
   home: "bg-status-departed text-white hover:bg-status-departed/90",
 };
-const UNDO_MS = 30000;
+const UNDO_MS = 25000; // the server allows 30 s
 const PRINT_LABEL: Record<string, string> = {
   queued: "Sending…",
   rendering: "Sending…",

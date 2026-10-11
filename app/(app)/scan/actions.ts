@@ -54,7 +54,16 @@ export async function scanCamper(camperId: string, mode: "in" | "out", outKind: 
   if (!c?.id) return { ok: false, error: "This camper isn't in your area." };
   const d = decide(mode, outKind, c.status!);
   if (d.kind !== "act") return { ok: true, kind: d.kind, camperId: c.id, name: c.display_name ?? "", status: c.status!, message: d.message, since: c.last_event_at, by: c.last_event_by };
-  return record(c.id, c.display_name ?? "", c.session_id!, d.event, method, d.verb, d.tone);
+  // someone had marked them "not coming": say so, so the helper can tell the head counselor
+  const verb = c.status === "no_show" ? `${d.verb} (was marked not coming)` : d.verb;
+  const r = await record(c.id, c.display_name ?? "", c.session_id!, d.event, method, verb, d.tone);
+  if (r.ok || !r.changedMeanwhile) return r;
+  // the other helper at the gate scanned the same kid a split second earlier: say what they did
+  const { data: now } = await supabase.from("campers_board").select("status, last_event_at, last_event_by").eq("id", camperId).maybeSingle();
+  if (!now?.status) return r;
+  const again = decide(mode, outKind, now.status);
+  if (again.kind === "act") return r;
+  return { ok: true, kind: again.kind, camperId: c.id, name: c.display_name ?? "", status: now.status, message: again.message, since: now.last_event_at, by: now.last_event_by };
 }
 
 /** A button on the camper card. */
@@ -68,13 +77,23 @@ export async function recordFromCard(camperId: string, event: AttendanceEventTyp
   return record(c.id, c.display_name ?? "", c.session_id!, event, "manual", verb, tone, note);
 }
 
-async function record(camperId: string, name: string, sessionId: string, event: AttendanceEventType, method: "scan" | "manual", verb: string, tone: "in" | "out" | "home", note?: string): Promise<ScanOutcome> {
+async function record(
+  camperId: string,
+  name: string,
+  sessionId: string,
+  event: AttendanceEventType,
+  method: "scan" | "manual",
+  verb: string,
+  tone: "in" | "out" | "home",
+  note?: string,
+): Promise<ScanOutcome & { changedMeanwhile?: boolean }> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("record_attendance", { p_camper_id: camperId, p_event_type: event, p_method: method, p_note: note || undefined });
-  if (error || !data) return { ok: false, error: friendly(error) };
+  if (error || !data) return { ok: false, error: friendly(error), changedMeanwhile: /invalid transition/i.test(errorMessage(error)) };
   const ev = data as { id: string; resulting_status: CamperStatus };
   const autoPrinted = event === "arrival" ? await autoPrintOnFirstArrival(camperId, sessionId) : [];
-  revalidatePath("/status");
+  // no revalidatePath: Who's here is rendered fresh on every visit, and revalidating would
+  // send the whole Check in page back with every scan (~50 KB of a gate phone's data)
   return { ok: true, kind: "act", camperId, name, status: ev.resulting_status, eventId: ev.id, verb, tone, autoPrinted };
 }
 
@@ -83,7 +102,6 @@ export async function undoScan(eventId: string): Promise<{ ok: true; status: Cam
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("undo_attendance", { p_event_id: eventId });
   if (error || !data) return { ok: false, error: errorMessage(error) };
-  revalidatePath("/status");
   return { ok: true, status: (data as { resulting_status: CamperStatus }).resulting_status };
 }
 
@@ -178,4 +196,36 @@ export async function rosterStatuses(): Promise<Record<string, CamperStatus>> {
   const { fetchAll } = await import("@/lib/supabase/fetch-all");
   const rows = await fetchAll((from, to) => supabase.from("campers").select("id, status").eq("session_id", session.id).is("archived_at", null).order("id").range(from, to));
   return Object.fromEntries(rows.map((r) => [r.id, r.status]));
+}
+
+export type CodeLookup =
+  | { found: true; entry: { id: string; code: string; name: string; first: string; last: string; where: string; status: CamperStatus } }
+  | { found: false; message: string };
+
+/**
+ * A code the Check in page doesn't have: a walk-in added after the page loaded (then it's
+ * returned and checked in), or a child at the wrong line (then say which line).
+ */
+export async function lookupCode(code: string): Promise<CodeLookup> {
+  await requireUser();
+  const session = await getActiveSession();
+  if (!session || !/^\d{6}$/.test(code)) return { found: false, message: "No camper has this code." };
+  const supabase = await createClient();
+  const { data: mine } = await supabase
+    .from("campers")
+    .select("id, camper_code, first_name, last_name, status, divisions(name), bunks(name)")
+    .eq("session_id", session.id)
+    .eq("camper_code", code)
+    .is("archived_at", null)
+    .maybeSingle();
+  if (mine) {
+    const where = [(mine.divisions as { name: string } | null)?.name, (mine.bunks as { name: string } | null)?.name ?? "no bunk"].filter(Boolean).join(" · ");
+    return { found: true, entry: { id: mine.id, code: mine.camper_code, name: `${mine.first_name} ${mine.last_name}`, first: mine.first_name, last: mine.last_name, where, status: mine.status } };
+  }
+  // outside this person's area: only say where they check in, nothing else about them
+  const { data: other } = await createAdminClient().from("campers").select("archived_at, divisions(name)").eq("session_id", session.id).eq("camper_code", code).maybeSingle();
+  if (!other) return { found: false, message: "No camper has this code. Check the tag, or type the name." };
+  if (other.archived_at) return { found: false, message: "This camper was archived. Send them to the office." };
+  const division = (other.divisions as { name: string } | null)?.name;
+  return { found: false, message: division ? `Wrong line: this camper checks in with ${division}.` : "This camper has no division yet. Send them to the office." };
 }
