@@ -18,7 +18,8 @@ export function UndoImportButton({ id, fileName, size = "default" }: { id: strin
             Everything goes back to how it was before <strong dir="auto">{fileName}</strong> was applied:
           </p>
           <ul className="list-disc space-y-1 pl-5">
-            <li>Campers it added are removed (or archived if they already have check-ins).</li>
+            <li>Campers it added are removed, except anyone who already checked in: they stay, marked &ldquo;not in the latest export&rdquo;.</li>
+            <li>Campers you archived from its &ldquo;not in file&rdquo; list come back.</li>
             <li>Details it changed go back to their previous values.</li>
             <li>Divisions and bunks it created are removed if they are empty.</li>
             <li>Changes staff made by hand after the import are kept.</li>

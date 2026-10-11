@@ -220,7 +220,7 @@ isOneToOne: false
                   ]
                 },"campers": {
                   Row: {
-                    "allergies": string | null,"archived_at": string | null,"bunk_id": string | null,"bunk_locked_by_staff": boolean,"bunk_preferences": (string)[],"camper_code": string,"created_at": string,"current_buzzer_number": number | null,"display_name": string | null,"division_id": string | null,"first_name": string,"grade": string | null,"has_allergies": boolean | null,"has_epipen": boolean | null,"has_medications": boolean | null,"id": string,"in_latest_import": boolean,"last_event_id": string | null,"last_name": string,"local_address": string | null,"local_address_cross_streets": string | null,"medical_notes": string | null,"name_normalized": string | null,"notes_from_parents": string | null,"session_id": string,"source_data": Json | null,"source_id": string | null,"staff_notes": string | null,"status": Database["public"]['Enums']["camper_status"],"tshirt_size": string | null,"updated_at": string
+                    "allergies": string | null,"archived_at": string | null,"bunk_id": string | null,"bunk_locked_by_staff": boolean,"bunk_preferences": (string)[],"camper_code": string,"created_at": string,"current_buzzer_number": number | null,"display_name": string | null,"division_id": string | null,"first_name": string,"grade": string | null,"has_allergies": boolean | null,"has_epipen": boolean | null,"has_medications": boolean | null,"id": string,"in_latest_import": boolean,"last_event_id": string | null,"last_name": string,"local_address": string | null,"local_address_cross_streets": string | null,"medical_notes": string | null,"name_normalized": string | null,"notes_from_parents": string | null,"session_id": string,"source_data": Json | null,"source_id": string | null,"staff_edited": string[],"staff_notes": string | null,"status": Database["public"]['Enums']["camper_status"],"tshirt_size": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
@@ -772,6 +772,9 @@ isOneToOne: false
           Functions: {
             "apply_import":
 { Args: { "p_import_id": string }; Returns: Json
+                           },
+"archive_missing":
+{ Args: { "p_import_id": string; "p_camper_ids": string[] }; Returns: number
                            },
 "area_covers":
 { Args: { "p_bunk_id": string,"p_division_id": string }; Returns: boolean

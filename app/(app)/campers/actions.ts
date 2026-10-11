@@ -3,6 +3,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireAdmin, requireUser } from "@/lib/auth/current-user";
+import { canAccessBunk, canAddWalkIn, visibleFieldGroups } from "@/lib/auth/permissions";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { parsePhone } from "@/lib/import/mapping";
 import type { Database } from "@/lib/supabase/database.types";
@@ -28,35 +30,32 @@ const edit = z.object({
   has_medications: tri,
   notes_from_parents: opt,
   staff_notes: opt,
-  can_edit_sensitive: z.enum(["1", "0"]).default("0"),
 });
 
 export async function updateCamper(fd: FormData): Promise<ActionResult> {
-  await requireUser();
+  const user = await requireUser();
   try {
     const d = edit.parse(Object.fromEntries(fd));
     const supabase = await createClient();
-    const { data: current } = await supabase.from("campers").select("bunk_id, division_id").eq("id", d.id).maybeSingle();
+    const [{ data: current }, { data: fv }] = await Promise.all([
+      supabase.from("campers").select("bunk_id, division_id").eq("id", d.id).maybeSingle(),
+      supabase.from("field_visibility").select("field_group, roles"),
+    ]);
     if (!current) return fail("You cannot edit this camper.");
+    // only details this person can see are written: the form leaves the rest empty, and
+    // saving those would wipe them
+    const groups = visibleFieldGroups(user, fv ?? []);
     const patch: CamperUpdate = {
       first_name: d.first_name,
       last_name: d.last_name,
       grade: d.grade,
       tshirt_size: d.tshirt_size,
-      staff_notes: d.staff_notes,
     };
-    if (d.can_edit_sensitive === "1") {
-      Object.assign(patch, {
-        local_address: d.local_address,
-        local_address_cross_streets: d.local_address_cross_streets,
-        medical_notes: d.medical_notes,
-        allergies: d.allergies,
-        has_allergies: d.has_allergies,
-        has_epipen: d.has_epipen,
-        has_medications: d.has_medications,
-        notes_from_parents: d.notes_from_parents,
-      });
-    }
+    if (groups.has("staff_notes")) patch.staff_notes = d.staff_notes;
+    if (groups.has("address")) Object.assign(patch, { local_address: d.local_address, local_address_cross_streets: d.local_address_cross_streets });
+    if (groups.has("medical"))
+      Object.assign(patch, { medical_notes: d.medical_notes, allergies: d.allergies, has_allergies: d.has_allergies, has_epipen: d.has_epipen, has_medications: d.has_medications });
+    if (groups.has("parent_notes")) patch.notes_from_parents = d.notes_from_parents;
     // placement: "b:<bunk id>" or "d:<division id>" (in the division, no bunk)
     if (d.placement) {
       const [kind, pid] = d.placement.split(":");
@@ -74,8 +73,9 @@ export async function updateCamper(fd: FormData): Promise<ActionResult> {
         Object.assign(patch, { division_id, bunk_id, bunk_locked_by_staff: true });
       }
     }
-    const { error } = await supabase.from("campers").update(patch).eq("id", d.id);
+    const { data: saved, error } = await supabase.from("campers").update(patch).eq("id", d.id).select("id");
     if (error) throw error;
+    if (!saved?.length) return fail("You can't edit this camper.");
     revalidatePath(`/campers/${d.id}`);
     return ok("Saved.");
   } catch (e) {
@@ -139,16 +139,32 @@ export async function archiveCamper(fd: FormData): Promise<ActionResult> {
   return ok(restore ? "Camper restored." : "Camper archived.");
 }
 
-const walkIn = z.object({ first_name: z.string().trim().min(1), last_name: z.string().trim().min(1), division_id: z.guid(), bunk_id: z.string().optional() });
+const walkIn = z.object({ first_name: z.string().trim().min(1), last_name: z.string().trim().min(1), division_id: z.guid(), bunk_id: z.string().optional(), add_anyway: z.string().optional() });
 
 export async function createWalkIn(fd: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const user = await requireUser();
   const session = await getActiveSession();
   if (!session) return fail("No active session.");
   try {
     const d = walkIn.parse(Object.fromEntries(fd));
-    const supabase = await createClient();
-    const { data, error } = await supabase
+    if (!canAddWalkIn(user) || !canAccessBunk(user, d.division_id, d.bunk_id || null, "edit")) return fail("You can only add walk-ins to a division you can edit.");
+    // the registration desk often types a name that's already there (a sibling, or registered after all)
+    if (!d.add_anyway) {
+      const { data: same } = await createAdminClient()
+        .from("campers")
+        .select("id, divisions(name), bunks(name)")
+        .eq("session_id", session.id)
+        .is("archived_at", null)
+        .ilike("first_name", d.first_name.replace(/[%_]/g, ""))
+        .ilike("last_name", d.last_name.replace(/[%_]/g, ""))
+        .limit(3);
+      if (same?.length) {
+        const where = same.map((s) => [(s.divisions as { name: string } | null)?.name, (s.bunks as { name: string } | null)?.name].filter(Boolean).join(" · ")).join("; ");
+        return fail(`${d.first_name} ${d.last_name} is already registered (${where}). Check it isn't the same child, then tick “Add anyway”.`);
+      }
+    }
+    // inserting campers is an admin right in the database; the check above is the desk's
+    const { data, error } = await createAdminClient()
       .from("campers")
       .insert({ session_id: session.id, first_name: d.first_name, last_name: d.last_name, division_id: d.division_id, bunk_id: d.bunk_id || null, bunk_locked_by_staff: Boolean(d.bunk_id), in_latest_import: false })
       .select("id")

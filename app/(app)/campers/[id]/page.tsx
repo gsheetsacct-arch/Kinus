@@ -20,8 +20,12 @@ import { loadCard } from "@/app/(app)/scan/actions";
 import { CorrectStatus } from "@/components/scan/correct-status";
 import { EVENT_LABEL } from "@/lib/attendance/machine";
 import { getCamper } from "@/lib/data/campers";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, formatPhone } from "@/lib/utils";
+import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
+import { FIELD_BY_KEY } from "@/lib/fields";
 import { addContact, archiveCamper, removeContact, updateCamper } from "../actions";
+
+export const metadata = { title: "Camper" };
 
 const ROLE_LABEL: Record<string, string> = { mother: "Mother", father: "Father", guardian: "Guardian", emergency: "Emergency", host: "Host", authorized_pickup: "Authorized pickup" };
 
@@ -56,12 +60,27 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
   if (!c) notFound();
   // a camper from another year: offer that year's bunks
   const bunks = c.session_id === session?.id ? activeBunks.data : (await divisionsFor(c.session_id!)).data;
+  // the Changes tab says who
+  const actorIds = [...new Set((history ?? []).map((h) => h.actor_id).filter((x): x is string => Boolean(x)))];
+  const { data: actors } = actorIds.length ? await supabase.from("profiles").select("id, full_name").in("id", actorIds) : { data: [] as { id: string; full_name: string }[] };
+  const actorName = new Map((actors ?? []).map((a) => [a.id, a.full_name]));
+  // the Changes tab shows names, not ids
+  const placeName = new Map<string, string>((bunks ?? []).flatMap((d) => [[d.id, d.name] as [string, string], ...((d.bunks as { id: string; name: string }[]) ?? []).map((b) => [b.id, b.name] as [string, string])]));
+  const HISTORY_LABEL: Record<string, string> = { division_id: "Division", bunk_id: "Bunk", archived_at: "Archived", in_latest_import: "In latest export", status: "Status" };
+  const historyValue = (k: string, v: unknown) => {
+    if (v === null || v === undefined || v === "") return "—";
+    if ((k === "division_id" || k === "bunk_id") && typeof v === "string") return placeName.get(v) ?? "(removed)";
+    if (k === "status" && typeof v === "string") return STATUS_LABEL[v as CamperStatus] ?? v;
+    if (k === "archived_at" && typeof v === "string") return formatDateTime(v);
+    if (typeof v === "boolean") return v ? "Yes" : "No";
+    if (Array.isArray(v)) return v.join(", ") || "—";
+    return String(v);
+  };
   const placeable = (bunks ?? [])
     .filter((d) => canAccessBunk(user, d.id, null, "edit") || d.id === c.division_id)
     .map((d) => ({ ...d, bunks: [...(d.bunks as { id: string; name: string; sort_order: number }[])].sort((a, b) => a.sort_order - b.sort_order) }));
   const groups = visibleFieldGroups(user, fv ?? []);
   const canEdit = c.division_id ? canAccessBunk(user, c.division_id, c.bunk_id, "edit") : isAdmin(user);
-  const canEditSensitive = canEdit && groups.has("medical") && groups.has("address") && groups.has("parent_notes");
 
   return (
     <div>
@@ -73,10 +92,10 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
           <>
             <span className="font-mono text-sm text-muted-foreground">{c.camper_code}</span>
             {isAdmin(user) && (
-              <ActionForm action={archiveCamper} confirm={c.archived_at ? undefined : "Archive this camper?"}>
+              <ActionForm action={archiveCamper} confirm={c.archived_at ? undefined : `Archive ${c.display_name}?`} confirmDetail="They disappear from lists and check-in. Their history is kept, and you can restore them here." confirmLabel="Archive" danger>
                 <input type="hidden" name="id" value={c.id!} />
                 {c.archived_at && <input type="hidden" name="restore" value="1" />}
-                <Button variant="ghost" size="sm" type="submit">
+                <Button variant="outline" size="sm" type="submit" className={c.archived_at ? undefined : "border-destructive/40 text-destructive hover:bg-destructive/10"}>
                   {c.archived_at ? "Restore" : "Archive"}
                 </Button>
               </ActionForm>
@@ -101,10 +120,10 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
         </Card>
       )}
       <Tabs defaultValue="overview">
-        <TabsList>
+        <TabsList className="h-auto max-w-full flex-wrap justify-start">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="timeline">Timeline ({events?.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
+          <TabsTrigger value="timeline">Check-ins ({events?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="history">Changes</TabsTrigger>
           {canEdit && <TabsTrigger value="edit">Edit</TabsTrigger>}
         </TabsList>
         <TabsContent value="overview" className="grid gap-6 lg:grid-cols-2">
@@ -124,17 +143,17 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
               {groups.has("staff_notes") && <Field label="Staff notes" value={c.staff_notes} />}
             </CardContent>
           </Card>
-          <Card className={groups.has("medical") ? "border-amber-400/60" : undefined}>
+          <Card className={c.has_medical_flag ? "border-amber-400/60" : undefined}>
             <CardHeader>
               <CardTitle>Medical</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-3">
               {groups.has("medical") ? (
                 <>
-                  <Field label="Allergies?" value={yn(c.has_allergies)} />
+                  <Field label="Has allergies" value={yn(c.has_allergies)} />
                   <Field label="EpiPen" value={yn(c.has_epipen)} />
                   <Field label="Medications" value={yn(c.has_medications)} />
-                  <Field label="Allergies" value={c.allergies} />
+                  <Field label="Allergy details" value={c.allergies} />
                   <div className="col-span-2">
                     <Field label="Medical notes" value={c.medical_notes} />
                   </div>
@@ -166,7 +185,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
                     </span>
                     {(k.phone_e164 ?? k.phone) && (
                       <a href={`tel:${k.phone_e164 ?? k.phone}`} className="inline-flex items-center gap-1 underline">
-                        <Phone className="size-3.5" /> {k.phone}
+                        <Phone className="size-3.5" /> {formatPhone(k.phone)}
                       </a>
                     )}
                     {k.email && (
@@ -242,21 +261,21 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
                     <div className="flex gap-2 text-muted-foreground">
                       <span className="w-36">{formatDateTime(h.at)}</span>
                       <span>
-                        {h.action.toLowerCase()} via {src}
+                        {h.action === "INSERT" ? "added" : h.action === "DELETE" ? "removed" : "changed"} {h.source === "ui" ? (h.actor_id && actorName.get(h.actor_id) ? `by ${actorName.get(h.actor_id)}` : "in Kinus") : <>by {src}</>}
                       </span>
                     </div>
                     {h.action === "UPDATE" && (
                       <table className="mt-1 text-xs">
                         <tbody>
                           {Object.entries(diff)
-                            .filter(([k]) => !["last_event_id", "updated_at", "source_data"].includes(k))
+                            .filter(([k]) => !["last_event_id", "updated_at", "source_data", "staff_edited", "bunk_locked_by_staff", "name_normalized", "display_name"].includes(k))
                             .map(([k, v]) => (
                               <tr key={k}>
-                                <td className="pr-3 font-mono text-muted-foreground">{k}</td>
+                                <td className="pr-3 text-muted-foreground">{HISTORY_LABEL[k] ?? FIELD_BY_KEY[k]?.label ?? k}</td>
                                 <td className="pr-3 line-through" dir="auto">
-                                  {String(v.old ?? "")}
+                                  {historyValue(k, v.old)}
                                 </td>
-                                <td dir="auto">{String(v.new ?? "")}</td>
+                                <td dir="auto">{historyValue(k, v.new)}</td>
                               </tr>
                             ))}
                         </tbody>
@@ -274,7 +293,6 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
           <TabsContent value="edit">
             <ActionForm action={updateCamper} className="grid max-w-3xl gap-4 rounded-xl border bg-card p-5 shadow-[var(--shadow-card)] sm:grid-cols-2">
               <input type="hidden" name="id" value={c.id!} />
-              <input type="hidden" name="can_edit_sensitive" value={canEditSensitive ? "1" : "0"} />
               <div className="space-y-1.5">
                 <Label htmlFor="first_name">First name</Label>
                 <Input id="first_name" name="first_name" defaultValue={c.first_name ?? ""} dir="auto" required />
@@ -310,7 +328,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
                   <Input id="tshirt_size" name="tshirt_size" defaultValue={c.tshirt_size ?? ""} />
                 </div>
               </div>
-              {canEditSensitive && (
+              {groups.has("address") && (
                 <>
                   <div className="space-y-1.5">
                     <Label htmlFor="local_address">Local address</Label>
@@ -320,6 +338,10 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
                     <Label htmlFor="local_address_cross_streets">Cross streets</Label>
                     <Input id="local_address_cross_streets" name="local_address_cross_streets" defaultValue={c.local_address_cross_streets ?? ""} dir="auto" />
                   </div>
+                </>
+              )}
+              {groups.has("medical") && (
+                <>
                   {(
                     [
                       ["has_allergies", "Has allergies?"],
@@ -344,16 +366,20 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
                     <Label htmlFor="medical_notes">Medical notes</Label>
                     <Textarea id="medical_notes" name="medical_notes" defaultValue={c.medical_notes ?? ""} dir="auto" />
                   </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <Label htmlFor="notes_from_parents">Notes from parents</Label>
-                    <Textarea id="notes_from_parents" name="notes_from_parents" defaultValue={c.notes_from_parents ?? ""} dir="auto" />
-                  </div>
                 </>
               )}
-              <div className="space-y-1 sm:col-span-2">
-                <Label htmlFor="staff_notes">Staff notes</Label>
-                <Textarea id="staff_notes" name="staff_notes" defaultValue={c.staff_notes ?? ""} dir="auto" />
-              </div>
+              {groups.has("parent_notes") && (
+                <div className="space-y-1 sm:col-span-2">
+                  <Label htmlFor="notes_from_parents">Notes from parents</Label>
+                  <Textarea id="notes_from_parents" name="notes_from_parents" defaultValue={c.notes_from_parents ?? ""} dir="auto" />
+                </div>
+              )}
+              {groups.has("staff_notes") && (
+                <div className="space-y-1 sm:col-span-2">
+                  <Label htmlFor="staff_notes">Staff notes</Label>
+                  <Textarea id="staff_notes" name="staff_notes" defaultValue={c.staff_notes ?? ""} dir="auto" />
+                </div>
+              )}
               <div className="sm:col-span-2">
                 <Button type="submit">Save changes</Button>
               </div>

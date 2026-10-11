@@ -8,7 +8,7 @@ insert into bunks (id, division_id, name) values
 insert into campers (id, session_id, first_name, last_name, division_id, bunk_id) values
   ('40000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'A', 'Mine', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001'),
   ('40000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'B', 'Other', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000002');
-insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-0000-0000-000000000003', 'c@x.com', '{"full_name":"Counselor","role":"counselor"}');
+insert into auth.users (id, email, raw_app_meta_data) values ('00000000-0000-0000-0000-000000000003', 'c@x.com', '{"full_name":"Counselor","role":"counselor"}');
 insert into staff_scopes (user_id, division_id, bunk_id) values ('00000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001');
 do $$ begin
   if (select value->>'percent' from settings where key = 'missing_rules') <> '75' then raise exception 'default rule missing'; end if;
@@ -36,3 +36,12 @@ do $$ begin
   perform record_attendance('40000000-0000-0000-0000-000000000001', 'correction', 'manual', 'sneaky', now(), 'present');
   raise exception 'counselor made a correction';
 exception when insufficient_privilege then null; end $$;
+-- the follow-up note moves into the timeline when they're marked not coming (0016)
+insert into camper_followups (camper_id, note) values ('40000000-0000-0000-0000-000000000001', 'Called mom, no answer');
+select record_attendance('40000000-0000-0000-0000-000000000001', 'no_show', 'manual', 'Sick this week');
+do $$ begin
+  if exists (select 1 from camper_followups where camper_id = '40000000-0000-0000-0000-000000000001') then raise exception 'follow-up left behind'; end if;
+  if (select note from attendance_events where camper_id = '40000000-0000-0000-0000-000000000001' and event_type = 'no_show' order by occurred_at desc, id desc limit 1) not like 'Sick this week · follow-up from %: Called mom, no answer' then
+    raise exception 'note not kept: %', (select note from attendance_events where camper_id = '40000000-0000-0000-0000-000000000001' and event_type = 'no_show' order by occurred_at desc limit 1);
+  end if;
+end $$;

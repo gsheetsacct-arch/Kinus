@@ -159,6 +159,25 @@ which completes the sign-in and continues to `/set-password` for invitations. Op
   invites and magic links carry your branding and are not rate-limited by Supabase's
   default sender.
 
+## 9.5a Sign-in settings in Supabase
+
+**Only invited staff.** Authentication → Sign In / Providers → turn off **Allow new users to sign up**.
+People added on the Staff page still get in (invitations and accounts made there use Supabase's admin
+tools, which ignore this switch), and existing staff keep signing in with a password or an emailed link.
+After switching it off, add one test person from Staff to confirm.
+
+**Face ID / fingerprint (passkeys, beta in Supabase).**
+1. Authentication → **Passkeys** → enable.
+2. Relying party name: `Kinus`. Relying party ID: the app's domain without `https://`, e.g.
+   `kinus.vercel.app` (or your own domain). Allowed origin: `https://` + that domain.
+3. Staff open **Account → Face ID or fingerprint → Add** on each phone or computer (they're asked to
+   sign in again first if their last sign-in is older than 10 minutes), then use **Sign in with Face ID
+   or fingerprint** on the sign-in page. Password and emailed links keep working as a fallback.
+
+A passkey belongs to that exact domain: it won't work on Vercel preview addresses, and moving Kinus to
+a new domain means everyone sets Face ID up again. A lost phone: Staff → the person → **Remove Face
+ID sign-ins**.
+
 ## 9.6 Operations during the program
 
 - Status page for staff: `/health` shows DB reachable, last cron run,

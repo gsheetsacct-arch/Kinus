@@ -23,7 +23,7 @@ function explain(e: unknown): string {
  * sideways. A tag held
  * in view counts once until it has been out of view for a moment.
  */
-export function Camera({ onCode }: { onCode: (text: string) => void }) {
+export function Camera({ onCode, onTurnOff }: { onCode: (text: string) => void; onTurnOff?: () => void }) {
   const video = React.useRef<HTMLVideoElement>(null);
   const onCodeRef = React.useRef(onCode);
   onCodeRef.current = onCode;
@@ -158,23 +158,31 @@ export function Camera({ onCode }: { onCode: (text: string) => void }) {
   };
 
   return (
-    <div className="relative overflow-hidden rounded-xl bg-black">
-      <video ref={video} className="aspect-[4/3] max-h-[50dvh] w-full object-cover" muted playsInline autoPlay />
-      {state.kind === "on" && <div className="pointer-events-none absolute inset-x-8 top-1/2 h-20 -translate-y-1/2 rounded-lg border-2 border-white/70" />}
-      {state.kind === "starting" && <div className="absolute inset-0 flex items-center justify-center text-sm text-white/80">Starting the camera…</div>}
+    <>
+      {/* no camera (an office laptop): a short note instead of a big black box */}
       {state.kind === "error" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center text-sm text-white">
-          <p>{state.message}</p>
-          <Button size="sm" variant="secondary" onClick={() => setAttempt((a) => a + 1)}>
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+          <p className="min-w-0 flex-1 basis-56">{state.message}</p>
+          <Button size="sm" variant="outline" onClick={() => setAttempt((a) => a + 1)}>
             <RefreshCw /> Try again
           </Button>
+          {onTurnOff && (
+            <Button size="sm" variant="ghost" onClick={onTurnOff}>
+              Don&apos;t use the camera here
+            </Button>
+          )}
         </div>
       )}
-      {state.kind === "on" && devices.length > 1 && (
-        <Button size="sm" variant="secondary" className="absolute right-2 top-2 opacity-90" onClick={next} aria-label="Use another camera">
-          <SwitchCamera /> Switch camera
-        </Button>
-      )}
-    </div>
+      <div className={state.kind === "error" ? "hidden" : "relative overflow-hidden rounded-xl bg-black"}>
+        <video ref={video} className="aspect-[4/3] max-h-[50dvh] w-full object-cover" muted playsInline autoPlay />
+        {state.kind === "on" && <div className="pointer-events-none absolute inset-x-8 top-1/2 h-20 -translate-y-1/2 rounded-lg border-2 border-white/70" />}
+        {state.kind === "starting" && <div className="absolute inset-0 flex items-center justify-center text-sm text-white/80">Starting the camera…</div>}
+        {state.kind === "on" && devices.length > 1 && (
+          <Button size="sm" variant="secondary" className="absolute right-2 top-2 opacity-90" onClick={next} aria-label="Use another camera">
+            <SwitchCamera /> Switch camera
+          </Button>
+        )}
+      </div>
+    </>
   );
 }

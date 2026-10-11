@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 import { StaffTable, type StaffRow } from "@/components/staff/staff-table";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireDirector } from "@/lib/auth/current-user";
-import { canManageRole, isAdmin, type StaffRole } from "@/lib/auth/permissions";
+import { canGrantAreas, canManageRole, isAdmin, type StaffRole } from "@/lib/auth/permissions";
 import { ROLE_ORDER, areaLabel } from "@/lib/labels";
-import { areaNames, loadAreaTree } from "@/lib/data/areas";
+import { areaNames, grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
 import { bulkSendLinks, bulkSetAccess, bulkSetActive } from "./actions";
 
@@ -25,7 +25,14 @@ export default async function UsersPage() {
     signInInfo(),
   ]);
   const names = areaNames(tree);
-  const rows: StaffRow[] = (profiles ?? []).map((p) => {
+  const groupOf = (id: string) => tree.divisions.find((d) => d.id === id)?.group_id ?? null;
+  // a director of part of camp sees the people inside their part (and themselves)
+  const inMyArea = (p: { id: string; role: StaffRole; all_areas: boolean }) => {
+    if (isAdmin(me) || p.id === me.id) return true;
+    const theirs = (areas ?? []).filter((a) => a.user_id === p.id).map(({ group_id, division_id, bunk_id }) => ({ group_id, division_id, bunk_id }));
+    return p.role !== "owner" && !p.all_areas && theirs.length > 0 && canGrantAreas(me, theirs, false, groupOf);
+  };
+  const rows: StaffRow[] = (profiles ?? []).filter(inMyArea).map((p) => {
     const mine = (areas ?? []).filter((a) => a.user_id === p.id);
     const groupIds = mine.map((a) => a.group_id).filter((x): x is string => Boolean(x));
     const divisionIds = [
@@ -75,7 +82,7 @@ export default async function UsersPage() {
           Use <strong>Add many at once</strong> to paste your staff list from a spreadsheet (name, email, role, division, bunk). Everyone gets an invitation email. To change many people later, tick them below.
         </Callout>
       )}
-      <StaffTable rows={rows} tree={tree} roles={roles} actions={{ bulkSetAccess, bulkSendLinks, bulkSetActive }} lockAll={!isAdmin(me)} />
+      <StaffTable rows={rows} tree={grantableTree(me, tree)} roles={roles} actions={{ bulkSetAccess, bulkSendLinks, bulkSetActive }} lockAll={!isAdmin(me)} />
     </div>
   );
 }

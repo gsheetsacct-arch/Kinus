@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { decide, parseScan, cardActions } from "../scan";
+import { decide, parseScan, cardActions, findScanCode, looksLikeScan } from "../scan";
 import { nextStatus } from "../machine";
 
 describe("decide", () => {
@@ -35,5 +35,23 @@ describe("parseScan", () => {
     expect(parseScan("100016")).toBe("100016");
     expect(parseScan("Levi")).toBeNull();
     expect(parseScan("KN1000")).toBeNull();
+  });
+});
+
+describe("findScanCode", () => {
+  it("finds a good scan after junk left in the box", () => {
+    expect(findScanCode("KN12AB9KN106518")).toBe("106518");
+    expect(findScanCode("KN106518")).toBe("106518");
+    expect(findScanCode("106518")).toBe("106518");
+  });
+  it("never takes 6 digits out of a longer number or a garbled read", () => {
+    expect(findScanCode("12345678")).toBeNull();
+    expect(findScanCode("KN12AB9")).toBeNull();
+    expect(findScanCode("Levi Cohen")).toBeNull();
+  });
+  it("tells a damaged tag read from a name", () => {
+    expect(looksLikeScan("KN12AB9")).toBe(true);
+    expect(looksLikeScan("Levi Cohen")).toBe(false);
+    expect(looksLikeScan("levi")).toBe(false);
   });
 });

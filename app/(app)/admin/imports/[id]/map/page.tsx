@@ -13,6 +13,8 @@ import { requireAdmin } from "@/lib/auth/current-user";
 import { TARGET_OPTIONS, type ColumnMap, type MappingOptions } from "@/lib/import";
 import { previewImport } from "../../actions";
 
+export const metadata = { title: "Match the columns" };
+
 function ColumnRow({ header, value, samples, highlight }: { header: string; value: string; samples: string[]; highlight?: boolean }) {
   return (
     <div className={`grid gap-2 border-b px-4 py-3 last:border-0 sm:grid-cols-[1fr_1fr_240px] sm:items-center ${highlight ? "bg-amber-50/70 dark:bg-amber-950/20" : ""}`}>
@@ -75,7 +77,7 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
         )}
 
         {unknown.length > 0 && (
-          <Section title="New columns" description="Choose where each goes, or leave “Don't import”." bodyClassName="p-0">
+          <Section title="New columns" description="Choose where each goes, or leave “Don&apos;t import”: the column is still kept with each camper, and tags can use it (e.g. {{source.ppa.hebrew_name}} for a Hebrew name)." bodyClassName="p-0">
             {unknown.map((h) => (
               <ColumnRow key={h} header={h} value="" samples={sampleFor(h)} highlight />
             ))}

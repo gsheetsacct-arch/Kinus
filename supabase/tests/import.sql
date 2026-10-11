@@ -1,7 +1,7 @@
 \set ON_ERROR_STOP on
 -- Import test: profile trigger, apply_import adds/updates/missing, attribution. Run by supabase/tests/run.sh.
 insert into settings (key, value) values ('bootstrap_owner', '{"email":"owner@x.com"}');
-insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-0000-0000-000000000001','owner@x.com','{}'),
+insert into auth.users (id, email, raw_app_meta_data) values ('00000000-0000-0000-0000-000000000001','owner@x.com','{}'),
   ('00000000-0000-0000-0000-000000000002','hc@x.com','{"full_name":"Head C","role":"counselor"}');
 select id, full_name, role from profiles order by email;
 insert into sessions (id,name,is_active) values ('10000000-0000-0000-0000-000000000001','Kinus',true);

@@ -153,7 +153,7 @@ export function planRows(rows: BulkInputRow[], tree: AreaTree, defaults: { role:
     let role: StaffRole | null = defaults.role;
     if (r.role) {
       role = matchRole(r.role);
-      if (!role) errors.push(`Unknown role “${r.role}”.`);
+      if (!role) errors.push(`Unknown role “${r.role}”.${suggest(r.role, ROLE_WORDS.flatMap(([, words]) => words))}`);
     }
     const lvl = r.level ? matchLevel(r.level) : null;
     if (r.level && !lvl) errors.push(`Unknown level “${r.level}”. Use view, check in/out, or edit.`);

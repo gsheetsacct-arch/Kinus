@@ -105,8 +105,8 @@ export function AppShell({
             <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Tent className="size-4" />
             </span>
-            Kinus
-            {sessionName && camps.length < 2 && <span className="truncate text-xs font-normal text-muted-foreground">· {sessionName}</span>}
+            {/* the session's own name usually says "Kinus" already ("Kinus 5787") */}
+            <span className="truncate">{sessionName ?? "Kinus"}</span>
           </Link>
           <CampSwitcher camps={camps} current={currentCamp} className="ml-auto max-w-40" />
           <Link href="/account" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold" title="Your account" aria-label="Your account">

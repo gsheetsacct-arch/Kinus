@@ -21,6 +21,12 @@ const done = (message: string): Result => {
 export async function saveFollowup(camperId: string, f: { until?: string | null; note?: string | null }): Promise<Result> {
   const me = await requireUser();
   const supabase = await createClient();
+  // only for campers still missing: the gate may have checked them in a moment ago, and a
+  // note left on someone who's here would resurface on a check-in days later
+  const { data: c } = await supabase.from("campers").select("status").eq("id", camperId).maybeSingle();
+  if (c && c.status !== "expected" && (f.until || c.status !== "no_show")) {
+    return { ok: false, error: c.status === "no_show" ? "They're marked not coming. Tap “Coming after all” first." : "They've arrived in the meantime, so there's nothing to follow up." };
+  }
   const row: { camper_id: string; updated_at: string; until?: string | null; note?: string | null } = { camper_id: camperId, updated_at: new Date().toISOString() };
   if (f.until !== undefined) row.until = f.until;
   if (f.note !== undefined) row.note = f.note?.trim() || null;
@@ -43,7 +49,7 @@ export async function markNotComing(camperId: string, reason: string): Promise<R
   const supabase = await createClient();
   const { error } = await supabase.rpc("record_attendance", { p_camper_id: camperId, p_event_type: "no_show", p_method: "manual", p_note: reason.trim() || "Not coming" });
   if (error) return { ok: false, error: friendly(error) };
-  await supabase.from("camper_followups").delete().eq("camper_id", camperId);
+  // (the follow-up note moves into their timeline in the database)
   return done("Marked not coming.");
 }
 
@@ -62,6 +68,5 @@ export async function checkInNow(camperId: string): Promise<Result> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("record_attendance", { p_camper_id: camperId, p_event_type: "arrival", p_method: "manual" });
   if (error) return { ok: false, error: friendly(error) };
-  await supabase.from("camper_followups").delete().eq("camper_id", camperId);
   return done("Checked in.");
 }

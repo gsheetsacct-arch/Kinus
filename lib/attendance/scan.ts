@@ -28,6 +28,18 @@ export function parseScan(text: string): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * The code in what a scanner typed, also when junk came first ("KN12AB9KN106518": a damaged
+ * read left in the box, then a good scan). Never takes 6 digits out of a longer number.
+ */
+export function findScanCode(text: string): string | null {
+  const t = text.trim().replace(/\s+/g, "");
+  return parseScan(t) ?? /(?:^|\D)(?:KN)?0*(\d{6})$/i.exec(t)?.[1] ?? null;
+}
+
+/** Looks like a (damaged) tag read rather than a name being typed. */
+export const looksLikeScan = (text: string) => !/\s/.test(text.trim()) && text.trim().length >= 5 && /\d/.test(text);
+
 /** Which buttons a camper card shows for a status. */
 export function cardActions(status: CamperStatus): { event: AttendanceEventType; label: string; tone: "in" | "out" | "home" }[] {
   switch (status) {

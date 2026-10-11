@@ -27,8 +27,8 @@ export const FIELDS: FieldDef[] = [
   { key: "status", label: "Status", group: "status", kind: "status" },
   { key: "in_latest_import", label: "In latest export", group: "status", kind: "bool" },
   { key: "has_medical_flag", label: "Medical flag", group: "basic", kind: "bool" },
-  { key: "has_allergies", label: "Allergies?", group: "medical", kind: "bool" },
-  { key: "allergies", label: "Allergies", group: "medical", kind: "text" },
+  { key: "has_allergies", label: "Has allergies", group: "medical", kind: "bool" },
+  { key: "allergies", label: "Allergy details", group: "medical", kind: "text" },
   { key: "has_epipen", label: "EpiPen", group: "medical", kind: "bool" },
   { key: "has_medications", label: "Medications", group: "medical", kind: "bool" },
   { key: "medical_notes", label: "Medical notes", group: "medical", kind: "text" },
@@ -46,6 +46,22 @@ export const FIELD_BY_KEY: Record<string, FieldDef> = Object.fromEntries(FIELDS.
 
 /** Groups that are always visible (not gated by field_visibility). */
 export const UNGATED_GROUPS: FieldGroup[] = ["basic", "status"];
+
+/**
+ * The sensitivity group a merge key reads from. Raw registration columns ("source.…") carry
+ * no group of their own, so anything that looks medical, like an address or like parent
+ * contact details is treated as that group; the rest is basic.
+ */
+export function groupOfKey(key: string): FieldGroup {
+  if (key.startsWith("contact.")) return "contacts";
+  if (!key.startsWith("source.")) return FIELD_BY_KEY[key]?.group ?? "basic";
+  const col = key.slice(7).toLowerCase();
+  if (/medic|allerg|epi.?pen|diet|condition|diagnos|dosage|health|insur|trauma|doctor|physician|treatment/.test(col)) return "medical";
+  if (/address|street|zip|postal/.test(col)) return "address";
+  if (/phone|cell|mobile|email|e-mail|mother|father|parent|guardian|emergency|contact/.test(col)) return "contacts";
+  if (/note|comment/.test(col)) return "parent_notes";
+  return "basic";
+}
 
 export type ContactLike = { role: string; slot: number; name: string | null; phone: string | null; phone_e164: string | null; email: string | null };
 

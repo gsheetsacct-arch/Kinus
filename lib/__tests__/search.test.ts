@@ -29,4 +29,10 @@ describe("matchScore", () => {
   it("matches everything when empty", () => {
     expect(matchScore(levi, "  ")).toBe(1);
   });
+
+  it("finds the code as printed on the tag (KN…)", () => {
+    const e = searchEntry("Levi Cohen", "100180");
+    expect(matchScore(e, "KN100180")).toBeGreaterThan(0);
+    expect(matchScore(e, "kn1001")).toBeGreaterThan(0);
+  });
 });

@@ -7,12 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/auth/current-user";
 import { ACCESS_LEVELS, STAFF_ROLES, areaLabel } from "@/lib/labels";
 import { areaNames, loadAreaTree } from "@/lib/data/areas";
 import { getActiveSession } from "@/lib/auth/current-user";
 import { signOut } from "@/app/(auth)/actions";
 import { changeMyPassword, updateMyProfile } from "./actions";
+import { Passkeys } from "./passkeys";
 
 export const metadata = { title: "Your account" };
 
@@ -20,7 +22,7 @@ export default async function AccountPage() {
   const me = await requireUser();
   const supabase = await createClient();
   const session = await getActiveSession();
-  const [{ data: profile }, tree] = await Promise.all([supabase.from("profiles").select("full_name, phone, email").eq("id", me.id).single(), loadAreaTree(supabase, session?.id)]);
+  const [{ data: profile }, tree] = await Promise.all([createAdminClient().from("profiles").select("full_name, phone, email").eq("id", me.id).single(), loadAreaTree(supabase, session?.id)]);
   const names = areaNames(tree);
 
   return (
@@ -52,6 +54,14 @@ export default async function AccountPage() {
           </div>
         </ActionForm>
       </Section>
+      <div id="face-id" className="scroll-mt-20">
+        <Section
+          title="Face ID or fingerprint"
+          description="Sign in with your face or fingerprint instead of a password. Set it up on each phone or computer you use; it stays on that device (or syncs through iCloud Keychain or Google Password Manager)."
+        >
+          <Passkeys />
+        </Section>
+      </div>
       <Section title="What you can access">
         <div className="space-y-3 text-sm">
           <div className="flex flex-wrap items-center gap-2">

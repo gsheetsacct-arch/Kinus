@@ -60,4 +60,8 @@ describe("planRows", () => {
     expect(plan[2].errors[0]).toMatch(/Say where they work/);
     expect(plan[3]).toMatchObject({ role: "office", allAreas: true, level: "view", errors: [] });
   });
+  it("suggests the nearest role for a typo", () => {
+    const [row] = planRows([{ line: 2, name: "Levi", email: "levi@x.com", role: "Councelor", where: "All", bunk: "", level: "" }], { groups: [], divisions: [] }, { role: "counselor", level: "role" });
+    expect(row.errors.join(" ")).toMatch(/Did you mean “counselor”/);
+  });
 });

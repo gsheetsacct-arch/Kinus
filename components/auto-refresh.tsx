@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 export function AutoRefresh({ every = 3000 }: { every?: number }) {
   const router = useRouter();
   useEffect(() => {
-    const t = setInterval(() => router.refresh(), every);
+    // only while someone is looking (a phone in a pocket doesn't need fresh numbers)
+    const t = setInterval(() => document.visibilityState === "visible" && router.refresh(), every);
     return () => clearInterval(t);
   }, [router, every]);
   return null;

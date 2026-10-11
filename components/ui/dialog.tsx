@@ -20,7 +20,7 @@ function DialogContent({ className, children, ...props }: React.ComponentProps<t
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100 focus:outline-none">
+        <DialogPrimitive.Close className="absolute right-2 top-2 flex size-10 items-center justify-center rounded-md opacity-70 hover:bg-muted hover:opacity-100 focus:outline-none">
           <XIcon className="size-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>

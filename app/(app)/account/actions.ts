@@ -1,5 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/current-user";
@@ -30,4 +31,27 @@ export async function changeMyPassword(fd: FormData): Promise<ActionResult> {
   const { error } = await supabase.auth.updateUser({ password: pw });
   if (error) return fail(/different from the old/i.test(error.message) ? "That's already your password. Choose a new one." : error.message);
   return ok("Password changed. Use it next time you sign in.");
+}
+
+/** How long after signing in someone may add a Face ID / fingerprint sign-in. */
+const RECENT_SIGN_IN_S = 10 * 60;
+
+/**
+ * Adding a passkey needs a fresh sign-in, so a phone left unlocked (or a borrowed laptop)
+ * can't quietly get a permanent way in. Read from the session's own sign-in record (amr).
+ */
+export async function signedInRecently(): Promise<boolean> {
+  await requireUser();
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  const amr = (data?.claims?.amr ?? []) as ({ method: string; timestamp: number } | string)[];
+  const latest = Math.max(0, ...amr.map((a) => (typeof a === "object" && a ? Number(a.timestamp) || 0 : 0)));
+  return latest > 0 && Date.now() / 1000 - latest < RECENT_SIGN_IN_S;
+}
+
+/** Sign out and come back to the Face ID section after signing in again. */
+export async function signInAgainForPasskey() {
+  const supabase = await createClient();
+  await supabase.auth.signOut({ scope: "local" });
+  redirect(`/login?next=${encodeURIComponent("/account#face-id")}`);
 }

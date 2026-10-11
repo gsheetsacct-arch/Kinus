@@ -13,7 +13,7 @@ insert into campers (id, session_id, first_name, last_name, division_id, bunk_id
  ('40000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','B','BMP','20000000-0000-0000-0000-000000000002',null),
  ('40000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','C','French','20000000-0000-0000-0000-000000000003',null),
  ('40000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001','D','Main2','20000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000002');
-insert into auth.users (id, email, raw_user_meta_data) values
+insert into auth.users (id, email, raw_app_meta_data) values
  ('00000000-0000-0000-0000-000000000001','owner@x.com','{"full_name":"Owner","role":"owner"}'),
  ('00000000-0000-0000-0000-000000000002','dir@x.com','{"full_name":"Main director","role":"director"}'),
  ('00000000-0000-0000-0000-000000000003','c@x.com','{"full_name":"Counselor","role":"counselor"}'),

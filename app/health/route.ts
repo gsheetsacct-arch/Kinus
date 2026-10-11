@@ -22,6 +22,7 @@ export async function GET(request: Request) {
       const { error: fast } = staff ? { error: null } : await admin.rpc("my_level_rank");
       const { error: followups } = staff || fast ? { error: null } : await admin.from("camper_followups").select("camper_id").limit(1);
       const labels = staff || fast || followups ? null : (await admin.from("print_templates").select("id").eq("id", "d0000000-0000-0000-0000-000000000003").maybeSingle()).data;
+      const { error: mergeList } = staff || fast || followups || !labels ? { error: null } : await admin.from("merge_fields").select("enabled").limit(1);
       out.schema = staff
         ? "OUT OF DATE: run migrations from 0006 on (staff sign-in fails until then)"
         : fast
@@ -30,7 +31,9 @@ export async function GET(request: Request) {
             ? "OUT OF DATE: run migration 0009 (campers not here yet)"
             : !labels
               ? "OUT OF DATE: run migration 0010 (the 4×6 Publisher labels)"
-              : "applied";
+              : mergeList
+                ? "OUT OF DATE: run migrations 0011 to 0014 (labels, mail merge list, security, card buttons)"
+                : "applied (0013 security and 0014 can't be checked from here: make sure they ran)";
       const [{ count: profiles }, { data: session }] = await Promise.all([
         admin.from("profiles").select("id", { count: "exact", head: true }),
         admin.from("sessions").select("name").eq("is_active", true).maybeSingle(),

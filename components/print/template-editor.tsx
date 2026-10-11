@@ -15,13 +15,18 @@ import { fitPreview } from "@/lib/print/fit-preview";
 import type { Layer, SheetLayout, TemplateSpec } from "@/lib/print/types";
 import { previewTemplate, previewValues, saveTemplate } from "@/app/(app)/print/actions";
 import { TagCanvas, type FitInfo } from "./tag-canvas";
+import { LeaveGuard } from "@/components/leave-guard";
 
 export type EditorTemplate = TemplateSpec & { show_on_card: boolean; auto_on_first_checkin: boolean };
 export type MergeKey = { key: string; label: string; enabled: boolean };
 
 const ICON = { text: Type, barcode: Barcode, qr: QrCode, box: Square } as const;
 const uid = () => Math.random().toString(36).slice(2, 8);
-const describe = (l: Layer) => (l.type === "box" ? "Colour block" : l.type === "text" ? l.text || "Text" : `${l.type === "qr" ? "QR code" : "Barcode"} ${l.text}`);
+/** "{{LAST}}, {{FIRST}}" → "Last name, First name" for the parts list. */
+const describe = (l: Layer, labels: Map<string, string>) => {
+  const words = (t: string) => t.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, k: string) => k.split("|").map((x) => labels.get(x.trim()) ?? x.trim()).join(" or "));
+  return l.type === "box" ? "Colour block" : l.type === "text" ? words(l.text) || "Text" : `${l.type === "qr" ? "QR code" : "Barcode"}: ${words(l.text)}`;
+};
 const usedKeys = (layers: Layer[]) => new Set(layers.flatMap((l) => [...("text" in l ? l.text : (l.fill ?? "")).matchAll(/\{\{\s*([^{}|]+)/g)].map((m) => m[1].trim())));
 
 function Num({ label, value, onChange, step = 0.5, min }: { label: string; value: number; onChange: (n: number) => void; step?: number; min?: number }) {
@@ -121,33 +126,33 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
     };
   }, [who, code]);
 
-  React.useEffect(() => {
-    if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
-
-  const save = () =>
-    startSave(async () => {
-      const r = await saveTemplate({ ...t, id: t.id || undefined, kind: t.kind as "name_tag", layers: t.layers, sheet_layout: t.sheet_layout });
-      if (!r.ok) return void toast.error(r.error);
-      setDirty(false);
-      toast.success(r.message);
-      if (r.redirect) router.push(r.redirect);
-      else router.refresh();
-    });
+  const persist = async (leaving = false) => {
+    const r = await saveTemplate({ ...t, id: t.id || undefined, kind: t.kind as "name_tag", layers: t.layers, sheet_layout: t.sheet_layout });
+    if (!r.ok) {
+      toast.error(r.error);
+      return false;
+    }
+    setDirty(false);
+    toast.success(r.message);
+    if (leaving) return true;
+    if (r.redirect) router.push(r.redirect);
+    else router.refresh();
+    return true;
+  };
+  const save = () => startSave(async () => void (await persist()));
 
   const W = t.page_width_mm;
   const H = t.page_height_mm;
   const center = (w: number, h: number) => ({ x: Math.max(0, Math.round((W - w) / 2)), y: Math.max(0, Math.round((H - h) / 2)), w: Math.min(w, W), h: Math.min(h, H) });
   const sel = t.layers.find((l) => l.id === selected) ?? null;
+  const labels = new Map(fields.map((f) => [f.key, f.label]));
   const fit = sel ? fits[sel.id] : undefined;
   const hidden = [...usedKeys(t.layers)].filter((k) => fields.some((f) => f.key === k && !f.enabled));
   const sheet = t.sheet_layout;
 
   return (
     <div className="space-y-4">
+      <LeaveGuard dirty={dirty} onSave={() => persist(true)} />
       {/* top bar */}
       <div className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-3 shadow-[var(--shadow-card)]">
         <label className="min-w-48 flex-1 space-y-1">
@@ -168,7 +173,8 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
             <Input value={code} onChange={(e) => setCode(e.target.value.trim())} placeholder="100016" inputMode="numeric" className="h-9 w-28" />
           </label>
         )}
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex items-center gap-2">
+          {dirty && <span className="text-sm font-medium text-amber-700 dark:text-amber-300">Unsaved changes</span>}
           <Button variant="outline" onClick={async () => setPreview(await previewTemplate(t, who === "code" ? { kind: "code", code } : { kind: who }))}>
             <Eye /> Print preview
           </Button>
@@ -359,7 +365,7 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
                     <button type="button" onClick={() => setSelected(l.id)} className="flex min-w-0 flex-1 items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted">
                       <Icon className="size-4 shrink-0 text-muted-foreground" />
                       <span className="truncate font-mono text-xs" dir="auto">
-                        {describe(l)}
+                        {describe(l, labels)}
                       </span>
                       {fits[l.id]?.overflow && <AlertTriangle className="size-3.5 shrink-0 text-amber-500" aria-label="Doesn't fit" />}
                     </button>

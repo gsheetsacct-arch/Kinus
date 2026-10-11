@@ -79,7 +79,7 @@ export function CampersBrowser({ rows, divisions, initial, archivedHref }: { row
           <Input
             value={f.q}
             onChange={(e) => set({ q: e.target.value })}
-            placeholder="Name in any language, camper code, or parent phone"
+            placeholder="Name, code or parent phone"
             dir="auto"
             className="pl-9 pr-9"
             aria-label="Search campers"
@@ -116,9 +116,9 @@ export function CampersBrowser({ rows, divisions, initial, archivedHref }: { row
           ))}
         </Select>
         <Select value={f.sort} onChange={(e) => set({ sort: e.target.value })} aria-label="Sort by">
-          <option value="name">Sort: last name</option>
-          <option value="bunk">Sort: bunk</option>
-          <option value="status">Sort: status</option>
+          <option value="name">By last name</option>
+          <option value="bunk">By bunk</option>
+          <option value="status">By status</option>
         </Select>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">

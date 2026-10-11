@@ -1,3 +1,4 @@
+import { formatPhone } from "@/lib/utils";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { FIELD_BY_KEY, UNGATED_GROUPS, getFieldValue } from "@/lib/fields";
@@ -22,6 +23,18 @@ export async function getPresetsFor(supabase: DB, user: CurrentUser): Promise<Li
   return (data ?? []).map((p) => ({ ...p, columns: p.columns as string[], sort: p.sort as { field: string; dir: string }[] }));
 }
 
+/** Bunk and division groups in the camp's own order (the same as Who's here), not A–Z. */
+async function inCampOrder<G extends { title: string }>(supabase: DB, sessionId: string, groupBy: string | null, groups: G[]): Promise<G[]> {
+  if (groupBy !== "bunk" && groupBy !== "division") return groups;
+  const { data: divs } = await supabase.from("divisions").select("name, sort_order, bunks(name, sort_order)").eq("session_id", sessionId);
+  const rank = new Map<string, number>();
+  for (const d of divs ?? []) {
+    if (groupBy === "division") rank.set(d.name, d.sort_order);
+    else for (const b of (d.bunks as { name: string; sort_order: number }[]) ?? []) if (!rank.has(b.name)) rank.set(b.name, d.sort_order * 10000 + b.sort_order);
+  }
+  return [...groups].sort((a, b) => (rank.get(a.title) ?? 1e9) - (rank.get(b.title) ?? 1e9) || a.title.localeCompare(b.title, undefined, { numeric: true }));
+}
+
 const cmp = (a: string | boolean | null, b: string | boolean | null) => String(a ?? "").localeCompare(String(b ?? ""), undefined, { numeric: true, sensitivity: "base" });
 
 /** Builds a list: scope-filtered campers, visible columns only, grouped and sorted per preset. */
@@ -29,7 +42,7 @@ export async function buildList(
   supabase: DB,
   user: CurrentUser,
   preset: ListPreset,
-  scope: { sessionId: string; divisionId?: string; bunkId?: string; divisionIds?: string[] | null },
+  scope: { sessionId: string; divisionId?: string; bunkId?: string; divisionIds?: string[] | null; campName?: string },
   fv: FieldVisibilityRow[],
 ): Promise<BuiltList> {
   // sensitive columns only appear for roles allowed to see them (the data is masked anyway)
@@ -67,6 +80,7 @@ export async function buildList(
       cells: columns.map((col) => {
         const v = getFieldValue(c, col.key);
         if (col.key === "status" && typeof v === "string") return STATUS_LABEL[v as keyof typeof STATUS_LABEL] ?? v;
+        if (col.key.endsWith(".phone") && typeof v === "string") return formatPhone(v);
         return v;
       }),
     });
@@ -77,7 +91,7 @@ export async function buildList(
   return {
     preset,
     columns,
-    groups: [...groupsMap.values()],
-    scopeLabel: [divName, bunkName].filter(Boolean).join(" · ") || (scope.divisionIds ? "Whole camp" : "All divisions"),
+    groups: await inCampOrder(supabase, scope.sessionId, groupKey, [...groupsMap.values()]),
+    scopeLabel: [divName, bunkName].filter(Boolean).join(" · ") || (scope.campName ? `All of ${scope.campName}` : "All divisions"),
   };
 }

@@ -1,4 +1,5 @@
 "use server";
+import { plural } from "@/lib/utils";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -46,10 +47,12 @@ export async function markPrinted(ids: string[], printed = true): Promise<Action
 export async function cancelJobs(ids: string[]): Promise<ActionResult> {
   try {
     await requirePrinter();
-    const { error } = await createAdminClient().from("print_jobs").update({ status: "cancelled" }).in("id", ids).neq("status", "printed");
+    const { data, error } = await createAdminClient().from("print_jobs").update({ status: "cancelled" }).in("id", ids).neq("status", "printed").select("id");
     if (error) throw error;
     revalidatePath("/print");
-    return ok("Cancelled.");
+    const n = data?.length ?? 0;
+    const kept = ids.length - n;
+    return ok(`${n} cancelled.${kept ? ` ${kept} already printed ${kept === 1 ? "stays" : "stay"} printed.` : ""}`);
   } catch (e) {
     return fail(errorMessage(e));
   }
@@ -87,6 +90,17 @@ const batchSchema = z.object({
   deliver_to: z.string().trim().optional(),
 });
 
+const WHICH_SHORT: Record<BatchWhich, string | null> = { all: null, not_printed: "not printed before", present: "here now", arrived_today: "arrived today" };
+
+/** "Bunk Tes", "Division 2", "American camp": what a batch covered, for the queue. */
+async function placeName(db: Awaited<ReturnType<typeof createClient>>, where: string) {
+  const [kind, id] = where.split(":");
+  if (kind === "b" && id) return (await db.from("bunks").select("name, divisions(name)").eq("id", id).maybeSingle()).data?.name ?? "A bunk";
+  if (kind === "d" && id) return (await db.from("divisions").select("name").eq("id", id).maybeSingle()).data?.name ?? "A division";
+  const camp = await getCampContext();
+  return camp.current ? `All of ${camp.current.name}` : "Whole camp";
+}
+
 async function resolveWhere(where: string) {
   const camp = await getCampContext();
   const [kind, id] = where.split(":");
@@ -118,7 +132,7 @@ export async function createBatch(fd: FormData): Promise<ActionResult> {
       camperIds: ids,
       copies: d.copies,
       deliverTo: d.deliver === "email" ? d.deliver_to || null : user.email,
-      note: d.deliver === "here" ? "Printed from the print area" : null,
+      note: [await placeName(supabase, d.where), WHICH_SHORT[d.which]].filter(Boolean).join(" · "),
     });
     if (d.deliver === "email") {
       const base = await appUrl();
@@ -127,7 +141,7 @@ export async function createBatch(fd: FormData): Promise<ActionResult> {
       await createAdminClient().from("print_jobs").update({ status: "ready" }).eq("id", job.id);
     }
     revalidatePath("/print");
-    return ok(d.deliver === "email" ? `${ids.length} tags: making the PDF and emailing it.` : `${ids.length} tags ready.`, d.deliver === "here" ? `/print/jobs/${job.id}?print=1` : "/print");
+    return ok(d.deliver === "email" ? `${plural(ids.length, "tag")}: making the PDF and emailing it.` : `${plural(ids.length, "tag")} ready.`, d.deliver === "here" ? `/print/jobs/${job.id}?print=1` : "/print");
   } catch (e) {
     return fail(errorMessage(e));
   }

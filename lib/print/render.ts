@@ -25,6 +25,9 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
       return `<div class="l" style="${pos}background:${color};border-radius:${l.radius ?? 0}mm;${l.border ? `border:0.3mm solid ${safeColor(l.border, "#000")};` : ""}"></div>`;
     }
     case "text": {
+      // "T-shirt: {{TSHIRT}}" with no T-shirt size prints nothing, not a lonely "T-shirt:"
+      const fields = [...l.text.matchAll(/\{\{[^{}]+\}\}/g)];
+      if (fields.length && fields.every((m) => fill(m[0], get).trim() === "")) return "";
       const text = fill(l.text, get);
       const style = `${pos}font-size:${l.size}pt;font-weight:${l.weight ?? 400};text-align:${l.align ?? "left"};color:${safeColor(l.color, "#111111")};justify-content:${l.align === "center" ? "center" : l.align === "right" ? "flex-end" : "flex-start"};`;
       const fitAttr = l.fit !== false ? `data-fit data-min="${((l.minSize ?? DEFAULT_MIN_PT) * PX_PER_PT).toFixed(2)}"` : "";

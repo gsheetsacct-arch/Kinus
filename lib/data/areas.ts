@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { canGrantAreas, isAdmin, type CurrentUser } from "@/lib/auth/permissions";
 import type { Database } from "@/lib/supabase/database.types";
 
 export type AreaTree = {
@@ -46,4 +47,21 @@ export function areaNames(tree: AreaTree) {
   const division = (id: string) => tree.divisions.find((d) => d.id === id)?.name ?? "A division from another session";
   const bunk = (id: string) => tree.divisions.flatMap((d) => d.bunks).find((b) => b.id === id)?.name ?? "?";
   return { group, division, bunk };
+}
+
+/**
+ * The part of camp this person may give others access to: everything for an admin, their
+ * own camp/divisions/bunks for an area director (so the picker never offers what the save refuses).
+ */
+export function grantableTree(me: CurrentUser, tree: AreaTree): AreaTree {
+  if (isAdmin(me)) return tree;
+  const groupOf = (id: string) => tree.divisions.find((d) => d.id === id)?.group_id ?? null;
+  const ok = (a: { group_id?: string | null; division_id?: string | null; bunk_id?: string | null }) =>
+    canGrantAreas(me, [{ group_id: a.group_id ?? null, division_id: a.division_id ?? null, bunk_id: a.bunk_id ?? null }], false, groupOf);
+  return {
+    groups: tree.groups.filter((g) => ok({ group_id: g.id })),
+    divisions: tree.divisions
+      .map((d) => ({ ...d, bunks: d.bunks.filter((b) => ok({ division_id: d.id, bunk_id: b.id })) }))
+      .filter((d) => ok({ division_id: d.id }) || d.bunks.length > 0),
+  };
 }

@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { canFollowUp } from "@/lib/auth/permissions";
 import Link from "next/link";
 import { UserSearch } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
@@ -9,8 +11,8 @@ import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { LEVEL_RANK, effectiveLevel, isAdmin, seesAllCamp, visibleFieldGroups } from "@/lib/auth/permissions";
 import { loadAreaTree } from "@/lib/data/areas";
 import { loadBoard } from "@/lib/data/board";
-import { getCampContext } from "@/lib/data/camp";
-import { loadFollowups, loadRules } from "@/lib/data/missing";
+import { everyoneLabel, getCampContext } from "@/lib/data/camp";
+import { campStarted, loadFollowups, loadRules } from "@/lib/data/missing";
 import { defaultScope } from "@/lib/attendance/board";
 
 export const metadata = { title: "Not here yet" };
@@ -18,6 +20,8 @@ export const dynamic = "force-dynamic";
 
 export default async function MissingPage() {
   const [user, session, camp] = await Promise.all([requireUser(), getActiveSession(), getCampContext()]);
+  // counselors see their bunk on Who's here; following up is for the people over them
+  if (!canFollowUp(user)) redirect("/status");
   if (!session) return <EmptyState icon={UserSearch} title="No active session" description="Camp hasn't been set up yet." action={<Button asChild><Link href="/">Home</Link></Button>} />;
   const supabase = await createClient();
   const [{ data: fv }, tree, { data: templates }, rules, followups] = await Promise.all([
@@ -27,6 +31,7 @@ export default async function MissingPage() {
     loadRules(supabase),
     loadFollowups(supabase, session.id),
   ]);
+  const started = await campStarted(session.id);
   const rows = await loadBoard(supabase, session.id, visibleFieldGroups(user, fv ?? []).has("contacts"), camp.divisionIds);
   const campTree = { groups: tree.groups, divisions: tree.divisions.filter((d) => !camp.divisionIds || camp.divisionIds.includes(d.id)) };
   const rule = [rules.percent ? `${rules.percent}% of their bunk is here` : null, rules.after_time ? `it's past ${rules.after_time}` : null].filter(Boolean).join(" or ");
@@ -49,11 +54,13 @@ export default async function MissingPage() {
         rows={rows}
         followups={followups}
         rules={rules}
+        campStarted={started}
         tree={campTree}
         defaultScope={seesAllCamp(user) ? { kind: "all" } : defaultScope(user.coverage, campTree)}
-        campLabel={camp.camps.length > 1 ? (camp.current ? `All of ${camp.current.name}` : "All camps") : "Everyone"}
+        campLabel={everyoneLabel(camp)}
         canAct={LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan}
         templates={templates ?? []}
+        serverNow={new Date().toISOString()}
       />
     </div>
   );

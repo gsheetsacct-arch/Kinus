@@ -24,7 +24,8 @@ export function ScopeSelect({
   const camps = tree.groups.filter((g) => divisions.some((d) => d.group_id === g.id));
   return (
     <Select value={encodeScope(value)} onChange={(e) => onChange(e.target.value)} aria-label="Show" className="w-auto min-w-56 max-w-full font-medium">
-      <option value="all">{campLabel}</option>
+      {/* someone over one division: "everyone" would be the same as "all of" that division */}
+      {(divisions.length !== 1 || value.kind === "all") && <option value="all">{campLabel}</option>}
       {camps.length > 1 &&
         camps.map((g) => (
           <option key={g.id} value={encodeScope({ kind: "group", id: g.id })}>
@@ -33,7 +34,8 @@ export function ScopeSelect({
         ))}
       {divisions.map((d) => (
         <optgroup key={d.id} label={d.name}>
-          <option value={encodeScope({ kind: "division", id: d.id })}>All of {d.name}</option>
+          {/* a counselor with one bunk there: "all of the division" isn't theirs to see */}
+          {(d.bunks.filter((b) => has.b.has(b.id)).length !== 1 || (value.kind === "division" && value.id === d.id)) && <option value={encodeScope({ kind: "division", id: d.id })}>All of {d.name}</option>}
           {d.bunks
             .filter((b) => has.b.has(b.id))
             .map((b) => (
@@ -48,15 +50,24 @@ export function ScopeSelect({
 }
 
 /** The chosen place, remembered per device and per screen; falls back if it no longer exists. */
-export function useScope(storageKey: string, initial: BoardScope, exists: (s: BoardScope) => boolean, decode: (v: string | null) => BoardScope | null) {
-  const [scope, setScope] = React.useState<BoardScope>(initial);
+export function useScope(storageKey: string, initial: BoardScope, exists: (s: BoardScope) => boolean, decode: (v: string | null) => BoardScope | null, fromLink?: BoardScope | null) {
+  const [scope, setScope] = React.useState<BoardScope>(fromLink && exists(fromLink) ? fromLink : initial);
   React.useEffect(() => {
+    // a link to a particular place (from Home) wins over the remembered one
+    if (fromLink && exists(fromLink)) return;
     try {
       const s = decode(localStorage.getItem(storageKey));
       if (s && exists(s)) setScope(s);
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
+  // the place stopped existing while the page was open (a counselor moved to another bunk):
+  // go back to their own place instead of showing an empty board
+  const stillThere = exists(scope);
+  const fallback = exists(initial) ? initial : null;
+  React.useEffect(() => {
+    if (!stillThere) setScope(fallback ?? { kind: "all" });
+  }, [stillThere, fallback]);
   const choose = React.useCallback(
     (v: string) => {
       setScope(decode(v) ?? { kind: "all" });

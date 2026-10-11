@@ -33,7 +33,7 @@ export function CampSwitcher({ camps, current, className }: { camps: CampOption[
             router.refresh();
           });
         }}
-        className="h-8 w-full min-w-0 cursor-pointer appearance-none truncate rounded-lg border bg-background py-1 pl-2.5 pr-7 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+        className="h-10 w-full min-w-0 cursor-pointer md:h-8 appearance-none truncate rounded-lg border bg-background py-1 pl-2.5 pr-7 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
       >
         {camps.map((c) => (
           <option key={c.id} value={c.id}>

@@ -10,7 +10,7 @@ describe("missingStates", () => {
   it("flags stragglers once most of the bunk is here", () => {
     const rows = [...bunk("a", ["present", "present", "present", "expected"]), ...bunk("b", ["present", "expected", "expected", "expected"])];
     const s = missingStates(rows, { percent: 75, after_time: null }, none, now, "11:00");
-    expect(s.get("a3")).toEqual({ kind: "check", reason: "3 of 4 in their bunk are here" });
+    expect(s.get("a3")).toEqual({ kind: "check", reason: "3 of 4 in their bunk have arrived" });
     expect(s.get("b1")).toEqual({ kind: "waiting" });
   });
   it("counts campers who went out or home as arrived, and leaves no-shows out", () => {
@@ -39,5 +39,21 @@ describe("missingStates", () => {
 describe("campClock", () => {
   it("is 24-hour camp time", () => {
     expect(campClock(new Date("2026-07-01T18:05:00Z"), "America/New_York")).toBe("14:05");
+  });
+});
+
+describe("campStarted", () => {
+  it("flags a bunk that's entirely late once camp has started elsewhere", () => {
+    const rows = bunk("late", ["expected", "expected"]);
+    const rules = { percent: 75, after_time: "10:00" };
+    expect(missingStates(rows, rules, none, now, "11:00").get("late0")?.kind).toBe("waiting");
+    expect(missingStates(rows, rules, none, now, "11:00", true).get("late0")).toEqual({ kind: "check", reason: "Still not here after 10:00" });
+    expect(missingStates(rows, rules, none, now, "11:00", false).get("late0")?.kind).toBe("waiting");
+  });
+  it("treats a camper missing since an earlier camp day as past the cut-off all day", () => {
+    const rules = { percent: 0, after_time: "10:30" };
+    const rows = bunk("a", ["present", "expected"]);
+    expect(missingStates(rows, rules, none, now, "08:00", true).get("a1")?.kind).toBe("waiting");
+    expect(missingStates(rows, rules, none, now, "08:00", "earlier").get("a1")).toEqual({ kind: "check", reason: "Still not here since camp started" });
   });
 });

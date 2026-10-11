@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, getCurrentUser } from "@/lib/auth/current-user";
 import { canUsePrintArea, visibleFieldGroups } from "@/lib/auth/permissions";
 import { getCampContext } from "@/lib/data/camp";
-import { FIELD_BY_KEY, UNGATED_GROUPS } from "@/lib/fields";
+import { groupOfKey, UNGATED_GROUPS } from "@/lib/fields";
 import { batchCamperIds, BATCH_WHICH, type BatchWhich } from "@/lib/print/batch";
 import { byBunkThenName, loadMergeSetup, loadPrintCampers } from "@/lib/print/data";
 import { mergeValues } from "@/lib/print/merge";
@@ -12,9 +12,9 @@ import { mergeValues } from "@/lib/print/merge";
 export const maxDuration = 60;
 
 const cell = (v: string) => (/[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-/** Camper fields a merge field reads ("tshirt_size", or "{{first_name}} {{last_name}}"). */
-const sourcesOf = (source: string) => (source.includes("{{") ? [...source.matchAll(/\{\{\s*([\w.]+)\s*\}\}/g)].map((m) => m[1]) : [source]);
-const groupOf = (key: string) => (key.startsWith("contact.") ? "contacts" : (FIELD_BY_KEY[key]?.group ?? "basic"));
+/** Camper fields a merge field reads ("tshirt_size", "{{first_name}} {{last_name}}", "{{a|b}}"). */
+const sourcesOf = (source: string) =>
+  source.includes("{{") ? [...source.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].flatMap((m) => m[1].split("|").map((k) => k.trim())) : [source.trim()];
 
 /**
  * Mail-merge data for Publisher (or Word/Excel): one row per camper, one column per merge
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
   campers.sort(byBunkThenName);
   // a spreadsheet travels: leave out details this person's role can't see
   const allowed = visibleFieldGroups(user, fv ?? []);
-  const hidden = new Set(setup.fields.filter((f) => sourcesOf(f.source_field).some((k) => { const g = groupOf(k); return !UNGATED_GROUPS.includes(g as never) && !allowed.has(g); })).map((f) => f.key));
+  const hidden = new Set(setup.fields.filter((f) => sourcesOf(f.source_field).some((k) => { const g = groupOfKey(k); return !UNGATED_GROUPS.includes(g) && !allowed.has(g); })).map((f) => f.key));
   // only fields on the merge list
   const keys = setup.fields.filter((f) => f.enabled !== false).map((f) => f.key);
   const lines = [keys.join(",")];
