@@ -11,7 +11,7 @@ import { decodeScope, inScope, scopeExists, type BoardScope } from "@/lib/attend
 import { campClock, missingStates, type Followup, type MissingRules } from "@/lib/attendance/missing";
 import type { BoardRow } from "@/lib/data/board";
 import { matchScore, searchEntry } from "@/lib/search";
-import { campDateTimeToIso, campToday } from "@/lib/time";
+import { campDateTimeToIso, campHour, campToday } from "@/lib/time";
 import { CAMP_TIME_ZONE, cn, formatPhone, formatWhen } from "@/lib/utils";
 import { checkInNow, clearFollowup, markNotComing, saveFollowup, undoNotComing } from "@/app/(app)/missing/actions";
 import { ScopeSelect, useScope, type ScopeTree } from "./scope-select";
@@ -263,11 +263,12 @@ function FollowupDialog({
   const [until, setUntil] = React.useState("");
   React.useEffect(() => {
     if (!dlg) return;
-    setNote(dlg.kind === "not_coming" ? "" : (followup?.note ?? ""));
+    setNote(followup?.note ?? "");
     setUntil("");
-    const now = new Date();
-    setDate(campToday(now));
-    setTime(new Date(now.getTime() + 2 * 3600000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: CAMP_TIME_ZONE }));
+    // two hours from now, on whatever day that is at camp (10 pm + 2 h is tomorrow)
+    const later = new Date(Date.now() + 2 * 3600000);
+    setDate(campToday(later));
+    setTime(later.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: CAMP_TIME_ZONE }));
   }, [dlg, followup]);
   if (!dlg) return null;
   const id = dlg.row.id;
@@ -277,7 +278,8 @@ function FollowupDialog({
     { label: "In 1 hour", until: inHours(1) },
     { label: "In 2 hours", until: inHours(2) },
     { label: "This evening", until: campDateTimeToIso(campToday(), "18:00") },
-    { label: "Tomorrow morning", until: campDateTimeToIso(tomorrow, "09:00") },
+    // in the small hours, "morning" is today's
+    campHour() < 6 ? { label: "This morning", until: campDateTimeToIso(campToday(), "09:00") } : { label: "Tomorrow morning", until: campDateTimeToIso(tomorrow, "09:00") },
   ].filter((q) => new Date(q.until) > new Date());
   const laterIso = until === "custom" ? (date && time ? campDateTimeToIso(date, time) : "") : until;
 

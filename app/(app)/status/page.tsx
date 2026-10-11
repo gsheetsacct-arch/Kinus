@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import { StatusBoard } from "@/components/status/status-board";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { LEVEL_RANK, effectiveLevel, isDirector, seesAllCamp, visibleFieldGroups } from "@/lib/auth/permissions";
+import { LEVEL_RANK, canFollowUp, effectiveLevel, isDirector, seesAllCamp, visibleFieldGroups } from "@/lib/auth/permissions";
 import { loadAreaTree } from "@/lib/data/areas";
 import { loadBoard } from "@/lib/data/board";
 import { campStarted, loadFollowups, loadRules } from "@/lib/data/missing";
-import { getCampContext } from "@/lib/data/camp";
+import { everyoneLabel, getCampContext } from "@/lib/data/camp";
 import { decodeScope, defaultScope } from "@/lib/attendance/board";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
 
@@ -35,7 +35,7 @@ export default async function StatusPage({ searchParams }: { searchParams: Promi
   ]);
   const inCamp = (id: string | null) => !camp.divisionIds || (id !== null && camp.divisionIds.includes(id));
   const campTree = { groups: tree.groups, divisions: tree.divisions.filter((d) => inCamp(d.id)) };
-  const label = camp.camps.length > 1 ? (camp.current ? `All of ${camp.current.name}` : "All camps") : "Everyone";
+  const label = everyoneLabel(camp);
   return (
     <div>
       <PageHeader title="Who's here" description="Where every camper is right now. Tap a name to check them in or out." />
@@ -50,6 +50,7 @@ export default async function StatusPage({ searchParams }: { searchParams: Promi
         templates={templates ?? []}
         rules={rules}
         campStarted={started}
+        canFollowUp={canFollowUp(user)}
         followups={followups}
         linkScope={decodeScope(sp.where)}
         linkStatus={sp.status === "all" ? "" : sp.status && sp.status in STATUS_LABEL ? (sp.status as CamperStatus) : undefined}

@@ -34,7 +34,8 @@ export function ScopeSelect({
         ))}
       {divisions.map((d) => (
         <optgroup key={d.id} label={d.name}>
-          <option value={encodeScope({ kind: "division", id: d.id })}>All of {d.name}</option>
+          {/* a counselor with one bunk there: "all of the division" isn't theirs to see */}
+          {(d.bunks.filter((b) => has.b.has(b.id)).length !== 1 || (value.kind === "division" && value.id === d.id)) && <option value={encodeScope({ kind: "division", id: d.id })}>All of {d.name}</option>}
           {d.bunks
             .filter((b) => has.b.has(b.id))
             .map((b) => (

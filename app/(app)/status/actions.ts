@@ -11,11 +11,14 @@ import type { BoardRow } from "@/lib/data/board";
 export type BoardChange = Pick<BoardRow, "id" | "status" | "at" | "by" | "type" | "note">;
 
 /** Check-ins since `since` (ISO), for live updates without reloading the whole board. */
-export async function boardChanges(since: string): Promise<{ changes: BoardChange[]; now: string }> {
+export async function boardChanges(since: string): Promise<{ changes: BoardChange[]; now: string; cursor: string }> {
   await requireUser();
   const session = await getActiveSession();
   const now = new Date().toISOString();
-  if (!session) return { changes: [], now };
+  // the next poll looks a minute back: a check-in's time is when its transaction began, so
+  // one that commits slowly would otherwise fall behind the cursor and never show up
+  const cursor = new Date(Date.now() - 60000).toISOString();
+  if (!session) return { changes: [], now, cursor };
   const supabase = await createClient();
   // a busy minute (a whole bus at once) can pass the 1,000-row cap, so page through
   const data = await fetchAll((from, to) =>
@@ -30,6 +33,7 @@ export async function boardChanges(since: string): Promise<{ changes: BoardChang
   ).catch(() => []);
   return {
     now,
+    cursor,
     changes: data.map((c) => ({ id: c.id!, status: c.status!, at: c.last_event_at, by: c.last_event_by, type: c.last_event_type, note: c.last_event_note })),
   };
 }

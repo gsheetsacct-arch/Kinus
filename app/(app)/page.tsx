@@ -9,7 +9,8 @@ import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { canFollowUp, isAdmin, seesAllCamp, type CurrentUser } from "@/lib/auth/permissions";
 import { campStarted, flagRows, loadFollowups, loadRules } from "@/lib/data/missing";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
-import { cn } from "@/lib/utils";
+import { cn, formatTime } from "@/lib/utils";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { getCampContext } from "@/lib/data/camp";
 import { campHour } from "@/lib/time";
@@ -141,7 +142,11 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
       {session && campers.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-base font-semibold">Right now</h2>
+          {/* the numbers reload by themselves every 30 s while the page is open */}
+          <AutoRefresh every={30000} />
+          <h2 className="flex items-baseline gap-2 text-base font-semibold">
+            Right now <span className="text-xs font-normal text-muted-foreground">as of {formatTime(new Date().toISOString())}</span>
+          </h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <Link href="/status?status=all" className={tile}>
               <div className="text-xs font-medium text-muted-foreground">{areaLabel}</div>

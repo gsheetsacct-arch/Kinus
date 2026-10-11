@@ -2,6 +2,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, ChevronRight, Phone, Radio, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ const BULK: { event: AttendanceEventType; label: string; danger?: boolean }[] = 
   { event: "pickup", label: "Not coming back", danger: true },
   { event: "no_show", label: "Not coming", danger: true },
 ];
+const ROWS_PER_GROUP = 40;
 /** Above this many campers, a "not coming" change asks for the number to be typed. */
 const TYPE_TO_CONFIRM = 20;
 const SCOPE_KEY = "kinus:board-scope";
@@ -68,6 +70,7 @@ export function StatusBoard({
   followups,
   linkScope,
   linkStatus,
+  canFollowUp = true,
 }: {
   rows: BoardRow[];
   tree: Tree;
@@ -84,12 +87,15 @@ export function StatusBoard({
   /** Opened from a link (Home tiles and cards): this place and status. */
   linkScope?: BoardScope | null;
   linkStatus?: CamperStatus | "";
+  /** Counselors can't open Not here yet: the banner is just information for them. */
+  canFollowUp?: boolean;
 }) {
   const [rows, setRows] = React.useState(initialRows);
   const [scope, chooseScopeRaw] = useScope(SCOPE_KEY, defaultScope, (x) => scopeExists(x, tree), decodeScope, linkScope);
   const [status, setStatus] = React.useState<CamperStatus | "">(linkStatus ?? "present");
   const [q, setQ] = React.useState("");
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
   const [open, setOpen] = React.useState<string | null>(null);
   const [bulk, setBulk] = React.useState<{ action: (typeof BULK)[number]; ids: string[] } | null>(null);
   const [live, setLive] = React.useState(false);
@@ -106,8 +112,8 @@ export function StatusBoard({
   // live: a push from the database when anyone checks a camper in or out, plus a slow poll as a safety net
   const refresh = React.useCallback(async () => {
     try {
-      const { changes, now } = await boardChanges(since.current);
-      since.current = now;
+      const { changes, now, cursor } = await boardChanges(since.current);
+      since.current = cursor;
       setUpdated(now);
       if (!changes.length) return;
       const byId = new Map(changes.map((c) => [c.id, c]));
@@ -139,6 +145,18 @@ export function StatusBoard({
     const t = setInterval(refresh, live ? 60000 : 15000);
     return () => clearInterval(t);
   }, [refresh, live]);
+  // and a full reload of the board's data now and then: walk-ins, bunk moves, "coming later"
+  // notes and rule changes aren't check-ins, so the quick updates above don't carry them
+  const router = useRouter();
+  React.useEffect(() => {
+    const t = setInterval(() => document.visibilityState === "visible" && router.refresh(), 90000);
+    const onVisible = () => document.visibilityState === "visible" && router.refresh();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [router]);
 
   const index = React.useMemo(() => new Map(rows.map((r) => [r.id, searchEntry(r.name, r.code, r.phones.map((p) => p.tel))])), [rows]);
   const scoped = React.useMemo(() => rows.filter((r) => inScope(r, scope, tree)), [rows, scope, tree]);
@@ -202,15 +220,23 @@ export function StatusBoard({
         ))}
       </div>
 
-      {toCheck > 0 && (
-        <Link href="/missing" className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100">
-          <AlertTriangle className="size-4 shrink-0" />
-          <span className="flex-1">
-            <strong>{toCheck}</strong> {toCheck === 1 ? "camper" : "campers"} to check up on: still not here when they should be.
-          </span>
-          <ChevronRight className="size-4" />
-        </Link>
-      )}
+      {toCheck > 0 &&
+        (canFollowUp ? (
+          <Link href="/missing" className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100">
+            <AlertTriangle className="size-4 shrink-0" />
+            <span className="flex-1">
+              <strong>{toCheck}</strong> {toCheck === 1 ? "camper" : "campers"} to check up on: still not here when they should be.
+            </span>
+            <ChevronRight className="size-4" />
+          </Link>
+        ) : (
+          <p className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100">
+            <AlertTriangle className="size-4 shrink-0" />
+            <span>
+              <strong>{toCheck}</strong> {toCheck === 1 ? "camper" : "campers"} still not here when they should be (marked “check up”). Your head counselor is following up.
+            </span>
+          </p>
+        ))}
 
       <div className="no-print relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -261,7 +287,7 @@ export function StatusBoard({
               </span>
             </header>
             <ul className="divide-y">
-              {g.rows.map((r) => (
+              {(expanded.has(g.key) || q.trim() ? g.rows : g.rows.slice(0, ROWS_PER_GROUP)).map((r) => (
                 <li key={r.id} className={cn("flex items-start gap-3 px-4 py-2.5", selected.has(r.id) && "bg-primary-soft/40")}>
                   {canBulk && <input type="checkbox" className="mt-0.5 size-5 accent-[var(--primary)]" checked={selected.has(r.id)} onChange={(e) => toggle([r.id], e.target.checked)} aria-label={`Select ${r.name}`} />}
                   <button type="button" onClick={() => setOpen(r.id)} className="min-w-0 flex-1 text-left">
@@ -276,6 +302,7 @@ export function StatusBoard({
                     <span className="block truncate text-xs text-muted-foreground">
                       {r.at ? `${formatWhen(r.at, now)} · ${eventLabel(r)}${r.by ? ` by ${r.by}` : ""}` : r.at ? " " : "Not checked in yet"}
                       {r.note && !isUndo(r) && <span dir="auto"> · “{r.note}”</span>}
+                      <span className="font-mono"> · {r.code}</span>
                     </span>
                   </button>
                   <span className="flex shrink-0 flex-col items-end gap-1 sm:flex-row-reverse sm:items-center sm:gap-2">
@@ -294,6 +321,12 @@ export function StatusBoard({
                 </li>
               ))}
             </ul>
+            {/* a whole camp is hundreds of rows: draw a bunk's first ones, the rest on request (phones stay quick) */}
+            {!expanded.has(g.key) && !q.trim() && g.rows.length > ROWS_PER_GROUP && (
+              <button type="button" className="w-full border-t py-3 text-sm font-medium text-primary hover:bg-muted/50" onClick={() => setExpanded((x) => new Set(x).add(g.key))}>
+                Show all {g.rows.length}
+              </button>
+            )}
           </section>
         );
       })}

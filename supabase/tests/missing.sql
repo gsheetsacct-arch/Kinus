@@ -36,3 +36,12 @@ do $$ begin
   perform record_attendance('40000000-0000-0000-0000-000000000001', 'correction', 'manual', 'sneaky', now(), 'present');
   raise exception 'counselor made a correction';
 exception when insufficient_privilege then null; end $$;
+-- the follow-up note moves into the timeline when they're marked not coming (0016)
+insert into camper_followups (camper_id, note) values ('40000000-0000-0000-0000-000000000001', 'Called mom, no answer');
+select record_attendance('40000000-0000-0000-0000-000000000001', 'no_show', 'manual', 'Sick this week');
+do $$ begin
+  if exists (select 1 from camper_followups where camper_id = '40000000-0000-0000-0000-000000000001') then raise exception 'follow-up left behind'; end if;
+  if (select note from attendance_events where camper_id = '40000000-0000-0000-0000-000000000001' and event_type = 'no_show' order by occurred_at desc, id desc limit 1) <> 'Sick this week · follow-up: Called mom, no answer' then
+    raise exception 'note not kept: %', (select note from attendance_events where camper_id = '40000000-0000-0000-0000-000000000001' and event_type = 'no_show' order by occurred_at desc limit 1);
+  end if;
+end $$;

@@ -45,3 +45,9 @@ export const getCampContext = cache(async (): Promise<CampContext> => {
 
 /** Whether a division is in the camp being looked at. */
 export const inCurrentCamp = (ctx: CampContext, divisionId: string | null | undefined) => !ctx.divisionIds || (divisionId ? ctx.divisionIds.includes(divisionId) : !ctx.current);
+
+/** What "everyone" means on the scope menu: all camps, one camp ("All of American"), or everyone. */
+export function everyoneLabel(camp: { camps: { name: string }[]; current: { name: string } | null }) {
+  if (camp.camps.length > 1) return camp.current ? `All of ${camp.current.name}` : "All camps";
+  return camp.camps.length === 1 ? `All of ${camp.camps[0].name}` : "Everyone";
+}

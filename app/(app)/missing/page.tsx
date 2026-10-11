@@ -11,7 +11,7 @@ import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { LEVEL_RANK, effectiveLevel, isAdmin, seesAllCamp, visibleFieldGroups } from "@/lib/auth/permissions";
 import { loadAreaTree } from "@/lib/data/areas";
 import { loadBoard } from "@/lib/data/board";
-import { getCampContext } from "@/lib/data/camp";
+import { everyoneLabel, getCampContext } from "@/lib/data/camp";
 import { campStarted, loadFollowups, loadRules } from "@/lib/data/missing";
 import { defaultScope } from "@/lib/attendance/board";
 
@@ -57,7 +57,7 @@ export default async function MissingPage() {
         campStarted={started}
         tree={campTree}
         defaultScope={seesAllCamp(user) ? { kind: "all" } : defaultScope(user.coverage, campTree)}
-        campLabel={camp.camps.length > 1 ? (camp.current ? `All of ${camp.current.name}` : "All camps") : "Everyone"}
+        campLabel={everyoneLabel(camp)}
         canAct={LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan}
         templates={templates ?? []}
         serverNow={new Date().toISOString()}

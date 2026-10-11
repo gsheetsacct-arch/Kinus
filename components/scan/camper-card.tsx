@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { StatusBadge } from "@/components/status-badge";
 import { cardActions } from "@/lib/attendance/scan";
 import type { AttendanceEventType, CamperStatus } from "@/lib/attendance/machine";
-import { cn, formatPhone, formatTime } from "@/lib/utils";
+import { cn, formatPhone, formatTime, formatWhen } from "@/lib/utils";
 import { loadCard, recordFromCard, requestTag, undoScan, type CardData, type ScanOutcome } from "@/app/(app)/scan/actions";
 
 export type TemplateButton = { id: string; name: string };
@@ -59,6 +59,11 @@ export function CamperCard({
   const [done, setDone] = React.useState<Extract<ScanOutcome, { ok: true; kind: "act" }> | null>(null);
   const reload = React.useCallback(() => loadCard(camperId).then(setCard), [camperId]);
   const first = React.useRef(initial !== undefined);
+  // a card left open (a pop-up on Who's here) keeps up with the gate
+  React.useEffect(() => {
+    const t = setInterval(() => document.visibilityState === "visible" && loadCard(camperId).then((c) => c && setCard(c)).catch(() => undefined), 20000);
+    return () => clearInterval(t);
+  }, [camperId]);
   React.useEffect(() => {
     if (first.current) {
       first.current = false;
@@ -77,7 +82,12 @@ export function CamperCard({
       setResting(true);
       setTimeout(() => setResting(false), 1200);
       const r = await recordFromCard(card.id, event);
-      if (!r.ok) return void toast.error(r.error);
+      if (!r.ok) {
+        toast.error(r.error);
+        // usually someone else just changed them: show where they are now
+        reload();
+        return;
+      }
       if (r.kind === "act") {
         onAction?.(r);
         // said on the card itself, with Undo: a notice would cover the name, and a pop-up
@@ -123,7 +133,7 @@ export function CamperCard({
       )}
       <p className="text-sm text-muted-foreground">
         {embedded && <StatusBadge status={card.status} className="mr-2 align-middle" />}
-        {card.since ? `Since ${formatTime(card.since)}${card.by ? ` · ${card.by}` : ""}` : "Not checked in yet"}
+        {card.since ? `Since ${formatWhen(card.since)}${card.by ? ` · ${card.by}` : ""}` : "Not checked in yet"}
       </p>
       {card.medicalFlag && !embedded && (
         <p className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">

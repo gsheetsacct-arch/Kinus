@@ -13,7 +13,8 @@ export async function campStarted(sessionId: string): Promise<boolean> {
   const { createAdminClient } = await import("@/lib/supabase/admin");
   const { count } = await createAdminClient()
     .from("attendance_events")
-    .select("id, campers!inner(session_id)", { count: "exact", head: true })
+    // two foreign keys link these tables (camper_id, and campers.last_event_id): name the one meant
+    .select("id, campers!attendance_events_camper_id_fkey!inner(session_id)", { count: "exact", head: true })
     .eq("campers.session_id", sessionId)
     .eq("event_type", "arrival");
   return (count ?? 0) > 0;
