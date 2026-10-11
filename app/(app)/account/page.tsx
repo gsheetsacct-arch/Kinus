@@ -14,6 +14,7 @@ import { areaNames, loadAreaTree } from "@/lib/data/areas";
 import { getActiveSession } from "@/lib/auth/current-user";
 import { signOut } from "@/app/(auth)/actions";
 import { changeMyPassword, updateMyProfile } from "./actions";
+import { Passkeys } from "./passkeys";
 
 export const metadata = { title: "Your account" };
 
@@ -53,6 +54,14 @@ export default async function AccountPage() {
           </div>
         </ActionForm>
       </Section>
+      <div id="face-id" className="scroll-mt-20">
+        <Section
+          title="Face ID or fingerprint"
+          description="Sign in with your face or fingerprint instead of a password. Set it up on each phone or computer you use; it stays on that device (or syncs through iCloud Keychain or Google Password Manager)."
+        >
+          <Passkeys />
+        </Section>
+      </div>
       <Section title="What you can access">
         <div className="space-y-3 text-sm">
           <div className="flex flex-wrap items-center gap-2">

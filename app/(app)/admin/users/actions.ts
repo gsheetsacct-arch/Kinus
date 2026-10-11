@@ -340,3 +340,24 @@ export async function setActive(fd: FormData): Promise<ActionResult> {
   revalidatePath("/admin/users");
   return ok(active ? "Account reactivated." : "Account deactivated. They can no longer see anything.");
 }
+
+/** A lost or handed-on phone: remove every Face ID / fingerprint sign-in this person set up. */
+export async function removePasskeys(fd: FormData): Promise<ActionResult> {
+  const me = await requireDirector();
+  const id = String(fd.get("id"));
+  try {
+    if (!(await assertCanManage(me, [id])).length) return fail("You can't change this person.");
+    const admin = createAdminClient();
+    const { data: keys, error } = await admin.auth.admin.passkey.listPasskeys({ userId: id });
+    if (error) throw error;
+    for (const k of keys ?? []) {
+      const { error: e } = await admin.auth.admin.passkey.deletePasskey({ userId: id, passkeyId: k.id });
+      if (e) throw e;
+    }
+    revalidatePath(`/admin/users/${id}`);
+    const n = keys?.length ?? 0;
+    return ok(n ? `Removed ${n === 1 ? "1 Face ID sign-in" : `${n} Face ID sign-ins`}. They sign in with their password or an emailed link.` : "They had no Face ID sign-ins.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}

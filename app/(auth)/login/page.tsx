@@ -2,6 +2,7 @@ import { Tent } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { HashSession } from "./hash-session";
 import { LoginForm } from "./login-form";
+import { PasskeySignIn } from "@/components/auth/passkey-sign-in";
 
 export const metadata = { title: "Sign in" };
 
@@ -39,6 +40,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <p className="mb-6 mt-1 text-sm text-muted-foreground">Use the email your invitation was sent to.</p>
           {error && <p className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{decodeURIComponent(error)}</p>}
           <HashSession next={safeNext} signedIn={Boolean(user)} />
+          <PasskeySignIn next={safeNext} />
           <LoginForm next={safeNext} />
         </div>
       </section>

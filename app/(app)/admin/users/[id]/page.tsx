@@ -17,7 +17,7 @@ import { ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
 import { encodeArea, grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
 import { formatDateTime } from "@/lib/utils";
-import { savePerson, sendSignInLink, setActive, setUserPassword } from "../actions";
+import { removePasskeys, savePerson, sendSignInLink, setActive, setUserPassword } from "../actions";
 
 export const metadata = { title: "Edit person" };
 
@@ -41,6 +41,13 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
   const signIn = info.get(p.id);
   const st = statusOf(p.is_active, signIn);
   const roles = ROLE_ORDER.filter((r) => canManageRole(me, r) || r === p.role);
+  // their Face ID / fingerprint sign-ins (null when passkeys aren't switched on in Supabase)
+  const passkeys = manageable
+    ? await admin.auth.admin.passkey
+        .listPasskeys({ userId: p.id })
+        .then(({ data, error }) => (error || !Array.isArray(data) ? null : data))
+        .catch(() => null)
+    : null;
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -96,6 +103,18 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
               </FormDialog>
             </div>
           </Section>
+          {passkeys !== null && (
+            <Section title="Face ID or fingerprint sign-in" description={passkeys.length ? `Set up on ${passkeys.length === 1 ? "1 device" : `${passkeys.length} devices`}: ${passkeys.map((k) => k.friendly_name || "a device").join(", ")}.` : "Not set up. They can add it on their Account page."}>
+              {passkeys.length > 0 && (
+                <ActionForm action={removePasskeys} confirm={`Remove ${p.full_name}'s Face ID sign-ins?`} confirmDetail="For a lost or handed-on phone. They sign in with their password or an emailed link, and can set Face ID up again." confirmLabel="Remove" danger>
+                  <input type="hidden" name="id" value={p.id} />
+                  <Button variant="outline" type="submit">
+                    Remove Face ID sign-ins
+                  </Button>
+                </ActionForm>
+              )}
+            </Section>
+          )}
           <Section tone="danger" title={p.is_active ? "Deactivate account" : "Account is deactivated"} description={p.is_active ? "They immediately lose access. You can reactivate them later." : "They can't see anything until reactivated."}>
             <ActionForm action={setActive} confirm={p.is_active ? `Deactivate ${p.full_name}?` : undefined} confirmDetail="They can't sign in until you turn their account back on. Nothing they recorded is lost." confirmLabel="Deactivate" danger>
               <input type="hidden" name="id" value={p.id} />

@@ -15,7 +15,8 @@ export async function signInWithPassword(formData: FormData): Promise<ActionResu
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email: parsed.data.email, password: parsed.data.password });
   if (error) return fail(error.message === "Invalid login credentials" ? "Wrong email or password." : error.message);
-  const next = parsed.data.next && parsed.data.next.startsWith("/") ? parsed.data.next : "/";
+  // only paths on this site ("//other.site" would leave it)
+  const next = parsed.data.next && parsed.data.next.startsWith("/") && !parsed.data.next.startsWith("//") ? parsed.data.next : "/";
   return ok(undefined, next);
 }
 
