@@ -56,6 +56,7 @@ export function CamperCard({
   // second tap doesn't land on the button that just appeared under the finger
   const [confirming, setConfirming] = React.useState<AttendanceEventType | null>(null);
   const [resting, setResting] = React.useState(false);
+  const [reason, setReason] = React.useState("");
   const [done, setDone] = React.useState<Extract<ScanOutcome, { ok: true; kind: "act" }> | null>(null);
   const reload = React.useCallback(() => loadCard(camperId).then(setCard), [camperId]);
   const first = React.useRef(initial !== undefined);
@@ -76,12 +77,13 @@ export function CamperCard({
   if (card === undefined) return <div className="h-40 animate-pulse rounded-xl bg-muted" />;
   if (card === null) return <p className="text-sm text-muted-foreground">This camper isn&apos;t in your area.</p>;
 
-  const act = (event: AttendanceEventType) =>
+  const act = (event: AttendanceEventType, note?: string) =>
     start(async () => {
       setConfirming(null);
+      setReason("");
       setResting(true);
       setTimeout(() => setResting(false), 1200);
-      const r = await recordFromCard(card.id, event);
+      const r = await recordFromCard(card.id, event, note?.trim() || undefined);
       if (!r.ok) {
         toast.error(r.error);
         // usually someone else just changed them: show where they are now
@@ -156,12 +158,13 @@ export function CamperCard({
       )}
       {canScan && confirming && (
         <div className="space-y-2 rounded-xl border border-status-departed/40 p-3">
-          <p className="text-sm font-medium">Check {card.name} out for the day: not coming back today?</p>
+          <p className="text-sm font-medium">Check {card.name} out: not coming back today?</p>
+          <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why (optional): home for the night, left camp for good, sick…" aria-label="Why" dir="auto" />
           <div className="grid grid-cols-2 gap-2">
             <Button variant="outline" size="lg" onClick={() => setConfirming(null)}>
               Cancel
             </Button>
-            <Button size="lg" className={TONE.home} disabled={pending} onClick={() => act(confirming)}>
+            <Button size="lg" className={TONE.home} disabled={pending} onClick={() => act(confirming, reason)}>
               Not coming back
             </Button>
           </div>

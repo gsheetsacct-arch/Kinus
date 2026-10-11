@@ -61,6 +61,11 @@ export function useScope(storageKey: string, initial: BoardScope, exists: (s: Bo
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
+  // the place stopped existing while the page was open (a counselor moved to another bunk):
+  // go back to their own place instead of showing an empty board
+  React.useEffect(() => {
+    if (!exists(scope)) setScope(exists(initial) ? initial : { kind: "all" });
+  });
   const choose = React.useCallback(
     (v: string) => {
       setScope(decode(v) ?? { kind: "all" });

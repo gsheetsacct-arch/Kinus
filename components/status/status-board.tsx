@@ -16,7 +16,7 @@ import type { BoardRow } from "@/lib/data/board";
 import { matchScore, searchEntry } from "@/lib/search";
 import { createClient } from "@/lib/supabase/client";
 import { CAMP_TIME_ZONE, cn, formatPhone, formatWhen } from "@/lib/utils";
-import { campClock, missingStates, type Followup, type MissingRules } from "@/lib/attendance/missing";
+import { campClock, missingStates, type CampStart, type Followup, type MissingRules } from "@/lib/attendance/missing";
 import { boardChanges, bulkAttendance } from "@/app/(app)/status/actions";
 
 type Tree = { groups: { id: string; name: string }[]; divisions: { id: string; name: string; group_id: string | null; bunks: { id: string; name: string }[] }[] };
@@ -82,7 +82,7 @@ export function StatusBoard({
   templates: TemplateButton[];
   rules: MissingRules;
   /** Someone in the session has arrived (session-wide). */
-  campStarted: boolean;
+  campStarted: CampStart;
   followups: Record<string, Followup>;
   /** Opened from a link (Home tiles and cards): this place and status. */
   linkScope?: BoardScope | null;
@@ -91,7 +91,7 @@ export function StatusBoard({
   canFollowUp?: boolean;
 }) {
   const [rows, setRows] = React.useState(initialRows);
-  const [scope, chooseScopeRaw] = useScope(SCOPE_KEY, defaultScope, (x) => scopeExists(x, tree), decodeScope, linkScope);
+  const [scope, chooseScopeRaw] = useScope(SCOPE_KEY, defaultScope, (x) => scopeExists(x, tree) && (x.kind === "all" || rows.some((r) => inScope(r, x, tree))), decodeScope, linkScope);
   const [status, setStatus] = React.useState<CamperStatus | "">(linkStatus ?? "present");
   const [q, setQ] = React.useState("");
   const [selected, setSelected] = React.useState<Set<string>>(new Set());

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CamperCard, type TemplateButton } from "@/components/scan/camper-card";
 import { decodeScope, inScope, scopeExists, type BoardScope } from "@/lib/attendance/board";
-import { campClock, missingStates, type Followup, type MissingRules } from "@/lib/attendance/missing";
+import { campClock, missingStates, type CampStart, type Followup, type MissingRules } from "@/lib/attendance/missing";
 import type { BoardRow } from "@/lib/data/board";
 import { matchScore, searchEntry } from "@/lib/search";
 import { campDateTimeToIso, campHour, campToday } from "@/lib/time";
@@ -41,7 +41,7 @@ export function MissingBoard({
   followups: Record<string, Followup>;
   rules: MissingRules;
   /** Someone in the session has arrived (session-wide). */
-  campStarted: boolean;
+  campStarted: CampStart;
   tree: ScopeTree;
   defaultScope: BoardScope;
   campLabel: string;
@@ -51,7 +51,7 @@ export function MissingBoard({
   serverNow: string;
 }) {
   const router = useRouter();
-  const [scope, chooseScope] = useScope("kinus:missing-scope", defaultScope, (s) => scopeExists(s, tree), decodeScope);
+  const [scope, chooseScope] = useScope("kinus:missing-scope", defaultScope, (s) => scopeExists(s, tree) && (s.kind === "all" || rows.some((r) => inScope(r, s, tree))), decodeScope);
   const [now, setNow] = React.useState<Date>(() => new Date(serverNow));
   const [ready, setReady] = React.useState(false);
   const [q, setQ] = React.useState("");

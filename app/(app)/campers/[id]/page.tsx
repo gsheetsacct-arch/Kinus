@@ -60,6 +60,10 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
   if (!c) notFound();
   // a camper from another year: offer that year's bunks
   const bunks = c.session_id === session?.id ? activeBunks.data : (await divisionsFor(c.session_id!)).data;
+  // the Changes tab says who
+  const actorIds = [...new Set((history ?? []).map((h) => h.actor_id).filter((x): x is string => Boolean(x)))];
+  const { data: actors } = actorIds.length ? await supabase.from("profiles").select("id, full_name").in("id", actorIds) : { data: [] as { id: string; full_name: string }[] };
+  const actorName = new Map((actors ?? []).map((a) => [a.id, a.full_name]));
   // the Changes tab shows names, not ids
   const placeName = new Map<string, string>((bunks ?? []).flatMap((d) => [[d.id, d.name] as [string, string], ...((d.bunks as { id: string; name: string }[]) ?? []).map((b) => [b.id, b.name] as [string, string])]));
   const HISTORY_LABEL: Record<string, string> = { division_id: "Division", bunk_id: "Bunk", archived_at: "Archived", in_latest_import: "In latest export", status: "Status" };
@@ -257,7 +261,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
                     <div className="flex gap-2 text-muted-foreground">
                       <span className="w-36">{formatDateTime(h.at)}</span>
                       <span>
-                        {h.action === "INSERT" ? "added" : h.action === "DELETE" ? "removed" : "changed"} {h.source === "ui" ? "in Kinus" : <>by {src}</>}
+                        {h.action === "INSERT" ? "added" : h.action === "DELETE" ? "removed" : "changed"} {h.source === "ui" ? (h.actor_id && actorName.get(h.actor_id) ? `by ${actorName.get(h.actor_id)}` : "in Kinus") : <>by {src}</>}
                       </span>
                     </div>
                     {h.action === "UPDATE" && (

@@ -8,7 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireDirector } from "@/lib/auth/current-user";
 import { canGrantAreas, canManageRole, isAdmin, type StaffRole } from "@/lib/auth/permissions";
 import { ROLE_ORDER, areaLabel } from "@/lib/labels";
-import { areaNames, loadAreaTree } from "@/lib/data/areas";
+import { areaNames, grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
 import { bulkSendLinks, bulkSetAccess, bulkSetActive } from "./actions";
 
@@ -82,7 +82,7 @@ export default async function UsersPage() {
           Use <strong>Add many at once</strong> to paste your staff list from a spreadsheet (name, email, role, division, bunk). Everyone gets an invitation email. To change many people later, tick them below.
         </Callout>
       )}
-      <StaffTable rows={rows} tree={tree} roles={roles} actions={{ bulkSetAccess, bulkSendLinks, bulkSetActive }} lockAll={!isAdmin(me)} />
+      <StaffTable rows={rows} tree={grantableTree(me, tree)} roles={roles} actions={{ bulkSetAccess, bulkSendLinks, bulkSetActive }} lockAll={!isAdmin(me)} />
     </div>
   );
 }

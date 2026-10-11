@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireDirector } from "@/lib/auth/current-user";
 import { canManageRole, isAdmin } from "@/lib/auth/permissions";
 import { ROLE_ORDER } from "@/lib/labels";
-import { loadAreaTree } from "@/lib/data/areas";
+import { grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { savePerson } from "../actions";
 
 export const metadata = { title: "Add a person" };
@@ -22,7 +22,7 @@ export default async function NewPersonPage() {
           isNew
           person={{ full_name: "", email: "", phone: "", role: "counselor", access_level: "scan", all_areas: false, areas: [] }}
           roles={ROLE_ORDER.filter((r) => canManageRole(me, r))}
-          tree={tree}
+          tree={grantableTree(me, tree)}
           action={savePerson}
           submitLabel="Add person"
           lockAll={!isAdmin(me)}

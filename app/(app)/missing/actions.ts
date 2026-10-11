@@ -21,10 +21,11 @@ const done = (message: string): Result => {
 export async function saveFollowup(camperId: string, f: { until?: string | null; note?: string | null }): Promise<Result> {
   const me = await requireUser();
   const supabase = await createClient();
-  // only for campers still missing: someone may have checked them in a moment ago
-  if (f.until) {
-    const { data: c } = await supabase.from("campers").select("status").eq("id", camperId).maybeSingle();
-    if (c && c.status !== "expected") return { ok: false, error: c.status === "no_show" ? "They're marked not coming. Tap “Coming after all” first." : "They're already here." };
+  // only for campers still missing: the gate may have checked them in a moment ago, and a
+  // note left on someone who's here would resurface on a check-in days later
+  const { data: c } = await supabase.from("campers").select("status").eq("id", camperId).maybeSingle();
+  if (c && c.status !== "expected" && (f.until || c.status !== "no_show")) {
+    return { ok: false, error: c.status === "no_show" ? "They're marked not coming. Tap “Coming after all” first." : "They've arrived in the meantime, so there's nothing to follow up." };
   }
   const row: { camper_id: string; updated_at: string; until?: string | null; note?: string | null } = { camper_id: camperId, updated_at: new Date().toISOString() };
   if (f.until !== undefined) row.until = f.until;

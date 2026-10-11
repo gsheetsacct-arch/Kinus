@@ -41,7 +41,7 @@ insert into camper_followups (camper_id, note) values ('40000000-0000-0000-0000-
 select record_attendance('40000000-0000-0000-0000-000000000001', 'no_show', 'manual', 'Sick this week');
 do $$ begin
   if exists (select 1 from camper_followups where camper_id = '40000000-0000-0000-0000-000000000001') then raise exception 'follow-up left behind'; end if;
-  if (select note from attendance_events where camper_id = '40000000-0000-0000-0000-000000000001' and event_type = 'no_show' order by occurred_at desc, id desc limit 1) <> 'Sick this week · follow-up: Called mom, no answer' then
+  if (select note from attendance_events where camper_id = '40000000-0000-0000-0000-000000000001' and event_type = 'no_show' order by occurred_at desc, id desc limit 1) not like 'Sick this week · follow-up from %: Called mom, no answer' then
     raise exception 'note not kept: %', (select note from attendance_events where camper_id = '40000000-0000-0000-0000-000000000001' and event_type = 'no_show' order by occurred_at desc limit 1);
   end if;
 end $$;

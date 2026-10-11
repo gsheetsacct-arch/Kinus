@@ -50,4 +50,10 @@ describe("campStarted", () => {
     expect(missingStates(rows, rules, none, now, "11:00", true).get("late0")).toEqual({ kind: "check", reason: "Still not here after 10:00" });
     expect(missingStates(rows, rules, none, now, "11:00", false).get("late0")?.kind).toBe("waiting");
   });
+  it("treats a camper missing since an earlier camp day as past the cut-off all day", () => {
+    const rules = { percent: 0, after_time: "10:30" };
+    const rows = bunk("a", ["present", "expected"]);
+    expect(missingStates(rows, rules, none, now, "08:00", true).get("a1")?.kind).toBe("waiting");
+    expect(missingStates(rows, rules, none, now, "08:00", "earlier").get("a1")).toEqual({ kind: "check", reason: "Still not here since camp started" });
+  });
 });

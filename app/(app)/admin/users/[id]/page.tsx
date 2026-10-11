@@ -14,7 +14,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireDirector } from "@/lib/auth/current-user";
 import { canGrantAreas, canManageRole, isAdmin } from "@/lib/auth/permissions";
 import { ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
-import { encodeArea, loadAreaTree } from "@/lib/data/areas";
+import { encodeArea, grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
 import { formatDateTime } from "@/lib/utils";
 import { savePerson, sendSignInLink, setActive, setUserPassword } from "../actions";
@@ -61,7 +61,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
         <PersonForm
           person={{ id: p.id, full_name: p.full_name, email: p.email, phone: p.phone ?? "", role: p.role, access_level: p.access_level, all_areas: p.all_areas, areas: (areas ?? []).map(encodeArea) }}
           roles={roles}
-          tree={tree}
+          tree={grantableTree(me, tree)}
           action={savePerson}
           submitLabel="Save"
           lockAll={!isAdmin(me)}
