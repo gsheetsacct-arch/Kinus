@@ -14,7 +14,7 @@ export function PhoneBook({ sections }: { sections: PhoneBookSection[] }) {
   const shown = sections
     .map((s) => ({
       ...s,
-      entries: s.entries.filter((e) => !needle || normalizeName(`${e.name} ${e.where} ${STAFF_ROLES[e.role].label}`).includes(needle) || (e.phone ?? "").replace(/\D/g, "").includes(q.replace(/\D/g, "") || "x")),
+      entries: s.entries.filter((e) => !needle || normalizeName(`${e.name} ${e.where} ${STAFF_ROLES[e.role].label} ${e.title ?? ""}`).includes(needle) || (e.phone ?? "").replace(/\D/g, "").includes(q.replace(/\D/g, "") || "x")),
     }))
     .filter((s) => s.entries.length);
   const missing = sections.flatMap((s) => s.entries).filter((e) => !e.phone).length;
@@ -47,6 +47,7 @@ export function PhoneBook({ sections }: { sections: PhoneBookSection[] }) {
                     {e.you && <span className="ml-1.5 text-xs font-normal text-muted-foreground">(you)</span>}
                   </span>
                   <span className="block text-xs text-muted-foreground" dir="auto">
+                    {e.title ? `${e.title} · ` : ""}
                     {STAFF_ROLES[e.role].label} · {e.where}
                     {e.phone ? ` · ${formatPhone(e.phone)}` : " · no phone yet"}
                   </span>

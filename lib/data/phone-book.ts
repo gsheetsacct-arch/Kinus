@@ -1,9 +1,9 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { seesAllCamp, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
+import { phoneBookHeadsOnly, seesAllCamp, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
 import { loadAreaTree } from "@/lib/data/areas";
 
-export type PhoneBookEntry = { id: string; name: string; role: StaffRole; phone: string | null; email: string | null; where: string; you: boolean };
+export type PhoneBookEntry = { id: string; name: string; role: StaffRole; title: string | null; phone: string | null; email: string | null; where: string; you: boolean };
 export type PhoneBookSection = { key: string; title: string; color: string | null; entries: PhoneBookEntry[] };
 
 // head staff first, then counselors, then everyone else
@@ -18,7 +18,7 @@ export async function loadPhoneBook(me: CurrentUser, sessionId: string, campDivi
   const admin = createAdminClient();
   const [tree, { data: people }, { data: scopes }] = await Promise.all([
     loadAreaTree(admin, sessionId),
-    admin.from("profiles").select("id, full_name, role, phone, email, all_areas, is_active").eq("is_active", true),
+    admin.from("profiles").select("id, full_name, role, title, phone, email, all_areas, is_active").eq("is_active", true),
     admin.from("staff_scopes").select("user_id, group_id, division_id, bunk_id"),
   ]);
   const mine = new Set(me.coverage.map((c) => c.division_id));
@@ -27,13 +27,16 @@ export async function loadPhoneBook(me: CurrentUser, sessionId: string, campDivi
   const groupName = new Map(tree.groups.map((g) => [g.id, g.name]));
   const byUser = new Map<string, { group_id: string | null; division_id: string | null; bunk_id: string | null }[]>();
   for (const s of scopes ?? []) byUser.set(s.user_id, [...(byUser.get(s.user_id) ?? []), s]);
-  const entry = (p: NonNullable<typeof people>[number], where: string): PhoneBookEntry => ({ id: p.id, name: p.full_name, role: p.role, phone: p.phone, email: p.email, where, you: p.id === me.id });
-  const sort = (list: (PhoneBookEntry & { order: number })[]) => list.sort((a, b) => (RANK[a.role] ?? 9) - (RANK[b.role] ?? 9) || a.order - b.order || a.name.localeCompare(b.name)).map((e) => ({ id: e.id, name: e.name, role: e.role, phone: e.phone, email: e.email, where: e.where, you: e.you }));
+  const entry = (p: NonNullable<typeof people>[number], where: string): PhoneBookEntry => ({ id: p.id, name: p.full_name, role: p.role, title: p.title, phone: p.phone, email: p.email, where, you: p.id === me.id });
+  const sort = (list: (PhoneBookEntry & { order: number })[]) => list.sort((a, b) => (RANK[a.role] ?? 9) - (RANK[b.role] ?? 9) || a.order - b.order || a.name.localeCompare(b.name)).map((e) => ({ id: e.id, name: e.name, role: e.role, title: e.title, phone: e.phone, email: e.email, where: e.where, you: e.you }));
 
+  // counselors and check-in helpers: just the head counselors and division heads over them
+  const headsOnly = phoneBookHeadsOnly(me);
   const sections: PhoneBookSection[] = divisions.map((d) => {
     const list: (PhoneBookEntry & { order: number })[] = [];
     for (const p of people ?? []) {
       if (p.all_areas || p.role === "owner") continue;
+      if (headsOnly && p.role !== "head_counselor" && p.role !== "division_head") continue;
       const here = (byUser.get(p.id) ?? []).filter((s) => s.division_id === d.id || (s.group_id && s.group_id === d.group_id));
       if (!here.length) continue;
       const bunks = here.filter((s) => s.bunk_id).map((s) => bunkName.get(s.bunk_id!)!).filter(Boolean);
@@ -43,6 +46,6 @@ export async function loadPhoneBook(me: CurrentUser, sessionId: string, campDivi
     return { key: d.id, title: d.name, color: d.color, entries: sort(list) };
   });
   const camp = (people ?? []).filter((p) => p.all_areas || p.role === "owner").map((p) => ({ ...entry(p, "All of camp"), order: 0 }));
-  if (camp.length) sections.push({ key: "camp", title: "Whole camp: directors and office", color: null, entries: sort(camp) });
+  if (camp.length && !headsOnly) sections.push({ key: "camp", title: "Whole camp: directors and office", color: null, entries: sort(camp) });
   return sections.filter((s) => s.entries.length);
 }

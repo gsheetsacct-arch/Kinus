@@ -1,5 +1,5 @@
 import type { CurrentUser } from "@/lib/auth/permissions";
-import { LEVEL_RANK, canFollowUp, canUsePhoneBook, canUsePrintArea, effectiveLevel, isAdmin, isDirector } from "@/lib/auth/permissions";
+import { LEVEL_RANK, canFollowUp, canUsePhoneBook, canUsePrintArea, effectiveLevel, isAdmin, isStaffManager } from "@/lib/auth/permissions";
 
 export type NavIcon = "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser";
 export type NavItem = { href: string; label: string; icon: NavIcon; description: string; section: "main" | "admin"; mobile?: boolean };
@@ -16,9 +16,9 @@ export function buildNav(user: CurrentUser): NavItem[] {
     { href: "/campers", label: "Campers", icon: "Users", description: "Find any camper", section: "main", mobile: true },
     { href: "/lists", label: "Lists", icon: "ListChecks", description: "Bunk and division lists to print", section: "main" },
   ];
-  if (canUsePhoneBook(user)) nav.push({ href: "/phone-book", label: "Phone book", icon: "BookUser", description: "Call or text the staff of your divisions", section: "main" });
+  if (canUsePhoneBook(user)) nav.push({ href: "/phone-book", label: "Phone book", icon: "BookUser", description: "Call or text the staff you work with", section: "main" });
   if (canUsePrintArea(user)) nav.push({ href: "/print", label: "Print", icon: "Printer", description: "Name and luggage tags: queue, batches, templates", section: "main" });
-  if (isDirector(user)) nav.push({ href: "/admin/users", label: "Staff", icon: "UserCog", description: "Invite people and choose what they can see", section: "main" });
+  if (isStaffManager(user)) nav.push({ href: "/admin/users", label: "Staff", icon: "UserCog", description: "Invite people and choose what they can see", section: "main" });
   if (isAdmin(user)) {
     nav.push(
       { href: "/admin/imports", label: "Import roster", icon: "Upload", description: "Upload the registration export", section: "admin" },

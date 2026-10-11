@@ -5,9 +5,9 @@ import { Callout } from "@/components/callout";
 import { Button } from "@/components/ui/button";
 import { StaffTable, type StaffRow } from "@/components/staff/staff-table";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getActiveSession, requireDirector } from "@/lib/auth/current-user";
-import { canGrantAreas, canManageRole, isAdmin, type StaffRole } from "@/lib/auth/permissions";
-import { ROLE_ORDER, areaLabel } from "@/lib/labels";
+import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
+import { canGrantAreas, canManageRole, isAdmin, type StaffRole, isDirector } from "@/lib/auth/permissions";
+import { ROLE_ORDER, areaLabel, STAFF_ROLES } from "@/lib/labels";
 import { areaNames, grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
 import { bulkSendLinks, bulkSetAccess, bulkSetActive } from "./actions";
@@ -15,11 +15,11 @@ import { bulkSendLinks, bulkSetAccess, bulkSetActive } from "./actions";
 export const metadata = { title: "Staff" };
 
 export default async function UsersPage() {
-  const me = await requireDirector();
+  const me = await requireStaffManager();
   const session = await getActiveSession();
   const admin = createAdminClient();
   const [{ data: profiles }, { data: areas }, tree, info] = await Promise.all([
-    admin.from("profiles").select("id, email, full_name, role, access_level, all_areas, is_active").order("full_name"),
+    admin.from("profiles").select("id, email, full_name, title, role, access_level, all_areas, is_active").order("full_name"),
     admin.from("staff_scopes").select("user_id, group_id, division_id, bunk_id"),
     loadAreaTree(admin, session?.id),
     signInInfo(),
@@ -43,6 +43,7 @@ export default async function UsersPage() {
       id: p.id,
       name: p.full_name,
       email: p.email,
+      title: p.title,
       role: p.role,
       level: p.role === "owner" ? "edit" : p.access_level,
       allAreas: everywhere,
@@ -61,7 +62,7 @@ export default async function UsersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Staff"
-        description={`${rows.filter((r) => r.active).length} active people`}
+        description={isDirector(me) ? `${rows.filter((r) => r.active).length} active people` : `Your divisions' staff · ${rows.filter((r) => r.active).length} active. You can add and change ${roles.map((r) => STAFF_ROLES[r].label.toLowerCase() + "s").join(" and ")}.`}
         actions={
           <>
             <Button asChild variant="outline">

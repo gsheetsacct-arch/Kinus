@@ -2,7 +2,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isAdmin, isDirector, type CurrentUser } from "./permissions";
+import { isAdmin, isDirector, isStaffManager, type CurrentUser } from "./permissions";
 
 /** Why a signed-in person can't use the app (shown instead of sending them back to sign-in). */
 export type AccountProblem = "database" | "inactive" | "no_profile";
@@ -75,6 +75,13 @@ export async function requireAdmin(): Promise<CurrentUser> {
 }
 
 /** Any director (their own area) or owner. */
+/** The Staff pages: directors, division heads and head counselors (each for their own staff). */
+export async function requireStaffManager(): Promise<CurrentUser> {
+  const u = await requireUser();
+  if (!isStaffManager(u)) redirect("/?denied=head-staff");
+  return u;
+}
+
 export async function requireDirector(): Promise<CurrentUser> {
   const u = await requireUser();
   if (!isDirector(u)) redirect("/?denied=director");

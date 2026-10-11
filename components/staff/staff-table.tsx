@@ -19,6 +19,7 @@ export type StaffRow = {
   id: string;
   name: string;
   email: string;
+  title: string | null;
   role: StaffRole;
   level: AccessLevel;
   allAreas: boolean;
@@ -50,7 +51,7 @@ export function StaffTable({ rows, tree, roles, actions, lockAll }: { rows: Staf
   const shown = React.useMemo(() => {
     const needle = q.trim().toLowerCase();
     const list = rows.filter((r) => {
-      if (needle && !`${r.name} ${r.email}`.toLowerCase().includes(needle)) return false;
+      if (needle && !`${r.name} ${r.email} ${r.title ?? ""} ${r.where}`.toLowerCase().includes(needle)) return false;
       if (role && r.role !== role) return false;
       if (status === "active" && !r.active) return false;
       if (status === "invited" && !(r.active && r.status.variant === "warning")) return false;
@@ -228,6 +229,11 @@ export function StaffTable({ rows, tree, roles, actions, lockAll }: { rows: Staf
                     {r.name}
                   </span>
                   <Badge variant="primary">{STAFF_ROLES[r.role].label}</Badge>
+                  {r.title && (
+                    <span className="text-xs text-muted-foreground" dir="auto">
+                      {r.title}
+                    </span>
+                  )}
                   {r.status.label !== "Active" && <Badge variant={r.status.variant}>{r.status.label}</Badge>}
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">{r.email}</span>
