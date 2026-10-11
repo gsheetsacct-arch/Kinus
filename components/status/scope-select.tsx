@@ -63,9 +63,11 @@ export function useScope(storageKey: string, initial: BoardScope, exists: (s: Bo
   }, [storageKey]);
   // the place stopped existing while the page was open (a counselor moved to another bunk):
   // go back to their own place instead of showing an empty board
+  const stillThere = exists(scope);
+  const fallback = exists(initial) ? initial : null;
   React.useEffect(() => {
-    if (!exists(scope)) setScope(exists(initial) ? initial : { kind: "all" });
-  });
+    if (!stillThere) setScope(fallback ?? { kind: "all" });
+  }, [stillThere, fallback]);
   const choose = React.useCallback(
     (v: string) => {
       setScope(decode(v) ?? { kind: "all" });
