@@ -19,3 +19,6 @@ export function campDateTimeToIso(date: string, time: string): string {
 
 /** Start of today in camp time, as an ISO instant. */
 export const startOfCampDay = (now = new Date()) => campDateTimeToIso(campToday(now), "00:00");
+
+/** The hour (0-23) at camp right now, whatever time zone the server runs in. */
+export const campHour = (now = new Date()) => Number(new Intl.DateTimeFormat("en-US", { timeZone: CAMP_TIME_ZONE, hour: "numeric", hourCycle: "h23" }).format(now));

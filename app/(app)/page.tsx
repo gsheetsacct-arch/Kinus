@@ -12,6 +12,7 @@ import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
 import { cn } from "@/lib/utils";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { getCampContext } from "@/lib/data/camp";
+import { campHour } from "@/lib/time";
 
 export const metadata = { title: "Home" };
 
@@ -79,7 +80,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const tile = "rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] transition-colors hover:border-primary/40 hover:bg-primary-soft/30";
   const remaining = steps.filter((s) => !s.done);
   const next = remaining[0];
-  const hour = new Date().getHours();
+  const hour = campHour();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
   const quick = [
