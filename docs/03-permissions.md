@@ -47,3 +47,11 @@ campers in their own area. Everyone else sees a yes/no medical flag.
 - Server actions check `canManageRole()` / `canGrantAreas()` before any staff change.
 - The `profiles_guard` trigger stops anyone but camp-wide directors (and the server)
   changing roles, levels, areas or active state.
+
+## Staff phone book
+
+Head counselors, division heads, directors, the owner, office and logistics have **Phone book**
+(More → Phone book): the staff of each division they look after — head staff first, then counselors
+by bunk, then check-in helpers — plus the directors and office over all of camp, with call, text and
+email buttons. Counselors and check-in helpers don't have it. Phone numbers come from each person's
+Account page (or a director on the Staff page).

@@ -108,5 +108,8 @@ export function canManageRole(me: CurrentUser, role: StaffRole): boolean {
 /** The print area (queue, batches, templates). Everyone else requests tags from a camper card. */
 export const canUsePrintArea = (u: CurrentUser) => ["owner", "director", "division_head", "office", "logistics"].includes(u.role);
 
+/** The staff phone book: head staff (and the office) can reach the staff of the divisions they look after. */
+export const canUsePhoneBook = (u: CurrentUser) => ["owner", "director", "division_head", "head_counselor", "office", "logistics"].includes(u.role);
+
 /** Following up on campers who haven't arrived: heads, directors and the office (not bunk counselors or check-in helpers). */
 export const canFollowUp = (u: CurrentUser) => !["counselor", "scanner"].includes(u.role);
