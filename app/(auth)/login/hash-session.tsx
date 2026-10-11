@@ -40,7 +40,7 @@ export function HashSession({ next, signedIn }: { next: string; signedIn: boolea
         }
         // A full page load (not a client-side navigation) so the server reads the new
         // session cookie; it also drops the tokens from the address bar and history.
-        window.location.replace(type === "invite" || type === "recovery" || type === "signup" ? "/set-password" : next);
+        window.location.replace(type === "recovery" ? "/set-password?reset=1" : type === "invite" || type === "signup" ? "/set-password" : next);
       })
       .catch((e: Error) => {
         setState("error");

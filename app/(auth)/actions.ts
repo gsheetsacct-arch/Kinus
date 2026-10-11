@@ -20,20 +20,37 @@ export async function signInWithPassword(formData: FormData): Promise<ActionResu
   return ok(undefined, next);
 }
 
+// Implicit flow: the link itself carries the session, so it works when opened on a
+// phone or another browser, unlike a PKCE link tied to the browser that asked for it.
+const linkClient = () =>
+  createPlainClient(publicEnv.NEXT_PUBLIC_SUPABASE_URL, publicEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    auth: { flowType: "implicit", persistSession: false, autoRefreshToken: false },
+  });
+const tooMany = (m: string) => /rate limit|security purposes|too many/i.test(m);
+// Supabase's own wording when the email has no account ("Signups not allowed for otp"):
+// say the same thing as for a real account, so the page doesn't reveal who has one
+const noAccount = (m: string) => /signups? not allowed|not allowed for otp|user not found|no user/i.test(m);
+
 export async function sendMagicLink(formData: FormData): Promise<ActionResult> {
   const email = z.string().email().safeParse(formData.get("email"));
   if (!email.success) return fail("Enter a valid email.");
-  // Implicit flow: the link itself carries the session, so it works when opened on a
-  // phone or another browser, unlike a PKCE link tied to the browser that asked for it.
-  const supabase = createPlainClient(publicEnv.NEXT_PUBLIC_SUPABASE_URL, publicEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
-    auth: { flowType: "implicit", persistSession: false, autoRefreshToken: false },
-  });
-  const { error } = await supabase.auth.signInWithOtp({
+  const { error } = await linkClient().auth.signInWithOtp({
     email: email.data,
     options: { shouldCreateUser: false, emailRedirectTo: `${await appUrl()}/login` },
   });
-  if (error) return fail(/rate limit|security purposes/i.test(error.message) ? "Too many links requested. Wait a minute and try again." : error.message);
-  return ok("Check your email for a sign-in link. It works on any device.");
+  if (error && tooMany(error.message)) return fail("Too many links requested. Wait a minute and try again.");
+  if (error && !noAccount(error.message)) return fail(error.message);
+  return ok("If that email has a Kinus account, a sign-in link is on its way. It works on any device.");
+}
+
+/** Forgot password: an email with a link to choose a new one (it opens “Set a new password”). */
+export async function sendPasswordReset(formData: FormData): Promise<ActionResult> {
+  const email = z.string().email().safeParse(formData.get("email"));
+  if (!email.success) return fail("Enter a valid email.");
+  const { error } = await linkClient().auth.resetPasswordForEmail(email.data, { redirectTo: `${await appUrl()}/login` });
+  if (error && tooMany(error.message)) return fail("Too many emails requested. Wait a minute and try again.");
+  if (error && !noAccount(error.message)) return fail(error.message);
+  return ok("If that email has a Kinus account, we've sent a link to set a new password. Check your inbox.");
 }
 
 export async function setPassword(formData: FormData): Promise<ActionResult> {

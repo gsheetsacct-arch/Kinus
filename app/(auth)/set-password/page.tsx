@@ -8,8 +8,8 @@ import { setPassword } from "../actions";
 
 export const metadata = { title: "Set password" };
 
-export default async function SetPasswordPage() {
-  const user = await requireUser();
+export default async function SetPasswordPage({ searchParams }: { searchParams: Promise<{ reset?: string }> }) {
+  const [user, { reset }] = await Promise.all([requireUser(), searchParams]);
   return (
     <main className="flex min-h-dvh items-center justify-center bg-muted/40 p-6">
       <div className="w-full max-w-sm rounded-2xl border bg-card p-8 shadow-[var(--shadow-card)]">
@@ -19,8 +19,10 @@ export default async function SetPasswordPage() {
           </span>
           <span className="text-lg font-semibold">Kinus</span>
         </div>
-        <h1 className="text-2xl font-semibold">Welcome, {user.fullName.split(" ")[0]}</h1>
-        <p className="mb-6 mt-1 text-sm text-muted-foreground">Choose a password for {user.email}. You can always use an emailed link instead.</p>
+        <h1 className="text-2xl font-semibold">{reset ? "Set a new password" : `Welcome, ${user.fullName.split(" ")[0]}`}</h1>
+        <p className="mb-6 mt-1 text-sm text-muted-foreground">
+          {reset ? `For ${user.email}. Your old password stops working.` : `Choose a password for ${user.email}. You can always use an emailed link instead.`}
+        </p>
         <ActionForm action={setPassword} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="password">New password</Label>
