@@ -1,4 +1,4 @@
-import { CalendarDays, Plus, Pencil, Trash2, CheckCircle2 } from "lucide-react";
+import { CalendarDays, Copy, Plus, Pencil, Trash2, CheckCircle2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/section";
 import { Callout } from "@/components/callout";
@@ -8,10 +8,11 @@ import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
+import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
-import { activateSession, deleteSession, saveSession } from "./actions";
+import { activateSession, copySetup, deleteSession, saveSession } from "./actions";
 
 export const metadata = { title: "Sessions" };
 
@@ -31,6 +32,31 @@ function SessionFields({ s }: { s?: { id: string; name: string; starts_on: strin
         </Field>
       </div>
     </>
+  );
+}
+
+/** Which session to start from, and whether staff keep their places. */
+function CopyFields({ sessions, required }: { sessions: { id: string; name: string }[]; required?: boolean }) {
+  return (
+    <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+      <Field label="Start from" htmlFor="copy_from" hint="Camps, divisions and bunks, with their colours, languages and order.">
+        <Select id="copy_from" name="copy_from" defaultValue={sessions[0]?.id ?? ""}>
+          {sessions.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.name}&apos;s setup
+            </option>
+          ))}
+          {!required && <option value="">Nothing: start empty</option>}
+        </Select>
+      </Field>
+      <label className="flex items-start gap-2 text-sm">
+        <input type="checkbox" name="copy_staff" defaultChecked className="mt-0.5 size-4" />
+        <span>
+          Keep staff in the same camps, divisions and bunks
+          <span className="block text-xs text-muted-foreground">Change anyone who moved on the Staff page afterwards.</span>
+        </span>
+      </label>
+    </div>
   );
 }
 
@@ -57,11 +83,12 @@ export default async function SessionsPage() {
         </Button>
       }
       title="New session"
-      description="Divisions, campers and imports start empty in a new session. Staff accounts carry over, and so do the camps: when the import brings in a division with the same name as last session, it goes back into the same camp (Hebrew, French…)."
+      description="Campers start empty: import this year's export into it. Everything else can start from an earlier session."
       action={saveSession}
       submitLabel="Create session"
     >
       <SessionFields />
+      {(sessions?.length ?? 0) > 0 && <CopyFields sessions={sessions ?? []} />}
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" name="activate" defaultChecked={!sessions?.length} className="size-4" /> Make it the active session now
       </label>
@@ -107,6 +134,22 @@ export default async function SessionsPage() {
                         Make active
                       </Button>
                     </ActionForm>
+                  )}
+                  {(sessions?.length ?? 0) > 1 && (
+                    <FormDialog
+                      trigger={
+                        <Button size="sm" variant="outline">
+                          <Copy /> Copy setup from…
+                        </Button>
+                      }
+                      title={`Copy setup into ${s.name}`}
+                      description="Brings in the camps, divisions and bunks of another session, with their colours, languages and order, and keeps staff in the same places. Divisions that are already here (from an import) take on those settings. Campers aren't touched."
+                      action={copySetup}
+                      submitLabel="Copy setup"
+                    >
+                      <input type="hidden" name="to" value={s.id} />
+                      <CopyFields sessions={(sessions ?? []).filter((x) => x.id !== s.id)} required />
+                    </FormDialog>
                   )}
                   <FormDialog
                     trigger={
