@@ -104,6 +104,10 @@ Typed parsing rules:
 - Division: matched by exact name after trimming within the session. Unknown →
   created (language guessed: Hebrew letters → `he`, otherwise `en`; admin fixes
   later) and listed in the preview under "New divisions".
+- Camp: a new division goes into the camp it was in last session (same division name;
+  the camp is created in the new session with the same name and order, migration 0025).
+  A division never seen before: "Hebrew/Ivrit/עברית" or "French/Français" in the name
+  picks that camp, anything else the main camp. Move one with Divisions & bunks → Edit.
 - Bunk: first non-empty value among `bunkColumnPriority`, matched within the
   camper's division; unknown → created and listed under "New bunks". Bunks named
   with Hebrew letters (Bunk Yud, Yud Alef, Chof Beis, י״א…) are slotted into
