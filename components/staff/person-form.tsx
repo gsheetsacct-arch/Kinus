@@ -16,6 +16,8 @@ export type PersonFormValues = {
   full_name: string;
   email: string;
   phone: string;
+  /** Free-text position: "Learning head", "Waterfront". */
+  title: string;
   role: StaffRole;
   access_level: AccessLevel;
   all_areas: boolean;
@@ -32,6 +34,7 @@ export function PersonForm({
   lockAll,
   readOnly,
   isNew,
+  levels,
 }: {
   person: PersonFormValues;
   roles: StaffRole[];
@@ -41,6 +44,8 @@ export function PersonForm({
   lockAll?: boolean;
   readOnly?: boolean;
   isNew?: boolean;
+  /** The levels this manager may give (head counselors: up to their own). */
+  levels?: AccessLevel[];
 }) {
   const [role, setRole] = React.useState<StaffRole>(person.role);
   const [level, setLevel] = React.useState<AccessLevel>(person.access_level);
@@ -56,6 +61,9 @@ export function PersonForm({
         </Field>
         <Field label="Phone (optional)" htmlFor="phone">
           <Input id="phone" name="phone" type="tel" defaultValue={person.phone} disabled={readOnly} />
+        </Field>
+        <Field label="Position (optional)" htmlFor="title" hint="What they do at camp, e.g. Learning head, Waterfront, Night watch. Shown in the phone book." className="sm:col-span-3">
+          <Input id="title" name="title" defaultValue={person.title} maxLength={80} dir="auto" disabled={readOnly} />
         </Field>
       </section>
 
@@ -104,7 +112,7 @@ export function PersonForm({
         <section className="space-y-2">
           <h3 className="text-sm font-semibold">3 · What they can do there</h3>
           <div className="grid gap-2 sm:grid-cols-3">
-            {(Object.keys(ACCESS_LEVELS) as AccessLevel[]).map((l) => (
+            {(Object.keys(ACCESS_LEVELS) as AccessLevel[]).filter((l) => !levels || levels.includes(l) || l === person.access_level).map((l) => (
               <label
                 key={l}
                 className={cn(

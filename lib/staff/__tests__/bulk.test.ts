@@ -14,7 +14,7 @@ const tree: AreaTree = {
 describe("readRows", () => {
   it("reads a sheet with headers in any order", () => {
     const rows = readRows([["Email", "Full name", "Bunk", "Division", "Role"], ["A@x.com", "Levi Cohen", "Bunk Chof", "Division 2", "Counselor"], ["", "", "", "", ""]]);
-    expect(rows).toEqual([{ line: 2, name: "Levi Cohen", email: "a@x.com", role: "Counselor", where: "Division 2", bunk: "Bunk Chof", level: "" }]);
+    expect(rows).toEqual([{ line: 2, name: "Levi Cohen", email: "a@x.com", role: "Counselor", where: "Division 2", bunk: "Bunk Chof", level: "", title: "", phone: "" }]);
   });
   it("reads a sheet without headers (name, email, role, division, bunk)", () => {
     expect(readRows([["Levi", "l@x.com", "hc", "Main camp", ""]])[0]).toMatchObject({ name: "Levi", email: "l@x.com", role: "hc", where: "Main camp" });
@@ -47,10 +47,10 @@ describe("planRows", () => {
   it("applies the default role, flags duplicates and missing places", () => {
     const plan = planRows(
       [
-        { line: 2, name: "A", email: "a@x.com", role: "", where: "Division 1", bunk: "Bunk Beis", level: "" },
-        { line: 3, name: "B", email: "a@x.com", role: "", where: "Division 1", bunk: "", level: "" },
-        { line: 4, name: "C", email: "c@x.com", role: "Counselor", where: "", bunk: "", level: "" },
-        { line: 5, name: "D", email: "d@x.com", role: "office", where: "", bunk: "", level: "view" },
+        { line: 2, name: "A", email: "a@x.com", role: "", where: "Division 1", bunk: "Bunk Beis", level: "", title: "", phone: "" },
+        { line: 3, name: "B", email: "a@x.com", role: "", where: "Division 1", bunk: "", level: "", title: "", phone: "" },
+        { line: 4, name: "C", email: "c@x.com", role: "Counselor", where: "", bunk: "", level: "", title: "", phone: "" },
+        { line: 5, name: "D", email: "d@x.com", role: "office", where: "", bunk: "", level: "view", title: "", phone: "" },
       ],
       tree,
       { role: "counselor", level: "role" },
@@ -61,7 +61,18 @@ describe("planRows", () => {
     expect(plan[3]).toMatchObject({ role: "office", allAreas: true, level: "view", errors: [] });
   });
   it("suggests the nearest role for a typo", () => {
-    const [row] = planRows([{ line: 2, name: "Levi", email: "levi@x.com", role: "Councelor", where: "All", bunk: "", level: "" }], { groups: [], divisions: [] }, { role: "counselor", level: "role" });
+    const [row] = planRows([{ line: 2, name: "Levi", email: "levi@x.com", role: "Councelor", where: "All", bunk: "", level: "", title: "", phone: "" }], { groups: [], divisions: [] }, { role: "counselor", level: "role" });
     expect(row.errors.join(" ")).toMatch(/Did you mean “counselor”/);
+  });
+  it("defaults the division for someone over one division, and reads a Position column", () => {
+    const rows = readRows([
+      ["Name", "Email", "Position", "Bunk"],
+      ["Levi", "levi@x.com", "Counselor", "Bunk Beis"],
+      ["Mendy", "mendy@x.com", "Waterfront", ""],
+    ]);
+    const plan = planRows(rows, tree, { role: "counselor", level: "role", where: "Division 1" });
+    expect(plan[0]).toMatchObject({ role: "counselor", title: "", errors: [] });
+    expect(plan[0].areaText).toMatch(/Bunk Beis/);
+    expect(plan[1]).toMatchObject({ role: "counselor", title: "Waterfront", areaText: "Division 1", errors: [] });
   });
 });

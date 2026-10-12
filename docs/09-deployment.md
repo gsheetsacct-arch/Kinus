@@ -158,6 +158,12 @@ which completes the sign-in and continues to `/set-password` for invitations. Op
 - Also configured as Supabase Auth's custom SMTP (`smtp.resend.com`), so staff
   invites and magic links carry your branding and are not rate-limited by Supabase's
   default sender.
+  Supabase → Authentication → Emails → SMTP Settings: host `smtp.resend.com`, port `465`,
+  user `resend`, password = a Resend API key, sender e.g. `Kinus <kinus@yourcamp.org>`
+  (a verified domain). Without this, Supabase's built-in sender only mails your Supabase
+  team's own addresses and a few emails an hour, so invitations to staff don't arrive.
+- Email templates (invitation, sign-in link, password reset…): paste the ready-made
+  ones from [`docs/email-templates`](email-templates/README.md).
 
 ## 9.5a Sign-in settings in Supabase
 

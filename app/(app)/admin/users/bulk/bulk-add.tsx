@@ -66,8 +66,7 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
               htmlFor="text"
               hint={
                 <>
-                  Copy the rows straight from Excel or Google Sheets. Columns: <strong>Name, Email, Role, Camp or division, Bunk</strong> (a header row is fine, in any order). Role, division and bunk can be left
-                  empty where they don&apos;t apply. Write <em>All</em> for all of camp.
+                  Copy the rows straight from Excel or Google Sheets, header row included. Columns: <strong>Name, Email, Role, Division, Bunk, Position, Phone</strong> (see the guide above).
                 </>
               }
             >
@@ -125,7 +124,14 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
                         </div>
                         <div className="text-xs text-muted-foreground">{r.email || "—"}</div>
                       </td>
-                      <td className="px-4 py-2">{r.role ? STAFF_ROLES[r.role].label : "—"}</td>
+                      <td className="px-4 py-2">
+                        {r.role ? STAFF_ROLES[r.role].label : "—"}
+                        {r.title && (
+                          <span className="block text-xs text-muted-foreground" dir="auto">
+                            {r.title}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-2" dir="auto">
                         {r.areaText}
                       </td>

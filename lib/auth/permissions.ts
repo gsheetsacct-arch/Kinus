@@ -29,6 +29,8 @@ export const isOwner = (u: CurrentUser) => u.role === "owner";
 export const isAdmin = (u: CurrentUser) => u.role === "owner" || (u.role === "director" && u.allAreas);
 /** Directors of any area: staff for their area, bulk actions, corrections. */
 export const isDirector = (u: CurrentUser) => u.role === "owner" || u.role === "director";
+/** Who runs a Staff page: directors, and division heads and head counselors for the staff of their own divisions. */
+export const isStaffManager = (u: CurrentUser) => isDirector(u) || u.role === "division_head" || u.role === "head_counselor";
 export const seesAllCamp = (u: CurrentUser) => u.role === "owner" || u.allAreas;
 export const roleRank = (r: StaffRole) => ROLE_RANK[r];
 
@@ -86,7 +88,8 @@ export function canGrantAreas(
   divisionGroup: (divisionId: string) => string | null,
 ): boolean {
   if (isAdmin(me)) return true;
-  if (!isDirector(me) || allAreas) return false;
+  // area directors, division heads and head counselors: only inside their own part, never all of camp
+  if (!isStaffManager(me) || allAreas) return false;
   const myGroups = new Set(me.areas.map((a) => a.group_id).filter(Boolean));
   return areas.every((a) => {
     if (a.group_id) return myGroups.has(a.group_id);
@@ -97,16 +100,30 @@ export function canGrantAreas(
   });
 }
 
-/** Area directors may manage people below director rank; admins anyone but owners (owners: anyone). */
+/**
+ * Who may manage whom: owners anyone; directors over all of camp anyone but owners; area
+ * directors anyone below director; a division head their head counselors, counselors and
+ * check-in helpers; a head counselor their counselors and check-in helpers.
+ */
 export function canManageRole(me: CurrentUser, role: StaffRole): boolean {
   if (me.role === "owner") return true;
   if (isAdmin(me)) return role !== "owner";
   if (isDirector(me)) return roleRank(role) < roleRank("director");
+  if (me.role === "division_head") return role === "head_counselor" || role === "counselor" || role === "scanner";
+  if (me.role === "head_counselor") return role === "counselor" || role === "scanner";
   return false;
 }
 
+/** Directors give any level; division heads and head counselors at most their own. */
+export const canGrantLevel = (me: CurrentUser, level: AccessLevel) => isDirector(me) || LEVEL_RANK[level] <= LEVEL_RANK[effectiveLevel(me)];
+
 /** The print area (queue, batches, templates). Everyone else requests tags from a camper card. */
 export const canUsePrintArea = (u: CurrentUser) => ["owner", "director", "division_head", "office", "logistics"].includes(u.role);
+
+/** The staff phone book: everyone. Counselors and check-in helpers see their own head staff; head staff and the office see all their divisions' staff. */
+export const canUsePhoneBook = (u: CurrentUser) => Boolean(u.role);
+/** A short phone book: just the head counselors and division heads of their division. */
+export const phoneBookHeadsOnly = (u: CurrentUser) => u.role === "counselor" || u.role === "scanner";
 
 /** Following up on campers who haven't arrived: heads, directors and the office (not bunk counselors or check-in helpers). */
 export const canFollowUp = (u: CurrentUser) => !["counselor", "scanner"].includes(u.role);

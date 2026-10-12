@@ -11,8 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getActiveSession, requireDirector } from "@/lib/auth/current-user";
-import { canGrantAreas, canManageRole, isAdmin } from "@/lib/auth/permissions";
+import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
+import { canGrantAreas, canGrantLevel, canManageRole, isAdmin } from "@/lib/auth/permissions";
 import { ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
 import { encodeArea, grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
@@ -22,12 +22,12 @@ import { removePasskeys, savePerson, sendSignInLink, setActive, setUserPassword 
 export const metadata = { title: "Edit person" };
 
 export default async function PersonPage({ params }: { params: Promise<{ id: string }> }) {
-  const me = await requireDirector();
+  const me = await requireStaffManager();
   const { id } = await params;
   const session = await getActiveSession();
   const admin = createAdminClient();
   const [{ data: p }, { data: areas }, tree, info] = await Promise.all([
-    admin.from("profiles").select("id, email, full_name, phone, role, access_level, all_areas, is_active").eq("id", id).maybeSingle(),
+    admin.from("profiles").select("id, email, full_name, phone, title, role, access_level, all_areas, is_active").eq("id", id).maybeSingle(),
     admin.from("staff_scopes").select("group_id, division_id, bunk_id").eq("user_id", id),
     loadAreaTree(admin, session?.id),
     signInInfo(),
@@ -66,7 +66,8 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
       {!isSelf && !manageable && <Callout tone="warning">As {STAFF_ROLES[me.role].label.toLowerCase()} you can see but not change a {STAFF_ROLES[p.role].label.toLowerCase()}.</Callout>}
       <Section title="Role and access">
         <PersonForm
-          person={{ id: p.id, full_name: p.full_name, email: p.email, phone: p.phone ?? "", role: p.role, access_level: p.access_level, all_areas: p.all_areas, areas: (areas ?? []).map(encodeArea) }}
+          person={{ id: p.id, full_name: p.full_name, email: p.email, phone: p.phone ?? "", title: p.title ?? "", role: p.role, access_level: p.access_level, all_areas: p.all_areas, areas: (areas ?? []).map(encodeArea) }}
+          levels={(["view", "scan", "edit"] as const).filter((l) => canGrantLevel(me, l))}
           roles={roles}
           tree={grantableTree(me, tree)}
           action={savePerson}

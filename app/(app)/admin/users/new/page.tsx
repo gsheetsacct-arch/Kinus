@@ -2,8 +2,8 @@ import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/section";
 import { PersonForm } from "@/components/staff/person-form";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getActiveSession, requireDirector } from "@/lib/auth/current-user";
-import { canManageRole, isAdmin } from "@/lib/auth/permissions";
+import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
+import { canGrantLevel, canManageRole, isAdmin } from "@/lib/auth/permissions";
 import { ROLE_ORDER } from "@/lib/labels";
 import { grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { savePerson } from "../actions";
@@ -11,7 +11,7 @@ import { savePerson } from "../actions";
 export const metadata = { title: "Add a person" };
 
 export default async function NewPersonPage() {
-  const me = await requireDirector();
+  const me = await requireStaffManager();
   const session = await getActiveSession();
   const tree = await loadAreaTree(createAdminClient(), session?.id);
   return (
@@ -20,7 +20,8 @@ export default async function NewPersonPage() {
       <Section>
         <PersonForm
           isNew
-          person={{ full_name: "", email: "", phone: "", role: "counselor", access_level: "scan", all_areas: false, areas: [] }}
+          person={{ full_name: "", email: "", phone: "", title: "", role: "counselor", access_level: "scan", all_areas: false, areas: [] }}
+          levels={(["view", "scan", "edit"] as const).filter((l) => canGrantLevel(me, l))}
           roles={ROLE_ORDER.filter((r) => canManageRole(me, r))}
           tree={grantableTree(me, tree)}
           action={savePerson}

@@ -12,7 +12,10 @@ import type { AreaTree } from "@/lib/data/areas";
 export function AreaPicker({ tree, defaultAll, defaultAreas, lockAll }: { tree: AreaTree; defaultAll: boolean; defaultAreas: string[]; lockAll?: boolean }) {
   const [all, setAll] = React.useState(defaultAll && !lockAll);
   const [sel, setSel] = React.useState<Set<string>>(new Set(defaultAreas));
-  const [open, setOpen] = React.useState<Set<string>>(new Set(defaultAreas.filter((a) => a.startsWith("b:")).map((a) => a.split(":")[1])));
+  // bunks shown for divisions already picked by bunk, and always when there's only one division (a head counselor)
+  const [open, setOpen] = React.useState<Set<string>>(
+    new Set([...defaultAreas.filter((a) => a.startsWith("b:")).map((a) => a.split(":")[1]), ...(tree.divisions.length === 1 ? [tree.divisions[0].id] : [])]),
+  );
   const toggle = (v: string) =>
     setSel((s) => {
       const n = new Set(s);

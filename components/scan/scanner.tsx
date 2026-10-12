@@ -39,7 +39,8 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
   const [flash, setFlash] = React.useState<Flash | null>(null);
   const [recent, setRecent] = React.useState<Recent[]>([]);
   const [card, setCard] = React.useState<string | null>(null);
-  // the camera is on unless this device turned it off (a desk with a USB scanner)
+  // the camera starts every time the page opens; only "Don't use the camera here" (a desk
+  // with a USB scanner, a laptop without a camera) is remembered on the device
   const [camera, setCamera] = React.useState(false);
   const [sound, setSound] = React.useState(true);
   const [, setTick] = React.useState(0);
@@ -65,7 +66,7 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
         if (saved.m === "out" && saved.o) setOutKind(saved.o);
       }
       setSound(localStorage.getItem("kinus:sound") !== "off");
-      setCamera(localStorage.getItem("kinus:camera") !== "off");
+      setCamera(localStorage.getItem("kinus:no-camera") !== "1");
     } catch {}
   }, [canScan]);
   const choose = (m: ScanMode) => {
@@ -204,13 +205,20 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
       : [];
   const matches = allMatches.slice(0, MAX_RESULTS).map((x) => x.r);
 
+  // Stop / Start: just for now
   const setCameraOn = (v: boolean) => {
     setCamera(v);
     try {
-      localStorage.setItem("kinus:camera", v ? "on" : "off");
+      if (v) localStorage.removeItem("kinus:no-camera");
     } catch {}
   };
-  const turnOffCamera = () => setCameraOn(false);
+  // "Don't use the camera here": this device, from now on (Start camera undoes it)
+  const neverCamera = () => {
+    setCamera(false);
+    try {
+      localStorage.setItem("kinus:no-camera", "1");
+    } catch {}
+  };
 
   const undo = async (r: Recent) => {
     if (!r.eventId) return;
@@ -341,14 +349,14 @@ export function Scanner({ roster, templates, canScan }: { roster: RosterEntry[];
             >
               {sound ? <Volume2 /> : <VolumeX />}
             </Button>
-            <Button variant={camera ? "default" : "outline"} size="sm" onClick={() => (camera ? turnOffCamera() : setCameraOn(true))}>
-              {camera ? <CameraOff /> : <CameraIcon />} {camera ? "Stop camera" : "Camera"}
+            <Button variant={camera ? "default" : "outline"} size="sm" onClick={() => setCameraOn(!camera)}>
+              {camera ? <CameraOff /> : <CameraIcon />} {camera ? "Stop camera" : "Start camera"}
             </Button>
           </span>
         </div>
         {camera && (
           <div className={cn(q.trim() && "hidden")}>
-            <Camera onCode={onCameraCode} onTurnOff={turnOffCamera} />
+            <Camera onCode={onCameraCode} onTurnOff={neverCamera} />
           </div>
         )}
       </div>
