@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { fetchAll } from "@/lib/supabase/fetch-all";
-import { bunkOrders, putInOrder, slotNewBunks } from "@/lib/data/bunk-sort";
+import { bunkOrders, divisionOrder, putDivisionsInOrder, putInOrder, slotNewBunks, slotNewDivisions } from "@/lib/data/bunk-sort";
 import { usesHebrewLetters } from "@/lib/bunk-order";
 
 const done = (msg: string, redirect?: string) => {
@@ -34,9 +34,10 @@ export async function saveDivision(fd: FormData): Promise<ActionResult> {
       if (error) throw error;
       return done("Division saved.");
     }
-    const { count } = await supabase.from("divisions").select("id", { count: "exact", head: true }).eq("session_id", session.id);
-    const { data, error } = await supabase.from("divisions").insert({ ...row, session_id: session.id, sort_order: (count ?? 0) + 1 }).select("id").single();
+    const before = await divisionOrder(supabase, session.id);
+    const { data, error } = await supabase.from("divisions").insert({ ...row, session_id: session.id, sort_order: before.length + 1 }).select("id").single();
     if (error) throw error;
+    await slotNewDivisions(supabase, session.id, before);
     return done("Division added.", `/admin/divisions?d=${data.id}`);
   } catch (e) {
     return fail(/duplicate/.test(errorMessage(e)) ? "A division with that name already exists." : errorMessage(e));
@@ -167,6 +168,20 @@ export async function sortBunks(fd: FormData): Promise<ActionResult> {
     // "all": only divisions whose bunks are named with Hebrew letters
     for (const [divisionId, bunks] of orders) if (only ? divisionId === only : usesHebrewLetters(bunks.map((b) => b.name))) moved += await putInOrder(supabase, bunks);
     return done(moved ? "Bunks are in order." : "The bunks were already in order.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+/** Puts the divisions in order: Division 1, 2, 3 … then the rest A–Z. */
+export async function sortDivisions(): Promise<ActionResult> {
+  await requireAdmin();
+  const session = await getActiveSession();
+  if (!session) return fail("No active session.");
+  try {
+    const supabase = await createClient();
+    const moved = await putDivisionsInOrder(supabase, await divisionOrder(supabase, session.id));
+    return done(moved ? "Divisions are in order." : "The divisions were already in order.");
   } catch (e) {
     return fail(errorMessage(e));
   }

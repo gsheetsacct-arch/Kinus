@@ -16,10 +16,10 @@ import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
 import { DIVISION_COLORS, LANGUAGES } from "@/lib/labels";
 import { plural } from "@/lib/utils";
-import { inNaturalOrder, usesHebrewLetters } from "@/lib/bunk-order";
+import { compareDivisionNames, inNaturalOrder, usesHebrewLetters } from "@/lib/bunk-order";
 import { DivisionPanel, DivisionTab, DivisionTabs } from "@/components/division-tabs";
 import { fetchAll } from "@/lib/supabase/fetch-all";
-import { deleteBunk, deleteDivision, deleteGroup, mergeBunk, moveBunk, moveDivision, removeEmpty, saveBunk, saveDivision, saveGroup, sortBunks } from "./actions";
+import { deleteBunk, deleteDivision, deleteGroup, mergeBunk, moveBunk, moveDivision, removeEmpty, saveBunk, saveDivision, saveGroup, sortBunks, sortDivisions } from "./actions";
 
 export const metadata = { title: "Divisions & bunks" };
 
@@ -145,6 +145,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
   const bunksByDivision = new Map<string, NonNullable<typeof bunks>>();
   for (const b of bunks ?? []) bunksByDivision.set(b.division_id, [...(bunksByDivision.get(b.division_id) ?? []), b]);
   const bunksOf = (divisionId: string) => bunksByDivision.get(divisionId) ?? [];
+  const divisionsUnordered = divs.some((d, i) => i > 0 && compareDivisionNames(divs[i - 1].name, d.name) > 0);
   // only divisions whose bunks are named with Hebrew letters are offered Alef-Beis order
   const unordered = divs.filter((d) => {
     const names = bunksOf(d.id).map((b) => b.name);
@@ -203,12 +204,23 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
         title="Divisions & bunks"
         description="Imports create these for you. Here you can rename, reorder, merge and tidy them."
         actions={
-          unordered.length > 1 && (
-            <ActionForm action={sortBunks}>
-              <Button type="submit" variant="outline" size="sm" title="Alef, Beis … Tes, Yud, Yud Alef, Yud Beis … Chof …">
-                <ArrowDownAZ /> Put all bunks in Alef-Beis order
-              </Button>
-            </ActionForm>
+          (divisionsUnordered || unordered.length > 1) && (
+            <span className="flex flex-wrap gap-2">
+              {divisionsUnordered && (
+                <ActionForm action={sortDivisions}>
+                  <Button type="submit" variant="outline" size="sm" title="Division 1, 2, 3 … then the rest A–Z">
+                    <ArrowDownAZ /> Put divisions in order
+                  </Button>
+                </ActionForm>
+              )}
+              {unordered.length > 1 && (
+                <ActionForm action={sortBunks}>
+                  <Button type="submit" variant="outline" size="sm" title="Alef, Beis … Tes, Yud, Yud Alef, Yud Beis … Chof …">
+                    <ArrowDownAZ /> Put all bunks in Alef-Beis order
+                  </Button>
+                </ActionForm>
+              )}
+            </span>
           )
         }
       />

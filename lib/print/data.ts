@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import type { ContactLike, CamperLike } from "@/lib/fields";
 import { fetchAll } from "@/lib/supabase/fetch-all";
-import { compareBunkNames } from "@/lib/bunk-order";
+import { compareBunkNames, compareDivisionNames } from "@/lib/bunk-order";
 import type { MergeField, Transform, ValueMap, TemplateSpec, Layer, SheetLayout } from "./types";
 
 type DB = SupabaseClient<Database>;
@@ -92,7 +92,7 @@ export async function campersInScope(db: DB, sessionId: string, scope: { divisio
 }
 
 export const byBunkThenName = (a: PrintCamper, b: PrintCamper) =>
-  compareBunkNames(a.division_name ?? "", b.division_name ?? "") ||
+  compareDivisionNames(a.division_name ?? "", b.division_name ?? "") ||
   compareBunkNames(a.bunk_name ?? "", b.bunk_name ?? "") ||
   a.last_name.localeCompare(b.last_name) ||
   a.first_name.localeCompare(b.first_name);

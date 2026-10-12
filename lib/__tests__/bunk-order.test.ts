@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareBunkNames, hebrewLetterNumber, inNaturalOrder } from "../bunk-order";
+import { compareBunkNames, compareDivisionNames, hebrewLetterNumber, inNaturalOrder } from "../bunk-order";
 
 describe("bunk order", () => {
   it("reads Hebrew-letter numbers in English and Hebrew", () => {
@@ -38,5 +38,12 @@ describe("bunk order", () => {
   it("knows when a list is already in order", () => {
     expect(inNaturalOrder(["Alef", "Beis", "Yud", "Yud Alef"])).toBe(true);
     expect(inNaturalOrder(["Alef", "Yud", "Yud Alef", "Beis"])).toBe(false);
+  });
+});
+
+describe("division order", () => {
+  it("puts numbered divisions first, in number order, then the rest A–Z", () => {
+    expect(["BMD", "Division 10", "Division 2", "Division 1", "Division 3"].sort(compareDivisionNames)).toEqual(["Division 1", "Division 2", "Division 3", "Division 10", "BMD"]);
+    expect(["Division Gimmel", "Division Alef", "Bar Mitzvah"].sort(compareDivisionNames)).toEqual(["Division Alef", "Division Gimmel", "Bar Mitzvah"]);
   });
 });

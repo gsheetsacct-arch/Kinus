@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { compareBunkNames, inNaturalOrder, usesHebrewLetters } from "@/lib/bunk-order";
+import { compareBunkNames, compareDivisionNames, inNaturalOrder, usesHebrewLetters } from "@/lib/bunk-order";
 
 type DB = SupabaseClient<Database>;
 type Bunk = { id: string; name: string; sort_order: number; division_id: string };
@@ -41,4 +41,30 @@ export async function slotNewBunks(db: DB, sessionId: string, before: Map<string
     if (bunks.length === old.length) continue;
     if (usesHebrewLetters(bunks.map((b) => b.name)) && inNaturalOrder(old.map((b) => b.name))) await putInOrder(db, bunks);
   }
+}
+
+type Division = { id: string; name: string; sort_order: number };
+
+export async function divisionOrder(db: DB, sessionId: string): Promise<Division[]> {
+  const { data, error } = await db.from("divisions").select("id, name, sort_order").eq("session_id", sessionId).order("sort_order").order("name");
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Renumbers the divisions: Division 1, 2, 3 … then the rest A–Z. Returns how many moved. */
+export async function putDivisionsInOrder(db: DB, divisions: Division[]): Promise<number> {
+  const sorted = [...divisions].sort((a, b) => compareDivisionNames(a.name, b.name));
+  const changes = sorted.map((d, i) => ({ id: d.id, from: d.sort_order, to: i + 1 })).filter((c) => c.from !== c.to);
+  const results = await Promise.all(changes.map((c) => db.from("divisions").update({ sort_order: c.to }).eq("id", c.id)));
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw failed.error;
+  return changes.length;
+}
+
+/** After divisions were added: in order if they were in order before (one ordered by hand stays as it was). */
+export async function slotNewDivisions(db: DB, sessionId: string, before: Division[]): Promise<void> {
+  const after = await divisionOrder(db, sessionId);
+  if (after.length === before.length) return;
+  const names = before.map((d) => d.name);
+  if (names.every((n, i) => i === 0 || compareDivisionNames(names[i - 1], n) <= 0)) await putDivisionsInOrder(db, after);
 }
