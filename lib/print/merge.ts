@@ -73,18 +73,18 @@ export function mergeValues(c: CamperLike & { division_color?: string | null }, 
 }
 
 /**
- * A made-up camper for previews when no real one is chosen: Hebrew and French names,
- * and the export columns the labels use, so every field shows something.
+ * A made-up camper for previews when no real one is chosen: an ordinary name in English
+ * and Hebrew, and the export columns the labels use, so every field shows something.
  */
 export const SAMPLE_CAMPER = {
-  first_name: "Gérard",
-  last_name: "Lévy-Schneerson",
+  first_name: "Yossi",
+  last_name: "Friedman",
   camper_code: "100016",
   grade: "5",
   tshirt_size: "Youth Small",
   division_name: "Division 2",
   division_color: "#2563eb",
-  bunk_name: "Bunk Chof Beis",
+  bunk_name: "Bunk Yud Alef",
   local_address: "1234 Crown St",
   local_address_cross_streets: "Kingston & Albany",
   contacts: [
@@ -92,27 +92,27 @@ export const SAMPLE_CAMPER = {
     { role: "father", slot: 1, name: "Yosef", phone: "+1 917 555 0199", phone_e164: "+19175550199", email: null },
   ],
   source_data: {
-    "ppa.hebrew_name": "מנחם מענדל",
-    "ppa.hebrew_last_name": "שניאורסאהן",
+    "ppa.hebrew_name": "יוסף",
+    "ppa.hebrew_last_name": "פרידמן",
     "ppa.yarmulka_size": "Medium",
-    "ppa.city": "Paris",
-    "ppa.state": "",
-    "ppa.country": "France",
+    "ppa.city": "Brooklyn",
+    "ppa.state": "NY",
+    "ppa.country": "USA",
   },
 };
 
 /** Values used for previews when no camper is chosen (built-in fields only; see SAMPLE_CAMPER). */
 export const SAMPLE_VALUES: Record<string, string> = {
-  FIRST: "מנחם מענדל",
-  LAST: "Gérard-Lévy",
-  FULL: "מנחם מענדל Gérard-Lévy",
+  FIRST: "Yossi",
+  LAST: "Friedman",
+  FULL: "Yossi Friedman",
   CODE: "100016",
   BARCODE: "KN100016",
   DIVISION: "Division 2",
   DIV: "2",
   DIVISION_COLOR: "#2563eb",
-  BUNK: "Bunk Chof Beis",
-  BUNK_SHORT: "Chof Beis",
+  BUNK: "Bunk Yud Alef",
+  BUNK_SHORT: "Yud Alef",
   GRADE: "5",
   TSHIRT: "YS",
   ADDRESS: "1234 Crown St",

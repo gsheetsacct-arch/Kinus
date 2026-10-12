@@ -104,7 +104,9 @@ Template model (path A), stored as JSON on `print_templates`:
     { "type": "text", "template": "{{DIVISION}} · {{BUNK}}", "x": 8, "y": 38, "w": 74, "h": 6, "size": 9 },
     { "type": "barcode", "symbology": "code128", "field": "BARCODE", "x": 20, "y": 44, "w": 50, "h": 8, "text": true }
   ],
-  "sheet_layout": { "paper": "letter", "cols": 2, "rows": 5, "marginMm": 10, "gapMm": 3 },
+  "sheet_layout": { "paper": "letter", "cols": 2, "rows": 4, "leftMm": 17.46, "topMm": 14.82,
+                    "pitchXMm": 95.25, "pitchYMm": 63.5, "preset": "avery-5395",
+                    "shiftXMm": 0, "shiftYMm": 0 },
   "show_on_card": true, "auto_on_first_checkin": true, "sort_order": 1
 }
 ```
@@ -114,8 +116,11 @@ Template model (path A), stored as JSON on `print_templates`:
   double-barrelled names, short Hebrew names).
 - `dir: "auto"` renders a Hebrew name RTL inside an otherwise LTR tag.
 - Per-division templates override the default by setting `division_id`.
-- `sheet_layout` imposes batches N-up on letter/A4; without it, one tag per page
-  for a label printer.
+- `sheet_layout` places tags on Letter/A4 label sheets: the first label's top-left
+  corner and the pitch (start of one label to the start of the next), exactly as
+  the label maker publishes them. `shiftXMm`/`shiftYMm` make up for a printer that
+  prints a little off. Without it, one tag per page for a label printer. Older
+  templates with only `marginMm`/`gapMm` are centred across the page as before.
 - `show_on_card` puts a one-tap button on the camper card; `auto_on_first_checkin`
   requests it automatically on the camper's first check-in; `sort_order` orders
   the buttons.
@@ -135,7 +140,21 @@ A canvas of the tag at real proportions (Print → Templates):
   doesn't fit at all. Give long fields a wider box rather than a smaller size.
 - Show it with a sample camper, the camper with the longest name, or any camper by
   code; "Print preview" shows the exact print rendering for the same camper.
-- The canvas uses the print fonts, so what fits on screen fits on paper.
+- The canvas uses the print fonts, so what fits on screen fits on paper, and shows
+  the real barcode and QR code. Selecting a barcode says whether it will scan: bars
+  thinner than 0.25 mm, or shorter than 6 mm, get a warning with the size to use.
+- **Labels**: "Choose labels" lists the label stock Kinus knows exactly
+  (`lib/print/presets.ts`): Avery US Letter sheets (5160, 5161, 5162, 5163, 5164,
+  5167, 5168, 5366, 5395, 5390, 5392, 5371…), Avery A4 sheets (L7160, L7163,
+  L7651…), and label-printer rolls (Zebra/Rollo 4×6 and smaller, Dymo, Brother).
+  Search by any number on the box (8160 finds 5160). Picking one sets the label size
+  and sheet layout and scales the design to fit. "Print a test sheet" fills a sheet
+  with outlines to hold against the labels; "Move right/down" corrects a printer
+  that prints a little off. Print at **Actual size / 100%**, never "Fit to page".
+- Template options: **Print button at check-in** adds a button for the template to
+  every camper's card (Check in and the camper's page), for staff to send a
+  replacement tag to the office. **Print by itself at first check-in** queues it
+  automatically the first time each camper is checked in.
 
 Fields: only fields **on the merge list** (Print → Fields & conversions) are offered
 in the editor and included in the data for Publisher. Contact details start off the
@@ -152,7 +171,9 @@ template + merge fields + camper(s) ─► HTML (React, print CSS, mm units, emb
 
 - Route handler `POST /api/print/render` (Node runtime, `maxDuration` 60 s). One
   Chromium launch per job; 300 tags render in seconds.
-- Barcodes via `bwip-js` as inline SVG.
+- Barcodes via `bwip-js` as inline SVG, Code 128 with a 10-bar-width blank margin
+  each side built in (scanners need it; a colour block drawn next to the bars can't
+  take it away), QR codes with a 2-square margin.
 - Fonts: Noto Sans + Noto Sans Hebrew bundled; the PDF embeds them.
 - The same HTML is served at `GET /print/jobs/<id>/preview` so the office can also
   press **Print** in the browser. Zero-dependency fallback.
@@ -176,8 +197,13 @@ template + merge fields + camper(s) ─► HTML (React, print CSS, mm units, emb
 ## 6.7 Batch printing (before the program)
 
 `/print/batch`: template, scope (division / bunk / all / only campers without a
-printed tag / only campers whose merge output changed since last print), copies,
-sheet layout → one job → one PDF. Also "Bunk sheets for division X", and the
+printed tag / **new campers and anyone whose details on it changed since it was
+printed**), copies, sheet layout → one job → one PDF. Each printed label keeps a
+fingerprint of the camper's values for the fields that template uses
+(`print_job_items.content_hash`, migration 0019); "changed" compares it with the
+camper's values now, so a moved bunk or a corrected name comes up again, while a
+check-in or moving parts around on the template doesn't. Labels printed before
+0019 count as unchanged. Also "Bunk sheets for division X", and the
 Publisher data-source export (6.3 B) from the same screen.
 
 ## 6.8 Email (Resend)

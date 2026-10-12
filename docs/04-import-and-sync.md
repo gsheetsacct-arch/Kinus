@@ -105,7 +105,10 @@ Typed parsing rules:
   created (language guessed: Hebrew letters → `he`, otherwise `en`; admin fixes
   later) and listed in the preview under "New divisions".
 - Bunk: first non-empty value among `bunkColumnPriority`, matched within the
-  camper's division; unknown → created and listed under "New bunks".
+  camper's division; unknown → created and listed under "New bunks". Bunks named
+  with Hebrew letters (Bunk Yud, Yud Alef, Chof Beis, י״א…) are slotted into
+  Alef-Beis order (`lib/bunk-order.ts`), unless someone has ordered that division
+  by hand; Divisions & bunks has "Put in Alef-Beis order" for existing ones.
 
 ### Step 3b — Campers listed in several divisions or bunks
 The registration export sometimes lists more than one division or bunk for a camper,

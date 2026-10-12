@@ -90,7 +90,9 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
         description={[c.division_name, c.bunk_name ?? "unassigned", c.grade ? `Grade ${c.grade}` : null].filter(Boolean).join(" · ")}
         actions={
           <>
-            <span className="font-mono text-sm text-muted-foreground">{c.camper_code}</span>
+            <span className="font-mono text-sm text-muted-foreground" title="Kinus code: on the camper's tag barcode, and what you type to find them at check-in">
+              {c.camper_code}
+            </span>
             {isAdmin(user) && (
               <ActionForm action={archiveCamper} confirm={c.archived_at ? undefined : `Archive ${c.display_name}?`} confirmDetail="They disappear from lists and check-in. Their history is kept, and you can restore them here." confirmLabel="Archive" danger>
                 <input type="hidden" name="id" value={c.id!} />
@@ -137,7 +139,8 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
               <Field label="Grade" value={c.grade} />
               <Field label="T-shirt" value={c.tshirt_size} />
               <Field label="Bunk preferences" value={(c.bunk_preferences ?? []).join(", ") || null} />
-              <Field label="Registration ID" value={c.source_id} />
+              <Field label="Kinus code (on the tag)" value={c.camper_code} />
+              <Field label="Registration ID (from the export)" value={c.source_id} />
               {groups.has("address") && <Field label="Local address" value={c.local_address} />}
               {groups.has("address") && <Field label="Cross streets" value={c.local_address_cross_streets} />}
               {groups.has("staff_notes") && <Field label="Staff notes" value={c.staff_notes} />}

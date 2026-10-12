@@ -90,7 +90,7 @@ const batchSchema = z.object({
   deliver_to: z.string().trim().optional(),
 });
 
-const WHICH_SHORT: Record<BatchWhich, string | null> = { all: null, not_printed: "not printed before", present: "here now", arrived_today: "arrived today" };
+const WHICH_SHORT: Record<BatchWhich, string | null> = { all: null, not_printed: "not printed before", changed: "new or changed", present: "here now", arrived_today: "arrived today" };
 
 /** "Bunk Tes", "Division 2", "American camp": what a batch covered, for the queue. */
 async function placeName(db: Awaited<ReturnType<typeof createClient>>, where: string) {
@@ -158,12 +158,25 @@ async function requireAdminUser() {
 
 const num = (min: number, max: number) => z.coerce.number().min(min).max(max);
 const layerSchema = z.discriminatedUnion("type", [
-  z.object({ id: z.string(), type: z.literal("text"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), size: num(3, 200), weight: z.union([z.literal(400), z.literal(700)]).optional(), align: z.enum(["left", "center", "right"]).optional(), color: z.string().max(40).optional(), fit: z.boolean().optional(), wrap: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional() }),
+  z.object({ id: z.string(), type: z.literal("text"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), size: num(3, 200), weight: z.union([z.literal(400), z.literal(700)]).optional(), align: z.enum(["left", "center", "right"]).optional(), color: z.string().max(40).optional(), fit: z.boolean().optional(), wrap: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(), minSize: num(3, 200).optional() }),
   z.object({ id: z.string(), type: z.literal("barcode"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(5, 500), h: num(3, 500), showText: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional() }),
   z.object({ id: z.string(), type: z.literal("qr"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(5, 500), h: num(5, 500) }),
   z.object({ id: z.string(), type: z.literal("box"), x: num(-50, 500), y: num(-50, 500), w: num(0.1, 500), h: num(0.1, 500), fill: z.string().max(60).optional(), radius: num(0, 100).optional(), border: z.string().max(40).optional() }),
 ]);
-const sheetSchema = z.object({ paper: z.enum(["letter", "a4"]), cols: z.coerce.number().int().min(1).max(10), rows: z.coerce.number().int().min(1).max(20), marginMm: num(0, 50), gapMm: num(0, 50) });
+const sheetSchema = z.object({
+  paper: z.enum(["letter", "a4"]),
+  cols: z.coerce.number().int().min(1).max(10),
+  rows: z.coerce.number().int().min(1).max(30),
+  leftMm: num(0, 200).optional(),
+  topMm: num(0, 200).optional(),
+  pitchXMm: num(1, 300).optional(),
+  pitchYMm: num(1, 300).optional(),
+  marginMm: num(0, 50).optional(),
+  gapMm: num(0, 50).optional(),
+  preset: z.string().max(40).optional(),
+  shiftXMm: num(-10, 10).optional(),
+  shiftYMm: num(-10, 10).optional(),
+});
 const templateSchema = z.object({
   id: z.guid().optional(),
   name: z.string().trim().min(1, "Give the template a name."),
@@ -264,7 +277,17 @@ export async function uploadBackground(fd: FormData): Promise<ActionResult> {
 }
 
 /** The exact print rendering for the editor's "Print preview", for the same camper as the canvas. */
-export async function previewTemplate(spec: TemplateSpec, who: { kind: "sample" } | { kind: "code"; code: string } | { kind: "longest" }): Promise<string> {
+/** Real barcodes and QR codes for the editor, the same ones that print. */
+export async function codePreviews(items: { type: "barcode" | "qr"; text: string }[]): Promise<{ svg: string; modules: number }[]> {
+  await requirePrinter();
+  const { code128Modules, code128Svg, qrSvg } = await import("@/lib/print/barcode");
+  return items.slice(0, 40).map(({ type, text }) => {
+    const svg = type === "qr" ? qrSvg(text.slice(0, 500)) : code128Svg(text.slice(0, 80));
+    return { svg, modules: type === "qr" ? 0 : code128Modules(svg) };
+  });
+}
+
+export async function previewTemplate(spec: TemplateSpec, who: { kind: "sample" } | { kind: "code"; code: string } | { kind: "longest" }, opts: { fullSheet?: boolean } = {}): Promise<string> {
   await requirePrinter();
   const r = await previewValues(who);
   const values = "error" in r ? await sampleValues() : r.values;
@@ -274,7 +297,9 @@ export async function previewTemplate(spec: TemplateSpec, who: { kind: "sample" 
     const { backgroundDataUrl } = await import("@/lib/print/data");
     background = await backgroundDataUrl(admin, spec.background_path);
   }
-  return renderDocument({ ...spec, sheet_layout: null }, [{ values, copies: 1 }], { background, outlines: true });
+  // a test sheet: the whole sheet filled, with outlines, to hold against the labels
+  const sheet = opts.fullSheet ? spec.sheet_layout : null;
+  return renderDocument({ ...spec, sheet_layout: sheet }, [{ values, copies: sheet ? sheet.cols * sheet.rows : 1 }], { background, outlines: true });
 }
 
 // ---------------------------------------------------------------------------

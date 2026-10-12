@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Layers, Pencil, Plus, Trash2, Users, Merge, Sparkles, FolderPlus, Folder } from "lucide-react";
+import { ArrowDown, ArrowDownAZ, ArrowUp, Layers, Pencil, Plus, Trash2, Users, Merge, Sparkles, FolderPlus, Folder } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/section";
 import { Callout } from "@/components/callout";
@@ -15,9 +15,11 @@ import { RadioCards } from "@/components/ui/radio-cards";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
 import { DIVISION_COLORS, LANGUAGES } from "@/lib/labels";
-import { cn, plural } from "@/lib/utils";
+import { plural } from "@/lib/utils";
+import { inNaturalOrder, usesHebrewLetters } from "@/lib/bunk-order";
+import { DivisionPanel, DivisionTab, DivisionTabs } from "@/components/division-tabs";
 import { fetchAll } from "@/lib/supabase/fetch-all";
-import { deleteBunk, deleteDivision, deleteGroup, mergeBunk, moveBunk, moveDivision, removeEmpty, saveBunk, saveDivision, saveGroup } from "./actions";
+import { deleteBunk, deleteDivision, deleteGroup, mergeBunk, moveBunk, moveDivision, removeEmpty, saveBunk, saveDivision, saveGroup, sortBunks } from "./actions";
 
 export const metadata = { title: "Divisions & bunks" };
 
@@ -130,9 +132,24 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
   ]);
   const groups = groupRows ?? [];
   const divs = divisions ?? [];
-  const campersIn = (divisionId: string, bunkId?: string | null) =>
-    campers.filter((c) => c.division_id === divisionId && (bunkId === undefined || c.bunk_id === bunkId)).length;
-  const bunksOf = (divisionId: string) => (bunks ?? []).filter((b) => b.division_id === divisionId);
+  // counted once (the page used to scan every camper for each bunk)
+  const perDivision = new Map<string, number>();
+  const perBunk = new Map<string, number>();
+  for (const c of campers) {
+    if (!c.division_id) continue;
+    perDivision.set(c.division_id, (perDivision.get(c.division_id) ?? 0) + 1);
+    const k = `${c.division_id}|${c.bunk_id ?? ""}`;
+    perBunk.set(k, (perBunk.get(k) ?? 0) + 1);
+  }
+  const campersIn = (divisionId: string, bunkId?: string | null) => (bunkId === undefined ? perDivision.get(divisionId) : perBunk.get(`${divisionId}|${bunkId ?? ""}`)) ?? 0;
+  const bunksByDivision = new Map<string, NonNullable<typeof bunks>>();
+  for (const b of bunks ?? []) bunksByDivision.set(b.division_id, [...(bunksByDivision.get(b.division_id) ?? []), b]);
+  const bunksOf = (divisionId: string) => bunksByDivision.get(divisionId) ?? [];
+  // only divisions whose bunks are named with Hebrew letters are offered Alef-Beis order
+  const unordered = divs.filter((d) => {
+    const names = bunksOf(d.id).map((b) => b.name);
+    return usesHebrewLetters(names) && !inNaturalOrder(names);
+  });
   const empty = divs.filter((d) => campersIn(d.id) === 0);
   const selected = divs.find((d) => d.id === selectedId) ?? divs[0];
 
@@ -165,31 +182,36 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
       <GroupFields divisions={divs} />
     </FormDialog>
   );
-  const DivisionLink = ({ d }: { d: (typeof divs)[number] }) => {
-    const active = d.id === selected?.id;
-    return (
-      <Link
-        href={`/admin/divisions?d=${d.id}#details`}
-        scroll={false}
-        className={cn("flex items-center gap-3 border-b px-4 py-3 last:border-0", active ? "bg-primary-soft/70" : "hover:bg-muted/50")}
-      >
-        <span className="h-9 w-1.5 shrink-0 rounded-full" style={{ background: d.color ?? "var(--muted-foreground)" }} />
-        <span className="min-w-0 flex-1">
-          <span className={cn("block truncate text-sm", active ? "font-semibold text-primary" : "font-medium")} dir="auto">
-            {d.name}
-          </span>
-          <span className="block text-xs text-muted-foreground">
-            {plural(bunksOf(d.id).length, "bunk")} · {plural(campersIn(d.id), "camper")}
-          </span>
+  const DivisionLink = ({ d }: { d: (typeof divs)[number] }) => (
+    <DivisionTab id={d.id} className="flex items-center gap-3 border-b px-4 py-3 last:border-0 hover:bg-muted/50 data-[active=true]:bg-primary-soft/70">
+      <span className="h-9 w-1.5 shrink-0 rounded-full" style={{ background: d.color ?? "var(--muted-foreground)" }} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium group-data-[active=true]:font-semibold group-data-[active=true]:text-primary" dir="auto">
+          {d.name}
         </span>
-      </Link>
-    );
-  };
+        <span className="block text-xs text-muted-foreground">
+          {plural(bunksOf(d.id).length, "bunk")} · {plural(campersIn(d.id), "camper")}
+        </span>
+      </span>
+    </DivisionTab>
+  );
   const ungrouped = divs.filter((d) => !d.group_id || !groups.some((g) => g.id === d.group_id));
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Divisions & bunks" description="Imports create these for you. Here you can rename, reorder, merge and tidy them." />
+      <PageHeader
+        title="Divisions & bunks"
+        description="Imports create these for you. Here you can rename, reorder, merge and tidy them."
+        actions={
+          unordered.length > 1 && (
+            <ActionForm action={sortBunks}>
+              <Button type="submit" variant="outline" size="sm" title="Alef, Beis … Tes, Yud, Yud Alef, Yud Beis … Chof …">
+                <ArrowDownAZ /> Put all bunks in Alef-Beis order
+              </Button>
+            </ActionForm>
+          )
+        }
+      />
       {empty.length > 0 && (
         <Callout
           tone="warning"
@@ -208,6 +230,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
       {!divs.length ? (
         <EmptyState icon={Layers} title="No divisions yet" description="Import the registration export and divisions and bunks are created automatically. Or add one by hand." action={<div className="w-48">{addDivision}</div>} />
       ) : (
+        <DivisionTabs key={selected?.id} initial={selected?.id ?? ""}>
         <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
           <div className="space-y-3">
             <nav className="overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-card)]">
@@ -265,20 +288,22 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
             {newGroup}
           </div>
 
-          {selected && (
-            <div id="details" className="scroll-mt-20">
+          <div id="details" className="scroll-mt-20">
+            {divs.map((d) => (
+              <DivisionPanel key={d.id} id={d.id}>
+            <div className="scroll-mt-20">
             <Section
               title={
                 <span className="flex flex-wrap items-center gap-2">
-                  <span className="size-3 rounded-full" style={{ background: selected.color ?? "var(--muted-foreground)" }} />
-                  <span dir="auto">{selected.name}</span>
-                  <Badge variant="secondary">{LANGUAGES[selected.language]}</Badge>
+                  <span className="size-3 rounded-full" style={{ background: d.color ?? "var(--muted-foreground)" }} />
+                  <span dir="auto">{d.name}</span>
+                  <Badge variant="secondary">{LANGUAGES[d.language]}</Badge>
                 </span>
               }
-              description={`${plural(bunksOf(selected.id).length, "bunk")} · ${plural(campersIn(selected.id), "camper")} · ${campersIn(selected.id, null)} without a bunk`}
+              description={`${plural(bunksOf(d.id).length, "bunk")} · ${plural(campersIn(d.id), "camper")} · ${campersIn(d.id, null)} without a bunk`}
               actions={
                 <>
-                  <MoveButtons action={moveDivision} id={selected.id} first={divs[0].id === selected.id} last={divs[divs.length - 1].id === selected.id} />
+                  <MoveButtons action={moveDivision} id={d.id} first={divs[0].id === d.id} last={divs[divs.length - 1].id === d.id} />
                   <FormDialog
                     trigger={
                       <Button size="sm" variant="outline">
@@ -288,34 +313,34 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
                     title="Edit division"
                     action={saveDivision}
                   >
-                    <DivisionFields d={selected} groups={groups} />
+                    <DivisionFields d={d} groups={groups} />
                   </FormDialog>
-                  {campersIn(selected.id) === 0 && (
+                  {campersIn(d.id) === 0 && (
                     <FormDialog
                       trigger={
                         <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive">
                           <Trash2 /> Delete
                         </Button>
                       }
-                      title={`Delete ${selected.name}?`}
+                      title={`Delete ${d.name}?`}
                       description="It has no campers. Its bunks and any staff access to it are removed too."
                       action={deleteDivision}
                       submitLabel="Delete division"
                       destructive
                     >
-                      <input type="hidden" name="id" value={selected.id} />
+                      <input type="hidden" name="id" value={d.id} />
                     </FormDialog>
                   )}
                 </>
               }
               bodyClassName="p-0"
             >
-              {bunksOf(selected.id).length === 0 ? (
+              {bunksOf(d.id).length === 0 ? (
                 <p className="p-5 text-sm text-muted-foreground">No bunks in this division yet.</p>
               ) : (
                 <ul className="divide-y">
-                  {bunksOf(selected.id).map((b, i, all) => {
-                    const n = campersIn(selected.id, b.id);
+                  {bunksOf(d.id).map((b, i, all) => {
+                    const n = campersIn(d.id, b.id);
                     const others = all.filter((x) => x.id !== b.id);
                     return (
                       <li key={b.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
@@ -323,7 +348,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
                           <span className="block truncate font-medium" dir="auto">
                             {b.name}
                           </span>
-                          <Link href={`/campers?division=${selected.id}&bunk=${b.id}`} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
+                          <Link href={`/campers?division=${d.id}&bunk=${b.id}`} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
                             <Users className="size-3" /> {n} {n === 1 ? "camper" : "campers"}
                           </Link>
                         </span>
@@ -340,7 +365,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
                             action={saveBunk}
                           >
                             <input type="hidden" name="id" value={b.id} />
-                            <input type="hidden" name="division_id" value={selected.id} />
+                            <input type="hidden" name="division_id" value={d.id} />
                             <Field label="Bunk name" htmlFor={`bunk-${b.id}`}>
                               <Input id={`bunk-${b.id}`} name="name" defaultValue={b.name} required dir="auto" />
                             </Field>
@@ -353,7 +378,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
                               </Button>
                             }
                             title={`Merge ${b.name}`}
-                            description={`Move its ${n} ${n === 1 ? "camper" : "campers"} into another bunk of ${selected.name}.`}
+                            description={`Move its ${n} ${n === 1 ? "camper" : "campers"} into another bunk of ${d.name}.`}
                             action={mergeBunk}
                             submitLabel="Merge"
                           >
@@ -379,7 +404,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
                               </Button>
                             }
                             title={`Delete ${b.name}?`}
-                            description={n ? `Its ${n} campers stay in ${selected.name} without a bunk. To keep them together, use Merge instead.` : "It has no campers."}
+                            description={n ? `Its ${n} campers stay in ${d.name} without a bunk. To keep them together, use Merge instead.` : "It has no campers."}
                             action={deleteBunk}
                             submitLabel="Delete bunk"
                             destructive
@@ -392,27 +417,38 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
                   })}
                 </ul>
               )}
-              <div className="border-t p-4">
+              <div className="flex flex-wrap items-center gap-2 border-t p-4">
                 <FormDialog
                   trigger={
                     <Button variant="tonal" size="sm">
                       <Plus /> Add bunk
                     </Button>
                   }
-                  title={`Add a bunk to ${selected.name}`}
+                  title={`Add a bunk to ${d.name}`}
                   action={saveBunk}
                   submitLabel="Add bunk"
                 >
-                  <input type="hidden" name="division_id" value={selected.id} />
+                  <input type="hidden" name="division_id" value={d.id} />
                   <Field label="Bunk name" htmlFor="new-bunk">
                     <Input id="new-bunk" name="name" required dir="auto" placeholder="e.g. Bunk Chof" />
                   </Field>
                 </FormDialog>
+                {unordered.includes(d) && (
+                  <ActionForm action={sortBunks}>
+                    <input type="hidden" name="division_id" value={d.id} />
+                    <Button type="submit" variant="ghost" size="sm" title="Alef, Beis … Tes, Yud, Yud Alef, Yud Beis … Chof …">
+                      <ArrowDownAZ /> Put in Alef-Beis order
+                    </Button>
+                  </ActionForm>
+                )}
               </div>
             </Section>
             </div>
-          )}
+              </DivisionPanel>
+            ))}
+          </div>
         </div>
+        </DivisionTabs>
       )}
     </div>
   );

@@ -5,6 +5,7 @@ import { fitText } from "@/lib/print/fit";
 import { DEFAULT_MIN_PT } from "@/lib/print/render-constants";
 import type { Layer } from "@/lib/print/types";
 import { cn } from "@/lib/utils";
+import { CodeImage, useCode } from "./code-image";
 
 export type FitInfo = { pt: number; overflow: boolean };
 type Box = { x: number; y: number; w: number; h: number };
@@ -238,17 +239,8 @@ function Part({
         {l.type === "box" && (
           <div className="size-full" style={{ background: safeColor(fill(l.fill ?? "", (k) => values[k] ?? ""), "transparent"), borderRadius: (l.radius ?? 0) * scale }} />
         )}
-        {l.type === "barcode" && (
-          <div className="flex size-full flex-col">
-            <div className="min-h-0 flex-1" style={{ background: "repeating-linear-gradient(90deg,#111 0 2px,#fff 2px 4px,#111 4px 5px,#fff 5px 8px,#111 8px 11px,#fff 11px 12px)" }} />
-            {l.showText !== false && (
-              <div className="text-center leading-tight" style={{ fontSize: 7 * MM_PER_PT * scale }}>
-                {fill(l.text, (k) => values[k] ?? "") || l.text}
-              </div>
-            )}
-          </div>
-        )}
-        {l.type === "qr" && <div className="size-full" style={{ background: "repeating-conic-gradient(#111 0 25%, #fff 0 50%) 0 0 / 16% 16%" }} />}
+        {l.type === "barcode" && <BarcodePart l={l} scale={scale} values={values} />}
+        {l.type === "qr" && <QrPart text={fill(l.text, (k) => values[k] ?? "") || l.text} />}
       </div>
       {selected &&
         HANDLES.map((h) => (
@@ -265,6 +257,26 @@ function Part({
         ))}
     </div>
   );
+}
+
+function BarcodePart({ l, scale, values }: { l: Extract<Layer, { type: "barcode" }>; scale: number; values: Record<string, string> }) {
+  const text = fill(l.text, (k) => values[k] ?? "") || l.text;
+  const code = useCode("barcode", text);
+  return (
+    <div className="flex size-full flex-col bg-white">
+      <div className="min-h-0 flex-1">{code?.svg ? <CodeImage svg={code.svg} stretch /> : <div className="size-full bg-slate-200" />}</div>
+      {l.showText !== false && (
+        <div className="text-center leading-tight" style={{ fontSize: 7 * MM_PER_PT * scale }}>
+          {text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QrPart({ text }: { text: string }) {
+  const code = useCode("qr", text);
+  return code?.svg ? <CodeImage svg={code.svg} /> : <div className="size-full bg-slate-200" />;
 }
 
 function TextPart({ l, scale, values, onFit }: { l: Extract<Layer, { type: "text" }>; scale: number; values: Record<string, string>; onFit: (id: string, info: FitInfo) => void }) {

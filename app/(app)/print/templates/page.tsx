@@ -9,6 +9,8 @@ import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/current-user";
 import { isAdmin } from "@/lib/auth/permissions";
 import { duplicateTemplate } from "../actions";
+import { currentPreset } from "@/lib/print/presets";
+import type { SheetLayout } from "@/lib/print/types";
 
 export const metadata = { title: "Templates" };
 const KIND: Record<string, string> = { name_tag: "Name tag", luggage_tag: "Luggage tag", other: "Other" };
@@ -33,7 +35,8 @@ export default async function TemplatesPage() {
       />
       <ul className="grid gap-3 sm:grid-cols-2">
         {(data ?? []).map((t) => {
-          const sheet = t.sheet_layout as { cols: number; rows: number; paper: string } | null;
+          const sheet = t.sheet_layout as SheetLayout | null;
+          const preset = currentPreset(Number(t.page_width_mm), Number(t.page_height_mm), sheet);
           return (
             <li key={t.id} className="flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)]">
               <div className="flex items-start justify-between gap-2">
@@ -49,11 +52,12 @@ export default async function TemplatesPage() {
               </div>
               <p className="text-sm text-muted-foreground">
                 {KIND[t.kind]} · {Number(t.page_width_mm)} × {Number(t.page_height_mm)} mm · {(t.layers as unknown[]).length} parts
+                {preset ? ` · ${preset.brand} ${preset.product}` : ""}
                 {sheet ? ` · ${sheet.cols * sheet.rows} per ${sheet.paper === "a4" ? "A4" : "Letter"} sheet` : " · one per label"}
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {t.show_on_card && <Badge variant="secondary">button on camper card</Badge>}
-                {t.auto_on_first_checkin && <Badge variant="warning">prints on first check-in</Badge>}
+                {t.show_on_card && <Badge variant="secondary">print button at check-in</Badge>}
+                {t.auto_on_first_checkin && <Badge variant="warning">prints by itself at first check-in</Badge>}
                 {t.background_path && <Badge variant="outline">background image</Badge>}
               </div>
             </li>

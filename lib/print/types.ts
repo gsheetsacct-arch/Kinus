@@ -20,7 +20,36 @@ export type Layer =
   | { id: string; type: "qr"; text: string; x: number; y: number; w: number; h: number }
   | { id: string; type: "box"; x: number; y: number; w: number; h: number; fill?: string; radius?: number; border?: string };
 
-export type SheetLayout = { paper: "letter" | "a4"; cols: number; rows: number; marginMm: number; gapMm: number };
+/**
+ * Tags laid out on Letter/A4 sheets. Label sheets (Avery…) give the first label's top-left
+ * corner and the pitch (start of one label to the start of the next). Older templates
+ * only have a margin and a gap, centred across the page.
+ */
+export type SheetLayout = {
+  paper: "letter" | "a4";
+  cols: number;
+  rows: number;
+  leftMm?: number;
+  topMm?: number;
+  pitchXMm?: number;
+  pitchYMm?: number;
+  marginMm?: number;
+  gapMm?: number;
+  /** The label stock it was set up for (lib/print/presets). */
+  preset?: string;
+  /** Moves everything to make up for a printer that prints a little off (+ is right / down). */
+  shiftXMm?: number;
+  shiftYMm?: number;
+};
+
+/** Where each label sits on the page. */
+export function sheetPlacement(s: SheetLayout, tagW: number, tagH: number, paperW: number) {
+  if (s.leftMm !== undefined && s.topMm !== undefined) {
+    return { left: s.leftMm, top: s.topMm, pitchX: s.pitchXMm ?? tagW, pitchY: s.pitchYMm ?? tagH };
+  }
+  const gap = s.gapMm ?? 0;
+  return { left: (paperW - (s.cols * tagW + (s.cols - 1) * gap)) / 2, top: s.marginMm ?? 0, pitchX: tagW + gap, pitchY: tagH + gap };
+}
 
 export type TemplateSpec = {
   id?: string;

@@ -2,7 +2,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, AlignCenter, AlignLeft, AlignRight, ArrowDown, ArrowUp, Barcode, Bold, Check, Eye, Plus, QrCode, Square, Trash2, Type } from "lucide-react";
+import { AlertTriangle, AlignCenter, AlignLeft, AlignRight, ArrowDown, ArrowUp, Barcode, Bold, Check, Eye, Plus, Printer, QrCode, Square, Trash2, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -12,9 +12,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn } from "@/lib/utils";
 import { DEFAULT_MIN_PT } from "@/lib/print/render-constants";
 import { fitPreview } from "@/lib/print/fit-preview";
-import type { Layer, SheetLayout, TemplateSpec } from "@/lib/print/types";
+import { sheetPlacement, type Layer, type SheetLayout, type TemplateSpec } from "@/lib/print/types";
+import { presetSummary, type LabelPreset } from "@/lib/print/presets";
+import { currentPreset, LabelPicker, SheetDiagram, sizeText } from "./label-picker";
 import { previewTemplate, previewValues, saveTemplate } from "@/app/(app)/print/actions";
 import { TagCanvas, type FitInfo } from "./tag-canvas";
+import { useCode } from "./code-image";
+import { fill } from "@/lib/print/merge";
 import { LeaveGuard } from "@/components/leave-guard";
 
 export type EditorTemplate = TemplateSpec & { show_on_card: boolean; auto_on_first_checkin: boolean };
@@ -28,6 +32,35 @@ const describe = (l: Layer, labels: Map<string, string>) => {
   return l.type === "box" ? "Colour block" : l.type === "text" ? words(l.text) || "Text" : `${l.type === "qr" ? "QR code" : "Barcode"}: ${words(l.text)}`;
 };
 const usedKeys = (layers: Layer[]) => new Set(layers.flatMap((l) => [...("text" in l ? l.text : (l.fill ?? "")).matchAll(/\{\{\s*([^{}|]+)/g)].map((m) => m[1].trim())));
+
+const tidy = (n: number) => Math.round(n * 100) / 100;
+
+/** Scales every part of the design by sx × sy (text by the smaller of the two). */
+function scaleLayers(layers: Layer[], sx: number, sy: number): Layer[] {
+  const k = Math.min(sx, sy);
+  return layers.map((l) => {
+    const box = { x: tidy(l.x * sx), y: tidy(l.y * sy), w: tidy(l.w * sx), h: tidy(l.h * sy) };
+    if (l.type === "text") return { ...l, ...box, size: Math.max(4, Math.round(l.size * k * 2) / 2), ...(l.minSize ? { minSize: Math.max(4, Math.round(l.minSize * k)) } : {}) };
+    if (l.type === "qr") {
+      const side = Math.min(box.w, box.h);
+      return { ...l, ...box, w: side, h: side };
+    }
+    return { ...l, ...box };
+  });
+}
+
+/** Says what's wrong when the labels don't fit on the paper. */
+function sheetFit(s: SheetLayout, w: number, h: number): string | null {
+  const [pw, ph] = s.paper === "a4" ? [210, 297] : [215.9, 279.4];
+  const at = sheetPlacement(s, w, h, pw);
+  const dx = s.shiftXMm ?? 0;
+  const dy = s.shiftYMm ?? 0;
+  if (at.left + dx < -0.05 || at.left + dx + at.pitchX * (s.cols - 1) + w > pw + 0.05) return `${s.cols} labels across don't fit on the paper.`;
+  if (at.top + dy < -0.05 || at.top + dy + at.pitchY * (s.rows - 1) + h > ph + 0.05) return `${s.rows} labels down don't fit on the paper.`;
+  if (s.cols > 1 && at.pitchX < w - 0.05) return "The labels overlap side by side.";
+  if (s.rows > 1 && at.pitchY < h - 0.05) return "The labels overlap top to bottom.";
+  return null;
+}
 
 function Num({ label, value, onChange, step = 0.5, min }: { label: string; value: number; onChange: (n: number) => void; step?: number; min?: number }) {
   return (
@@ -70,6 +103,26 @@ function MergeText({ value, onChange, fields, label }: { value: string; onChange
   );
 }
 
+/** Thinnest bar most scanners and phone cameras read reliably off a printed label. */
+const MIN_BAR_MM = 0.25;
+
+/** Says whether the barcode, at this size, will scan. */
+function BarcodeCheck({ l, values }: { l: Extract<Layer, { type: "barcode" }>; values: Record<string, string> }) {
+  const text = fill(l.text, (k) => values[k] ?? "") || l.text;
+  const code = useCode("barcode", text);
+  if (!code?.modules) return null;
+  const length = l.rotate ? l.h : l.w;
+  const tall = (l.rotate ? l.w : l.h) - (l.showText !== false ? 3 : 0);
+  const bar = length / code.modules;
+  const need = Math.ceil(code.modules * MIN_BAR_MM);
+  const problem = bar < MIN_BAR_MM ? `The bars are too thin to scan reliably (${bar.toFixed(2)} mm). Make the barcode at least ${need} mm long.` : tall < 6 ? "The bars are very short. Make the barcode at least 6 mm tall so it scans easily." : null;
+  return (
+    <p className={cn("rounded-md px-2 py-1.5 text-xs", problem ? "bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100" : "bg-muted text-muted-foreground")}>
+      {problem ?? `Scans well: bars are ${bar.toFixed(2)} mm, with blank space built in on each side.`}
+    </p>
+  );
+}
+
 export function TemplateEditor({ initial, fields, background, backgroundUrl }: { initial: EditorTemplate; fields: MergeKey[]; background: React.ReactNode; backgroundUrl: string | null }) {
   const router = useRouter();
   const [t, setT] = React.useState<EditorTemplate>(() => ({ ...initial, layers: initial.layers.map((l) => ({ ...l, id: l.id || uid() })) }));
@@ -82,6 +135,7 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
   const [dirty, setDirty] = React.useState(false);
   const [preview, setPreview] = React.useState<string | null>(null);
   const frame = React.useRef<HTMLIFrameElement>(null);
+  const [picking, setPicking] = React.useState(false);
 
   const update = (patch: Partial<EditorTemplate>) => {
     setT((cur) => ({ ...cur, ...patch }));
@@ -149,6 +203,38 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
   const fit = sel ? fits[sel.id] : undefined;
   const hidden = [...usedKeys(t.layers)].filter((k) => fields.some((f) => f.key === k && !f.enabled));
   const sheet = t.sheet_layout;
+  const preset = currentPreset(W, H, sheet);
+  const placed = sheet ? sheetPlacement(sheet, W, H, sheet.paper === "a4" ? 210 : 215.9) : null;
+  const sheetProblem = sheet && placed ? sheetFit(sheet, W, H) : null;
+  /** Older layouts (margin + gap) become exact positions the first time they're edited. */
+  const exact = (s: SheetLayout): SheetLayout => {
+    const at = sheetPlacement(s, W, H, s.paper === "a4" ? 210 : 215.9);
+    return { paper: s.paper, cols: s.cols, rows: s.rows, leftMm: tidy(at.left), topMm: tidy(at.top), pitchXMm: tidy(at.pitchX), pitchYMm: tidy(at.pitchY), shiftXMm: s.shiftXMm, shiftYMm: s.shiftYMm };
+  };
+  const setSheet = (patch: Partial<SheetLayout>) => sheet && update({ sheet_layout: { ...exact(sheet), preset: patch.shiftXMm !== undefined || patch.shiftYMm !== undefined ? sheet.preset : undefined, ...patch } });
+  /** A new label size: the design is scaled to fill it, so nothing ends up off the label. */
+  const resize = (w: number, h: number, sheetLayout: SheetLayout | null) => {
+    const sx = w / W;
+    const sy = h / H;
+    const scaled = Math.abs(sx - 1) > 0.01 || Math.abs(sy - 1) > 0.01;
+    update({ page_width_mm: w, page_height_mm: h, sheet_layout: sheetLayout, layers: scaled ? scaleLayers(t.layers, sx, sy) : t.layers });
+    if (scaled && t.layers.length) toast.message("The design was resized to fit the new labels. Check the text sizes.");
+  };
+  const pick = (p: LabelPreset | null) => {
+    setPicking(false);
+    if (!p) {
+      if (preset) update({ sheet_layout: sheet ? { ...exact(sheet), preset: undefined } : null });
+      return;
+    }
+    resize(p.widthMm, p.heightMm, p.sheet ? { ...p.sheet, preset: p.id, shiftXMm: sheet?.shiftXMm, shiftYMm: sheet?.shiftYMm } : null);
+  };
+  const testSheet = async () => {
+    const html = await previewTemplate(t, who === "code" ? { kind: "code", code } : { kind: who }, { fullSheet: true });
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    const w = window.open(url, "_blank");
+    if (!w) toast.error("Allow pop-ups for Kinus to print the test sheet.");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
 
   return (
     <div className="space-y-4">
@@ -313,9 +399,12 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
                   </>
                 )}
                 {sel.type === "barcode" && (
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" className="size-4" checked={sel.showText !== false} onChange={(e) => setLayer(sel.id, { showText: e.target.checked })} /> Show the code under the bars
-                  </label>
+                  <>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" className="size-4" checked={sel.showText !== false} onChange={(e) => setLayer(sel.id, { showText: e.target.checked })} /> Show the code under the bars
+                    </label>
+                    <BarcodeCheck l={sel} values={sample.values} />
+                  </>
                 )}
                 {sel.type === "box" && (
                   <div className="space-y-2">
@@ -397,46 +486,90 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
                   <option value="other">Other</option>
                 </Select>
               </Field>
-              <div className="grid grid-cols-2 gap-2">
-                <Num label="Width (mm)" value={W} onChange={(n) => update({ page_width_mm: n })} />
-                <Num label="Height (mm)" value={H} onChange={(n) => update({ page_height_mm: n })} />
-              </div>
-              <Field label="Paper" htmlFor="tsheet" hint={sheet ? "Tags laid out on full sheets for a regular printer (e.g. Avery)." : "One tag per page, for a label printer."}>
-                <Select
-                  id="tsheet"
-                  value={sheet ? "sheet" : "label"}
-                  onChange={(e) => update({ sheet_layout: e.target.value === "sheet" ? ({ paper: "letter", cols: 2, rows: 5, marginMm: 12, gapMm: 3 } satisfies SheetLayout) : null })}
-                >
-                  <option value="label">Label printer: one per page</option>
-                  <option value="sheet">Sheets of tags (Letter or A4)</option>
-                </Select>
-              </Field>
-              {sheet && (
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="space-y-1">
-                    <span className="block text-xs text-muted-foreground">Sheet</span>
-                    <Select value={sheet.paper} onChange={(e) => update({ sheet_layout: { ...sheet, paper: e.target.value as SheetLayout["paper"] } })} className="h-9">
-                      <option value="letter">Letter</option>
-                      <option value="a4">A4</option>
-                    </Select>
-                  </label>
-                  <Num label="Across" step={1} value={sheet.cols} onChange={(n) => update({ sheet_layout: { ...sheet, cols: n } })} />
-                  <Num label="Down" step={1} value={sheet.rows} onChange={(n) => update({ sheet_layout: { ...sheet, rows: n } })} />
-                  <Num label="Margin (mm)" value={sheet.marginMm} onChange={(n) => update({ sheet_layout: { ...sheet, marginMm: n } })} />
-                  <Num label="Gap (mm)" value={sheet.gapMm} onChange={(n) => update({ sheet_layout: { ...sheet, gapMm: n } })} />
+              <div className="space-y-2">
+                <span className="block text-sm font-medium">Labels</span>
+                <div className="flex items-start gap-3 rounded-lg border bg-background p-3">
+                  {sheet && <SheetDiagram sheet={sheet} w={W} h={H} className="w-14" />}
+                  <div className="min-w-0 flex-1 text-sm">
+                    <p className="font-medium">{preset ? `${preset.brand} ${preset.product}` : sheet ? "Custom sheet" : "Custom size, one per page"}</p>
+                    <p className="text-xs text-muted-foreground">{preset ? preset.name : sizeText(W, H)}</p>
+                    <p className="text-xs text-muted-foreground">{preset ? presetSummary(preset) : sheet ? `${sheet.cols * sheet.rows} per ${sheet.paper === "a4" ? "A4" : "Letter"} sheet` : "For a label printer"}</p>
+                    {sheetProblem && <p className="mt-1 text-xs font-medium text-destructive">{sheetProblem}</p>}
+                  </div>
                 </div>
+                <Button variant="outline" size="sm" className="w-full" onClick={() => setPicking(true)}>
+                  Choose labels (Avery, Dymo, Brother…)
+                </Button>
+              </div>
+              <details className="text-sm" open={!preset}>
+                <summary className="cursor-pointer text-xs text-muted-foreground">Size and layout by hand</summary>
+                <div className="mt-2 space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Num label="Label width (mm)" value={W} onChange={(n) => update({ page_width_mm: n, sheet_layout: sheet ? { ...sheet, preset: undefined } : null })} />
+                    <Num label="Label height (mm)" value={H} onChange={(n) => update({ page_height_mm: n, sheet_layout: sheet ? { ...sheet, preset: undefined } : null })} />
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => resize(H, W, sheet)}>
+                    Turn the label sideways ({+H.toFixed(1)} × {+W.toFixed(1)} mm)
+                  </Button>
+                  <Select
+                    aria-label="Paper"
+                    value={sheet ? "sheet" : "label"}
+                    onChange={(e) => update({ sheet_layout: e.target.value === "sheet" ? exact({ paper: "letter", cols: 2, rows: 5, marginMm: 12, gapMm: 3 }) : null })}
+                    className="h-9"
+                  >
+                    <option value="label">Label printer: one label per page</option>
+                    <option value="sheet">Sheets of labels (Letter or A4)</option>
+                  </Select>
+                  {sheet && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="space-y-1">
+                        <span className="block text-xs text-muted-foreground">Sheet</span>
+                        <Select value={sheet.paper} onChange={(e) => setSheet({ paper: e.target.value as SheetLayout["paper"] })} className="h-9">
+                          <option value="letter">Letter</option>
+                          <option value="a4">A4</option>
+                        </Select>
+                      </label>
+                      <span />
+                      <Num label="Across" step={1} min={1} value={sheet.cols} onChange={(n) => setSheet({ cols: n })} />
+                      <Num label="Down" step={1} min={1} value={sheet.rows} onChange={(n) => setSheet({ rows: n })} />
+                      <Num label="First label from left (mm)" step={0.1} value={placed!.left} onChange={(n) => setSheet({ leftMm: n })} />
+                      <Num label="First label from top (mm)" step={0.1} value={placed!.top} onChange={(n) => setSheet({ topMm: n })} />
+                      <Num label="Left of one to left of next (mm)" step={0.1} value={placed!.pitchX} onChange={(n) => setSheet({ pitchXMm: n })} />
+                      <Num label="Top of one to top of next (mm)" step={0.1} value={placed!.pitchY} onChange={(n) => setSheet({ pitchYMm: n })} />
+                    </div>
+                  )}
+                </div>
+              </details>
+              {sheet && (
+                <details className="text-sm">
+                  <summary className="cursor-pointer text-xs text-muted-foreground">Printing a little off the labels?</summary>
+                  <div className="mt-2 space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Print a test sheet on plain paper (at <strong>Actual size / 100%</strong>, not “Fit to page”), hold it over a sheet of labels against the light, and move everything until the outlines line up. Each printer is a little different.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Num label="Move right (mm)" step={0.5} value={sheet.shiftXMm ?? 0} onChange={(n) => setSheet({ shiftXMm: n })} />
+                      <Num label="Move down (mm)" step={0.5} value={sheet.shiftYMm ?? 0} onChange={(n) => setSheet({ shiftYMm: n })} />
+                    </div>
+                    <Button size="sm" variant="outline" onClick={testSheet}>
+                      <Printer /> Print a test sheet
+                    </Button>
+                  </div>
+                </details>
               )}
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm">
-                  <span className="font-medium">Button on the camper card</span>
-                  <span className="block text-xs text-muted-foreground">One tap at check-in sends it to the office.</span>
+                  <span className="font-medium">Print button at check-in</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Adds a “{t.name || "this tag"}” button to every camper&apos;s card, on Check in and on the camper&apos;s page. Staff tap it when a tag is lost or wrong, and it goes to the office to print. Leave it off for labels only the office prints.
+                  </span>
                 </span>
                 <Switch checked={t.show_on_card} onCheckedChange={(v) => update({ show_on_card: v })} />
               </label>
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm">
-                  <span className="font-medium">Print on first check-in</span>
-                  <span className="block text-xs text-muted-foreground">Requested once per camper, the first time they arrive.</span>
+                  <span className="font-medium">Print by itself at first check-in</span>
+                  <span className="block text-xs text-muted-foreground">The first time each camper is checked in, this tag goes to the office print queue on its own, without anyone tapping. Only once per camper.</span>
                 </span>
                 <Switch checked={t.auto_on_first_checkin} onCheckedChange={(v) => update({ auto_on_first_checkin: v })} />
               </label>
@@ -446,6 +579,7 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
         </div>
       </div>
 
+      <LabelPicker open={picking} onOpenChange={setPicking} current={preset} onPick={pick} />
       <Dialog open={preview !== null} onOpenChange={(o) => !o && setPreview(null)}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>

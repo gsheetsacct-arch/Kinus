@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { fetchAll } from "@/lib/supabase/fetch-all";
+import { bunkOrders, putInOrder, slotNewBunks } from "@/lib/data/bunk-sort";
+import { usesHebrewLetters } from "@/lib/bunk-order";
 
 const done = (msg: string, redirect?: string) => {
   revalidatePath("/", "layout");
@@ -114,9 +116,12 @@ export async function saveBunk(fd: FormData): Promise<ActionResult> {
       if (error) throw error;
       return done("Bunk renamed.");
     }
+    const session = await getActiveSession();
+    const before = session ? await bunkOrders(supabase, session.id) : null;
     const { count } = await supabase.from("bunks").select("id", { count: "exact", head: true }).eq("division_id", d.division_id);
     const { error } = await supabase.from("bunks").insert({ division_id: d.division_id, name: d.name, sort_order: (count ?? 0) + 1 });
     if (error) throw error;
+    if (session && before) await slotNewBunks(supabase, session.id, before);
     return done(`Bunk "${d.name}" added.`);
   } catch (e) {
     return fail(/duplicate/.test(errorMessage(e)) ? "This division already has a bunk with that name." : errorMessage(e));
@@ -144,6 +149,24 @@ export async function mergeBunk(fd: FormData): Promise<ActionResult> {
     const { error } = await supabase.from("bunks").delete().eq("id", from);
     if (error) throw error;
     return done(`Merged into ${target.name}.`);
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+/** Puts the bunks of one division (or every division) in Alef-Beis order: Alef … Tes, Yud, Yud Alef …. */
+export async function sortBunks(fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const session = await getActiveSession();
+  if (!session) return fail("No active session.");
+  try {
+    const supabase = await createClient();
+    const only = String(fd.get("division_id") ?? "");
+    const orders = await bunkOrders(supabase, session.id);
+    let moved = 0;
+    // "all": only divisions whose bunks are named with Hebrew letters
+    for (const [divisionId, bunks] of orders) if (only ? divisionId === only : usesHebrewLetters(bunks.map((b) => b.name))) moved += await putInOrder(supabase, bunks);
+    return done(moved ? "Bunks are in order." : "The bunks were already in order.");
   } catch (e) {
     return fail(errorMessage(e));
   }
