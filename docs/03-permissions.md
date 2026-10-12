@@ -41,6 +41,23 @@ every division in it, including divisions added to the group later.
 - **Staff list**: search, filter by role / where / status, sort, tick people, and
   change role and where (replace or add), email sign-in links, deactivate, or delete.
 
+## Signing in (`profiles.login`, migration 0022)
+- **Signs in** (`personal`): their own email, with a link, password or Face ID.
+- **Listed only** (`none`): most counselors. They're in the phone book and on their bunk's
+  lists (name and phone under the bunk heading) so head staff can reach them, but they
+  never sign in: no email needed, their Supabase sign-in is blocked (banned), and the app
+  refuses them too. New counselors default to this; bulk upload has an optional *Signs in*
+  column (yes/no).
+- **Check-in login** (`shared`): one per division, created on the Staff page (*Check-in
+  logins*) by directors, division heads and head counselors for their divisions. The
+  division's check-in phones sign in with its short name (`division-1`) and a generated
+  password; *New password* replaces it. Head staff and directors check in with their own
+  accounts.
+
+Anyone who can check in more than one division picks **which line they're at** on Check in
+(remembered for the shift). A camper from another division then asks "Not your line"
+before anything is recorded.
+
 ## Deleting someone
 Deactivating stops someone signing in and can be undone. **Delete** (their page, or
 tick people on the list; type "delete" to confirm) removes the account for good.

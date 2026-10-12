@@ -3,18 +3,29 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient as createPlainClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { checkinName } from "@/lib/staff/login-kinds";
 import { publicEnv } from "@/lib/env";
 import { appUrl } from "@/lib/auth/app-url";
 import { fail, ok, type ActionResult } from "@/lib/actions/result";
 
-const credentials = z.object({ email: z.string().email(), password: z.string().min(6), next: z.string().optional() });
+const credentials = z.object({ email: z.string().trim().min(1), password: z.string().min(6), next: z.string().optional() });
+
+/** A check-in phone signs in with its division's short name ("division-1") instead of an email. */
+async function emailFor(login: string): Promise<string | null> {
+  if (login.includes("@")) return login.toLowerCase();
+  const { data } = await createAdminClient().from("profiles").select("email").eq("login", "shared").ilike("email", `checkin.${checkinName(login)}@%`).limit(1).maybeSingle();
+  return data?.email ?? null;
+}
 
 export async function signInWithPassword(formData: FormData): Promise<ActionResult> {
   const parsed = credentials.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return fail("Enter your email and password.");
+  const email = await emailFor(parsed.data.email);
+  if (!email) return fail("No check-in login has that name. Check the spelling, or use your email.");
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email: parsed.data.email, password: parsed.data.password });
-  if (error) return fail(error.message === "Invalid login credentials" ? "Wrong email or password." : error.message);
+  const { error } = await supabase.auth.signInWithPassword({ email, password: parsed.data.password });
+  if (error) return fail(error.message === "Invalid login credentials" ? "Wrong email or password." : /banned/i.test(error.message) ? "This account doesn't sign in to Kinus." : error.message);
   // only paths on this site ("//other.site" would leave it)
   const next = parsed.data.next && parsed.data.next.startsWith("/") && !parsed.data.next.startsWith("//") ? parsed.data.next : "/";
   return ok(undefined, next);

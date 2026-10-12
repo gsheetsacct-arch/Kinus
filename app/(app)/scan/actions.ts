@@ -209,7 +209,7 @@ export async function rosterStatuses(): Promise<Record<string, CamperStatus>> {
 }
 
 export type CodeLookup =
-  | { found: true; entry: { id: string; code: string; name: string; first: string; last: string; where: string; status: CamperStatus } }
+  | { found: true; entry: { id: string; code: string; name: string; first: string; last: string; where: string; status: CamperStatus; div: string | null } }
   | { found: false; message: string };
 
 /**
@@ -223,14 +223,14 @@ export async function lookupCode(code: string): Promise<CodeLookup> {
   const supabase = await createClient();
   const { data: mine } = await supabase
     .from("campers")
-    .select("id, camper_code, first_name, last_name, status, divisions(name), bunks(name)")
+    .select("id, camper_code, first_name, last_name, status, division_id, divisions(name), bunks(name)")
     .eq("session_id", session.id)
     .eq("camper_code", code)
     .is("archived_at", null)
     .maybeSingle();
   if (mine) {
     const where = [(mine.divisions as { name: string } | null)?.name, (mine.bunks as { name: string } | null)?.name ?? "no bunk"].filter(Boolean).join(" · ");
-    return { found: true, entry: { id: mine.id, code: mine.camper_code, name: `${mine.first_name} ${mine.last_name}`, first: mine.first_name, last: mine.last_name, where, status: mine.status } };
+    return { found: true, entry: { id: mine.id, code: mine.camper_code, name: `${mine.first_name} ${mine.last_name}`, first: mine.first_name, last: mine.last_name, where, status: mine.status, div: mine.division_id } };
   }
   // outside this person's area: only say where they check in, nothing else about them
   const { data: other } = await createAdminClient().from("campers").select("archived_at, divisions(name)").eq("session_id", session.id).eq("camper_code", code).maybeSingle();

@@ -13,10 +13,9 @@ export function templateRows(tree: AreaTree, roles: StaffRole[]): string[][] {
   const can = (r: StaffRole) => roles.includes(r);
   const rows: string[][] = [];
   if (can("counselor")) {
-    rows.push(["Levi Cohen", "levi.cohen@example.com", STAFF_ROLES.counselor.label, div(d), d?.bunks[0]?.name ?? "", "", "+1 718 555 0101"]);
+    rows.push(["Levi Cohen", "", STAFF_ROLES.counselor.label, div(d), d?.bunks[0]?.name ?? "", "", "+1 718 555 0101"]);
     if (d && d.bunks.length > 2) rows.push(["Mendy Gurary", "mendy@example.com", STAFF_ROLES.counselor.label, div(d), `${d.bunks[1].name}; ${d.bunks[2].name}`, "Learning head", "+1 718 555 0102"]);
   }
-  if (can("scanner")) rows.push(["Gate Helper", "helper@example.com", STAFF_ROLES.scanner.label, div(d), "", "Check-in table", ""]);
   if (can("head_counselor") && d2) rows.push(["Shmuli Levin", "shmuli@example.com", STAFF_ROLES.head_counselor.label, d2.name, "", "", "+1 917 555 0103"]);
   return rows;
 }

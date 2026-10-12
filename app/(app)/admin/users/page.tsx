@@ -10,6 +10,8 @@ import { canGrantAreas, canManageRole, isAdmin, type StaffRole, isDirector } fro
 import { ROLE_ORDER, areaLabel, STAFF_ROLES } from "@/lib/labels";
 import { areaNames, grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
+import { CheckinLogins } from "@/components/staff/checkin-logins";
+import { checkinNameOf, shownEmail } from "@/lib/staff/login-kinds";
 import { bulkSendLinks, bulkSetAccess, bulkSetActive, deletePeople } from "./actions";
 
 export const metadata = { title: "Staff" };
@@ -20,7 +22,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const session = await getActiveSession();
   const admin = createAdminClient();
   const [{ data: profiles }, { data: areas }, tree, info] = await Promise.all([
-    admin.from("profiles").select("id, email, full_name, title, role, access_level, all_areas, is_active").order("full_name"),
+    admin.from("profiles").select("id, email, full_name, title, role, access_level, all_areas, is_active, login").order("full_name"),
     admin.from("staff_scopes").select("user_id, group_id, division_id, bunk_id"),
     loadAreaTree(admin, session?.id),
     signInInfo(),
@@ -43,7 +45,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     return {
       id: p.id,
       name: p.full_name,
-      email: p.email,
+      email: shownEmail(p.email) ?? "",
       title: p.title,
       role: p.role,
       level: p.role === "owner" ? "edit" : p.access_level,
@@ -51,13 +53,20 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       where: everywhere ? "All of camp" : mine.length ? mine.map((a) => areaLabel(a, names)).join(", ") : "Nowhere yet",
       divisionIds,
       groupIds,
-      status: statusOf(p.is_active, info.get(p.id)),
+      status: statusOf(p.is_active, info.get(p.id), p.login),
       active: p.is_active,
       lastSignIn: info.get(p.id)?.lastSignInAt ?? null,
       manageable: p.id !== me.id && canManageRole(me, p.role),
     };
   });
   const roles = ROLE_ORDER.filter((r) => canManageRole(me, r as StaffRole));
+  // one check-in login per division this person looks after
+  const grantable = grantableTree(me, tree);
+  const shared = (profiles ?? []).filter((p) => p.login === "shared");
+  const checkinLogins = grantable.divisions.map((d) => {
+    const acct = shared.find((p) => (areas ?? []).some((a) => a.user_id === p.id && a.division_id === d.id));
+    return { divisionId: d.id, divisionName: d.name, color: d.color, account: acct ? { id: acct.id, name: checkinNameOf(acct.email) ?? acct.email, active: acct.is_active, lastSignIn: info.get(acct.id)?.lastSignInAt ?? null } : null };
+  });
 
   return (
     <div className="space-y-6">
@@ -91,6 +100,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
           Use <strong>Add many at once</strong> to paste your staff list from a spreadsheet (name, email, role, division, bunk). Everyone gets an invitation email. To change many people later, tick them below.
         </Callout>
       )}
+      {canManageRole(me, "scanner") && <CheckinLogins logins={checkinLogins} />}
       <StaffTable rows={rows} tree={grantableTree(me, tree)} roles={roles} actions={{ bulkSetAccess, bulkSendLinks, bulkSetActive, deletePeople }} lockAll={!isAdmin(me)} initialRole={roleFilter && roleFilter in STAFF_ROLES ? roleFilter : undefined} />
     </div>
   );

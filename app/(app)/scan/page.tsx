@@ -8,6 +8,7 @@ import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { LEVEL_RANK, effectiveLevel } from "@/lib/auth/permissions";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { loadAreaTree } from "@/lib/data/areas";
+import { getCampContext } from "@/lib/data/camp";
 
 export const metadata = { title: "Check in" };
 export const maxDuration = 60;
@@ -28,7 +29,12 @@ export default async function ScanPage() {
   const roster: RosterEntry[] = rows.map((c) => {
     const d = c.division_id ? div.get(c.division_id) : undefined;
     const b = d?.bunks.find((x) => x.id === c.bunk_id);
-    return { id: c.id, code: c.camper_code, name: `${c.first_name} ${c.last_name}`, first: c.first_name, last: c.last_name, where: [d?.name, b?.name ?? "no bunk"].filter(Boolean).join(" · "), status: c.status };
+    return { id: c.id, code: c.camper_code, name: `${c.first_name} ${c.last_name}`, first: c.first_name, last: c.last_name, where: [d?.name, b?.name ?? "no bunk"].filter(Boolean).join(" · "), status: c.status, div: c.division_id };
   });
-  return <Scanner roster={roster} templates={templates ?? []} canScan={LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan} />;
+  // the divisions this person checks in (more than one: they pick which line they're at)
+  // (only the camp chosen at the top of the menu: American, Hebrew…)
+  const camp = await getCampContext();
+  const present = new Set(rows.map((c) => c.division_id));
+  const divisions = tree.divisions.filter((d) => present.has(d.id) && (!camp.divisionIds || camp.divisionIds.includes(d.id))).map((d) => ({ id: d.id, name: d.name, color: d.color }));
+  return <Scanner roster={roster} templates={templates ?? []} canScan={LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan} divisions={divisions} />;
 }

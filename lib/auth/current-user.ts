@@ -17,7 +17,7 @@ const loadAccount = cache(async (): Promise<Account> => {
   const user = { id: claims.sub, email: claims.email ?? "", user_metadata: claims.user_metadata ?? {} };
   const [{ data: profileRow, error: profileError }, { data: areas, error: areasError }] = await Promise.all([
     // email comes from the sign-in: staff can't read profile emails (migration 0013)
-    supabase.from("profiles").select("id, full_name, role, access_level, all_areas, is_active").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("id, full_name, role, access_level, all_areas, is_active, login").eq("id", user.id).maybeSingle(),
     supabase.from("staff_scopes").select("id, group_id, division_id, bunk_id").eq("user_id", user.id),
   ]);
   // a column or table the app expects is missing: the database is behind the app
@@ -28,7 +28,8 @@ const loadAccount = cache(async (): Promise<Account> => {
   let profile = profileRow;
   if (!profile) profile = await healMissingProfile(user.id, user.email ?? "", (user.user_metadata ?? {}) as Record<string, string>);
   if (!profile) return { user: null, problem: "no_profile" };
-  if (!profile.is_active) return { user: null, problem: "inactive" };
+  // listed-only people (most counselors) never use the app, even with a sign-in link
+  if (!profile.is_active || profile.login === "none") return { user: null, problem: "inactive" };
   const rows = areas ?? [];
   const groupIds = rows.map((a) => a.group_id).filter((x): x is string => Boolean(x));
   const grouped = groupIds.length ? ((await supabase.from("divisions").select("id, group_id").in("group_id", groupIds)).data ?? []) : [];
@@ -108,7 +109,7 @@ async function healMissingProfile(id: string, email: string, meta: Record<string
     const { data } = await admin
       .from("profiles")
       .upsert({ id, email, full_name: meta.full_name ?? email.split("@")[0], role: owner ? "owner" : "counselor", all_areas: owner, access_level: owner ? "edit" : "scan" })
-      .select("id, email, full_name, role, access_level, all_areas, is_active")
+      .select("id, email, full_name, role, access_level, all_areas, is_active, login")
       .single();
     return data;
   } catch {

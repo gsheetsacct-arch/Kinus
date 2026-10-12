@@ -1,3 +1,4 @@
+import { loadExtraFields } from "@/lib/data/extra-fields";
 import { notFound } from "next/navigation";
 import { Lock } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -33,6 +34,7 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
   const preset = isNew ? null : (await supabase.from("list_presets").select("*").eq("id", id).maybeSingle()).data;
   if (!isNew && !preset) notFound();
   const columns = new Set((preset?.columns as string[] | undefined) ?? ["display_name", "bunk"]);
+  const extraFields = await loadExtraFields();
   const sort = (preset?.sort as { field: string; dir: string }[] | undefined) ?? [];
   const sortField = sort.find((s) => s.field !== preset?.group_by)?.field ?? "last_name";
 
@@ -105,6 +107,19 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                 </fieldset>
               );
             })}
+            {extraFields.length > 0 && (
+              <fieldset className="space-y-2">
+                <legend className="mb-2 text-sm font-semibold">From the registration export</legend>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {extraFields.map((f) => (
+                    <label key={f.column} className="flex cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm hover:bg-muted/40 has-[:checked]:border-primary/50 has-[:checked]:bg-primary-soft/40">
+                      <input type="checkbox" name="columns" value={`source.${f.column}`} defaultChecked={columns.has(`source.${f.column}`)} className="size-4 accent-[var(--primary)]" />
+                      {f.label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
           </div>
         </Section>
       </ActionForm>

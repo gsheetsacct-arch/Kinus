@@ -11,6 +11,10 @@ import { parseFile, findLostText, applyMapping, matchAndDiff, resolveMultiValues
 import type { Json } from "@/lib/supabase/database.types";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { bunkOrders, slotNewBunks } from "@/lib/data/bunk-sort";
+import { columnKey, humanLabel, parseExtraFields } from "@/lib/import/extra-fields";
+
+/** The column step's choice "show it on the camper page" (an extra field). */
+const EXTRA = "__extra";
 
 type J = NonNullable<Json>;
 
@@ -23,25 +27,22 @@ export async function uploadImport(fd: FormData): Promise<ActionResult> {
   const file = fd.get("file");
   if (!(file instanceof File) || file.size === 0) return fail("Choose a file.");
   if (file.size > MAX_BYTES) return fail("File is larger than 15 MB.");
-  const override = fd.get("override") === "on";
-  const mappingId = String(fd.get("mapping_id") || "");
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const parsed = parseFile(bytes, file.name);
     if (parsed.headers.length === 0 || parsed.rows.length === 0) return fail("The file has no data rows.");
+    // "???" where letters were lost (the export was opened and saved again in Excel or WPS):
+    // shown on the next step so the person can decide, instead of refusing the file
     const lost = findLostText(parsed.headers, parsed.rows);
-    if (lost.length && !override) {
-      const sample = lost.slice(0, 3).map((h) => `row ${h.row}: "${h.value}"`).join("; ");
-      return fail(
-        `${lost.length} ${lost.length === 1 ? "cell has" : "cells have"} text replaced by "???" (${sample}). This happens when the file was opened and saved again in WPS or Excel. Upload the original download instead, or tick "The ??? are real" under More options.`,
-      );
-    }
     const hash = createHash("sha256").update(bytes).digest("hex");
     const admin = createAdminClient();
     const dup = await admin.from("imports").select("id, applied_at, status").eq("session_id", session.id).eq("file_hash", hash).eq("status", "applied").maybeSingle();
     if (dup.data) return fail(`This exact file was already imported on ${formatDateTime(dup.data.applied_at)}. Nothing has changed.`);
 
     await discardDrafts(session.id);
+    // Kinus remembers how the columns were matched last time (one layout, updated on each import)
+    const { data: layout } = await admin.from("import_mappings").select("id").order("is_default", { ascending: false }).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    const mappingId = layout?.id ?? "";
     const { data: imp, error } = await admin
       .from("imports")
       .insert({
@@ -52,7 +53,7 @@ export async function uploadImport(fd: FormData): Promise<ActionResult> {
         file_hash: hash,
         status: "uploaded",
         uploaded_by: me.id,
-        options: { headers: parsed.headers, encoding: parsed.encoding, skippedEmptyRows: parsed.skippedEmptyRows, lostTextOverride: override, lostTextCells: lost.length },
+        options: { headers: parsed.headers, encoding: parsed.encoding, skippedEmptyRows: parsed.skippedEmptyRows, lostTextCells: lost.length, lostTextSample: lost.slice(0, 5) as unknown as J },
       })
       .select("id")
       .single();
@@ -129,7 +130,6 @@ const previewSchema = z.object({
   takeBunksFromFile: z.enum(["on"]).optional(),
   emptyMeansUnknown: z.enum(["on"]).optional(),
   phoneDefaultRegion: z.string().trim().length(2).default("US"),
-  preset_name: z.string().trim().optional(),
 });
 
 export async function previewImport(fd: FormData): Promise<ActionResult> {
@@ -145,9 +145,11 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     if (!active || active.id !== imp.session_id) return fail("This draft belongs to another session. Start a new import in the active session.");
     const headers = ((imp.options as { headers?: string[] })?.headers ?? []) as string[];
     const columnMap: ColumnMap = {};
+    const extra: string[] = [];
     for (const h of headers) {
       const t = String(fd.get(`map:${h}`) ?? "");
-      if (t) columnMap[h] = t;
+      if (t === EXTRA) extra.push(h);
+      else if (t) columnMap[h] = t;
     }
     if (!Object.values(columnMap).includes("first_name") || !Object.values(columnMap).includes("last_name")) {
       return fail("Map at least first name and last name.");
@@ -160,9 +162,21 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     // prioritise bunk columns in header order unless the preset says otherwise
     mappingOptions.bunkColumnPriority = (mappingOptions.bunkColumnPriority ?? []).filter((c) => columnMap[c] === "bunk");
 
-    if (d.preset_name) {
-      await admin.from("import_mappings").insert({ name: d.preset_name, column_map: columnMap, options: mappingOptions as unknown as J, created_by: me.id });
+    // remembered for next time: the one column layout, updated with what was chosen now
+    if (imp.mapping_id) {
+      const { data: m } = await admin.from("import_mappings").select("column_map").eq("id", imp.mapping_id).maybeSingle();
+      const merged: ColumnMap = { ...((m?.column_map as ColumnMap) ?? {}) };
+      for (const h of headers) delete merged[h];
+      await admin.from("import_mappings").update({ column_map: { ...merged, ...columnMap } as unknown as J, options: mappingOptions as unknown as J }).eq("id", imp.mapping_id);
+    } else {
+      await admin.from("import_mappings").insert({ name: "Registration export", column_map: columnMap, options: mappingOptions as unknown as J, is_default: true, created_by: me.id });
     }
+    // extra fields: the columns chosen to show on the camper page (others in this file are taken off)
+    const { data: extraRow } = await admin.from("settings").select("value").eq("key", "extra_fields").maybeSingle();
+    const keepOthers = parseExtraFields(extraRow?.value).filter((f) => !headers.some((h) => columnKey(h) === columnKey(f.column)));
+    const before = parseExtraFields(extraRow?.value);
+    const chosen = extra.map((h) => before.find((f) => columnKey(f.column) === columnKey(h)) ?? { column: h, label: humanLabel(h) });
+    await admin.from("settings").upsert({ key: "extra_fields", value: [...keepOthers, ...chosen] as unknown as J, updated_by: me.id, updated_at: new Date().toISOString() });
 
     const rawRows = await fetchAll((from, to) => admin.from("import_rows").select("id, row_number, raw").eq("import_id", imp.id).order("row_number").range(from, to));
     const parsedRows = rawRows.map((r) => ({ id: r.id, rowNumber: r.row_number, parsed: applyMapping(r.raw as Record<string, string>, columnMap, mappingOptions) }));

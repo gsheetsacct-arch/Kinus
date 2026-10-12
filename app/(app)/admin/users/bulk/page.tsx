@@ -60,8 +60,11 @@ export default async function BulkAddPage() {
                 </tr>
                 <tr>
                   <td className={`${cell} font-medium`}>Email</td>
-                  <td className={cell}>Yes</td>
-                  <td className={cell}>Where their invitation goes. Someone already in Kinus (same email) is updated instead of added twice.</td>
+                  <td className={cell}>For people who sign in</td>
+                  <td className={cell}>
+                    Where their invitation goes. Someone already in Kinus (same email) is updated instead of added twice. Counselors are listed without signing in, so they don&apos;t need one (an
+                    email still shows in the phone book).
+                  </td>
                 </tr>
                 <tr>
                   <td className={`${cell} font-medium`}>Role</td>
@@ -119,7 +122,15 @@ export default async function BulkAddPage() {
                 <tr>
                   <td className={`${cell} font-medium`}>Phone</td>
                   <td className={cell}>No</td>
-                  <td className={cell}>For the phone book. They can also add it themselves on their Account page.</td>
+                  <td className={cell}>For the phone book and the bunk lists, so head staff can reach them.</td>
+                </tr>
+                <tr>
+                  <td className={`${cell} font-medium`}>Signs in</td>
+                  <td className={cell}>No</td>
+                  <td className={cell}>
+                    <em>Yes</em> or <em>No</em>. Leave it empty for the usual: counselors are listed only (phone book, bunk lists) and don&apos;t sign in; everyone else does. Check-in phones use the
+                    division&apos;s check-in login instead (on the Staff page).
+                  </td>
                 </tr>
               </tbody>
             </table>

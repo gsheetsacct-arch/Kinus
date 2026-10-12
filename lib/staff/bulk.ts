@@ -2,7 +2,7 @@ import type { AccessLevel, StaffRole } from "@/lib/auth/permissions";
 import type { AreaTree, AreaValue } from "@/lib/data/areas";
 import { normalizeName } from "@/lib/import/normalize";
 
-export type BulkInputRow = { line: number; name: string; email: string; role: string; where: string; bunk: string; level: string; title: string; phone: string };
+export type BulkInputRow = { line: number; name: string; email: string; role: string; where: string; bunk: string; level: string; title: string; phone: string; signs?: string };
 export type BulkPlanRow = {
   line: number;
   name: string;
@@ -15,6 +15,8 @@ export type BulkPlanRow = {
   /** Free-text position ("Learning head", "Waterfront"). */
   title: string;
   phone: string;
+  /** "none": listed only (no sign-in, email optional). Counselors are listed only unless the sheet says otherwise. */
+  login: "personal" | "none";
   errors: string[];
 };
 
@@ -27,6 +29,7 @@ const HEADERS: Record<keyof Omit<BulkInputRow, "line">, string[]> = {
   where: ["division", "group", "camp", "where", "area", "divisions"],
   bunk: ["bunk", "bunks", "group/bunk", "cabin"],
   level: ["level", "access", "can"],
+  signs: ["signs in", "sign in", "sign-in", "login", "log in", "account", "uses kinus"],
 };
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -41,7 +44,7 @@ export function readRows(grid: string[][]): BulkInputRow[] {
     const i = head.findIndex((h) => HEADERS[key].includes(h));
     return i;
   };
-  const idx = { name: col("name", 0), email: col("email", 1), role: col("role", 2), where: col("where", 3), bunk: col("bunk", 4), level: col("level", 5), title: col("title", 6), phone: col("phone", 7) };
+  const idx = { name: col("name", 0), email: col("email", 1), role: col("role", 2), where: col("where", 3), bunk: col("bunk", 4), level: col("level", 5), title: col("title", 6), phone: col("phone", 7), signs: col("signs", -1) };
   // without a header, find the email column by content
   if (!looksLikeHeader) {
     const e = rows[0].findIndex((c) => EMAIL.test(c));
@@ -61,6 +64,7 @@ export function readRows(grid: string[][]): BulkInputRow[] {
     level: at(r, idx.level),
     title: at(r, idx.title),
     phone: at(r, idx.phone),
+    signs: at(r, idx.signs),
   }));
 }
 
@@ -154,9 +158,6 @@ export function planRows(rows: BulkInputRow[], tree: AreaTree, defaults: { role:
   return rows.map((r) => {
     const errors: string[] = [];
     if (!r.name) errors.push("Missing name.");
-    if (!EMAIL.test(r.email)) errors.push(r.email ? `“${r.email}” isn't an email address.` : "Missing email.");
-    else if (seen.has(r.email)) errors.push("This email is listed twice.");
-    seen.add(r.email);
     let role: StaffRole | null = defaults.role;
     let title = r.title;
     // a sheet with only a "Position" column: a word Kinus knows ("Counselor") is the role,
@@ -169,6 +170,13 @@ export function planRows(rows: BulkInputRow[], tree: AreaTree, defaults: { role:
       role = matchRole(r.role);
       if (!role) errors.push(`Unknown role “${r.role}”.${suggest(r.role, ROLE_WORDS.flatMap(([, words]) => words))}`);
     }
+    // counselors are listed (phone book, bunk) without signing in, unless the sheet says they sign in
+    const said = (r.signs ?? "").trim().toLowerCase();
+    const login: "personal" | "none" = /^(y|yes|true|1|x|✓)$/.test(said) ? "personal" : /^(n|no|false|0|-)$/.test(said) ? "none" : role === "counselor" ? "none" : "personal";
+    if (r.email && !EMAIL.test(r.email)) errors.push(`“${r.email}” isn't an email address.`);
+    else if (!r.email && login === "personal") errors.push("Missing email: everyone who signs in needs one.");
+    else if (r.email && seen.has(r.email)) errors.push("This email is listed twice.");
+    if (r.email) seen.add(r.email);
     const lvl = r.level ? matchLevel(r.level) : null;
     // a Level column from older sheets is read but not used: the role decides (Staff → Roles)
     const a = matchAreas(r.where || defaults.where || "", r.bunk, tree);
@@ -176,6 +184,6 @@ export function planRows(rows: BulkInputRow[], tree: AreaTree, defaults: { role:
     if (!a.allAreas && !a.areas.length && !a.errors.length && role !== "office" && role !== "logistics") errors.push("Say where they work: a camp, division, bunk, or “All”.");
     const level = lvl ?? (defaults.level !== "role" ? defaults.level : null);
     const everywhere = a.allAreas || (!a.areas.length && !a.errors.length && (role === "office" || role === "logistics"));
-    return { line: r.line, name: r.name, email: r.email, role, level, allAreas: everywhere, areas: a.areas, areaText: everywhere ? "All of camp" : a.areas.length ? a.text : "—", title, phone: r.phone, errors };
+    return { line: r.line, name: r.name, email: r.email, role, level, allAreas: everywhere, areas: a.areas, areaText: everywhere ? "All of camp" : a.areas.length ? a.text : "—", title, phone: r.phone, login, errors };
   });
 }

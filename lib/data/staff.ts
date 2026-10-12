@@ -19,8 +19,10 @@ export async function signInInfo(): Promise<Map<string, SignInInfo>> {
   return out;
 }
 
-export function statusOf(active: boolean, info: SignInInfo | undefined): { label: string; variant: "success" | "warning" | "destructive" | "outline" } {
+export function statusOf(active: boolean, info: SignInInfo | undefined, login = "personal"): { label: string; variant: "success" | "warning" | "destructive" | "outline" } {
   if (!active) return { label: "Deactivated", variant: "destructive" };
+  if (login === "none") return { label: "Listed · no sign-in", variant: "outline" };
+  if (login === "shared" && !info?.lastSignInAt) return { label: "Check-in login · not used yet", variant: "outline" };
   if (!info) return { label: "Active", variant: "success" };
   if (!info.lastSignInAt) return { label: "Invited · hasn't signed in", variant: "warning" };
   return { label: "Active", variant: "success" };

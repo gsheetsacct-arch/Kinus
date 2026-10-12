@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/section";
@@ -11,25 +12,41 @@ import { Field } from "@/components/ui/field";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
 import { TARGET_OPTIONS, type ColumnMap, type MappingOptions } from "@/lib/import";
+import { columnKey, parseExtraFields } from "@/lib/import/extra-fields";
+import { FIELD_BY_KEY } from "@/lib/fields";
 import { previewImport } from "../../actions";
 
 export const metadata = { title: "Match the columns" };
 
-function ColumnRow({ header, value, samples, highlight }: { header: string; value: string; samples: string[]; highlight?: boolean }) {
+const EXTRA = "__extra";
+/** Kinus fields in plain words ("tshirt_size" → "T-shirt", "contact[mother].phone" → "Mother: phone"). */
+const targetLabel = (value: string, raw: string) => {
+  if (FIELD_BY_KEY[value]) return FIELD_BY_KEY[value].label;
+  const known: Record<string, string> = { division: "Division", bunk: "Bunk", source_id: "Registration ID" };
+  if (known[value]) return known[value];
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+};
+
+function ColumnRow({ header, value, samples, highlight, labels }: { header: string; value: string; samples: string[]; highlight?: boolean; labels?: string[] }) {
   return (
-    <div className={`grid gap-2 border-b px-4 py-3 last:border-0 sm:grid-cols-[1fr_1fr_240px] sm:items-center ${highlight ? "bg-amber-50/70 dark:bg-amber-950/20" : ""}`}>
+    <div className={`grid gap-2 border-b px-4 py-3 last:border-0 sm:grid-cols-[1fr_1fr_260px] sm:items-center ${highlight ? "bg-amber-50/70 dark:bg-amber-950/20" : ""}`}>
       <div className="min-w-0">
         <div className="truncate font-mono text-xs">{header}</div>
+        {labels && labels.length > 0 && <div className="mt-0.5 text-xs text-primary">Labels use it: {labels.join(", ")}</div>}
       </div>
       <div className="min-w-0 truncate text-xs text-muted-foreground" dir="auto">
         {samples.length ? samples.join(" · ") : <em>empty in the first rows</em>}
       </div>
-      <Select name={`map:${header}`} defaultValue={value} className="h-9 text-sm" aria-label={`Kinus field for ${header}`}>
-        {TARGET_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.value === "" ? "Don't import" : o.label}
-          </option>
-        ))}
+      <Select name={`map:${header}`} defaultValue={value} className="h-9 text-sm" aria-label={`What to do with ${header}`}>
+        <option value="">Not needed</option>
+        <option value={EXTRA}>Show on the camper page</option>
+        <optgroup label="A Kinus field">
+          {TARGET_OPTIONS.filter((o) => o.value !== "").map((o) => (
+            <option key={o.value} value={o.value}>
+              {targetLabel(o.value, o.label)}
+            </option>
+          ))}
+        </optgroup>
       </Select>
     </div>
   );
@@ -55,9 +72,21 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
   const samples = (sample ?? []).map((r) => r.raw as Record<string, string>);
   const sampleFor = (h: string) => [...new Set(samples.map((s) => s[h]).filter(Boolean))].slice(0, 2);
   const { count } = await supabase.from("import_rows").select("id", { count: "exact", head: true }).eq("import_id", id);
-  const known = headers.filter((h) => h in presetMap);
-  const unknown = headers.filter((h) => !(h in presetMap));
+  // extra fields already chosen, and the columns labels read ("{{source.ppa.yarmulka_size}}")
+  const [{ data: extraRow }, { data: mergeFields }] = await Promise.all([
+    supabase.from("settings").select("value").eq("key", "extra_fields").maybeSingle(),
+    supabase.from("merge_fields").select("label, source_field"),
+  ]);
+  const extras = parseExtraFields(extraRow?.value);
+  const isExtra = (h: string) => extras.some((f) => columnKey(f.column) === columnKey(h));
+  const labelsUsing = (h: string) => (mergeFields ?? []).filter((f) => [...f.source_field.matchAll(/source\.([^{}|\s]+)/g)].some((m) => columnKey(m[1]) === columnKey(h))).map((f) => f.label);
+  // a column labels read is shown on the camper page too, so it plainly is in use
+  const valueFor = (h: string) => presetMap[h] ?? (isExtra(h) || labelsUsing(h).length ? EXTRA : "");
+  const decided = (h: string) => h in presetMap || isExtra(h) || labelsUsing(h).length > 0;
+  const known = headers.filter(decided);
+  const unknown = headers.filter((h) => !decided(h));
   const missing = Object.keys(presetMap).filter((h) => !headers.includes(h));
+  const lost = { cells: (imp.options as { lostTextCells?: number }).lostTextCells ?? 0, sample: ((imp.options as { lostTextSample?: { row: number; column: string; value: string }[] }).lostTextSample ?? []) };
 
   return (
     <div className="max-w-4xl">
@@ -65,21 +94,40 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
       <Steps steps={IMPORT_STEPS} current={2} />
       <ActionForm action={previewImport} className="space-y-6">
         <input type="hidden" name="id" value={imp.id} />
+        {lost.cells > 0 && (
+          <Callout tone="warning" title={`${lost.cells} ${lost.cells === 1 ? "name has" : "names have"} “???” instead of letters`}>
+            <span className="block">
+              For example {lost.sample.slice(0, 3).map((x) => `“${x.value}” (row ${x.row})`).join(", ")}. This happens when the export is opened and saved again in Excel or WPS: Hebrew and French
+              letters turn into “???”.
+            </span>
+            <span className="mt-1 block">
+              Best: download the export again and upload it without opening it first.{" "}
+              <Link href="/admin/imports/new" className="font-medium underline">
+                Upload another file
+              </Link>
+              . If those names really are written that way, just carry on.
+            </span>
+          </Callout>
+        )}
         {unknown.length === 0 && missing.length === 0 ? (
           <Callout tone="success" title={`All ${headers.length} columns were recognised`}>
             Nothing to do here unless the export changed. Press <strong>Review changes</strong>.
           </Callout>
         ) : (
           <Callout tone="warning" title={`${known.length} of ${headers.length} columns were recognised`}>
-            {unknown.length > 0 && <>Check the {unknown.length} highlighted {unknown.length === 1 ? "column" : "columns"} below. Columns you don&apos;t import are still kept with each camper. </>}
+            {unknown.length > 0 && <>The file has {unknown.length} new {unknown.length === 1 ? "column" : "columns"}, highlighted below. Choose whether to show each on the camper page. </>}
             {missing.length > 0 && <>Not in this file: {missing.join(", ")}.</>}
           </Callout>
         )}
 
         {unknown.length > 0 && (
-          <Section title="New columns" description="Choose where each goes, or leave “Don&apos;t import”: the column is still kept with each camper, and tags can use it (e.g. {{source.ppa.hebrew_name}} for a Hebrew name)." bodyClassName="p-0">
+          <Section
+            title="New columns"
+            description="“Show on the camper page” also lets lists and labels use it. “Not needed” keeps it out of sight. Either way nothing is lost: every column is kept with each camper, and you can change this on the next import."
+            bodyClassName="p-0"
+          >
             {unknown.map((h) => (
-              <ColumnRow key={h} header={h} value="" samples={sampleFor(h)} highlight />
+              <ColumnRow key={h} header={h} value="" samples={sampleFor(h)} highlight labels={labelsUsing(h)} />
             ))}
           </Section>
         )}
@@ -90,7 +138,7 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
           </summary>
           <div className="border-t">
             {known.map((h) => (
-              <ColumnRow key={h} header={h} value={presetMap[h] ?? ""} samples={sampleFor(h)} />
+              <ColumnRow key={h} header={h} value={valueFor(h)} samples={sampleFor(h)} labels={labelsUsing(h)} />
             ))}
           </div>
         </details>
@@ -116,9 +164,6 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
               <div className="mt-3 grid gap-4 sm:grid-cols-2">
                 <Field label="Country for phone numbers without a + code" htmlFor="phoneDefaultRegion" hint="Two letters, e.g. US, CA, FR, IL.">
                   <Input id="phoneDefaultRegion" name="phoneDefaultRegion" defaultValue={presetOptions.phoneDefaultRegion ?? "US"} maxLength={2} className="w-24 uppercase" />
-                </Field>
-                <Field label="Save this column layout for next time" htmlFor="preset_name" hint="Only needed if the export format changed.">
-                  <Input id="preset_name" name="preset_name" placeholder="Layout name" />
                 </Field>
               </div>
             </details>
