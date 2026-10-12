@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
+import { parseExtraFields } from "@/lib/import/extra-fields";
 
 const office = z.object({ to: z.string().trim().email("Enter a valid email address.").or(z.literal("")), cc: z.string().trim().optional() });
 
@@ -68,11 +69,23 @@ export async function saveExtraFields(fd: FormData): Promise<ActionResult> {
   const me = await requireAdmin();
   try {
     const columns = fd.getAll("column").map(String);
-    const fields = columns
-      .map((column, i) => ({ column, label: String(fd.getAll("label")[i] ?? "").trim() || column, keep: fd.get(`keep:${column}`) === "on" }))
-      .filter((f) => f.keep)
-      .map(({ column, label }) => ({ column, label: label.slice(0, 80) }));
     const supabase = await createClient();
+    const { data: current } = await supabase.from("settings").select("value").eq("key", "extra_fields").maybeSingle();
+    const before = parseExtraFields(current?.value);
+    const fields = columns
+      .map((column, i) => {
+        // short answers: the ones on the page, plus any for answers not in this session
+        const orig = fd.getAll(`orig:${column}`).map(String);
+        const short = fd.getAll(`short:${column}`).map((v) => String(v).trim().slice(0, 60));
+        const answers: Record<string, string> = { ...(before.find((f) => f.column === column)?.answers ?? {}) };
+        orig.forEach((o, j) => {
+          if (short[j]) answers[o] = short[j];
+          else delete answers[o];
+        });
+        return { column, label: (String(fd.getAll("label")[i] ?? "").trim() || column).slice(0, 80), keep: fd.get(`keep:${column}`) === "on", answers };
+      })
+      .filter((f) => f.keep)
+      .map(({ column, label, answers }) => ({ column, label, ...(Object.keys(answers).length ? { answers } : {}) }));
     const { error } = await supabase.from("settings").upsert({ key: "extra_fields", value: fields, updated_by: me.id, updated_at: new Date().toISOString() });
     if (error) throw error;
     revalidatePath("/", "layout");

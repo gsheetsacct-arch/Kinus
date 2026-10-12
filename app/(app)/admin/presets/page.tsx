@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { ChevronRight, Plus } from "lucide-react";
+import { ChevronRight, Copy, Plus } from "lucide-react";
+import { ActionForm } from "@/components/action-form";
+import { loadExtraFields } from "@/lib/data/extra-fields";
+import { copyPreset } from "./actions";
 import { PageHeader } from "@/components/page-header";
 import { Callout } from "@/components/callout";
 import { Button } from "@/components/ui/button";
@@ -14,7 +17,10 @@ export const metadata = { title: "List layouts" };
 export default async function PresetsPage() {
   await requireAdmin();
   const supabase = await createClient();
-  const { data: presets } = await supabase.from("list_presets").select("id, name, audience, columns, group_by, is_default").order("audience").order("name");
+  const [{ data: presets }, extras] = await Promise.all([
+    supabase.from("list_presets").select("id, name, audience, columns, group_by, is_default").order("audience").order("name"),
+    loadExtraFields(),
+  ]);
   return (
     <div className="space-y-6">
       <PageHeader
@@ -34,9 +40,10 @@ export default async function PresetsPage() {
       </Callout>
       <div className="overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-card)]">
         {(presets ?? []).map((p) => {
-          const cols = (p.columns as string[]).map((c) => FIELD_BY_KEY[c]?.label ?? c);
+          const cols = (p.columns as string[]).map((c) => FIELD_BY_KEY[c]?.label ?? extras.find((f) => `source.${f.column}` === c)?.label ?? c);
           return (
-            <Link key={p.id} href={`/admin/presets/${p.id}`} className="flex items-center gap-4 border-b px-5 py-4 last:border-0 hover:bg-muted/40">
+            <div key={p.id} className="flex items-center gap-2 border-b pr-3 last:border-0 hover:bg-muted/40">
+            <Link href={`/admin/presets/${p.id}`} className="flex min-w-0 flex-1 items-center gap-4 px-5 py-4">
               <span className="min-w-0 flex-1 space-y-1.5">
                 <span className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{p.name}</span>
@@ -54,6 +61,13 @@ export default async function PresetsPage() {
               </span>
               <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
             </Link>
+            <ActionForm action={copyPreset}>
+              <input type="hidden" name="id" value={p.id} />
+              <Button type="submit" size="sm" variant="ghost" title="Make a copy to change">
+                <Copy /> Copy
+              </Button>
+            </ActionForm>
+            </div>
           );
         })}
       </div>

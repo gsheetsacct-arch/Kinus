@@ -175,7 +175,12 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     const { data: extraRow } = await admin.from("settings").select("value").eq("key", "extra_fields").maybeSingle();
     const keepOthers = parseExtraFields(extraRow?.value).filter((f) => !headers.some((h) => columnKey(h) === columnKey(f.column)));
     const before = parseExtraFields(extraRow?.value);
-    const chosen = extra.map((h) => before.find((f) => columnKey(f.column) === columnKey(h)) ?? { column: h, label: humanLabel(h) });
+    // named on the column step; else the name it had, else one made from the column
+    const chosen = extra.map((h) => {
+      const had = before.find((f) => columnKey(f.column) === columnKey(h));
+      // short answers set in Settings stay
+      return { column: h, label: String(fd.get(`name:${h}`) ?? "").trim().slice(0, 80) || had?.label || humanLabel(h), ...(had?.answers ? { answers: had.answers } : {}) };
+    });
     await admin.from("settings").upsert({ key: "extra_fields", value: [...keepOthers, ...chosen] as unknown as J, updated_by: me.id, updated_at: new Date().toISOString() });
 
     const rawRows = await fetchAll((from, to) => admin.from("import_rows").select("id, row_number, raw").eq("import_id", imp.id).order("row_number").range(from, to));

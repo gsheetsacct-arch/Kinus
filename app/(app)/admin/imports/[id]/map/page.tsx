@@ -12,7 +12,7 @@ import { Field } from "@/components/ui/field";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
 import { TARGET_OPTIONS, type ColumnMap, type MappingOptions } from "@/lib/import";
-import { columnKey, parseExtraFields } from "@/lib/import/extra-fields";
+import { columnKey, humanLabel, parseExtraFields } from "@/lib/import/extra-fields";
 import { FIELD_BY_KEY } from "@/lib/fields";
 import { previewImport } from "../../actions";
 
@@ -27,12 +27,18 @@ const targetLabel = (value: string, raw: string) => {
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 };
 
-function ColumnRow({ header, value, samples, highlight, labels }: { header: string; value: string; samples: string[]; highlight?: boolean; labels?: string[] }) {
+function ColumnRow({ header, value, samples, highlight, labels, name }: { header: string; value: string; samples: string[]; highlight?: boolean; labels?: string[]; name?: string }) {
   return (
     <div className={`grid gap-2 border-b px-4 py-3 last:border-0 sm:grid-cols-[1fr_1fr_260px] sm:items-center ${highlight ? "bg-amber-50/70 dark:bg-amber-950/20" : ""}`}>
-      <div className="min-w-0">
+      <div className="min-w-0 space-y-1">
         <div className="truncate font-mono text-xs">{header}</div>
-        {labels && labels.length > 0 && <div className="mt-0.5 text-xs text-primary">Labels use it: {labels.join(", ")}</div>}
+        {labels && labels.length > 0 && <div className="text-xs text-primary">Labels use it: {labels.join(", ")}</div>}
+        {name !== undefined && (
+          <label className="block">
+            <span className="sr-only">Name in Kinus for {header}</span>
+            <Input name={`name:${header}`} defaultValue={name} placeholder="Name in Kinus" dir="auto" className="h-8 text-sm" title="What this column is called on the camper page, in lists and labels" />
+          </label>
+        )}
       </div>
       <div className="min-w-0 truncate text-xs text-muted-foreground" dir="auto">
         {samples.length ? samples.join(" · ") : <em>empty in the first rows</em>}
@@ -82,8 +88,12 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
   const labelsUsing = (h: string) => (mergeFields ?? []).filter((f) => [...f.source_field.matchAll(/source\.([^{}|\s]+)/g)].some((m) => columnKey(m[1]) === columnKey(h))).map((f) => f.label);
   // a column labels read is shown on the camper page too, so it plainly is in use
   const valueFor = (h: string) => presetMap[h] ?? (isExtra(h) || labelsUsing(h).length ? EXTRA : "");
+  // the plain name shown for an extra field ("Sleeping at the Kinus"), editable right here
+  const nameFor = (h: string) => extras.find((f) => columnKey(f.column) === columnKey(h))?.label ?? humanLabel(h);
   const decided = (h: string) => h in presetMap || isExtra(h) || labelsUsing(h).length > 0;
   const known = headers.filter(decided);
+  const shown = known.filter((h) => valueFor(h) === EXTRA);
+  const rest = known.filter((h) => valueFor(h) !== EXTRA);
   const unknown = headers.filter((h) => !decided(h));
   const missing = Object.keys(presetMap).filter((h) => !headers.includes(h));
   const lost = { cells: (imp.options as { lostTextCells?: number }).lostTextCells ?? 0, sample: ((imp.options as { lostTextSample?: { row: number; column: string; value: string }[] }).lostTextSample ?? []) };
@@ -123,22 +133,30 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
         {unknown.length > 0 && (
           <Section
             title="New columns"
-            description="“Show on the camper page” also lets lists and labels use it. “Not needed” keeps it out of sight. Either way nothing is lost: every column is kept with each camper, and you can change this on the next import."
+            description="Give each column you want a plain name (“Sleeping at the Kinus”), then choose “Show on the camper page”: lists and labels can use it too. “Not needed” keeps it out of sight. Either way nothing is lost: every column is kept with each camper, and you can change this on the next import."
             bodyClassName="p-0"
           >
             {unknown.map((h) => (
-              <ColumnRow key={h} header={h} value="" samples={sampleFor(h)} highlight labels={labelsUsing(h)} />
+              <ColumnRow key={h} header={h} value="" samples={sampleFor(h)} highlight labels={labelsUsing(h)} name={nameFor(h)} />
+            ))}
+          </Section>
+        )}
+
+        {shown.length > 0 && (
+          <Section title="Shown on the camper page" description="The name each column goes by in Kinus: on the camper page, in lists and on labels. Change it here any time." bodyClassName="p-0">
+            {shown.map((h) => (
+              <ColumnRow key={h} header={h} value={EXTRA} samples={sampleFor(h)} labels={labelsUsing(h)} name={nameFor(h)} />
             ))}
           </Section>
         )}
 
         <details className="group rounded-xl border bg-card shadow-[var(--shadow-card)]" open={unknown.length === 0 && headers.length < 12}>
           <summary className="cursor-pointer select-none px-5 py-4 text-sm font-semibold">
-            Recognised columns ({known.length}) <span className="font-normal text-muted-foreground group-open:hidden">· show</span>
+            Other recognised columns ({rest.length}) <span className="font-normal text-muted-foreground group-open:hidden">· show</span>
           </summary>
           <div className="border-t">
-            {known.map((h) => (
-              <ColumnRow key={h} header={h} value={valueFor(h)} samples={sampleFor(h)} labels={labelsUsing(h)} />
+            {rest.map((h) => (
+              <ColumnRow key={h} header={h} value={valueFor(h)} samples={sampleFor(h)} labels={labelsUsing(h)} name={h in presetMap ? undefined : nameFor(h)} />
             ))}
           </div>
         </details>

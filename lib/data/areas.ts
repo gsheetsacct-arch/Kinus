@@ -1,3 +1,4 @@
+import { compareBunkNames } from "@/lib/bunk-order";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { canGrantAreas, isAdmin, type CurrentUser } from "@/lib/auth/permissions";
 import type { Database } from "@/lib/supabase/database.types";
@@ -21,7 +22,7 @@ export async function loadAreaTree(db: SupabaseClient<Database>, sessionId: stri
       name: d.name,
       group_id: d.group_id,
       color: d.color,
-      bunks: [...((d.bunks as { id: string; name: string; sort_order: number }[]) ?? [])].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)).map(({ id, name }) => ({ id, name })),
+      bunks: [...((d.bunks as { id: string; name: string; sort_order: number }[]) ?? [])].sort((a, b) => a.sort_order - b.sort_order || compareBunkNames(a.name, b.name)).map(({ id, name }) => ({ id, name })),
     })),
   };
 }
