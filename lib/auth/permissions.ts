@@ -114,8 +114,6 @@ export function canManageRole(me: CurrentUser, role: StaffRole): boolean {
   return false;
 }
 
-/** Directors give any level; division heads and head counselors at most their own. */
-export const canGrantLevel = (me: CurrentUser, level: AccessLevel) => isDirector(me) || LEVEL_RANK[level] <= LEVEL_RANK[effectiveLevel(me)];
 
 /** The print area (queue, batches, templates). Everyone else requests tags from a camper card. */
 export const canUsePrintArea = (u: CurrentUser) => ["owner", "director", "division_head", "office", "logistics"].includes(u.role);

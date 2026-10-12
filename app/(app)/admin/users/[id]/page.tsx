@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { KeyRound, Mail } from "lucide-react";
+import { KeyRound, Mail, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/section";
 import { Callout } from "@/components/callout";
@@ -12,12 +12,13 @@ import { Field } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
-import { canGrantAreas, canGrantLevel, canManageRole, isAdmin } from "@/lib/auth/permissions";
+import { canGrantAreas, canManageRole, isAdmin } from "@/lib/auth/permissions";
 import { ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
 import { encodeArea, grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
 import { formatDateTime } from "@/lib/utils";
-import { removePasskeys, savePerson, sendSignInLink, setActive, setUserPassword } from "../actions";
+import { loadRoles, roleSummary } from "@/lib/data/roles";
+import { deletePeople, removePasskeys, savePerson, sendSignInLink, setActive, setUserPassword } from "../actions";
 
 export const metadata = { title: "Edit person" };
 
@@ -26,12 +27,14 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
   const { id } = await params;
   const session = await getActiveSession();
   const admin = createAdminClient();
-  const [{ data: p }, { data: areas }, tree, info] = await Promise.all([
+  const [{ data: p }, { data: areas }, tree, info, setup] = await Promise.all([
     admin.from("profiles").select("id, email, full_name, phone, title, role, access_level, all_areas, is_active").eq("id", id).maybeSingle(),
     admin.from("staff_scopes").select("group_id, division_id, bunk_id").eq("user_id", id),
     loadAreaTree(admin, session?.id),
     signInInfo(),
+    loadRoles(admin),
   ]);
+  const summaries = Object.fromEntries(ROLE_ORDER.map((r) => [r, roleSummary(setup, r)]));
   if (!p) notFound();
   const isSelf = me.id === p.id;
   // a director of part of camp only opens people inside their part
@@ -67,7 +70,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
       <Section title="Role and access">
         <PersonForm
           person={{ id: p.id, full_name: p.full_name, email: p.email, phone: p.phone ?? "", title: p.title ?? "", role: p.role, access_level: p.access_level, all_areas: p.all_areas, areas: (areas ?? []).map(encodeArea) }}
-          levels={(["view", "scan", "edit"] as const).filter((l) => canGrantLevel(me, l))}
+          summaries={summaries}
           roles={roles}
           tree={grantableTree(me, tree)}
           action={savePerson}
@@ -124,6 +127,24 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
                 {p.is_active ? "Deactivate" : "Reactivate"}
               </Button>
             </ActionForm>
+          </Section>
+          <Section tone="danger" title="Delete completely" description="Removes their account for good. Check-ins and print requests they recorded stay, without their name. Use this for someone added by mistake or who won't be back.">
+            <FormDialog
+              trigger={
+                <Button variant="outline" className="border-destructive/40 text-destructive hover:bg-destructive/10">
+                  <Trash2 /> Delete {p.full_name.split(" ")[0]}
+                </Button>
+              }
+              title={`Delete ${p.full_name} for good?`}
+              description="This can't be undone. To only stop them signing in, deactivate instead."
+              action={deletePeople}
+              submitLabel="Delete"
+              destructive
+              confirmText="delete"
+            >
+              <input type="hidden" name="ids" value={p.id} />
+              <input type="hidden" name="back" value="1" />
+            </FormDialog>
           </Section>
         </div>
       )}

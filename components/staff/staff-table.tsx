@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { ChevronRight, Mail, Search, ShieldCheck, UserX } from "lucide-react";
+import { ChevronRight, Mail, Search, ShieldCheck, Trash2, UserX } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -36,13 +36,14 @@ type Actions = {
   bulkSetAccess: (fd: FormData) => Promise<ActionResult>;
   bulkSendLinks: (fd: FormData) => Promise<ActionResult>;
   bulkSetActive: (fd: FormData) => Promise<ActionResult>;
+  deletePeople: (fd: FormData) => Promise<ActionResult>;
 };
 
 const ROLE_SORT = (r: StaffRole) => ROLE_ORDER.indexOf(r);
 
-export function StaffTable({ rows, tree, roles, actions, lockAll }: { rows: StaffRow[]; tree: AreaTree; roles: StaffRole[]; actions: Actions; lockAll: boolean }) {
+export function StaffTable({ rows, tree, roles, actions, lockAll, initialRole }: { rows: StaffRow[]; tree: AreaTree; roles: StaffRole[]; actions: Actions; lockAll: boolean; initialRole?: string }) {
   const [q, setQ] = React.useState("");
-  const [role, setRole] = React.useState("");
+  const [role, setRole] = React.useState(initialRole ?? "");
   const [where, setWhere] = React.useState("");
   const [status, setStatus] = React.useState("active");
   const [sort, setSort] = React.useState("name");
@@ -150,22 +151,12 @@ export function StaffTable({ rows, tree, roles, actions, lockAll }: { rows: Staf
           >
             <Hidden />
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Role" htmlFor="bulk-role">
+              <Field label="Role" htmlFor="bulk-role" hint="The role decides what they can do and see.">
                 <Select id="bulk-role" name="role" defaultValue="">
                   <option value="">Keep their role</option>
                   {roles.map((r) => (
                     <option key={r} value={r}>
                       {STAFF_ROLES[r].label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="What they can do" htmlFor="bulk-level" hint="Changing the role resets this to the role's usual level.">
-                <Select id="bulk-level" name="access_level" defaultValue="">
-                  <option value="">Keep (or the role&apos;s usual)</option>
-                  {(Object.keys(ACCESS_LEVELS) as AccessLevel[]).map((l) => (
-                    <option key={l} value={l}>
-                      {ACCESS_LEVELS[l].label}
                     </option>
                   ))}
                 </Select>
@@ -200,6 +191,21 @@ export function StaffTable({ rows, tree, roles, actions, lockAll }: { rows: Staf
           >
             <Hidden />
             <input type="hidden" name="active" value="false" />
+          </FormDialog>
+          <FormDialog
+            trigger={
+              <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive">
+                <Trash2 /> Delete
+              </Button>
+            }
+            title={`Delete ${ids.length} ${ids.length === 1 ? "person" : "people"} for good?`}
+            description="Their accounts are removed and can't be brought back. Check-ins and print requests they recorded stay, without their name. To only stop them signing in, deactivate instead."
+            action={actions.deletePeople}
+            submitLabel="Delete"
+            destructive
+            confirmText="delete"
+          >
+            <Hidden />
           </FormDialog>
         </div>
       )}

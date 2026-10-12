@@ -94,7 +94,7 @@ export const SAMPLE_CAMPER = {
   source_data: {
     "ppa.hebrew_name": "יוסף",
     "ppa.hebrew_last_name": "פרידמן",
-    "ppa.yarmulka_size": "Medium",
+    "ppa.yarmulka_size": "7",
     "ppa.city": "Brooklyn",
     "ppa.state": "NY",
     "ppa.country": "USA",

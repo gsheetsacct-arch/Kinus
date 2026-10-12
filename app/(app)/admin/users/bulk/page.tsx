@@ -4,8 +4,8 @@ import { Section } from "@/components/section";
 import { Button } from "@/components/ui/button";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
-import { canGrantLevel, canManageRole, isAdmin, isDirector } from "@/lib/auth/permissions";
-import { ACCESS_LEVELS, ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
+import { canManageRole, isAdmin, isDirector } from "@/lib/auth/permissions";
+import { ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
 import { grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { TEMPLATE_HEADERS, templateRows } from "@/lib/staff/template";
 import { applyBulkAdd, previewBulkAdd } from "../actions";
@@ -29,7 +29,6 @@ export default async function BulkAddPage() {
   const session = await getActiveSession();
   const tree = grantableTree(me, await loadAreaTree(createAdminClient(), session?.id));
   const roles = ROLE_ORDER.filter((r) => canManageRole(me, r));
-  const levels = (Object.keys(ACCESS_LEVELS) as (keyof typeof ACCESS_LEVELS)[]).filter((l) => canGrantLevel(me, l));
   const oneDivision = tree.divisions.length === 1 ? tree.divisions[0] : null;
   const example = [TEMPLATE_HEADERS, ...templateRows(tree, roles)].map((r) => r.join("\t")).join("\n");
   const cell = "px-3 py-2 align-top";
@@ -121,14 +120,6 @@ export default async function BulkAddPage() {
                   <td className={`${cell} font-medium`}>Phone</td>
                   <td className={cell}>No</td>
                   <td className={cell}>For the phone book. They can also add it themselves on their Account page.</td>
-                </tr>
-                <tr>
-                  <td className={`${cell} font-medium`}>Level</td>
-                  <td className={cell}>No</td>
-                  <td className={cell}>
-                    Only to change the usual for their role: {levels.map((l) => ACCESS_LEVELS[l].label.toLowerCase()).join(", ")}
-                    {!isDirector(me) && " (up to your own)"}.
-                  </td>
                 </tr>
               </tbody>
             </table>

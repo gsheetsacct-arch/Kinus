@@ -6,78 +6,30 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
-import { FIELD_GROUPS, STAFF_ROLES } from "@/lib/labels";
-import type { StaffRole } from "@/lib/auth/permissions";
-import { saveFieldVisibility, saveImportSettings, saveMissingRules, saveOfficeEmail } from "./actions";
+import Link from "next/link";
+import { saveImportSettings, saveMissingRules, saveOfficeEmail } from "./actions";
 import { DEFAULT_RULES, type MissingRules } from "@/lib/attendance/missing";
 
 export const metadata = { title: "Settings" };
 
-const COLS: StaffRole[] = ["director", "division_head", "head_counselor", "counselor", "scanner", "office", "logistics"];
-const ORDER = ["contacts", "medical", "parent_notes", "address", "staff_notes"];
 
 export default async function SettingsPage() {
   await requireAdmin();
   const supabase = await createClient();
-  const [{ data: fv }, { data: settings }] = await Promise.all([
-    supabase.from("field_visibility").select("field_group, roles"),
-    supabase.from("settings").select("key, value"),
-  ]);
-  const rows = [...(fv ?? [])].sort((a, b) => ORDER.indexOf(a.field_group) - ORDER.indexOf(b.field_group));
+  const { data: settings } = await supabase.from("settings").select("key, value");
   const setting = (k: string) => (settings?.find((s) => s.key === k)?.value ?? {}) as Record<string, unknown>;
   const officeEmail = setting("office_email");
   const imp = setting("import");
   const missing = { ...DEFAULT_RULES, ...(setting("missing_rules") as Partial<MissingRules>) };
 
-  const Box = ({ name, checked, label }: { name: string; checked: boolean; label: string }) => (
-    <td className="px-2 py-3 text-center">
-      <input type="checkbox" name={name} defaultChecked={checked} aria-label={label} title={label} className="size-5 accent-[var(--primary)]" />
-    </td>
-  );
-
   return (
     <div className="space-y-6">
       <PageHeader title="Settings" />
 
-      <Section
-        title="Who can see sensitive details"
-        description="Everyone sees names, bunks and check-in status for the campers in their area. Tick who also sees these details, again only for campers in their area. Without medical access, people still see a “medical flag” so they know to ask."
-      >
-        <ActionForm action={saveFieldVisibility} warnUnsaved className="group space-y-5">
-          <div className="-mx-5 overflow-x-auto px-5">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead>
-                <tr className="text-xs text-muted-foreground">
-                  <th className="py-2 pr-3 text-left font-medium">Detail</th>
-                  {COLS.map((r) => (
-                    <th key={r} className="px-2 py-2 font-medium">
-                      {STAFF_ROLES[r].label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.field_group} className="border-t">
-                    <td className="py-3 pr-3">
-                      <input type="hidden" name="group" value={row.field_group} />
-                      <div className="font-medium">{FIELD_GROUPS[row.field_group]?.label ?? row.field_group}</div>
-                      <div className="text-xs text-muted-foreground">{FIELD_GROUPS[row.field_group]?.description}</div>
-                    </td>
-                    {COLS.map((r) => (
-                      <Box key={r} name={`${row.field_group}:${r}`} checked={row.roles.includes(r)} label={`${STAFF_ROLES[r].label} can see ${FIELD_GROUPS[row.field_group]?.label ?? row.field_group}`} />
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-xs text-muted-foreground">Owners always see everything. A person only ever sees campers in their own area.</p>
-          <span className="flex items-center gap-3">
-            <Button type="submit">Save</Button>
-            <span className="hidden text-sm font-medium text-amber-700 group-data-[dirty=true]:inline dark:text-amber-300">Unsaved changes</span>
-          </span>
-        </ActionForm>
+      <Section title="Who can see and do what" description="Set per role: whether they view, check in & out, or edit, and which details (contacts, medical…) they see.">
+        <Button asChild variant="outline">
+          <Link href="/admin/roles">Open Roles</Link>
+        </Button>
       </Section>
 
       <Section
