@@ -9,9 +9,25 @@ import type { AreaTree } from "@/lib/data/areas";
  * all its divisions (also ones added to it later); picking a division covers all its
  * bunks. Submits `all_areas` and `areas` ("g:…", "d:…", "b:…:…").
  */
-export function AreaPicker({ tree, defaultAll, defaultAreas, lockAll }: { tree: AreaTree; defaultAll: boolean; defaultAreas: string[]; lockAll?: boolean }) {
+export function AreaPicker({
+  tree,
+  defaultAll,
+  defaultAreas,
+  lockAll,
+  onChange,
+}: {
+  tree: AreaTree;
+  defaultAll: boolean;
+  defaultAreas: string[];
+  lockAll?: boolean;
+  /** Told about every change (WherePicker keeps the choice when going back to its simple view). */
+  onChange?: (all: boolean, areas: string[]) => void;
+}) {
   const [all, setAll] = React.useState(defaultAll && !lockAll);
   const [sel, setSel] = React.useState<Set<string>>(new Set(defaultAreas));
+  const report = React.useRef(onChange);
+  report.current = onChange;
+  React.useEffect(() => report.current?.(all, [...sel]), [all, sel]);
   // bunks shown for divisions already picked by bunk, and always when there's only one division (a head counselor)
   const [open, setOpen] = React.useState<Set<string>>(
     new Set([...defaultAreas.filter((a) => a.startsWith("b:")).map((a) => a.split(":")[1]), ...(tree.divisions.length === 1 ? [tree.divisions[0].id] : [])]),

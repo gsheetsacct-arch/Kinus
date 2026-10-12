@@ -20,6 +20,13 @@ import { checkinName, isPlaceholderEmail, type LoginKind } from "@/lib/staff/log
 const ROLES = ["owner", "director", "division_head", "head_counselor", "counselor", "scanner", "office", "logistics"] as const;
 const signInRedirect = async () => `${await appUrl()}/login?next=/set-password`;
 
+/** Roles removed on Staff → Roles aren't given to anyone new. */
+async function removedRoles(): Promise<Set<StaffRole>> {
+  const { data } = await createAdminClient().from("role_access").select("role").eq("enabled", false);
+  return new Set((data ?? []).map((r) => r.role));
+}
+const notInUse = (role: StaffRole) => `${STAFF_ROLES[role].label} isn't a role at your camp. Bring it back under Staff → Roles first.`;
+
 async function divisionGroupLookup() {
   const session = await getActiveSession();
   const admin = createAdminClient();
@@ -55,6 +62,7 @@ async function assertCanAssign(me: CurrentUser, target: { id?: string; role?: St
   if (target?.id === me.id) throw new Error("You can't change your own role or area. Ask a director.");
   if (target?.role && !canManageRole(me, target.role)) throw new Error(`You can't change a ${STAFF_ROLES[target.role].label.toLowerCase()}'s access.`);
   if (!canManageRole(me, next.role)) throw new Error(`You can't make someone a ${STAFF_ROLES[next.role].label.toLowerCase()}.`);
+  if (next.role !== target?.role && (await removedRoles()).has(next.role)) throw new Error(notInUse(next.role));
   if (!canGrantAreas(me, next.areas, next.allAreas, await divisionGroupLookup())) throw new Error("You can only give access inside your own area.");
 }
 
@@ -198,6 +206,7 @@ export async function previewBulkAdd(fd: FormData): Promise<ActionResult & { pre
     ]);
     const existing = [...(byEmail ?? []), ...(listedPeople ?? []).filter((p) => !byEmail?.some((x) => x.id === p.id))];
     const lookup = await divisionGroupLookup();
+    const removed = await removedRoles();
     // someone already in Kinus may only be changed if they work inside my area (not taken from another division)
     const outside = new Set<string>();
     for (const p of existing ?? []) await assertCanManage(me, [p.id]).catch(() => outside.add(p.id));
@@ -206,6 +215,7 @@ export async function previewBulkAdd(fd: FormData): Promise<ActionResult & { pre
       const ex = (r.email ? existing.find((p) => p.email.toLowerCase() === r.email) : existing.find((p) => isPlaceholderEmail(p.email) && sameName(p))) ?? null;
       const errors = [...r.errors];
       if (r.role && !canManageRole(me, r.role)) errors.push(`You can't add a ${STAFF_ROLES[r.role].label.toLowerCase()}.`);
+      else if (r.role && removed.has(r.role) && r.role !== ex?.role) errors.push(notInUse(r.role));
       if (ex && !canManageRole(me, ex.role)) errors.push(`Already a ${STAFF_ROLES[ex.role].label.toLowerCase()}; you can't change them.`);
       if (ex?.id === me.id) errors.push("That's you.");
       else if (ex && outside.has(ex.id) && canManageRole(me, ex.role)) errors.push("Already works outside your area; ask a director to move them.");
@@ -455,6 +465,7 @@ export async function createCheckinLogin(divisionId: string): Promise<CheckinRes
   const me = await requireStaffManager();
   try {
     await assertCheckinDivision(me, divisionId);
+    if ((await removedRoles()).has("scanner")) return fail(notInUse("scanner"));
     const admin = createAdminClient();
     const { data: division } = await admin.from("divisions").select("id, name").eq("id", divisionId).single();
     if (!division) return fail("Division not found.");

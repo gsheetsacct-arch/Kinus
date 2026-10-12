@@ -6,7 +6,7 @@ import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
 import { canManageRole, isAdmin } from "@/lib/auth/permissions";
 import { ROLE_ORDER } from "@/lib/labels";
 import { grantableTree, loadAreaTree } from "@/lib/data/areas";
-import { loadRoles, roleSummary } from "@/lib/data/roles";
+import { loadRoles, roleSummary, rolesInUse } from "@/lib/data/roles";
 import { savePerson } from "../actions";
 
 export const metadata = { title: "Add a person" };
@@ -25,7 +25,7 @@ export default async function NewPersonPage() {
           isNew
           person={{ full_name: "", email: "", phone: "", title: "", role: "counselor", access_level: "scan", all_areas: false, areas: [] }}
           summaries={summaries}
-          roles={ROLE_ORDER.filter((r) => canManageRole(me, r))}
+          roles={rolesInUse(setup, ROLE_ORDER).filter((r) => canManageRole(me, r))}
           tree={grantableTree(me, tree)}
           action={savePerson}
           submitLabel="Add person"

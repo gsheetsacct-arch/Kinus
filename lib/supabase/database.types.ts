@@ -584,14 +584,14 @@ isOneToOne: false
                   ]
                 },"role_access": {
                   Row: {
-                    "access_level": Database["public"]['Enums']["access_level"],"role": Database["public"]['Enums']["staff_role"]
+                    "access_level": Database["public"]['Enums']["access_level"],"enabled": boolean,"role": Database["public"]['Enums']["staff_role"]
                   }
                   ComputedFields: never
                   Insert: {
-                    "access_level": Database["public"]['Enums']["access_level"],"role": Database["public"]['Enums']["staff_role"]
+                    "access_level": Database["public"]['Enums']["access_level"],"enabled"?: boolean,"role": Database["public"]['Enums']["staff_role"]
                   }
                   Update: {
-                    "access_level"?: Database["public"]['Enums']["access_level"],"role"?: Database["public"]['Enums']["staff_role"]
+                    "access_level"?: Database["public"]['Enums']["access_level"],"enabled"?: boolean,"role"?: Database["public"]['Enums']["staff_role"]
                   }
                   Relationships: [
                     

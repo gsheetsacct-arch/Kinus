@@ -10,7 +10,18 @@ What each role can do is set in one place, **Roles** (Setup → Roles, directors
 of camp): per role, *view only*, *check in & out* or *edit details*, and which sensitive
 details it sees. Changing a role there changes everyone with it (`role_access`, migration
 0021; a trigger keeps `profiles.access_level` equal to the role's level). People don't
-have a level of their own any more. Starting levels:
+have a level of their own any more.
+
+A role the camp doesn't use can be removed there once nobody has it (`role_access.enabled`,
+migration 0027): it stops being offered when adding or changing staff, in bulk upload and
+its template, and (for Check-in helper) for check-in logins. The server refuses it too.
+Removed roles are listed at the bottom of the page to bring back. Owner and Director
+always stay.
+
+When adding or changing a person, *Where* is asked the way the role needs it: a counselor
+picks a division, then their bunk; head counselors, division heads and check-in helpers
+pick divisions; directors, office and logistics pick all of camp or a camp. "Pick exactly"
+opens the full tree for any mix. Starting levels:
 
 | Role | Level | Notes |
 |---|---|---|
