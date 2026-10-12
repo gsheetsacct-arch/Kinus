@@ -139,8 +139,13 @@ value:
   kept staff assignment"* (warning, not a change).
 - Contacts: import-sourced contacts are rebuilt from the file and diffed as
   `contact[mother].phone: old → new`. Manually added contacts are untouched.
-- Unmapped columns: `source_data` is replaced but not reported field-by-field
-  (a single "raw data updated" line if the JSON differs).
+- Unmapped columns: `source_data` is replaced for **every** camper in the file,
+  `unchanged` rows included (migration 0020), but not reported field-by-field. So a
+  column added to the export later (e.g. `ppa.yarmulka_size` for the labels) reaches
+  everyone on the next import; undoing that import takes it away again.
+- The preview notes any export column the labels read (`source.…` in Print → Fields)
+  that the file lacks or leaves empty for everyone, so a missing column is noticed
+  before the labels print blank.
 
 Result per row: `add` / `update` (with `changes[]`) / `unchanged` / `conflict`.
 

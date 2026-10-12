@@ -117,6 +117,17 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
   const fieldMap = new Map<string, { r: Row; c: FieldChange }[]>();
   for (const r of by("update")) for (const c of r.changes) fieldMap.set(c.field, [...(fieldMap.get(c.field) ?? []), { r, c }]);
   const byField = [...fieldMap.entries()].sort((a, b) => b[1].length - a[1].length);
+  // export columns the labels read ("source.ppa.yarmulka_size"): say when this file lacks one
+  const { data: mergeFields } = await supabase.from("merge_fields").select("label, source_field");
+  const colKey = (k: string) => k.trim().toLowerCase().replace(/#/g, ".");
+  const withData = rows.filter((r) => r.parsed?.source_data);
+  const inFile = new Set(withData.flatMap((r) => Object.keys(r.parsed!.source_data ?? {}).map(colKey)));
+  const filled = (col: string) => withData.some((r) => Object.entries(r.parsed!.source_data ?? {}).some(([k, v]) => colKey(k) === col && String(v ?? "").trim() !== ""));
+  const labelColumns = new Map<string, string[]>();
+  for (const f of mergeFields ?? []) for (const m of f.source_field.matchAll(/source\.([^{}|\s]+)/g)) labelColumns.set(colKey(m[1]), [...(labelColumns.get(colKey(m[1])) ?? []), f.label]);
+  const columnGaps = withData.length
+    ? [...labelColumns.entries()].map(([col, used]) => ({ col, used: [...new Set(used)], state: !inFile.has(col) ? "missing" : filled(col) ? "ok" : "empty" })).filter((c) => c.state !== "ok")
+    : [];
   const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
   const st = IMPORT_STATUS[imp.status];
   const by_ = (imp.profiles as { full_name: string } | null)?.full_name ?? "someone";
@@ -175,6 +186,16 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
       {flagged.length > 0 && (
         <Callout tone="warning" title={`${flagged.length} ${flagged.length === 1 ? "camper is" : "campers are"} worth a look`}>
           For example campers the export lists in two divisions at once. Kinus placed each one where their bunk belongs; check them in the <strong>Worth a look</strong> tab.
+        </Callout>
+      )}
+      {previewed && columnGaps.length > 0 && (
+        <Callout title="Some label fields will print empty">
+          {columnGaps.map((c) => (
+            <span key={c.col} className="block">
+              <span className="font-mono text-xs">{c.col}</span> ({c.used.join(", ")}) {c.state === "missing" ? "isn't a column in this file" : "is in this file but empty for everyone"}.
+            </span>
+          ))}
+          <span className="mt-1 block text-muted-foreground">Fine if you don&apos;t print those yet; include the column in the export when you do, and the next import fills it in for everyone.</span>
         </Callout>
       )}
       {options.partialWarning && options.partialWarning.length > 0 && (
