@@ -10,7 +10,7 @@ import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result"
 import { parseFile, findLostText, applyMapping, matchAndDiff, resolveMultiValues, type ColumnMap, type MappingOptions, type ExistingCamper, type ParsedCamper } from "@/lib/import";
 import type { Json } from "@/lib/supabase/database.types";
 import { fetchAll } from "@/lib/supabase/fetch-all";
-import { bunkOrders, slotNewBunks } from "@/lib/data/bunk-sort";
+import { bunkOrders, divisionOrder, slotNewBunks, slotNewDivisions } from "@/lib/data/bunk-sort";
 import { columnKey, humanLabel, parseExtraFields } from "@/lib/import/extra-fields";
 
 /** The column step's choice "show it on the camper page" (an extra field). */
@@ -278,11 +278,13 @@ export async function applyImportAction(fd: FormData): Promise<ActionResult> {
   const { data: imp } = await supabase.from("imports").select("session_id").eq("id", id).maybeSingle();
   if (!imp || !active || imp.session_id !== active.id) return fail("This draft belongs to another session. Start a new import in the active session.");
   const before = await bunkOrders(supabase, imp.session_id);
+  const divisionsBefore = await divisionOrder(supabase, imp.session_id);
   const { data, error } = await supabase.rpc("apply_import", { p_import_id: id });
   if (error) return fail(errorMessage(error));
   await discardDrafts(imp.session_id, id);
   // new bunks from the file go into their Alef-Beis place (not the order they appeared in)
   await slotNewBunks(supabase, imp.session_id, before).catch(() => undefined);
+  await slotNewDivisions(supabase, imp.session_id, divisionsBefore).catch(() => undefined);
   const r = data as { added: number; updated: number; missing: number };
   revalidatePath("/", "layout");
   return ok(`Done: ${r.added} added, ${r.updated} updated, ${r.missing} marked “not in the latest export”.`, `/admin/imports/${id}`);

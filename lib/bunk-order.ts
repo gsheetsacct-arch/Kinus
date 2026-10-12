@@ -82,3 +82,19 @@ export function inNaturalOrder(names: string[]): boolean {
   for (let i = 1; i < names.length; i++) if (compareBunkNames(names[i - 1], names[i]) > 0) return false;
   return true;
 }
+
+/** The number in a division's name: "Division 2" → 2, "Division Beis" → 2; none for "BMD". */
+export function divisionNumber(name: string): number | null {
+  const digits = /\d+/.exec(name);
+  return digits ? Number(digits[0]) : hebrewLetterNumber(name);
+}
+
+/** Divisions: numbered ones first in number order (Division 1, 2, 3), then the rest A–Z (BMD). */
+export function compareDivisionNames(a: string, b: string): number {
+  const x = divisionNumber(a);
+  const y = divisionNumber(b);
+  if (x !== null && y !== null && x !== y) return x - y;
+  if (x !== null && y === null) return -1;
+  if (x === null && y !== null) return 1;
+  return natural(a, b);
+}

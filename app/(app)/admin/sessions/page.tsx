@@ -57,7 +57,7 @@ export default async function SessionsPage() {
         </Button>
       }
       title="New session"
-      description="Divisions, campers and imports start empty in a new session. Staff accounts carry over."
+      description="Divisions, campers and imports start empty in a new session. Staff accounts carry over, and so do the camps: when the import brings in a division with the same name as last session, it goes back into the same camp (Hebrew, French…)."
       action={saveSession}
       submitLabel="Create session"
     >
