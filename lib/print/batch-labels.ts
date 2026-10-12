@@ -1,6 +1,7 @@
 /** Shared by the server (batch selection) and the batch form. */
 export const BATCH_WHICH_LABELS = {
   not_printed: "Only campers who never got this one",
+  changed: "New campers, and anyone whose details on it changed since it was printed",
   all: "Everyone",
   present: "Only campers here right now",
   arrived_today: "Only campers who arrived today",

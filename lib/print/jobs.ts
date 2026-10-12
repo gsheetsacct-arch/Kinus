@@ -6,6 +6,8 @@ import { mergeValues } from "./merge";
 import { htmlToPdf } from "./pdf";
 import { sendEmail } from "./email";
 import { backgroundDataUrl, byBunkThenName, loadMergeSetup, loadPrintCampers, toSpec } from "./data";
+import { contentHash, templateKeys } from "./content";
+import type { TemplateSpec } from "./types";
 
 /** Office, directors and admins print for anyone; others need check-in access to the camper. */
 export function canPrintFor(user: CurrentUser, camper: { division_id: string | null; bunk_id: string | null }) {
@@ -13,6 +15,13 @@ export function canPrintFor(user: CurrentUser, camper: { division_id: string | n
   if (user.role === "office" || user.role === "logistics" || user.role === "owner") return seesAllCamp(user) || (camper.division_id ? canAccessBunk(user, camper.division_id, camper.bunk_id, "view") : false);
   if (user.role === "director") return camper.division_id ? canAccessBunk(user, camper.division_id, camper.bunk_id, "view") : seesAllCamp(user);
   return camper.division_id ? canAccessBunk(user, camper.division_id, camper.bunk_id, "scan") : false;
+}
+
+/** What each camper's label says right now, as fingerprints (see contentHash). */
+export async function labelHashes(db: Parameters<typeof loadPrintCampers>[0], spec: TemplateSpec, camperIds: string[]): Promise<Map<string, string>> {
+  const keys = templateKeys(spec);
+  const [campers, setup] = await Promise.all([loadPrintCampers(db, camperIds), loadMergeSetup(db)]);
+  return new Map(campers.map((c) => [c.id, contentHash(keys, mergeValues(c, setup.fields, setup.maps))]));
 }
 
 export async function officeEmail(): Promise<{ to: string; cc: string[] }> {
@@ -27,7 +36,7 @@ export async function createPrintJob(
   opts: { sessionId: string; templateId: string; camperIds: string[]; copies?: number; deliverTo?: string | null; note?: string | null },
 ): Promise<{ id: string; count: number }> {
   const admin = createAdminClient();
-  const { data: template } = await admin.from("print_templates").select("id, kind").eq("id", opts.templateId).single();
+  const { data: template } = await admin.from("print_templates").select("*").eq("id", opts.templateId).single();
   if (!template) throw new Error("That template no longer exists.");
   const ids = [...new Set(opts.camperIds)];
   if (!ids.length) throw new Error("No campers selected.");
@@ -44,8 +53,9 @@ export async function createPrintJob(
     .single();
   if (error) throw error;
   const copies = Math.min(Math.max(opts.copies ?? 1, 1), 10);
+  const hashes = await labelHashes(admin, toSpec(template), ids);
   for (let i = 0; i < ids.length; i += 500) {
-    const { error: e } = await admin.from("print_job_items").insert(ids.slice(i, i + 500).map((camper_id) => ({ job_id: job.id, camper_id, copies })));
+    const { error: e } = await admin.from("print_job_items").insert(ids.slice(i, i + 500).map((camper_id) => ({ job_id: job.id, camper_id, copies, content_hash: hashes.get(camper_id) ?? null })));
     if (e) throw e;
   }
   return { id: job.id, count: ids.length };

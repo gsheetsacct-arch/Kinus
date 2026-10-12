@@ -1,7 +1,7 @@
 import { code128Svg, qrSvg } from "./barcode";
 import { embeddedFontCss } from "./fonts";
 import { fill } from "./merge";
-import type { Layer, PrintItem, SheetLayout, TemplateSpec } from "./types";
+import { sheetPlacement, type Layer, type PrintItem, type SheetLayout, type TemplateSpec } from "./types";
 import { DEFAULT_MIN_PT, PX_PER_PT } from "./render-constants";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -63,9 +63,20 @@ export function renderDocument(t: TemplateSpec, items: PrintItem[], opts: { back
   if (sheet && sheet.cols > 0 && sheet.rows > 0) {
     const [pw, ph] = PAPER[sheet.paper] ?? PAPER.letter;
     const per = sheet.cols * sheet.rows;
-    pageCss = `@page{size:${pw}mm ${ph}mm;margin:0}.sheet{width:${pw}mm;height:${ph}mm;padding:${sheet.marginMm}mm;display:grid;grid-template-columns:repeat(${sheet.cols},${t.page_width_mm}mm);grid-auto-rows:${t.page_height_mm}mm;gap:${sheet.gapMm}mm;align-content:start;justify-content:center;break-after:page}`;
+    const at = sheetPlacement(sheet, t.page_width_mm, t.page_height_mm, pw);
+    const dx = sheet.shiftXMm ?? 0;
+    const dy = sheet.shiftYMm ?? 0;
+    // every label at its exact place on the sheet, as the label maker publishes it
+    pageCss = `@page{size:${pw}mm ${ph}mm;margin:0}.sheet{position:relative;width:${pw}mm;height:${ph}mm;overflow:hidden;break-after:page}.sheet>.tag{position:absolute}`;
     const pages: string[] = [];
-    for (let i = 0; i < tags.length; i += per) pages.push(`<div class="sheet">${tags.slice(i, i + per).join("")}</div>`);
+    for (let i = 0; i < tags.length; i += per) {
+      const slots = tags.slice(i, i + per).map((tag, k) => {
+        const x = at.left + (k % sheet.cols) * at.pitchX + dx;
+        const y = at.top + Math.floor(k / sheet.cols) * at.pitchY + dy;
+        return tag.replace('<div class="tag" style="', `<div class="tag" style="left:${x.toFixed(2)}mm;top:${y.toFixed(2)}mm;`);
+      });
+      pages.push(`<div class="sheet">${slots.join("")}</div>`);
+    }
     body = pages.join("");
   } else {
     pageCss = `@page{size:${t.page_width_mm}mm ${t.page_height_mm}mm;margin:0}.tag{break-after:page}`;

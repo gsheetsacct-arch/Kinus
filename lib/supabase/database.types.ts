@@ -474,14 +474,14 @@ isOneToOne: false
                   ]
                 },"print_job_items": {
                   Row: {
-                    "camper_id": string,"copies": number,"job_id": string
+                    "camper_id": string,"content_hash": string | null,"copies": number,"job_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "camper_id": string,"copies"?: number,"job_id": string
+                    "camper_id": string,"content_hash"?: string | null,"copies"?: number,"job_id": string
                   }
                   Update: {
-                    "camper_id"?: string,"copies"?: number,"job_id"?: string
+                    "camper_id"?: string,"content_hash"?: string | null,"copies"?: number,"job_id"?: string
                   }
                   Relationships: [
                     {

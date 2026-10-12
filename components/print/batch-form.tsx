@@ -21,7 +21,9 @@ export function BatchForm({ templates, divisions, campLabel, officeTo }: { templ
   React.useEffect(() => {
     let live = true;
     setCount(null);
-    countBatch(template, where, which).then((n) => live && setCount(n));
+    countBatch(template, where, which)
+      .then((n) => live && setCount(n))
+      .catch(() => live && setCount(-1));
     return () => {
       live = false;
     };
@@ -54,7 +56,15 @@ export function BatchForm({ templates, divisions, campLabel, officeTo }: { templ
           ))}
         </Select>
       </Field>
-      <Field label="Which campers" htmlFor="which">
+      <Field
+        label="Which campers"
+        htmlFor="which"
+        hint={
+          which === "changed"
+            ? "Changed means something printed on this label is different now: a moved bunk, a corrected name, a new phone number. Moving things around on the template doesn't count. Labels printed before this option existed count as unchanged."
+            : undefined
+        }
+      >
         <Select id="which" name="which" value={which} onChange={(e) => setWhich(e.target.value as BatchWhichKey)}>
           {(Object.keys(BATCH_WHICH_LABELS) as BatchWhichKey[]).map((k) => (
             <option key={k} value={k}>
@@ -84,7 +94,7 @@ export function BatchForm({ templates, divisions, campLabel, officeTo }: { templ
       <div className="flex flex-wrap items-center gap-3 border-t pt-4">
         <Button type="submit" disabled={!template || count === 0}>
           {deliver === "here" ? <Printer /> : <Mail />}
-          {count === null ? "Counting…" : count === 0 ? "No campers match" : `${deliver === "here" ? "Print" : "Email"} ${count} ${count === 1 ? "tag" : "tags"}`}
+          {count === null ? "Counting…" : count < 0 ? "Couldn't count: try again" : count === 0 ? "No campers match" : `${deliver === "here" ? "Print" : "Email"} ${count} ${count === 1 ? "tag" : "tags"}`}
         </Button>
         <Button asChild variant="outline">
           <a href={csv}>

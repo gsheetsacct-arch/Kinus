@@ -17,7 +17,7 @@ export const FIELDS: FieldDef[] = [
   { key: "display_name", label: "Name", group: "basic", kind: "text" },
   { key: "first_name", label: "First name", group: "basic", kind: "text" },
   { key: "last_name", label: "Last name", group: "basic", kind: "text" },
-  { key: "camper_code", label: "Code", group: "basic", kind: "text" },
+  { key: "camper_code", label: "Kinus code", group: "basic", kind: "text" },
   { key: "source_id", label: "Registration ID", group: "basic", kind: "text" },
   { key: "division", label: "Division", group: "basic", kind: "text" },
   { key: "bunk", label: "Bunk", group: "basic", kind: "text" },
