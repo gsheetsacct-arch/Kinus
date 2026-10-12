@@ -144,8 +144,10 @@ value:
   column added to the export later (e.g. `ppa.yarmulka_size` for the labels) reaches
   everyone on the next import; undoing that import takes it away again.
 - Column step: each column is a Kinus field, **Show on the camper page** (an *extra field*:
-  also offered for list columns and label fields; stored in `settings.extra_fields`,
-  renamed or removed in Settings), or **Not needed**. Every column is kept with the camper
+  also offered for list columns and label fields; stored in `settings.extra_fields`), or
+  **Not needed**. Each column not matched to a Kinus field has a *Name in Kinus* box
+  ("ppa.sleeping_at_the_kinus" → "Sleeping at the Kinus"), filled in from the column name
+  and editable on every import (or in Settings). Every column is kept with the camper
   either way. Columns the labels read default to *Show*. Kinus remembers the choices
   (one column layout, updated on each import); there are no separate presets to manage.
 - A file with "???" where letters were lost is no longer refused: the column step says how
