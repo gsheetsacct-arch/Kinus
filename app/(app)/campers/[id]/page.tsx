@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { extraValuesFor, loadExtraFields, visibleExtraFields } from "@/lib/data/extra-fields";
 import { notFound } from "next/navigation";
 import { Phone, Mail } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -80,6 +81,9 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
     .filter((d) => canAccessBunk(user, d.id, null, "edit") || d.id === c.division_id)
     .map((d) => ({ ...d, bunks: [...(d.bunks as { id: string; name: string; sort_order: number }[])].sort((a, b) => a.sort_order - b.sort_order) }));
   const groups = visibleFieldGroups(user, fv ?? []);
+  // extra columns from the registration export (sleeping at the Kinus, yarmulka size…)
+  const extraFields = visibleExtraFields(await loadExtraFields(), groups);
+  const extra = (await extraValuesFor([c.id!], extraFields)).get(c.id!) ?? {};
   const canEdit = c.division_id ? canAccessBunk(user, c.division_id, c.bunk_id, "edit") : isAdmin(user);
 
   return (
@@ -141,6 +145,9 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
               <Field label="Bunk preferences" value={(c.bunk_preferences ?? []).join(", ") || null} />
               <Field label="Kinus code (on the tag)" value={c.camper_code} />
               <Field label="Registration ID (from the export)" value={c.source_id} />
+              {extraFields.map((f) => (
+                <Field key={f.column} label={f.label} value={extra[f.column] || null} />
+              ))}
               {groups.has("address") && <Field label="Local address" value={c.local_address} />}
               {groups.has("address") && <Field label="Cross streets" value={c.local_address_cross_streets} />}
               {groups.has("staff_notes") && <Field label="Staff notes" value={c.staff_notes} />}

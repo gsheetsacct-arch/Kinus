@@ -143,6 +143,13 @@ value:
   `unchanged` rows included (migration 0020), but not reported field-by-field. So a
   column added to the export later (e.g. `ppa.yarmulka_size` for the labels) reaches
   everyone on the next import; undoing that import takes it away again.
+- Column step: each column is a Kinus field, **Show on the camper page** (an *extra field*:
+  also offered for list columns and label fields; stored in `settings.extra_fields`,
+  renamed or removed in Settings), or **Not needed**. Every column is kept with the camper
+  either way. Columns the labels read default to *Show*. Kinus remembers the choices
+  (one column layout, updated on each import); there are no separate presets to manage.
+- A file with "???" where letters were lost is no longer refused: the column step says how
+  many names are affected and how to get a clean file, and the person decides.
 - The preview notes any export column the labels read (`source.…` in Print → Fields)
   that the file lacks or leaves empty for everyone, so a missing column is noticed
   before the labels print blank.

@@ -1,4 +1,5 @@
 import "server-only";
+import { shownEmail } from "@/lib/staff/login-kinds";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { phoneBookHeadsOnly, seesAllCamp, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
 import { loadAreaTree } from "@/lib/data/areas";
@@ -18,7 +19,8 @@ export async function loadPhoneBook(me: CurrentUser, sessionId: string, campDivi
   const admin = createAdminClient();
   const [tree, { data: people }, { data: scopes }] = await Promise.all([
     loadAreaTree(admin, sessionId),
-    admin.from("profiles").select("id, full_name, role, title, phone, email, all_areas, is_active").eq("is_active", true),
+    // check-in logins are phones, not people
+    admin.from("profiles").select("id, full_name, role, title, phone, email, all_areas, is_active").eq("is_active", true).neq("login", "shared"),
     admin.from("staff_scopes").select("user_id, group_id, division_id, bunk_id"),
   ]);
   const mine = new Set(me.coverage.map((c) => c.division_id));
@@ -27,7 +29,7 @@ export async function loadPhoneBook(me: CurrentUser, sessionId: string, campDivi
   const groupName = new Map(tree.groups.map((g) => [g.id, g.name]));
   const byUser = new Map<string, { group_id: string | null; division_id: string | null; bunk_id: string | null }[]>();
   for (const s of scopes ?? []) byUser.set(s.user_id, [...(byUser.get(s.user_id) ?? []), s]);
-  const entry = (p: NonNullable<typeof people>[number], where: string): PhoneBookEntry => ({ id: p.id, name: p.full_name, role: p.role, title: p.title, phone: p.phone, email: p.email, where, you: p.id === me.id });
+  const entry = (p: NonNullable<typeof people>[number], where: string): PhoneBookEntry => ({ id: p.id, name: p.full_name, role: p.role, title: p.title, phone: p.phone, email: shownEmail(p.email), where, you: p.id === me.id });
   const sort = (list: (PhoneBookEntry & { order: number })[]) => list.sort((a, b) => (RANK[a.role] ?? 9) - (RANK[b.role] ?? 9) || a.order - b.order || a.name.localeCompare(b.name)).map((e) => ({ id: e.id, name: e.name, role: e.role, title: e.title, phone: e.phone, email: e.email, where: e.where, you: e.you }));
 
   // counselors and check-in helpers: just the head counselors and division heads over them

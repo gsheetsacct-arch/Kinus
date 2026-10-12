@@ -7,7 +7,8 @@ import { Field } from "@/components/ui/field";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
 import Link from "next/link";
-import { saveImportSettings, saveMissingRules, saveOfficeEmail } from "./actions";
+import { saveExtraFields, saveImportSettings, saveMissingRules, saveOfficeEmail } from "./actions";
+import { parseExtraFields } from "@/lib/import/extra-fields";
 import { DEFAULT_RULES, type MissingRules } from "@/lib/attendance/missing";
 
 export const metadata = { title: "Settings" };
@@ -20,6 +21,7 @@ export default async function SettingsPage() {
   const setting = (k: string) => (settings?.find((s) => s.key === k)?.value ?? {}) as Record<string, unknown>;
   const officeEmail = setting("office_email");
   const imp = setting("import");
+  const extraFields = parseExtraFields(settings?.find((x) => x.key === "extra_fields")?.value);
   const missing = { ...DEFAULT_RULES, ...(setting("missing_rules") as Partial<MissingRules>) };
 
   return (
@@ -53,6 +55,32 @@ export default async function SettingsPage() {
             </span>
           </div>
         </ActionForm>
+      </Section>
+
+      <Section
+        title="Extra fields from the export"
+        description="Columns of the registration export shown on the camper page, and offered for lists and labels. Choose them on the import's column step (“Show on the camper page”); rename or remove them here."
+      >
+        {extraFields.length === 0 ? (
+          <p className="text-sm text-muted-foreground">None yet.</p>
+        ) : (
+          <ActionForm action={saveExtraFields} warnUnsaved className="group space-y-3">
+            {extraFields.map((f) => (
+              <div key={f.column} className="grid items-center gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                <input type="hidden" name="column" value={f.column} />
+                <span className="truncate font-mono text-xs text-muted-foreground">{f.column}</span>
+                <Input name="label" defaultValue={f.label} aria-label={`Name for ${f.column}`} dir="auto" />
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name={`keep:${f.column}`} defaultChecked className="size-4" /> Show
+                </label>
+              </div>
+            ))}
+            <span className="flex items-center gap-3">
+              <Button type="submit">Save</Button>
+              <span className="hidden text-sm font-medium text-amber-700 group-data-[dirty=true]:inline dark:text-amber-300">Unsaved changes</span>
+            </span>
+          </ActionForm>
+        )}
       </Section>
 
       <div className="grid gap-6 lg:grid-cols-2">

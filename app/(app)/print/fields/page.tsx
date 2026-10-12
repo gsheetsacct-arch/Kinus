@@ -9,6 +9,7 @@ import { FIELDS } from "@/lib/fields";
 import { loadMergeSetup, loadPrintCampers } from "@/lib/print/data";
 import { sourceValues } from "@/lib/print/merge";
 import { getCampContext } from "@/lib/data/camp";
+import { loadExtraFields } from "@/lib/data/extra-fields";
 
 export const metadata = { title: "Fields & conversions" };
 
@@ -31,7 +32,9 @@ export default async function FieldsPage() {
       : Promise.resolve({ data: null }),
   ]);
   const catalog = [...FIELDS.filter((f) => f.kind !== "bool" && f.key !== "status").map((f) => ({ key: f.key, label: f.label })), { key: "division", label: "Division" }, { key: "bunk", label: "Bunk" }, { key: "division_color", label: "Division colour" }];
-  const unique = [...new Map(catalog.map((c) => [c.key, c])).values()];
+  // extra fields from the registration export can feed a label field too ("Sleeping at the Kinus")
+  const extras = (await loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: `${f.label} (from the export)` }));
+  const unique = [...new Map([...catalog, ...extras].map((c) => [c.key, c])).values()];
   let sample: Record<string, string> = {};
   let sampleName = "";
   if (sampleRow.data) {

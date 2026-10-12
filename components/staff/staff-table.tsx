@@ -242,7 +242,7 @@ export function StaffTable({ rows, tree, roles, actions, lockAll, initialRole }:
                   )}
                   {r.status.label !== "Active" && <Badge variant={r.status.variant}>{r.status.label}</Badge>}
                 </span>
-                <span className="block truncate text-xs text-muted-foreground">{r.email}</span>
+                <span className="block truncate text-xs text-muted-foreground">{r.email || (r.status.label.startsWith("Listed") ? "No email · listed only" : "")}</span>
                 <span className={cn("mt-0.5 block truncate text-xs", r.where === "Nowhere yet" ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground")} dir="auto">
                   {r.where} · {ACCESS_LEVELS[r.level].label}
                 </span>

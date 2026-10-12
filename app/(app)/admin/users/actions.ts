@@ -12,7 +12,10 @@ import { STAFF_ROLES } from "@/lib/labels";
 import { decodeArea, grantableTree, loadAreaTree, type AreaValue } from "@/lib/data/areas";
 import { planRows, readRows, type BulkPlanRow } from "@/lib/staff/bulk";
 import { decodeText } from "@/lib/import/decode";
+import { normalizeName } from "@/lib/import/normalize";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
+import { checkinEmail, generatePassword, placeholderEmail, setLoginKind } from "@/lib/staff/accounts";
+import { checkinName, isPlaceholderEmail, type LoginKind } from "@/lib/staff/login-kinds";
 
 const ROLES = ["owner", "director", "division_head", "head_counselor", "counselor", "scanner", "office", "logistics"] as const;
 const signInRedirect = async () => `${await appUrl()}/login?next=/set-password`;
@@ -78,12 +81,14 @@ async function writeAccess(userId: string, v: { role: StaffRole; allAreas: boole
 const person = z.object({
   id: z.guid().optional(),
   full_name: z.string().trim().min(1, "Enter their name."),
-  email: z.string().trim().toLowerCase().email("Enter a valid email address.").optional(),
+  email: z.string().trim().toLowerCase().email("Enter a valid email address.").optional().or(z.literal("")),
   phone: z.string().trim().optional(),
   title: z.string().trim().max(80, "Keep the position under 80 characters.").optional(),
   role: z.enum(ROLES, { message: "Choose a role." }),
   all_areas: z.string().optional(),
   invite: z.string().optional(),
+  /** "none": listed only (phone book, bunk), can't sign in. */
+  login: z.enum(["personal", "none"]).optional(),
 });
 
 /** Adds or updates one person: details, role, where, and level — all in one go. */
@@ -98,23 +103,51 @@ export async function savePerson(fd: FormData): Promise<ActionResult> {
     const admin = createAdminClient();
     if (d.id) {
       await assertCanManage(me, [d.id]);
-      const { data: target } = await admin.from("profiles").select("id, role").eq("id", d.id).single();
+      const { data: target } = await admin.from("profiles").select("id, role, email, login").eq("id", d.id).single();
       await assertCanAssign(me, target, { role: d.role, allAreas, areas });
       await writeAccess(d.id, { role: d.role, allAreas, areas, full_name: d.full_name, phone: d.phone || null, title: d.title || null });
+      let note = "";
+      if (target && target.login !== "shared") {
+        // someone listed only: their email can be added or fixed here
+        if (target.login === "none" && d.email && d.email !== target.email) await changeEmail(d.id, d.email);
+        const email = target.login === "none" && d.email ? d.email : target.email;
+        const next = d.login ?? target.login;
+        if (next !== target.login) {
+          if (next === "personal" && isPlaceholderEmail(email)) return fail("Add their email first: they sign in with it.");
+          await setLoginKind(d.id, next as LoginKind);
+          note = next === "none" ? " They can no longer sign in." : " Send them a sign-in link below so they can get in.";
+        }
+      }
       revalidatePath("/admin/users");
-      return ok("Saved.");
+      return ok(`Saved.${note}`);
     }
-    if (!d.email) return fail("Enter their email.");
+    const listed = d.login === "none";
+    if (!d.email && !listed) return fail("Enter their email: they sign in with it.");
     await assertCanAssign(me, null, { role: d.role, allAreas, areas });
-    const { data: existing } = await admin.from("profiles").select("id").eq("email", d.email).maybeSingle();
-    if (existing) return fail("Someone with that email already has an account. Find them in the staff list.");
-    const id = await createAccount(d.email, d.full_name, d.role, d.invite === "on" ? "invite" : "none");
+    if (d.email) {
+      const { data: existing } = await admin.from("profiles").select("id").eq("email", d.email).maybeSingle();
+      if (existing) return fail("Someone with that email is already in Kinus. Find them in the staff list.");
+    }
+    const email = d.email || (await placeholderEmail());
+    const id = await createAccount(email, d.full_name, d.role, !listed && d.invite === "on" ? "invite" : "none");
     await writeAccess(id, { role: d.role, allAreas, areas, full_name: d.full_name, phone: d.phone || null, title: d.title || null });
+    if (listed) await setLoginKind(id, "none");
     revalidatePath("/admin/users");
+    if (listed) return ok(`${d.full_name} added. Head staff see them in the phone book; they don't sign in.`, "/admin/users");
     return ok(d.invite === "on" ? `Invitation sent to ${d.email}.` : `${d.full_name} added. Send them a sign-in link when ready.`, "/admin/users");
   } catch (e) {
     return fail(errorMessage(e));
   }
+}
+
+async function changeEmail(id: string, email: string) {
+  const admin = createAdminClient();
+  const { data: taken } = await admin.from("profiles").select("id").eq("email", email).neq("id", id).maybeSingle();
+  if (taken) throw new Error("Someone else in Kinus already has that email.");
+  const { error } = await admin.auth.admin.updateUserById(id, { email, email_confirm: true });
+  if (error && !/not found/i.test(error.message)) throw error;
+  const { error: e } = await admin.from("profiles").update({ email }).eq("id", id);
+  if (e) throw e;
 }
 
 async function createAccount(email: string, fullName: string, role: StaffRole, mode: "invite" | "none" | { password: string }): Promise<string> {
@@ -158,13 +191,19 @@ export async function previewBulkAdd(fd: FormData): Promise<ActionResult & { pre
     const rows = planRows(readRows(grid), tree, { role: defaultRole, level: "role", where: tree.divisions.length === 1 ? tree.divisions[0].name : undefined });
     if (!rows.length) return fail("No rows found.");
     const emails = rows.map((r) => r.email).filter(Boolean);
-    const { data: existing } = await admin.from("profiles").select("id, email, role").in("email", emails.length ? emails : ["-"]);
+    const [{ data: byEmail }, { data: listedPeople }] = await Promise.all([
+      admin.from("profiles").select("id, email, role, full_name").in("email", emails.length ? emails : ["-"]),
+      // listed-only people without an email are matched by name (uploading the sheet again updates them)
+      admin.from("profiles").select("id, email, role, full_name").eq("login", "none"),
+    ]);
+    const existing = [...(byEmail ?? []), ...(listedPeople ?? []).filter((p) => !byEmail?.some((x) => x.id === p.id))];
     const lookup = await divisionGroupLookup();
     // someone already in Kinus may only be changed if they work inside my area (not taken from another division)
     const outside = new Set<string>();
     for (const p of existing ?? []) await assertCanManage(me, [p.id]).catch(() => outside.add(p.id));
     const out = rows.map((r) => {
-      const ex = existing?.find((p) => p.email.toLowerCase() === r.email) ?? null;
+      const sameName = (p: { full_name: string }) => normalizeName(p.full_name) === normalizeName(r.name);
+      const ex = (r.email ? existing.find((p) => p.email.toLowerCase() === r.email) : existing.find((p) => isPlaceholderEmail(p.email) && sameName(p))) ?? null;
       const errors = [...r.errors];
       if (r.role && !canManageRole(me, r.role)) errors.push(`You can't add a ${STAFF_ROLES[r.role].label.toLowerCase()}.`);
       if (ex && !canManageRole(me, ex.role)) errors.push(`Already a ${STAFF_ROLES[ex.role].label.toLowerCase()}; you can't change them.`);
@@ -179,7 +218,7 @@ export async function previewBulkAdd(fd: FormData): Promise<ActionResult & { pre
   }
 }
 
-export type BulkResult = { line: number; name: string; email: string; outcome: "invited" | "created" | "updated" | "failed"; detail?: string; password?: string };
+export type BulkResult = { line: number; name: string; email: string; outcome: "invited" | "created" | "listed" | "updated" | "failed"; detail?: string; password?: string };
 
 export async function applyBulkAdd(rowsJson: string, mode: "invite" | "password"): Promise<ActionResult & { results?: BulkResult[] }> {
   const me = await requireStaffManager();
@@ -197,6 +236,13 @@ export async function applyBulkAdd(rowsJson: string, mode: "invite" | "password"
         continue;
       }
       await assertCanAssign(me, null, { role: r.role, allAreas: r.allAreas, areas: r.areas });
+      if (r.login === "none") {
+        const id = await createAccount(r.email || (await placeholderEmail()), r.name, r.role, "none");
+        await writeAccess(id, { role: r.role, allAreas: r.allAreas, areas: r.areas, full_name: r.name, title: r.title || null, phone: r.phone || null });
+        await setLoginKind(id, "none");
+        results.push({ ...base, outcome: "listed" });
+        continue;
+      }
       const password = mode === "password" ? generatePassword() : undefined;
       const id = await createAccount(r.email, r.name, r.role, password ? { password } : "invite");
       await writeAccess(id, { role: r.role, allAreas: r.allAreas, areas: r.areas, full_name: r.name, title: r.title || null, phone: r.phone || null });
@@ -210,11 +256,6 @@ export async function applyBulkAdd(rowsJson: string, mode: "invite" | "password"
   return { ok: true, message: `${n("invited") + n("created")} added, ${n("updated")} updated${n("failed") ? `, ${n("failed")} failed` : ""}.`, results };
 }
 
-function generatePassword() {
-  const words = ["camp", "bunk", "sun", "lake", "tent", "fire", "pine", "trail", "star", "canoe", "hike", "song"];
-  const pick = () => words[Math.floor(Math.random() * words.length)];
-  return `${pick()}-${pick()}-${Math.floor(1000 + Math.random() * 9000)}`;
-}
 
 // ---------------------------------------------------------------------------
 // Bulk changes on the staff list
@@ -291,7 +332,10 @@ export async function deletePeople(fd: FormData): Promise<ActionResult> {
 export async function bulkSendLinks(fd: FormData): Promise<ActionResult> {
   const me = await requireStaffManager();
   try {
-    const people = await targets(me, fd);
+    const all = await targets(me, fd);
+    const { data: kinds } = await createAdminClient().from("profiles").select("id, login").in("id", all.map((p) => p.id));
+    const people = all.filter((p) => kinds?.find((k) => k.id === p.id)?.login === "personal");
+    if (!people.length) return fail("None of them sign in with their own email (listed-only staff and check-in logins don't get links).");
     const failed: string[] = [];
     for (const p of people) {
       const r = await sendLink(p.email);
@@ -330,8 +374,9 @@ async function sendLink(email: string): Promise<string | null> {
 export async function sendSignInLink(fd: FormData): Promise<ActionResult> {
   const me = await requireStaffManager();
   const email = String(fd.get("email"));
-  const { data: target } = await createAdminClient().from("profiles").select("id").eq("email", email).maybeSingle();
+  const { data: target } = await createAdminClient().from("profiles").select("id, login").eq("email", email).maybeSingle();
   if (!target) return fail("No staff account with that email.");
+  if (target.login !== "personal") return fail(target.login === "none" ? "They're listed only and don't sign in. Change that on their page first." : "Check-in logins use a password: set a new one under Check-in logins.");
   try {
     await assertCanManage(me, [target.id]);
   } catch (e) {
@@ -390,6 +435,57 @@ export async function removePasskeys(fd: FormData): Promise<ActionResult> {
     revalidatePath(`/admin/users/${id}`);
     const n = keys?.length ?? 0;
     return ok(n ? `Removed ${n === 1 ? "1 Face ID sign-in" : `${n} Face ID sign-ins`}. They sign in with their password or an emailed link.` : "They had no Face ID sign-ins.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Check-in logins: one per division, shared by that division's check-in phones
+// ---------------------------------------------------------------------------
+export type CheckinResult = ActionResult & { username?: string; password?: string };
+
+async function assertCheckinDivision(me: CurrentUser, divisionId: string) {
+  if (!canManageRole(me, "scanner")) throw new Error("You can't set up check-in logins.");
+  if (!canGrantAreas(me, [{ group_id: null, division_id: divisionId, bunk_id: null }], false, await divisionGroupLookup())) throw new Error("That division isn't yours.");
+}
+
+/** Creates the check-in login for a division: a short name ("division-1") and a password. */
+export async function createCheckinLogin(divisionId: string): Promise<CheckinResult> {
+  const me = await requireStaffManager();
+  try {
+    await assertCheckinDivision(me, divisionId);
+    const admin = createAdminClient();
+    const { data: division } = await admin.from("divisions").select("id, name").eq("id", divisionId).single();
+    if (!division) return fail("Division not found.");
+    const { data: has } = await admin.from("staff_scopes").select("user_id, profiles!staff_scopes_user_id_fkey!inner(login)").eq("division_id", divisionId).eq("profiles.login", "shared").limit(1);
+    if (has?.length) return fail(`${division.name} already has a check-in login. Set a new password instead.`);
+    // a short, unique name to type on the phone
+    let name = checkinName(division.name);
+    for (let n = 2; (await admin.from("profiles").select("id").ilike("email", `checkin.${name}@%`).maybeSingle()).data; n++) name = `${checkinName(division.name)}-${n}`;
+    const password = generatePassword();
+    const id = await createAccount(await checkinEmail(name), `${division.name} check-in`, "scanner", { password });
+    await writeAccess(id, { role: "scanner", allAreas: false, areas: [{ group_id: null, division_id: divisionId, bunk_id: null }], full_name: `${division.name} check-in`, title: "Check-in phones" });
+    await setLoginKind(id, "shared");
+    revalidatePath("/admin/users");
+    return { ok: true, message: "Check-in login created.", username: name, password };
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+/** A new password for a division's check-in login (the old one stops working). */
+export async function resetCheckinPassword(id: string): Promise<CheckinResult> {
+  const me = await requireStaffManager();
+  try {
+    const admin = createAdminClient();
+    const { data: p } = await admin.from("profiles").select("id, email, login").eq("id", id).single();
+    if (!p || p.login !== "shared") return fail("That isn't a check-in login.");
+    await assertCanManage(me, [id]);
+    const password = generatePassword();
+    const { error } = await admin.auth.admin.updateUserById(id, { password });
+    if (error) throw error;
+    return { ok: true, message: "New password set. Phones signed in with the old one stay signed in until they sign out.", username: p.email.slice("checkin.".length, p.email.indexOf("@")), password };
   } catch (e) {
     return fail(errorMessage(e));
   }

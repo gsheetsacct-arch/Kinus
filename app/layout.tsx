@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/sonner";
 export const metadata: Metadata = {
   title: { default: "Kinus", template: "%s · Kinus" },
   description: "Camp operations: roster, check-in, lists and tags.",
+  applicationName: "Kinus",
+  appleWebApp: { title: "Kinus", capable: true, statusBarStyle: "default" },
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, maximumScale: 1, themeColor: "#ffffff" };
 

@@ -14,7 +14,7 @@ const tree: AreaTree = {
 describe("readRows", () => {
   it("reads a sheet with headers in any order", () => {
     const rows = readRows([["Email", "Full name", "Bunk", "Division", "Role"], ["A@x.com", "Levi Cohen", "Bunk Chof", "Division 2", "Counselor"], ["", "", "", "", ""]]);
-    expect(rows).toEqual([{ line: 2, name: "Levi Cohen", email: "a@x.com", role: "Counselor", where: "Division 2", bunk: "Bunk Chof", level: "", title: "", phone: "" }]);
+    expect(rows).toEqual([{ line: 2, name: "Levi Cohen", email: "a@x.com", role: "Counselor", where: "Division 2", bunk: "Bunk Chof", level: "", title: "", phone: "", signs: "" }]);
   });
   it("reads a sheet without headers (name, email, role, division, bunk)", () => {
     expect(readRows([["Levi", "l@x.com", "hc", "Main camp", ""]])[0]).toMatchObject({ name: "Levi", email: "l@x.com", role: "hc", where: "Main camp" });
@@ -74,5 +74,21 @@ describe("planRows", () => {
     expect(plan[0]).toMatchObject({ role: "counselor", title: "", errors: [] });
     expect(plan[0].areaText).toMatch(/Bunk Beis/);
     expect(plan[1]).toMatchObject({ role: "counselor", title: "Waterfront", areaText: "Division 1", errors: [] });
+  });
+});
+
+describe("sign-in", () => {
+  const tree = { groups: [], divisions: [{ id: "d1", name: "Division 1", group_id: null, color: null, bunks: [{ id: "b1", name: "Bunk Alef" }] }] };
+  it("lists counselors without an email or sign-in, unless the sheet says they sign in", () => {
+    const rows = readRows([
+      ["Name", "Email", "Role", "Bunk", "Signs in"],
+      ["Moshe", "", "Counselor", "Bunk Alef", ""],
+      ["Dovid", "d@x.com", "Counselor", "Bunk Alef", "yes"],
+      ["Levi", "", "Head counselor", "Bunk Alef", ""],
+    ]);
+    const plan = planRows(rows, tree as never, { role: "counselor", level: "role", where: "Division 1" });
+    expect(plan[0]).toMatchObject({ login: "none", errors: [] });
+    expect(plan[1]).toMatchObject({ login: "personal", errors: [] });
+    expect(plan[2].errors[0]).toMatch(/Missing email/);
   });
 });

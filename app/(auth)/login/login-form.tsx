@@ -27,7 +27,10 @@ export function LoginForm({ next }: { next: string }) {
       {mode === "password" && (
         <ActionForm action={signInWithPassword} className="space-y-4">
           <input type="hidden" name="next" value={next} />
-          {emailField}
+          <div className="space-y-1.5">
+            <Label htmlFor="email">Email or check-in name</Label>
+            <Input id="email" name="email" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={email} onChange={(e) => setEmail(e.target.value)} className="h-12" />
+          </div>
           <div className="space-y-1.5">
             <Label htmlFor="password">Password</Label>
             <Input id="password" name="password" type="password" autoComplete="current-password" required className="h-12" />

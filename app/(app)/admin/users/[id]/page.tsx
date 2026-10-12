@@ -18,6 +18,7 @@ import { encodeArea, grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
 import { formatDateTime } from "@/lib/utils";
 import { loadRoles, roleSummary } from "@/lib/data/roles";
+import { checkinNameOf, shownEmail, type LoginKind } from "@/lib/staff/login-kinds";
 import { deletePeople, removePasskeys, savePerson, sendSignInLink, setActive, setUserPassword } from "../actions";
 
 export const metadata = { title: "Edit person" };
@@ -28,7 +29,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
   const session = await getActiveSession();
   const admin = createAdminClient();
   const [{ data: p }, { data: areas }, tree, info, setup] = await Promise.all([
-    admin.from("profiles").select("id, email, full_name, phone, title, role, access_level, all_areas, is_active").eq("id", id).maybeSingle(),
+    admin.from("profiles").select("id, email, full_name, phone, title, role, access_level, all_areas, is_active, login").eq("id", id).maybeSingle(),
     admin.from("staff_scopes").select("group_id, division_id, bunk_id").eq("user_id", id),
     loadAreaTree(admin, session?.id),
     signInInfo(),
@@ -42,10 +43,11 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
   if (!isAdmin(me) && !isSelf && (p.role === "owner" || p.all_areas || !(areas ?? []).length || !canGrantAreas(me, areas ?? [], false, groupOf))) notFound();
   const manageable = !isSelf && canManageRole(me, p.role);
   const signIn = info.get(p.id);
-  const st = statusOf(p.is_active, signIn);
+  const st = statusOf(p.is_active, signIn, p.login);
   const roles = ROLE_ORDER.filter((r) => canManageRole(me, r) || r === p.role);
   // their Face ID / fingerprint sign-ins (null when passkeys aren't switched on in Supabase)
-  const passkeys = manageable
+  const personal = p.login === "personal";
+  const passkeys = manageable && personal
     ? await admin.auth.admin.passkey
         .listPasskeys({ userId: p.id })
         .then(({ data, error }) => (error || !Array.isArray(data) ? null : data))
@@ -59,8 +61,10 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
         title={p.full_name}
         description={
           <span className="flex flex-wrap items-center gap-2">
-            {p.email}
+            {shownEmail(p.email) ?? "No email"}
             <Badge variant={st.variant}>{st.label}</Badge>
+            {p.login === "none" && <Badge variant="secondary">Listed only · no sign-in</Badge>}
+            {p.login === "shared" && <Badge variant="secondary">Check-in login · {checkinNameOf(p.email)}</Badge>}
             {signIn?.lastSignInAt && <span>Last signed in {formatDateTime(signIn.lastSignInAt)}</span>}
           </span>
         }
@@ -69,7 +73,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
       {!isSelf && !manageable && <Callout tone="warning">As {STAFF_ROLES[me.role].label.toLowerCase()} you can see but not change a {STAFF_ROLES[p.role].label.toLowerCase()}.</Callout>}
       <Section title="Role and access">
         <PersonForm
-          person={{ id: p.id, full_name: p.full_name, email: p.email, phone: p.phone ?? "", title: p.title ?? "", role: p.role, access_level: p.access_level, all_areas: p.all_areas, areas: (areas ?? []).map(encodeArea) }}
+          person={{ id: p.id, full_name: p.full_name, email: p.email, phone: p.phone ?? "", title: p.title ?? "", role: p.role, access_level: p.access_level, all_areas: p.all_areas, areas: (areas ?? []).map(encodeArea), login: p.login as LoginKind }}
           summaries={summaries}
           roles={roles}
           tree={grantableTree(me, tree)}
@@ -81,6 +85,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
       </Section>
       {manageable && (
         <div className="grid gap-6 lg:grid-cols-2">
+          {personal && (
           <Section title="Signing in" description="If they lost the invitation or forgot their password.">
             <div className="flex flex-wrap gap-2">
               <ActionForm action={sendSignInLink}>
@@ -107,6 +112,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
               </FormDialog>
             </div>
           </Section>
+          )}
           {passkeys !== null && (
             <Section title="Face ID or fingerprint sign-in" description={passkeys.length ? `Set up on ${passkeys.length === 1 ? "1 device" : `${passkeys.length} devices`}: ${passkeys.map((k) => k.friendly_name || "a device").join(", ")}.` : "Not set up. They can add it on their Account page."}>
               {passkeys.length > 0 && (

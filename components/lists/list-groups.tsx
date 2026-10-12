@@ -19,6 +19,11 @@ export function ListGroups({ columns, groups }: Pick<BuiltList, "columns" | "gro
               {g.title} <span className="text-sm font-normal text-muted-foreground">({g.rows.length})</span>
             </h2>
           )}
+          {g.staff && (
+            <p className="-mt-1 mb-2 text-sm text-muted-foreground" dir="auto">
+              {g.staff.length === 1 ? "Counselor" : "Counselors"}: {g.staff.join(" · ")}
+            </p>
+          )}
           {gi === 0 && columns.length > 3 && <p className="no-print mb-1 text-xs text-muted-foreground sm:hidden">Swipe the table sideways to see every column →</p>}
           <div className="-mx-4 overflow-x-auto px-4 print:mx-0 print:overflow-visible print:px-0">
             <table className="list-table w-full border-collapse text-sm">

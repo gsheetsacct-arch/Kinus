@@ -1,4 +1,5 @@
 "use client";
+import { shownEmail } from "@/lib/staff/login-kinds";
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -122,7 +123,10 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
                         <div className="font-medium" dir="auto">
                           {r.name || "—"}
                         </div>
-                        <div className="text-xs text-muted-foreground">{r.email || "—"}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {r.email || "no email"}
+                          {r.login === "none" && <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">listed, no sign-in</span>}
+                        </div>
                       </td>
                       <td className="px-4 py-2">
                         {r.role ? STAFF_ROLES[r.role].label : "—"}
@@ -230,11 +234,12 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
                     <span className="font-medium" dir="auto">
                       {r.name}
                     </span>{" "}
-                    <span className="text-muted-foreground">{r.email}</span>
+                    <span className="text-muted-foreground">{shownEmail(r.email) ?? "no email"}</span>
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {r.outcome === "invited" && "Invitation sent"}
                     {r.outcome === "created" && <>Starting password: <code className="rounded bg-muted px-1.5 py-0.5 text-foreground">{r.password}</code></>}
+                    {r.outcome === "listed" && "Listed (no sign-in)"}
                     {r.outcome === "updated" && "Updated"}
                     {r.outcome === "failed" && <span className="text-destructive">{r.detail}</span>}
                   </span>

@@ -1,7 +1,8 @@
 "use client";
+import { Logo } from "@/components/logo";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, ListChecks, Settings, LogOut, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid, Tent, Menu, CircleUser, ScanLine, Activity, Printer, UserSearch, BookUser, ShieldCheck } from "lucide-react";
+import { Users, ListChecks, Settings, LogOut, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid, Menu, CircleUser, ScanLine, Activity, Printer, UserSearch, BookUser, ShieldCheck } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import type { NavItem } from "@/lib/nav";
 import { CampSwitcher, type CampOption } from "./camp-switcher";
@@ -60,9 +61,7 @@ export function AppShell({
       </Suspense>
       <aside className="no-print sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-card md:flex">
         <div className="flex items-center gap-3 px-5 py-5">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <Tent className="size-5" />
-          </div>
+          <Logo />
           <div className="min-w-0">
             <Link href="/" className="block text-base font-semibold leading-tight">
               Kinus
@@ -102,9 +101,7 @@ export function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="no-print sticky top-0 z-30 flex items-center justify-between gap-3 border-b bg-card/95 px-4 py-3 backdrop-blur md:hidden">
           <Link href="/" className="flex min-w-0 items-center gap-2 font-semibold">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Tent className="size-4" />
-            </span>
+            <Logo className="size-7" />
             {/* the session's own name usually says "Kinus" already ("Kinus 5787") */}
             <span className="truncate">{sessionName ?? "Kinus"}</span>
           </Link>

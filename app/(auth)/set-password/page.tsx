@@ -1,5 +1,5 @@
-import { Tent } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Logo } from "@/components/logo";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ActionForm } from "@/components/action-form";
@@ -14,9 +14,7 @@ export default async function SetPasswordPage({ searchParams }: { searchParams: 
     <main className="flex min-h-dvh items-center justify-center bg-muted/40 p-6">
       <div className="w-full max-w-sm rounded-2xl border bg-card p-8 shadow-[var(--shadow-card)]">
         <div className="mb-6 flex items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <Tent className="size-5" />
-          </span>
+          <Logo className="size-10" />
           <span className="text-lg font-semibold">Kinus</span>
         </div>
         <h1 className="text-2xl font-semibold">{reset ? "Set a new password" : `Welcome, ${user.fullName.split(" ")[0]}`}</h1>

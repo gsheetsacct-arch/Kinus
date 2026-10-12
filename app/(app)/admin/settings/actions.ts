@@ -62,3 +62,22 @@ export async function saveMissingRules(fd: FormData): Promise<ActionResult> {
     return fail(errorMessage(e));
   }
 }
+
+/** Renames or removes the extra fields chosen on the import's column step. */
+export async function saveExtraFields(fd: FormData): Promise<ActionResult> {
+  const me = await requireAdmin();
+  try {
+    const columns = fd.getAll("column").map(String);
+    const fields = columns
+      .map((column, i) => ({ column, label: String(fd.getAll("label")[i] ?? "").trim() || column, keep: fd.get(`keep:${column}`) === "on" }))
+      .filter((f) => f.keep)
+      .map(({ column, label }) => ({ column, label: label.slice(0, 80) }));
+    const supabase = await createClient();
+    const { error } = await supabase.from("settings").upsert({ key: "extra_fields", value: fields, updated_by: me.id, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    revalidatePath("/", "layout");
+    return ok("Saved.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}

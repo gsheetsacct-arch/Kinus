@@ -19,7 +19,7 @@ export async function savePreset(fd: FormData): Promise<ActionResult> {
   const me = await requireAdmin();
   try {
     const d = schema.parse(Object.fromEntries(fd));
-    const columns = fd.getAll("columns").map(String).filter((k) => FIELD_BY_KEY[k]);
+    const columns = fd.getAll("columns").map(String).filter((k) => FIELD_BY_KEY[k] || /^source\.[^\s{}|]{1,120}$/.test(k));
     if (columns.length === 0) return fail("Tick at least one column.");
     const supabase = await createClient();
     const row = {

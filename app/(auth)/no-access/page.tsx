@@ -1,6 +1,6 @@
 import Link from "next/link";
+import { Logo } from "@/components/logo";
 import { redirect } from "next/navigation";
-import { Tent } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getAccountProblem, getCurrentUser } from "@/lib/auth/current-user";
 import { signOut } from "../actions";
@@ -31,9 +31,7 @@ export default async function NoAccessPage({ searchParams }: { searchParams: Pro
   return (
     <main className="flex min-h-dvh items-center justify-center p-6">
       <div className="w-full max-w-md space-y-5 rounded-2xl border bg-card p-6 shadow-[var(--shadow-card)]">
-        <span className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-          <Tent className="size-5" />
-        </span>
+        <Logo className="size-10" />
         <h1 className="text-xl font-semibold">{c.title}</h1>
         <p className="text-sm text-muted-foreground">{c.body}</p>
         <div className="flex flex-wrap gap-2">
