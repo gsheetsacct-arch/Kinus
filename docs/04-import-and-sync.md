@@ -104,6 +104,12 @@ Typed parsing rules:
 - Division: matched by exact name after trimming within the session. Unknown →
   created (language guessed: Hebrew letters → `he`, otherwise `en`; admin fixes
   later) and listed in the preview under "New divisions".
+- New sessions start from an earlier session's setup (Sessions → New session → "Start
+  from"; or "Copy setup from…" on a session that exists): camps, divisions (language,
+  colour, order, camp) and bunks, and optionally staff in the same places
+  (`copy_session_setup`, migration 0026). Campers never carry over; the import finds the
+  copied divisions and bunks by name. Divisions an import already made take on the
+  copied settings.
 - Camp: a new division goes into the camp it was in last session (same division name;
   the camp is created in the new session with the same name and order, migration 0025).
   A division never seen before: "Hebrew/Ivrit/עברית" or "French/Français" in the name

@@ -793,6 +793,9 @@ isOneToOne: false
 "area_covers":
 { Args: { "p_bunk_id": string,"p_division_id": string }; Returns: boolean
                            },
+"copy_session_setup":
+{ Args: { "p_from": string; "p_to": string; "p_staff"?: boolean }; Returns: Json
+                           },
 "assign_buzzer":
 { Args: { "p_camper_id": string,"p_number": number }; Returns: {
               "assigned_at": string,
