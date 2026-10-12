@@ -7,6 +7,7 @@ import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
 import { canManageRole, isAdmin, isDirector } from "@/lib/auth/permissions";
 import { ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
 import { grantableTree, loadAreaTree } from "@/lib/data/areas";
+import { loadRoles, rolesInUse } from "@/lib/data/roles";
 import { TEMPLATE_HEADERS, templateRows } from "@/lib/staff/template";
 import { applyBulkAdd, previewBulkAdd } from "../actions";
 import { BulkAdd } from "./bulk-add";
@@ -27,8 +28,10 @@ const ROLE_WORDS: Partial<Record<string, string>> = {
 export default async function BulkAddPage() {
   const me = await requireStaffManager();
   const session = await getActiveSession();
-  const tree = grantableTree(me, await loadAreaTree(createAdminClient(), session?.id));
-  const roles = ROLE_ORDER.filter((r) => canManageRole(me, r));
+  const admin = createAdminClient();
+  const [fullTree, setup] = await Promise.all([loadAreaTree(admin, session?.id), loadRoles(admin)]);
+  const tree = grantableTree(me, fullTree);
+  const roles = rolesInUse(setup, ROLE_ORDER).filter((r) => canManageRole(me, r));
   const oneDivision = tree.divisions.length === 1 ? tree.divisions[0] : null;
   const example = [TEMPLATE_HEADERS, ...templateRows(tree, roles)].map((r) => r.join("\t")).join("\n");
   const cell = "px-3 py-2 align-top";

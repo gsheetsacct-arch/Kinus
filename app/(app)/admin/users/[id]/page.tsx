@@ -17,7 +17,7 @@ import { ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
 import { encodeArea, grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
 import { formatDateTime } from "@/lib/utils";
-import { loadRoles, roleSummary } from "@/lib/data/roles";
+import { loadRoles, roleSummary, rolesInUse } from "@/lib/data/roles";
 import { checkinNameOf, shownEmail, type LoginKind } from "@/lib/staff/login-kinds";
 import { deletePeople, removePasskeys, savePerson, sendSignInLink, setActive, setUserPassword } from "../actions";
 
@@ -44,7 +44,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
   const manageable = !isSelf && canManageRole(me, p.role);
   const signIn = info.get(p.id);
   const st = statusOf(p.is_active, signIn, p.login);
-  const roles = ROLE_ORDER.filter((r) => canManageRole(me, r) || r === p.role);
+  const roles = rolesInUse(setup, ROLE_ORDER, p.role).filter((r) => canManageRole(me, r) || r === p.role);
   // their Face ID / fingerprint sign-ins (null when passkeys aren't switched on in Supabase)
   const personal = p.login === "personal";
   const passkeys = manageable && personal

@@ -10,7 +10,7 @@ import { shownEmail, type LoginKind } from "@/lib/staff/login-kinds";
 import type { AccessLevel, StaffRole } from "@/lib/auth/permissions";
 import type { AreaTree } from "@/lib/data/areas";
 import type { ActionResult } from "@/lib/actions/result";
-import { AreaPicker } from "./area-picker";
+import { WherePicker } from "./where-picker";
 
 export type PersonFormValues = {
   id?: string;
@@ -55,37 +55,30 @@ export function PersonForm({
   const [login, setLogin] = React.useState<LoginKind>(person.login ?? (isNew && person.role === "counselor" ? "none" : "personal"));
   const listed = login === "none";
   const shared = login === "shared";
+  const ordered = [...roles].sort((a, b) => FORM_ORDER.indexOf(a) - FORM_ORDER.indexOf(b));
+  const locked = readOnly && "pointer-events-none opacity-70";
   return (
-    <ActionForm action={action} className="space-y-8">
+    <ActionForm action={action} className="divide-y">
       {person.id && <input type="hidden" name="id" value={person.id} />}
-      <section className="grid gap-4 sm:grid-cols-3">
-        <Field label="Full name" htmlFor="full_name">
-          <Input id="full_name" name="full_name" defaultValue={person.full_name} required dir="auto" disabled={readOnly} />
-        </Field>
-        <Field label={listed ? "Email (optional)" : "Email"} htmlFor="email" hint={listed ? "Only for the phone book." : isNew ? "Their invitation goes here." : undefined}>
-          <Input id="email" name="email" type="email" defaultValue={shownEmail(person.email) ?? ""} required={!listed} disabled={readOnly || shared || (!isNew && !listed && person.login !== "none")} />
-        </Field>
-        <Field label="Phone (optional)" htmlFor="phone">
-          <Input id="phone" name="phone" type="tel" defaultValue={person.phone} disabled={readOnly} />
-        </Field>
-        <Field label="Position (optional)" htmlFor="title" hint="What they do at camp, e.g. Learning head, Waterfront, Night watch. Shown in the phone book." className="sm:col-span-3">
-          <Input id="title" name="title" defaultValue={person.title} maxLength={80} dir="auto" disabled={readOnly} />
-        </Field>
-      </section>
 
-      <section className="space-y-2">
-        <h3 className="text-sm font-semibold">1 · Role</h3>
-        <p className="text-xs text-muted-foreground">The role decides what they can do and which details they see. Directors over all of camp set that per role under Roles.</p>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {roles.map((r) => (
-            <label
-              key={r}
-              className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-lg border bg-card p-3 text-sm hover:bg-muted/40",
-                role === r && "border-primary bg-primary-soft/50 ring-1 ring-primary",
-                readOnly && "pointer-events-none opacity-70",
-              )}
-            >
+      <Row label="Who">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Full name" htmlFor="full_name">
+            <Input id="full_name" name="full_name" defaultValue={person.full_name} required dir="auto" disabled={readOnly} />
+          </Field>
+          <Field label="Phone (optional)" htmlFor="phone">
+            <Input id="phone" name="phone" type="tel" defaultValue={person.phone} disabled={readOnly} />
+          </Field>
+          <Field label="Position (optional)" htmlFor="title" hint="What they do at camp, e.g. Learning head, Waterfront. Shown in the phone book." className="sm:col-span-2">
+            <Input id="title" name="title" defaultValue={person.title} maxLength={80} dir="auto" disabled={readOnly} />
+          </Field>
+        </div>
+      </Row>
+
+      <Row label="Role">
+        <div className={cn("flex flex-wrap gap-2", locked)} role="radiogroup" aria-label="Role">
+          {ordered.map((r) => (
+            <label key={r} className="cursor-pointer">
               <input
                 type="radio"
                 name="role"
@@ -95,78 +88,91 @@ export function PersonForm({
                   setRole(r);
                   if (isNew) setLogin(r === "counselor" ? "none" : "personal");
                 }}
-                className="mt-0.5 size-4 accent-[var(--primary)]"
+                className="peer sr-only"
               />
-              <span>
-                <span className="block font-medium">{STAFF_ROLES[r].label}</span>
-                <span className="block text-xs text-muted-foreground">{STAFF_ROLES[r].description}</span>
-                {summaries[r] && <span className="mt-1 block text-xs font-medium text-foreground/80">{summaries[r]}</span>}
+              <span className="inline-flex min-h-9 items-center rounded-full border bg-card px-3.5 py-1 text-sm text-foreground/80 hover:bg-muted peer-checked:border-primary peer-checked:bg-primary peer-checked:font-medium peer-checked:text-primary-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-ring">
+                {STAFF_ROLES[r].label}
               </span>
             </label>
           ))}
         </div>
-      </section>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {STAFF_ROLES[role].description}
+          {summaries[role] && <span className="font-medium text-foreground/80"> {summaries[role]}.</span>}
+        </p>
+      </Row>
 
       {role !== "owner" && (
-        <section className="space-y-2">
-          <h3 className="text-sm font-semibold">2 · Where</h3>
-          <p className="text-xs text-muted-foreground">Which campers they work with.</p>
-          <div className={cn(readOnly && "pointer-events-none opacity-70")}>
-            <AreaPicker tree={tree} defaultAll={person.all_areas} defaultAreas={person.areas} lockAll={lockAll} />
+        <Row label="Where">
+          <WherePicker tree={tree} role={role} defaultAll={person.all_areas} defaultAreas={person.areas} lockAll={lockAll} readOnly={readOnly} />
+        </Row>
+      )}
+
+      <Row label="Signing in">
+        {shared ? (
+          <p className="text-sm text-muted-foreground">
+            This is the check-in login shared by a division&apos;s check-in phones. Its password is set under <strong>Check-in logins</strong> on the Staff page.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {role !== "owner" && (
+              <div className={cn("inline-flex w-full flex-wrap gap-1 rounded-lg bg-muted p-1 sm:w-auto", locked)}>
+                <input type="hidden" name="login" value={login} />
+                {(
+                  [
+                    ["personal", "Signs in to Kinus"],
+                    ["none", "Listed only"],
+                  ] as const
+                ).map(([k, label]) => (
+                  <label key={k} className="flex-1 cursor-pointer sm:flex-none">
+                    <input type="radio" checked={login === k} onChange={() => setLogin(k)} className="peer sr-only" />
+                    <span className="block rounded-md px-3 py-1.5 text-center text-sm text-muted-foreground peer-checked:bg-background peer-checked:font-medium peer-checked:text-foreground peer-checked:shadow-sm peer-focus-visible:ring-2 peer-focus-visible:ring-ring">
+                      {label}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {listed
+                ? "In the phone book and on their bunk so head staff can reach them. They don't sign in."
+                : "With their own email: a link, a password or Face ID."}
+            </p>
+            <Field label={listed ? "Email (optional)" : "Email"} htmlFor="email" className="max-w-md">
+              <Input id="email" name="email" type="email" defaultValue={shownEmail(person.email) ?? ""} required={!listed} disabled={readOnly || (!isNew && !listed && person.login !== "none")} />
+            </Field>
+            {isNew && !listed && (
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" name="invite" defaultChecked className="mt-0.5 size-4" />
+                <span>
+                  Email them an invitation now
+                  <span className="block text-xs text-muted-foreground">They click the link, choose a password, and they&apos;re in.</span>
+                </span>
+              </label>
+            )}
           </div>
-        </section>
-      )}
+        )}
+      </Row>
 
-      {shared ? (
-        <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
-          This is a check-in login shared by the check-in phones of a division. Its password is set under <strong>Check-in logins</strong> on the Staff page.
-        </p>
-      ) : (
-        role !== "owner" && (
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold">3 · Signing in</h3>
-            <input type="hidden" name="login" value={login} />
-            <div className="grid gap-2 sm:grid-cols-2">
-              {(
-                [
-                  ["personal", "Signs in to Kinus", "With their own email: a link, a password or Face ID."],
-                  ["none", "Listed only", "In the phone book and on their bunk so head staff can reach them. They don't sign in."],
-                ] as const
-              ).map(([k, label, desc]) => (
-                <label
-                  key={k}
-                  className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded-lg border bg-card p-3 text-sm hover:bg-muted/40",
-                    login === k && "border-primary bg-primary-soft/50 ring-1 ring-primary",
-                    readOnly && "pointer-events-none opacity-70",
-                  )}
-                >
-                  <input type="radio" checked={login === k} onChange={() => setLogin(k)} className="mt-0.5 size-4 accent-[var(--primary)]" />
-                  <span>
-                    <span className="block font-medium">{label}</span>
-                    <span className="block text-xs text-muted-foreground">{desc}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
-          </section>
-        )
-      )}
-
-      {isNew && !listed && (
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" name="invite" defaultChecked className="mt-0.5 size-4" />
-          <span>
-            Email them an invitation now
-            <span className="block text-xs text-muted-foreground">They click the link, choose a password, and they&apos;re in.</span>
-          </span>
-        </label>
-      )}
       {!readOnly && (
-        <Button type="submit" size="lg">
-          {submitLabel}
-        </Button>
+        <div className="pt-5">
+          <Button type="submit" size="lg">
+            {submitLabel}
+          </Button>
+        </div>
       )}
     </ActionForm>
+  );
+}
+
+/** Roles in the order people think of them: up the bunk ladder, then the rest. */
+const FORM_ORDER: StaffRole[] = ["counselor", "head_counselor", "division_head", "director", "scanner", "office", "logistics", "owner"];
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <section className="grid gap-2 py-5 first:pt-0 md:grid-cols-[8rem_1fr] md:gap-6">
+      <h3 className="text-sm font-semibold md:pt-1.5">{label}</h3>
+      <div className="min-w-0">{children}</div>
+    </section>
   );
 }

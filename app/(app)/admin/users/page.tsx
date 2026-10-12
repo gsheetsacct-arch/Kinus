@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
 import { canGrantAreas, canManageRole, isAdmin, type StaffRole, isDirector } from "@/lib/auth/permissions";
 import { ROLE_ORDER, areaLabel, STAFF_ROLES } from "@/lib/labels";
+import { loadRoles, rolesInUse } from "@/lib/data/roles";
 import { areaNames, grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
 import { CheckinLogins } from "@/components/staff/checkin-logins";
@@ -21,11 +22,12 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const { role: roleFilter } = await searchParams;
   const session = await getActiveSession();
   const admin = createAdminClient();
-  const [{ data: profiles }, { data: areas }, tree, info] = await Promise.all([
+  const [{ data: profiles }, { data: areas }, tree, info, setup] = await Promise.all([
     admin.from("profiles").select("id, email, full_name, title, role, access_level, all_areas, is_active, login").order("full_name"),
     admin.from("staff_scopes").select("user_id, group_id, division_id, bunk_id"),
     loadAreaTree(admin, session?.id),
     signInInfo(),
+    loadRoles(admin),
   ]);
   const names = areaNames(tree);
   const groupOf = (id: string) => tree.divisions.find((d) => d.id === id)?.group_id ?? null;
@@ -59,7 +61,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       manageable: p.id !== me.id && canManageRole(me, p.role),
     };
   });
-  const roles = ROLE_ORDER.filter((r) => canManageRole(me, r as StaffRole));
+  const roles = rolesInUse(setup, ROLE_ORDER).filter((r) => canManageRole(me, r as StaffRole));
   // one check-in login per division this person looks after
   const grantable = grantableTree(me, tree);
   const shared = (profiles ?? []).filter((p) => p.login === "shared");
@@ -100,7 +102,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
           Use <strong>Add many at once</strong> to paste your staff list from a spreadsheet (name, email, role, division, bunk). Everyone gets an invitation email. To change many people later, tick them below.
         </Callout>
       )}
-      {canManageRole(me, "scanner") && <CheckinLogins logins={checkinLogins} />}
+      {canManageRole(me, "scanner") && setup.inUse.scanner && <CheckinLogins logins={checkinLogins} />}
       <StaffTable rows={rows} tree={grantableTree(me, tree)} roles={roles} actions={{ bulkSetAccess, bulkSendLinks, bulkSetActive, deletePeople }} lockAll={!isAdmin(me)} initialRole={roleFilter && roleFilter in STAFF_ROLES ? roleFilter : undefined} />
     </div>
   );

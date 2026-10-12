@@ -35,3 +35,17 @@ do $$ begin
   if exists (select 1 from profiles where id = '00000000-0000-0000-0000-000000000002') then raise exception 'profile not deleted'; end if;
   if (select count(*) from attendance_events where camper_id = '40000000-0000-0000-0000-000000000001' and recorded_by is null) <> 1 then raise exception 'check-in lost'; end if;
 end $$;
+
+-- a role can be removed (and brought back); Owner and Director can't
+update role_access set enabled = false where role = 'logistics';
+do $$ begin
+  if (select enabled from role_access where role = 'logistics') then raise exception 'logistics not removed'; end if;
+end $$;
+update role_access set enabled = true where role = 'logistics';
+do $$ begin
+  begin
+    update role_access set enabled = false where role = 'director';
+    raise exception 'director was removed';
+  exception when check_violation then null;
+  end;
+end $$;
