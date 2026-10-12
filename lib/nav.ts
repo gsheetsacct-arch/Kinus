@@ -1,7 +1,7 @@
 import type { CurrentUser } from "@/lib/auth/permissions";
 import { LEVEL_RANK, canFollowUp, canUsePhoneBook, canUsePrintArea, effectiveLevel, isAdmin, isStaffManager } from "@/lib/auth/permissions";
 
-export type NavIcon = "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser";
+export type NavIcon = "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser" | "ShieldCheck";
 export type NavItem = { href: string; label: string; icon: NavIcon; description: string; section: "main" | "admin"; mobile?: boolean };
 
 export function buildNav(user: CurrentUser): NavItem[] {
@@ -22,10 +22,11 @@ export function buildNav(user: CurrentUser): NavItem[] {
   if (isAdmin(user)) {
     nav.push(
       { href: "/admin/imports", label: "Import roster", icon: "Upload", description: "Upload the registration export", section: "admin" },
+      { href: "/admin/roles", label: "Roles", icon: "ShieldCheck", description: "What each role can do and see", section: "admin" },
       { href: "/admin/divisions", label: "Divisions & bunks", icon: "Layers", description: "Rename, reorder, merge", section: "admin" },
       { href: "/admin/presets", label: "List layouts", icon: "SlidersHorizontal", description: "Which columns each list shows", section: "admin" },
       { href: "/admin/sessions", label: "Sessions", icon: "CalendarDays", description: "Each year or run of the program", section: "admin" },
-      { href: "/admin/settings", label: "Settings", icon: "Settings", description: "Privacy, office email, imports", section: "admin" },
+      { href: "/admin/settings", label: "Settings", icon: "Settings", description: "Office email, imports, follow-ups", section: "admin" },
     );
   }
   return nav;

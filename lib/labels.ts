@@ -3,28 +3,40 @@ import type { AccessLevel, StaffRole } from "@/lib/auth/permissions";
 
 export const STAFF_ROLES: Record<StaffRole, { label: string; description: string; defaultLevel: AccessLevel; audience: string }> = {
   owner: { label: "Owner", description: "Everything, everywhere, including other owners.", defaultLevel: "edit", audience: "director" },
-  director: { label: "Director", description: "Runs camp, or part of it: campers, staff and corrections. Over all of camp they also handle imports and settings.", defaultLevel: "edit", audience: "director" },
-  division_head: { label: "Division head", description: "Runs a division. Gets the most detailed lists.", defaultLevel: "edit", audience: "division_head" },
-  head_counselor: { label: "Head counselor", description: "Oversees counselors. Sees medical details.", defaultLevel: "scan", audience: "head_counselor" },
-  counselor: { label: "Counselor", description: "Looks after a bunk. Gets the bunk list.", defaultLevel: "scan", audience: "counselor" },
-  scanner: { label: "Check-in helper", description: "Only helps check campers in and out.", defaultLevel: "scan", audience: "counselor" },
-  office: { label: "Office", description: "Sees campers and contacts, and handles printing.", defaultLevel: "view", audience: "office" },
-  logistics: { label: "Logistics", description: "Checks campers in and out, buses and pickup.", defaultLevel: "scan", audience: "office" },
+  director: { label: "Director", description: "Runs camp, or part of it.", defaultLevel: "edit", audience: "director" },
+  division_head: { label: "Division head", description: "Runs a division.", defaultLevel: "edit", audience: "division_head" },
+  head_counselor: { label: "Head counselor", description: "Oversees the counselors of a division.", defaultLevel: "scan", audience: "head_counselor" },
+  counselor: { label: "Counselor", description: "Looks after a bunk.", defaultLevel: "scan", audience: "counselor" },
+  scanner: { label: "Check-in helper", description: "Helps check campers in and out at the gate.", defaultLevel: "scan", audience: "counselor" },
+  office: { label: "Office", description: "Works in the camp office.", defaultLevel: "view", audience: "office" },
+  logistics: { label: "Logistics", description: "Buses, pickup and drop-off.", defaultLevel: "scan", audience: "office" },
 };
 export const ROLE_ORDER: StaffRole[] = ["director", "division_head", "head_counselor", "counselor", "scanner", "office", "logistics", "owner"];
 
 export const ACCESS_LEVELS: Record<AccessLevel, { label: string; description: string }> = {
-  view: { label: "View only", description: "See campers, where they are, and contacts." },
+  view: { label: "View only", description: "See campers and where they are." },
   scan: { label: "Check in & out", description: "View, plus check campers in and out and request tags." },
-  edit: { label: "Edit details", description: "All of the above, plus change camper details and bunks." },
+  edit: { label: "Edit details", description: "All of the above, plus change camper details and bunks, and add walk-ins." },
 };
 
-export const FIELD_GROUPS: Record<string, { label: string; description: string }> = {
-  contacts: { label: "Parent & emergency contacts", description: "Names, phone numbers and emails" },
-  medical: { label: "Medical details", description: "Allergies, EpiPen, medications, medical notes" },
-  parent_notes: { label: "Notes from parents", description: "The “anything else we should know” answer" },
-  address: { label: "Local address", description: "Where the camper stays, with cross streets" },
-  staff_notes: { label: "Staff notes", description: "Notes staff wrote in Kinus" },
+export const FIELD_GROUPS: Record<string, { label: string; short: string; description: string }> = {
+  contacts: { label: "Parent & emergency contacts", short: "contacts", description: "Names, phone numbers and emails" },
+  medical: { label: "Medical details", short: "medical", description: "Allergies, EpiPen, medications, medical notes" },
+  parent_notes: { label: "Notes from parents", short: "notes from parents", description: "The “anything else we should know” answer" },
+  address: { label: "Local address", short: "address", description: "Where the camper stays, with cross streets" },
+  staff_notes: { label: "Staff notes", short: "staff notes", description: "Notes staff wrote in Kinus" },
+};
+
+/** What a role can do besides its level and details: fixed, shown on the Roles page. */
+export const ROLE_EXTRAS: Record<StaffRole, string[]> = {
+  owner: ["Everything, including other owners"],
+  director: ["Manages staff in their area", "Prints and runs batches", "Over all of camp: imports, templates and settings"],
+  division_head: ["Manages head counselors, counselors and check-in helpers in their divisions", "Prints and runs batches", "Follows up on campers who haven't arrived"],
+  head_counselor: ["Manages counselors and check-in helpers in their divisions", "Follows up on campers who haven't arrived"],
+  counselor: ["Phone book: their head counselor and division head"],
+  scanner: ["Phone book: their head counselor and division head"],
+  office: ["Prints and runs batches", "Follows up on campers who haven't arrived"],
+  logistics: ["Prints and runs batches (bus tags)", "Follows up on campers who haven't arrived"],
 };
 
 export const LANGUAGES: Record<string, string> = { he: "Hebrew", fr: "French", en: "English" };

@@ -5,25 +5,6 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 
-const ROLES = ["director", "division_head", "head_counselor", "counselor", "scanner", "office", "logistics"] as const;
-
-export async function saveFieldVisibility(fd: FormData): Promise<ActionResult> {
-  await requireAdmin();
-  const supabase = await createClient();
-  const groups = fd.getAll("group").map(String);
-  try {
-    for (const g of groups) {
-      const roles = ["owner" as const, ...ROLES.filter((r) => fd.get(`${g}:${r}`) === "on")];
-      const { error } = await supabase.from("field_visibility").update({ roles }).eq("field_group", g);
-      if (error) throw error;
-    }
-    revalidatePath("/admin/settings");
-    return ok("Saved.");
-  } catch (e) {
-    return fail(errorMessage(e));
-  }
-}
-
 const office = z.object({ to: z.string().trim().email("Enter a valid email address.").or(z.literal("")), cc: z.string().trim().optional() });
 
 export async function saveOfficeEmail(fd: FormData): Promise<ActionResult> {

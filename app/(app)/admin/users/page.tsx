@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { UserPlus, Users } from "lucide-react";
+import { ShieldCheck, UserPlus, Users } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Callout } from "@/components/callout";
 import { Button } from "@/components/ui/button";
@@ -10,12 +10,13 @@ import { canGrantAreas, canManageRole, isAdmin, type StaffRole, isDirector } fro
 import { ROLE_ORDER, areaLabel, STAFF_ROLES } from "@/lib/labels";
 import { areaNames, grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
-import { bulkSendLinks, bulkSetAccess, bulkSetActive } from "./actions";
+import { bulkSendLinks, bulkSetAccess, bulkSetActive, deletePeople } from "./actions";
 
 export const metadata = { title: "Staff" };
 
-export default async function UsersPage() {
+export default async function UsersPage({ searchParams }: { searchParams: Promise<{ role?: string }> }) {
   const me = await requireStaffManager();
+  const { role: roleFilter } = await searchParams;
   const session = await getActiveSession();
   const admin = createAdminClient();
   const [{ data: profiles }, { data: areas }, tree, info] = await Promise.all([
@@ -65,6 +66,13 @@ export default async function UsersPage() {
         description={isDirector(me) ? `${rows.filter((r) => r.active).length} active people` : `Your divisions' staff · ${rows.filter((r) => r.active).length} active. You can add and change ${roles.map((r) => STAFF_ROLES[r].label.toLowerCase() + "s").join(" and ")}.`}
         actions={
           <>
+            {isAdmin(me) && (
+              <Button asChild variant="ghost">
+                <Link href="/admin/roles">
+                  <ShieldCheck /> Roles
+                </Link>
+              </Button>
+            )}
             <Button asChild variant="outline">
               <Link href="/admin/users/bulk">
                 <Users /> Add many at once
@@ -83,7 +91,7 @@ export default async function UsersPage() {
           Use <strong>Add many at once</strong> to paste your staff list from a spreadsheet (name, email, role, division, bunk). Everyone gets an invitation email. To change many people later, tick them below.
         </Callout>
       )}
-      <StaffTable rows={rows} tree={grantableTree(me, tree)} roles={roles} actions={{ bulkSetAccess, bulkSendLinks, bulkSetActive }} lockAll={!isAdmin(me)} />
+      <StaffTable rows={rows} tree={grantableTree(me, tree)} roles={roles} actions={{ bulkSetAccess, bulkSendLinks, bulkSetActive, deletePeople }} lockAll={!isAdmin(me)} initialRole={roleFilter && roleFilter in STAFF_ROLES ? roleFilter : undefined} />
     </div>
   );
 }

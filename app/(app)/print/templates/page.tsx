@@ -15,16 +15,21 @@ import type { SheetLayout } from "@/lib/print/types";
 export const metadata = { title: "Templates" };
 const KIND: Record<string, string> = { name_tag: "Name tag", luggage_tag: "Luggage tag", other: "Other" };
 
-export default async function TemplatesPage() {
+export default async function TemplatesPage({ searchParams }: { searchParams: Promise<{ retired?: string }> }) {
+  const showRetired = (await searchParams).retired === "1";
   const user = await requireUser();
   if (!isAdmin(user)) redirect("/print");
   const supabase = await createClient();
   const { data } = await supabase.from("print_templates").select("id, name, kind, page_width_mm, page_height_mm, show_on_card, auto_on_first_checkin, sheet_layout, background_path, layers").order("sort_order").order("name");
+  // retired: used before, so kept for the print history, but no longer offered
+  const isRetired = (t: { name: string }) => t.name.startsWith("(retired)");
+  const retired = (data ?? []).filter(isRetired);
+  const shown = (data ?? []).filter((t) => showRetired === isRetired(t));
   return (
     <div>
       <PageHeader
-        title="Templates"
-        description="The designs for name tags, luggage tags and anything else printed per camper."
+        title={showRetired ? "Retired templates" : "Templates"}
+        description={showRetired ? "No longer offered for printing; kept so past print jobs still open." : "The designs for name tags, luggage tags and anything else printed per camper."}
         actions={
           <Button asChild size="sm">
             <Link href="/print/templates/new">
@@ -34,7 +39,7 @@ export default async function TemplatesPage() {
         }
       />
       <ul className="grid gap-3 sm:grid-cols-2">
-        {(data ?? []).map((t) => {
+        {shown.map((t) => {
           const sheet = t.sheet_layout as SheetLayout | null;
           const preset = currentPreset(Number(t.page_width_mm), Number(t.page_height_mm), sheet);
           return (
@@ -64,6 +69,20 @@ export default async function TemplatesPage() {
           );
         })}
       </ul>
+      {showRetired && !shown.length && <p className="text-sm text-muted-foreground">No retired templates.</p>}
+      {(retired.length > 0 || showRetired) && (
+        <p className="mt-4 text-sm text-muted-foreground">
+          {showRetired ? (
+            <Link href="/print/templates" className="hover:text-primary hover:underline">
+              Back to the templates in use
+            </Link>
+          ) : (
+            <Link href="/print/templates?retired=1" className="hover:text-primary hover:underline">
+              {retired.length} retired {retired.length === 1 ? "template is" : "templates are"} hidden (kept because they were printed before). Show
+            </Link>
+          )}
+        </p>
+      )}
     </div>
   );
 }

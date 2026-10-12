@@ -1,13 +1,18 @@
 # 3. Roles, areas and permissions
 
-Every person has three things, set on one form (or for many people at once):
+Every person has two things, set on one form (or for many people at once):
 
-1. **A role**: what they are.
-2. **Where**: all of camp, or any mix of division groups, divisions and bunks.
-3. **What they can do there**: view only, check in & out, or edit details.
-   Pre-filled from the role; can be changed per person.
+1. **A role**: decides what they can do and which details they see.
+2. **Where**: all of camp, or any mix of division groups, divisions and bunks; decides
+   which campers.
 
-| Role | Usual level | Notes |
+What each role can do is set in one place, **Roles** (Setup → Roles, directors over all
+of camp): per role, *view only*, *check in & out* or *edit details*, and which sensitive
+details it sees. Changing a role there changes everyone with it (`role_access`, migration
+0021; a trigger keeps `profiles.access_level` equal to the role's level). People don't
+have a level of their own any more. Starting levels:
+
+| Role | Level | Notes |
 |---|---|---|
 | Owner | edit | Everything, everywhere, including other owners. |
 | Director | edit | Over all of camp: also imports, sessions, divisions, settings, templates. Over an area: campers, staff and corrections in that area. |
@@ -34,12 +39,19 @@ every division in it, including divisions added to the group later.
   group, bunk) or upload CSV/XLSX; the preview flags typos with suggestions; new
   people get invitation emails (or starting passwords to hand out).
 - **Staff list**: search, filter by role / where / status, sort, tick people, and
-  change role, where (replace or add) and level, email sign-in links, or deactivate.
+  change role and where (replace or add), email sign-in links, deactivate, or delete.
+
+## Deleting someone
+Deactivating stops someone signing in and can be undone. **Delete** (their page, or
+tick people on the list; type "delete" to confirm) removes the account for good.
+What they recorded stays: check-ins, print requests and imports keep their place in the
+history with "who" left empty ("a deleted staff account"). Whoever may change a person
+may delete them; Kinus always keeps at least one owner.
 
 ## Sensitive details
-Settings → *Who can see sensitive details* ticks, per role, who also sees contacts,
-medical details, notes from parents, local address and staff notes, always only for
-campers in their own area. Everyone else sees a yes/no medical flag.
+Roles → *Sees* turns on, per role, contacts, medical details, notes from parents, local
+address and staff notes, always only for campers in their own area. Everyone else sees a
+yes/no medical flag.
 
 ## Enforcement
 - Postgres RLS: `area_covers()`, `can_access_camper()`, `can_access_division()`,
@@ -67,6 +79,6 @@ The **Staff** page (add, edit, deactivate, send sign-in links, add many at once)
 | Division head | head counselors, counselors, check-in helpers | inside their divisions |
 | Head counselor | counselors, check-in helpers | inside their divisions |
 
-Division heads and head counselors give at most their own access level, never "all of camp", and can't
+Division heads and head counselors never give "all of camp", and can't
 move someone who works in another division (a director does that). Each person also has a free-text
 **position** ("Learning head", "Waterfront") shown in the phone book; it doesn't change what they can do.

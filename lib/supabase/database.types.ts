@@ -582,6 +582,20 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"role_access": {
+                  Row: {
+                    "access_level": Database["public"]['Enums']["access_level"],"role": Database["public"]['Enums']["staff_role"]
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "access_level": Database["public"]['Enums']["access_level"],"role": Database["public"]['Enums']["staff_role"]
+                  }
+                  Update: {
+                    "access_level"?: Database["public"]['Enums']["access_level"],"role"?: Database["public"]['Enums']["staff_role"]
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"sessions": {
                   Row: {
                     "created_at": string,"ends_on": string | null,"id": string,"is_active": boolean,"name": string,"starts_on": string | null

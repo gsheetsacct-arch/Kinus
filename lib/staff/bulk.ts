@@ -170,7 +170,7 @@ export function planRows(rows: BulkInputRow[], tree: AreaTree, defaults: { role:
       if (!role) errors.push(`Unknown role “${r.role}”.${suggest(r.role, ROLE_WORDS.flatMap(([, words]) => words))}`);
     }
     const lvl = r.level ? matchLevel(r.level) : null;
-    if (r.level && !lvl) errors.push(`Unknown level “${r.level}”. Use view, check in/out, or edit.`);
+    // a Level column from older sheets is read but not used: the role decides (Staff → Roles)
     const a = matchAreas(r.where || defaults.where || "", r.bunk, tree);
     errors.push(...a.errors);
     if (!a.allAreas && !a.areas.length && !a.errors.length && role !== "office" && role !== "logistics") errors.push("Say where they work: a camp, division, bunk, or “All”.");

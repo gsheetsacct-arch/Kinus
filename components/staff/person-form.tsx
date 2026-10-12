@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { ActionForm } from "@/components/action-form";
 import { cn } from "@/lib/utils";
-import { ACCESS_LEVELS, STAFF_ROLES } from "@/lib/labels";
+import { STAFF_ROLES } from "@/lib/labels";
 import type { AccessLevel, StaffRole } from "@/lib/auth/permissions";
 import type { AreaTree } from "@/lib/data/areas";
 import type { ActionResult } from "@/lib/actions/result";
@@ -24,7 +24,7 @@ export type PersonFormValues = {
   areas: string[];
 };
 
-/** One form for everything about a person: who they are, their role, where, and what they can do. */
+/** One form for everything about a person: who they are, their role (what they can do), and where. */
 export function PersonForm({
   person,
   roles,
@@ -34,7 +34,7 @@ export function PersonForm({
   lockAll,
   readOnly,
   isNew,
-  levels,
+  summaries,
 }: {
   person: PersonFormValues;
   roles: StaffRole[];
@@ -44,11 +44,10 @@ export function PersonForm({
   lockAll?: boolean;
   readOnly?: boolean;
   isNew?: boolean;
-  /** The levels this manager may give (head counselors: up to their own). */
-  levels?: AccessLevel[];
+  /** What each role can do and see ("Check in & out · sees contacts"), from Staff → Roles. */
+  summaries: Partial<Record<StaffRole, string>>;
 }) {
   const [role, setRole] = React.useState<StaffRole>(person.role);
-  const [level, setLevel] = React.useState<AccessLevel>(person.access_level);
   return (
     <ActionForm action={action} className="space-y-8">
       {person.id && <input type="hidden" name="id" value={person.id} />}
@@ -69,6 +68,7 @@ export function PersonForm({
 
       <section className="space-y-2">
         <h3 className="text-sm font-semibold">1 · Role</h3>
+        <p className="text-xs text-muted-foreground">The role decides what they can do and which details they see. Directors over all of camp set that per role under Roles.</p>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {roles.map((r) => (
             <label
@@ -84,15 +84,13 @@ export function PersonForm({
                 name="role"
                 value={r}
                 checked={role === r}
-                onChange={() => {
-                  setRole(r);
-                  setLevel(STAFF_ROLES[r].defaultLevel);
-                }}
+                onChange={() => setRole(r)}
                 className="mt-0.5 size-4 accent-[var(--primary)]"
               />
               <span>
                 <span className="block font-medium">{STAFF_ROLES[r].label}</span>
                 <span className="block text-xs text-muted-foreground">{STAFF_ROLES[r].description}</span>
+                {summaries[r] && <span className="mt-1 block text-xs font-medium text-foreground/80">{summaries[r]}</span>}
               </span>
             </label>
           ))}
@@ -102,35 +100,9 @@ export function PersonForm({
       {role !== "owner" && (
         <section className="space-y-2">
           <h3 className="text-sm font-semibold">2 · Where</h3>
+          <p className="text-xs text-muted-foreground">Which campers they work with.</p>
           <div className={cn(readOnly && "pointer-events-none opacity-70")}>
             <AreaPicker tree={tree} defaultAll={person.all_areas} defaultAreas={person.areas} lockAll={lockAll} />
-          </div>
-        </section>
-      )}
-
-      {role !== "owner" && (
-        <section className="space-y-2">
-          <h3 className="text-sm font-semibold">3 · What they can do there</h3>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {(Object.keys(ACCESS_LEVELS) as AccessLevel[]).filter((l) => !levels || levels.includes(l) || l === person.access_level).map((l) => (
-              <label
-                key={l}
-                className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-lg border bg-card p-3 text-sm",
-                  level === l && "border-primary bg-primary-soft/50 ring-1 ring-primary",
-                  readOnly && "pointer-events-none opacity-70",
-                )}
-              >
-                <input type="radio" name="access_level" value={l} checked={level === l} onChange={() => setLevel(l)} className="mt-0.5 size-4 accent-[var(--primary)]" />
-                <span>
-                  <span className="block font-medium">
-                    {ACCESS_LEVELS[l].label}
-                    {STAFF_ROLES[role].defaultLevel === l && <span className="ml-1 text-xs font-normal text-muted-foreground">(usual)</span>}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">{ACCESS_LEVELS[l].description}</span>
-                </span>
-              </label>
-            ))}
           </div>
         </section>
       )}

@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { publicEnv } from "@/lib/env";
 import { appUrl } from "@/lib/auth/app-url";
 import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
-import { canGrantAreas, canGrantLevel, canManageRole, isAdmin, type AccessLevel, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
+import { canGrantAreas, canManageRole, isAdmin, type AccessLevel, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
 import { STAFF_ROLES } from "@/lib/labels";
 import { decodeArea, grantableTree, loadAreaTree, type AreaValue } from "@/lib/data/areas";
 import { planRows, readRows, type BulkPlanRow } from "@/lib/staff/bulk";
@@ -15,7 +15,6 @@ import { decodeText } from "@/lib/import/decode";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 
 const ROLES = ["owner", "director", "division_head", "head_counselor", "counselor", "scanner", "office", "logistics"] as const;
-const LEVELS = ["view", "scan", "edit"] as const;
 const signInRedirect = async () => `${await appUrl()}/login?next=/set-password`;
 
 async function divisionGroupLookup() {
@@ -49,19 +48,18 @@ async function assertCanManage(me: CurrentUser, ids: string[]): Promise<{ id: st
 }
 
 /** Checks that `me` may give this role/area/level to someone (and may touch them at all). */
-async function assertCanAssign(me: CurrentUser, target: { id?: string; role?: StaffRole } | null, next: { role: StaffRole; allAreas: boolean; areas: AreaValue[]; level?: AccessLevel }) {
+async function assertCanAssign(me: CurrentUser, target: { id?: string; role?: StaffRole } | null, next: { role: StaffRole; allAreas: boolean; areas: AreaValue[] }) {
   if (target?.id === me.id) throw new Error("You can't change your own role or area. Ask a director.");
-  if (next.level && !canGrantLevel(me, next.level)) throw new Error("You can't give more access than you have yourself.");
   if (target?.role && !canManageRole(me, target.role)) throw new Error(`You can't change a ${STAFF_ROLES[target.role].label.toLowerCase()}'s access.`);
   if (!canManageRole(me, next.role)) throw new Error(`You can't make someone a ${STAFF_ROLES[next.role].label.toLowerCase()}.`);
   if (!canGrantAreas(me, next.areas, next.allAreas, await divisionGroupLookup())) throw new Error("You can only give access inside your own area.");
 }
 
-async function writeAccess(userId: string, v: { role: StaffRole; level: AccessLevel; allAreas: boolean; areas: AreaValue[]; full_name?: string; phone?: string | null; title?: string | null }) {
+/** Role and where. What they can do follows from the role (Staff → Roles; set by the database). */
+async function writeAccess(userId: string, v: { role: StaffRole; allAreas: boolean; areas: AreaValue[]; full_name?: string; phone?: string | null; title?: string | null }) {
   const admin = createAdminClient();
-  const patch: { role: StaffRole; access_level: AccessLevel; all_areas: boolean; full_name?: string; phone?: string | null; title?: string | null } = {
+  const patch: { role: StaffRole; all_areas: boolean; full_name?: string; phone?: string | null; title?: string | null } = {
     role: v.role,
-    access_level: v.role === "owner" ? "edit" : v.level,
     all_areas: v.role === "owner" ? true : v.allAreas,
   };
   if (v.full_name !== undefined) patch.full_name = v.full_name;
@@ -84,7 +82,6 @@ const person = z.object({
   phone: z.string().trim().optional(),
   title: z.string().trim().max(80, "Keep the position under 80 characters.").optional(),
   role: z.enum(ROLES, { message: "Choose a role." }),
-  access_level: z.enum(LEVELS).optional(),
   all_areas: z.string().optional(),
   invite: z.string().optional(),
 });
@@ -96,24 +93,23 @@ export async function savePerson(fd: FormData): Promise<ActionResult> {
     const d = person.parse(Object.fromEntries(fd));
     const areas = fd.getAll("areas").map(String).map(decodeArea).filter((a): a is AreaValue => a !== null);
     const allAreas = d.all_areas === "on";
-    const level = d.access_level ?? STAFF_ROLES[d.role].defaultLevel;
     if (d.role !== "owner" && !allAreas && areas.length === 0 && d.role !== "office" && d.role !== "logistics")
       return fail("Choose where they work: all of camp, or at least one camp, division or bunk.");
     const admin = createAdminClient();
     if (d.id) {
       await assertCanManage(me, [d.id]);
       const { data: target } = await admin.from("profiles").select("id, role").eq("id", d.id).single();
-      await assertCanAssign(me, target, { role: d.role, allAreas, areas, level });
-      await writeAccess(d.id, { role: d.role, level, allAreas, areas, full_name: d.full_name, phone: d.phone || null, title: d.title || null });
+      await assertCanAssign(me, target, { role: d.role, allAreas, areas });
+      await writeAccess(d.id, { role: d.role, allAreas, areas, full_name: d.full_name, phone: d.phone || null, title: d.title || null });
       revalidatePath("/admin/users");
       return ok("Saved.");
     }
     if (!d.email) return fail("Enter their email.");
-    await assertCanAssign(me, null, { role: d.role, allAreas, areas, level });
+    await assertCanAssign(me, null, { role: d.role, allAreas, areas });
     const { data: existing } = await admin.from("profiles").select("id").eq("email", d.email).maybeSingle();
     if (existing) return fail("Someone with that email already has an account. Find them in the staff list.");
     const id = await createAccount(d.email, d.full_name, d.role, d.invite === "on" ? "invite" : "none");
-    await writeAccess(id, { role: d.role, level, allAreas, areas, full_name: d.full_name, phone: d.phone || null, title: d.title || null });
+    await writeAccess(id, { role: d.role, allAreas, areas, full_name: d.full_name, phone: d.phone || null, title: d.title || null });
     revalidatePath("/admin/users");
     return ok(d.invite === "on" ? `Invitation sent to ${d.email}.` : `${d.full_name} added. Send them a sign-in link when ready.`, "/admin/users");
   } catch (e) {
@@ -175,7 +171,6 @@ export async function previewBulkAdd(fd: FormData): Promise<ActionResult & { pre
       if (ex?.id === me.id) errors.push("That's you.");
       else if (ex && outside.has(ex.id) && canManageRole(me, ex.role)) errors.push("Already works outside your area; ask a director to move them.");
       if (!canGrantAreas(me, r.areas, r.allAreas, lookup)) errors.push("Outside your own area.");
-      if (r.level && !canGrantLevel(me, r.level)) errors.push("More access than you have yourself.");
       return { ...r, errors, existingId: ex?.id ?? null, existingRole: ex?.role ?? null };
     });
     return { ok: true, preview: { rows: out } };
@@ -194,18 +189,17 @@ export async function applyBulkAdd(rowsJson: string, mode: "invite" | "password"
     if (r.errors.length || !r.role) continue;
     const base = { line: r.line, name: r.name, email: r.email };
     try {
-      const level = r.level ?? STAFF_ROLES[r.role].defaultLevel;
       if (r.existingId) {
         await assertCanManage(me, [r.existingId]);
-        await assertCanAssign(me, { id: r.existingId, role: r.existingRole ?? undefined }, { role: r.role, allAreas: r.allAreas, areas: r.areas, level });
-        await writeAccess(r.existingId, { role: r.role, level, allAreas: r.allAreas, areas: r.areas, title: r.title || undefined, phone: r.phone || undefined });
+        await assertCanAssign(me, { id: r.existingId, role: r.existingRole ?? undefined }, { role: r.role, allAreas: r.allAreas, areas: r.areas });
+        await writeAccess(r.existingId, { role: r.role, allAreas: r.allAreas, areas: r.areas, title: r.title || undefined, phone: r.phone || undefined });
         results.push({ ...base, outcome: "updated" });
         continue;
       }
-      await assertCanAssign(me, null, { role: r.role, allAreas: r.allAreas, areas: r.areas, level });
+      await assertCanAssign(me, null, { role: r.role, allAreas: r.allAreas, areas: r.areas });
       const password = mode === "password" ? generatePassword() : undefined;
       const id = await createAccount(r.email, r.name, r.role, password ? { password } : "invite");
-      await writeAccess(id, { role: r.role, level, allAreas: r.allAreas, areas: r.areas, full_name: r.name, title: r.title || null, phone: r.phone || null });
+      await writeAccess(id, { role: r.role, allAreas: r.allAreas, areas: r.areas, full_name: r.name, title: r.title || null, phone: r.phone || null });
       results.push({ ...base, outcome: password ? "created" : "invited", password });
     } catch (e) {
       results.push({ ...base, outcome: "failed", detail: errorMessage(e) });
@@ -237,7 +231,6 @@ export async function bulkSetAccess(fd: FormData): Promise<ActionResult> {
   try {
     const people = await targets(me, fd);
     const role = fd.get("role") ? z.enum(ROLES).parse(fd.get("role")) : null;
-    const level = fd.get("access_level") ? z.enum(LEVELS).parse(fd.get("access_level")) : null;
     const whereMode = String(fd.get("where_mode") ?? "keep"); // keep | replace | add
     const allAreas = fd.get("all_areas") === "on";
     const areas = fd.getAll("areas").map(String).map(decodeArea).filter((a): a is AreaValue => a !== null);
@@ -257,10 +250,39 @@ export async function bulkSetAccess(fd: FormData): Promise<ActionResult> {
         nextAreas = [...nextAreas, ...areas.filter((a) => !seen.has(key(a)))];
       }
       await assertCanAssign(me, p, { role: nextRole, allAreas: nextAll, areas: nextAreas });
-      await writeAccess(p.id, { role: nextRole, level: level ?? (role ? STAFF_ROLES[nextRole].defaultLevel : p.access_level), allAreas: nextAll, areas: nextAreas });
+      await writeAccess(p.id, { role: nextRole, allAreas: nextAll, areas: nextAreas });
     }
     revalidatePath("/admin/users");
     return ok(`Updated ${people.length} ${people.length === 1 ? "person" : "people"}.`);
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+/**
+ * Deletes people completely: their account and sign-in go. What they recorded (check-ins,
+ * print requests, imports…) stays, without their name.
+ */
+export async function deletePeople(fd: FormData): Promise<ActionResult> {
+  const me = await requireStaffManager();
+  try {
+    const people = await targets(me, fd);
+    const admin = createAdminClient();
+    if (people.some((p) => p.role === "owner")) {
+      const { count } = await admin.from("profiles").select("id", { count: "exact", head: true }).eq("role", "owner").eq("is_active", true);
+      if ((count ?? 0) - people.filter((p) => p.role === "owner").length < 1) throw new Error("Kinus needs at least one owner. Make someone else an owner first.");
+    }
+    for (const p of people) {
+      const { error } = await admin.auth.admin.deleteUser(p.id);
+      // a profile without a sign-in account (rare): remove the profile itself
+      if (error && !/not found/i.test(error.message)) throw new Error(`${p.full_name}: ${error.message}`);
+      if (error) {
+        const del = await admin.from("profiles").delete().eq("id", p.id);
+        if (del.error) throw del.error;
+      }
+    }
+    revalidatePath("/admin/users");
+    return ok(people.length === 1 ? `${people[0].full_name} was deleted.` : `Deleted ${people.length} people.`, fd.get("back") ? "/admin/users" : undefined);
   } catch (e) {
     return fail(errorMessage(e));
   }

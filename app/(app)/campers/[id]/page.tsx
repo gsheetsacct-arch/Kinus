@@ -238,7 +238,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
                   <span className="w-36 text-muted-foreground">{formatDateTime(e.occurred_at)}</span>
                   <span className="font-medium">{EVENT_LABEL[e.event_type] ?? e.event_type}</span>
                   <StatusBadge status={e.resulting_status} />
-                  <span className="text-muted-foreground">by {(e.profiles as { full_name: string } | null)?.full_name ?? "system"} · {e.method}</span>
+                  <span className="text-muted-foreground">by {(e.profiles as { full_name: string } | null)?.full_name ?? "a deleted staff account"} · {e.method}</span>
                   {e.note && <span dir="auto">“{e.note}”</span>}
                 </li>
               ))}
