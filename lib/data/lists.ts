@@ -51,7 +51,7 @@ export async function buildList(
   const sortKeys = preset.sort.length ? preset.sort : [{ field: "last_name", dir: "asc" }];
   // extra fields from the registration export ("source.ppa.sleeping_at_the_kinus")
   const extraDefs = preset.columns.some((k) => k.startsWith("source."))
-    ? await import("./extra-fields").then(async (m) => (await m.loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: f.label, group: groupOfKey(`source.${f.column}`), kind: "text" as const })))
+    ? await import("./extra-fields").then(async (m) => (await m.loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: f.label, group: groupOfKey(`source.${f.column}`), kind: "text" as const, answers: f.answers })))
     : [];
   const defOf = (k: string) => FIELD_BY_KEY[k] ?? extraDefs.find((f) => f.key === k);
   const shownColumns = preset.columns
@@ -64,7 +64,7 @@ export async function buildList(
     supabase.from("divisions").select("id, name").eq("session_id", scope.sessionId),
   ]);
   const columns = shownColumns.map((f) => ({ key: f.key, label: f.label }));
-  const extraCols = columns.filter((c) => c.key.startsWith("source.")).map((c) => ({ column: c.key.slice(7), label: c.label }));
+  const extraCols = columns.filter((c) => c.key.startsWith("source.")).map((c) => ({ column: c.key.slice(7), label: c.label, answers: extraDefs.find((f) => f.key === c.key)?.answers }));
   const extraValues = extraCols.length ? await import("./extra-fields").then((m) => m.extraValuesFor(campers.map((c) => String(c.id)), extraCols)) : new Map<string, Record<string, string>>();
 
   const sorted = [...campers].sort((a, b) => {

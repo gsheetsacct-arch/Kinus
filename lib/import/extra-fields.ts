@@ -4,7 +4,12 @@
  * Every column of the file is kept with each camper anyway; this only decides what's shown.
  * Stored in settings.extra_fields as [{ column, label }].
  */
-export type ExtraField = { column: string; label: string };
+export type ExtraField = {
+  column: string;
+  label: string;
+  /** Shorter wording for long answers, for the camper page and lists: { "Yes, at the Kinus (In the …)": "Sleeping here" }. */
+  answers?: Record<string, string>;
+};
 
 /** "ppa#sleeping_at_the_kinus" and "ppa.sleeping_at_the_kinus" are the same column. */
 export const columnKey = (k: string) => k.trim().toLowerCase().replace(/#/g, ".");
@@ -18,7 +23,19 @@ export function humanLabel(column: string): string {
 
 export function parseExtraFields(value: unknown): ExtraField[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((x): x is ExtraField => Boolean(x && typeof x.column === "string" && typeof x.label === "string"));
+  return value
+    .filter((x): x is ExtraField => Boolean(x && typeof x.column === "string" && typeof x.label === "string"))
+    .map((f) => ({ column: f.column, label: f.label, ...(f.answers && typeof f.answers === "object" && !Array.isArray(f.answers) ? { answers: f.answers } : {}) }));
+}
+
+const same = (a: string) => a.replace(/\s+/g, " ").trim().toLowerCase();
+
+/** The short answer set for this value, else the value as it is. */
+export function shortAnswer(field: Pick<ExtraField, "answers">, value: string): string {
+  if (!value || !field.answers) return value;
+  const want = same(value);
+  for (const [long, short] of Object.entries(field.answers)) if (short.trim() && same(long) === want) return short.trim();
+  return value;
 }
 
 /** The camper's value for an extra field, from their row in the latest import. */

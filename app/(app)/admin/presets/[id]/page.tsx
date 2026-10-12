@@ -1,6 +1,6 @@
 import { loadExtraFields } from "@/lib/data/extra-fields";
 import { notFound } from "next/navigation";
-import { Lock } from "lucide-react";
+import { Copy, Lock } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/section";
 import { ActionForm } from "@/components/action-form";
@@ -13,7 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
 import { FIELDS, UNGATED_GROUPS, type FieldGroup } from "@/lib/fields";
 import { AUDIENCES, FIELD_GROUPS } from "@/lib/labels";
-import { deletePreset, savePreset } from "../actions";
+import { copyPreset, deletePreset, savePreset } from "../actions";
 
 export const metadata = { title: "List layout" };
 
@@ -40,7 +40,20 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="space-y-6">
-      <PageHeader back={{ href: "/admin/presets", label: "List layouts" }} title={isNew ? "New list layout" : preset!.name} />
+      <PageHeader
+        back={{ href: "/admin/presets", label: "List layouts" }}
+        title={isNew ? "New list layout" : preset!.name}
+        actions={
+          !isNew && (
+            <ActionForm action={copyPreset}>
+              <input type="hidden" name="id" value={preset!.id} />
+              <Button type="submit" variant="outline" title="A copy to change, keeping this one as it is">
+                <Copy /> Make a copy
+              </Button>
+            </ActionForm>
+          )
+        }
+      />
       <ActionForm action={savePreset} className="grid gap-6 lg:grid-cols-[340px_1fr]">
         <input type="hidden" name="id" value={preset?.id ?? ""} />
         <Section title="About this layout">

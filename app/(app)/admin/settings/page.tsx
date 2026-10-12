@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { createClient } from "@/lib/supabase/server";
-import { requireAdmin } from "@/lib/auth/current-user";
+import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
+import { extraAnswers } from "@/lib/data/extra-fields";
+import type { ExtraField } from "@/lib/import/extra-fields";
 import Link from "next/link";
 import { saveExtraFields, saveImportSettings, saveMissingRules, saveOfficeEmail } from "./actions";
 import { parseExtraFields } from "@/lib/import/extra-fields";
@@ -22,6 +24,8 @@ export default async function SettingsPage() {
   const officeEmail = setting("office_email");
   const imp = setting("import");
   const extraFields = parseExtraFields(settings?.find((x) => x.key === "extra_fields")?.value);
+  const session = await getActiveSession();
+  const answers = session ? await extraAnswers(session.id, extraFields) : new Map();
   const missing = { ...DEFAULT_RULES, ...(setting("missing_rules") as Partial<MissingRules>) };
 
   return (
@@ -66,13 +70,16 @@ export default async function SettingsPage() {
         ) : (
           <ActionForm action={saveExtraFields} warnUnsaved className="group space-y-3">
             {extraFields.map((f) => (
-              <div key={f.column} className="grid items-center gap-2 sm:grid-cols-[1fr_1fr_auto]">
-                <input type="hidden" name="column" value={f.column} />
-                <span className="truncate font-mono text-xs text-muted-foreground">{f.column}</span>
-                <Input name="label" defaultValue={f.label} aria-label={`Name for ${f.column}`} dir="auto" />
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" name={`keep:${f.column}`} defaultChecked className="size-4" /> Show
-                </label>
+              <div key={f.column} className="space-y-2 rounded-lg border p-3">
+                <div className="grid items-center gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                  <input type="hidden" name="column" value={f.column} />
+                  <span className="truncate font-mono text-xs text-muted-foreground">{f.column}</span>
+                  <Input name="label" defaultValue={f.label} aria-label={`Name for ${f.column}`} dir="auto" />
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name={`keep:${f.column}`} defaultChecked className="size-4" /> Show
+                  </label>
+                </div>
+                <ShortAnswers field={f} answers={answers.get(f.column)} />
               </div>
             ))}
             <span className="flex items-center gap-3">
@@ -118,5 +125,39 @@ export default async function SettingsPage() {
         </Section>
       </div>
     </div>
+  );
+}
+
+/** Short wording for each different answer (shown on the camper page and in lists). */
+function ShortAnswers({ field, answers }: { field: ExtraField; answers: { value: string; count: number }[] | null | undefined }) {
+  if (answers === undefined) return null;
+  if (answers === null) return <p className="text-xs text-muted-foreground">Answers here are written freely (too many different ones to shorten).</p>;
+  if (!answers.length) return <p className="text-xs text-muted-foreground">No answers yet in this session.</p>;
+  const set = Object.keys(field.answers ?? {}).filter((k) => field.answers![k]).length;
+  return (
+    <details className="text-sm" open={answers.some((a) => a.value.length > 25) && !set}>
+      <summary className="cursor-pointer text-xs text-muted-foreground">
+        Short answers ({answers.length} different{set ? `, ${set} shortened` : ""})
+      </summary>
+      <div className="mt-2 space-y-1.5">
+        <p className="text-xs text-muted-foreground">How each answer shows on the camper page and in lists. Leave empty to show it as it is.</p>
+        {answers.map((a) => (
+          <div key={a.value} className="grid items-center gap-2 sm:grid-cols-[1fr_220px]">
+            <input type="hidden" name={`orig:${field.column}`} value={a.value} />
+            <span className="text-xs" dir="auto">
+              {a.value} <span className="text-muted-foreground">· {a.count}</span>
+            </span>
+            <Input
+              name={`short:${field.column}`}
+              defaultValue={Object.entries(field.answers ?? {}).find(([k]) => k.trim().toLowerCase() === a.value.trim().toLowerCase())?.[1] ?? ""}
+              placeholder="Short answer"
+              aria-label={`Short answer for ${a.value}`}
+              className="h-8"
+              dir="auto"
+            />
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { compareBunkNames } from "@/lib/bunk-order";
 import { extraValuesFor, loadExtraFields, visibleExtraFields } from "@/lib/data/extra-fields";
 import { notFound } from "next/navigation";
 import { Phone, Mail } from "lucide-react";
@@ -79,7 +80,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
   };
   const placeable = (bunks ?? [])
     .filter((d) => canAccessBunk(user, d.id, null, "edit") || d.id === c.division_id)
-    .map((d) => ({ ...d, bunks: [...(d.bunks as { id: string; name: string; sort_order: number }[])].sort((a, b) => a.sort_order - b.sort_order) }));
+    .map((d) => ({ ...d, bunks: [...(d.bunks as { id: string; name: string; sort_order: number }[])].sort((a, b) => a.sort_order - b.sort_order || compareBunkNames(a.name, b.name)) }));
   const groups = visibleFieldGroups(user, fv ?? []);
   // extra columns from the registration export (sleeping at the Kinus, yarmulka size…)
   const extraFields = visibleExtraFields(await loadExtraFields(), groups);

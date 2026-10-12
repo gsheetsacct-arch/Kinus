@@ -48,3 +48,23 @@ export async function deletePreset(fd: FormData): Promise<ActionResult> {
   revalidatePath("/admin/presets");
   return ok("Layout deleted.", "/admin/presets");
 }
+
+/** A copy of a layout to change, without touching the original (opens the copy). */
+export async function copyPreset(fd: FormData): Promise<ActionResult> {
+  const me = await requireAdmin();
+  try {
+    const supabase = await createClient();
+    const { data: p, error } = await supabase.from("list_presets").select("name, audience, columns, sort, group_by").eq("id", String(fd.get("id"))).single();
+    if (error || !p) return fail("Layout not found.");
+    const { data: names } = await supabase.from("list_presets").select("name");
+    let name = `Copy of ${p.name}`;
+    for (let n = 2; names?.some((x) => x.name === name); n++) name = `Copy of ${p.name} (${n})`;
+    const { data: copy, error: e } = await supabase.from("list_presets").insert({ ...p, name, is_default: false, created_by: me.id }).select("id").single();
+    if (e) throw e;
+    revalidatePath("/admin/presets");
+    revalidatePath("/lists");
+    return ok(`“${name}” made. Change it here.`, `/admin/presets/${copy.id}`);
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
