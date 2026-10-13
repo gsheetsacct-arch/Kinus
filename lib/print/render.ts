@@ -1,5 +1,6 @@
 import { code128Svg, qrSvg } from "./barcode";
 import { embeddedFontCss } from "./fonts";
+import { FONTS, fontStack } from "./font-families";
 import { fill } from "./merge";
 import { sheetPlacement, type Layer, type PrintItem, type SheetLayout, type TemplateSpec } from "./types";
 import { DEFAULT_MIN_PT, PX_PER_PT } from "./render-constants";
@@ -36,9 +37,9 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
       const fields = [...l.text.matchAll(/\{\{[^{}]+\}\}/g)];
       if (fields.length && fields.every((m) => fill(m[0], get).trim() === "")) return "";
       const text = fill(l.text, get);
-      const style = `${pos}font-size:${l.size}pt;font-weight:${l.weight ?? 400};text-align:${l.align ?? "left"};color:${safeColor(l.color, "#111111")};justify-content:${l.align === "center" ? "center" : l.align === "right" ? "flex-end" : "flex-start"};`;
+      const style = `${pos}font-size:${l.size}pt;font-weight:${l.weight ?? 400};text-align:${l.align ?? "left"};color:${safeColor(l.color, "#111111")};justify-content:${l.align === "center" ? "center" : l.align === "right" ? "flex-end" : "flex-start"};${l.font && l.font !== "sans" ? `font-family:${fontStack(l.font)};` : ""}${l.italic ? "font-style:italic;" : ""}`;
       const fitAttr = l.fit !== false ? `data-fit data-min="${((l.minSize ?? DEFAULT_MIN_PT) * PX_PER_PT).toFixed(2)}"` : "";
-      return `<div class="l t${l.wrap ? " wrap" : ""}" ${fitAttr} style="${style}"><span dir="auto">${esc(text)}</span></div>`;
+      return `<div class="l t${l.wrap ? " wrap" : ""}" ${fitAttr} style="${esc(style)}"><span dir="auto"${l.underline ? ' style="text-decoration:underline"' : ""}>${esc(text)}</span></div>`;
     }
     case "barcode": {
       const text = fill(l.text, get);
@@ -114,7 +115,7 @@ export function renderDocument(
     body = tags.join("");
   }
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(t.name)}</title><style>
-${embeddedFontCss()}
+${embeddedFontCss(t.layers.flatMap((l) => (l.type === "text" && l.font ? [FONTS[l.font]?.family ?? "Kinus Sans"] : [])))}
 ${pageCss}
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}
 body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}

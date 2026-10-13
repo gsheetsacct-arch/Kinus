@@ -11,6 +11,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { isAdmin } from "@/lib/auth/permissions";
 import { imageDataUrls, backgroundDataUrl, toSpec } from "@/lib/print/data";
 import { embeddedFontCss } from "@/lib/print/fonts";
+import { FONTS } from "@/lib/print/font-families";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { deleteTemplate, uploadBackground } from "../../actions";
 
@@ -89,7 +90,7 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
           ) : undefined
         }
       />
-      <style dangerouslySetInnerHTML={{ __html: embeddedFontCss() }} />
+      <style dangerouslySetInnerHTML={{ __html: embeddedFontCss(Object.values(FONTS).map((f) => f.family)) }} />
       {initial.name.startsWith("(retired)") && (
         <Callout tone="warning">This template is retired: it isn&apos;t offered for printing or on camper cards. To use it again, copy it (the copy is a normal template).</Callout>
       )}

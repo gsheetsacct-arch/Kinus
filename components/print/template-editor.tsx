@@ -17,6 +17,7 @@ import {
   Copy,
   Eye,
   Image as ImageIcon,
+  Italic,
   Plus,
   Printer,
   QrCode,
@@ -24,6 +25,7 @@ import {
   Square,
   Trash2,
   Type,
+  Underline,
   Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,8 +40,10 @@ import { fitPreview } from "@/lib/print/fit-preview";
 import { sheetPlacement, type Layer, type SheetLayout, type TemplateSpec } from "@/lib/print/types";
 import { presetSummary, type LabelPreset } from "@/lib/print/presets";
 import { currentPreset, LabelPicker, SheetDiagram, sizeText } from "./label-picker";
-import { previewTemplate, previewValues, saveTemplate, uploadTemplateImage } from "@/app/(app)/print/actions";
+import { fitCheckPeople, previewTemplate, previewValues, saveTemplate, uploadTemplateImage } from "@/app/(app)/print/actions";
 import { TagCanvas, type FitInfo } from "./tag-canvas";
+import { boxCapPt, checkFit, type FitPerson, type FitResult } from "./fit-check";
+import { FONTS, type FontKey } from "@/lib/print/font-families";
 import { useCode } from "./code-image";
 import { fill } from "@/lib/print/merge";
 import { LeaveGuard } from "@/components/leave-guard";
@@ -146,6 +150,16 @@ function Num({ label, value, onChange, step = 0.5, min, max, whole }: { label: s
         }}
         onBlur={() => {
           focused.current = false;
+          // too big or too small: the nearest number that works (e.g. the biggest size the box holds)
+          const n = Number(text);
+          if (text.trim() !== "" && Number.isFinite(n)) {
+            const c = Math.min(max ?? Infinity, Math.max(min ?? -Infinity, whole ? Math.round(n) : n));
+            if (c !== value) {
+              onChange(c);
+              setText(String(c));
+              return;
+            }
+          }
           setText(Number.isFinite(value) ? String(value) : "");
         }}
         className="h-9"
@@ -206,6 +220,140 @@ function BarcodeCheck({ l, values }: { l: Extract<Layer, { type: "barcode" }>; v
   );
 }
 
+/**
+ * Size and fitting for a text part, said plainly: the biggest size the box can hold, what
+ * happens for the camper shown, and, measured for every camper, who'd be cut off and how to fix it.
+ */
+function TextSizes({
+  l,
+  fit,
+  every,
+  checking,
+  camper,
+  onChange,
+  onShow,
+}: {
+  l: Extract<Layer, { type: "text" }>;
+  fit: FitInfo | undefined;
+  every: FitResult | undefined;
+  checking: boolean;
+  camper: string;
+  onChange: (patch: Partial<Extract<Layer, { type: "text" }>>) => void;
+  onShow: (code: string) => void;
+}) {
+  const cap = boxCapPt(l);
+  const min = l.minSize ?? Math.min(DEFAULT_MIN_PT, l.size);
+  const shrinks = l.fit !== false;
+  const tone = (t: "ok" | "warn" | "bad") =>
+    t === "bad"
+      ? "border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100"
+      : t === "warn"
+        ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+        : "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100";
+  const names = (list: { name: string; code: string }[]) => (
+    <span className="mt-1 flex flex-wrap gap-1">
+      {list.slice(0, 6).map((c) => (
+        <button key={c.code + c.name} type="button" onClick={() => c.code && onShow(c.code)} className="rounded border border-current/30 bg-white/60 px-1.5 py-0.5 text-[11px] font-medium hover:bg-white dark:bg-black/20" title="Show this camper on the tag" dir="auto">
+          {c.name}
+        </button>
+      ))}
+      {list.length > 6 && <span className="self-center text-[11px]">and {list.length - 6} more</span>}
+    </span>
+  );
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <Num label="Text size (pt)" step={1} min={3} max={cap} value={Math.min(l.size, Math.max(cap, 3))} onChange={(n) => onChange({ size: n, ...(l.minSize !== undefined && l.minSize > n ? { minSize: n } : {}) })} />
+        {shrinks ? (
+          <Num label="Never smaller than (pt)" step={1} min={3} max={l.size} value={min} onChange={(n) => onChange({ minSize: n })} />
+        ) : (
+          <p className="self-end pb-2 text-xs text-muted-foreground">Doesn&apos;t shrink: long text is cut off.</p>
+        )}
+      </div>
+      <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+        This box holds text up to {cap} pt.
+        {l.size > cap ? (
+          <button type="button" className="font-medium text-red-700 underline dark:text-red-300" onClick={() => onChange({ size: cap, ...(min > cap ? { minSize: cap } : {}) })}>
+            {l.size} pt is too big for it: use {cap} pt
+          </button>
+        ) : (
+          l.size < cap && (
+            <button type="button" className="text-primary hover:underline" onClick={() => onChange({ size: cap })}>
+              Use the biggest
+            </button>
+          )
+        )}
+      </p>
+      {fit && (
+        <p className={cn("rounded-md border px-2.5 py-2 text-sm", tone(fit.overflow ? "bad" : fit.pt < l.size ? "warn" : "ok"))}>
+          {fit.overflow ? (
+            <>
+              <strong>Cut off</strong> for {camper || "this camper"}, even at {min} pt.
+            </>
+          ) : fit.pt < l.size ? (
+            <>
+              Shrinks to <strong>{fit.pt} pt</strong> for {camper || "this camper"}.
+            </>
+          ) : (
+            <>
+              Fits at <strong>{l.size} pt</strong> for {camper || "this camper"}.
+            </>
+          )}
+        </p>
+      )}
+      <div className={cn("rounded-md border px-2.5 py-2 text-sm", every ? tone(every.cut.length ? "bad" : every.smallest && every.smallest.pt < l.size ? "warn" : "ok") : "bg-muted text-muted-foreground")}>
+        <p className="text-xs font-semibold uppercase tracking-wide opacity-80">Every camper</p>
+        {!every ? (
+          <p className="text-xs">{checking ? "Checking every camper…" : "Nothing to check: this part has no fields."}</p>
+        ) : every.cut.length ? (
+          <>
+            <p>
+              <strong>
+                {every.cut.length} of {every.checked}
+              </strong>{" "}
+              {every.cut.length === 1 ? "camper is" : "campers are"} cut off{shrinks ? ` even at ${min} pt` : ""}:
+            </p>
+            {names(every.cut)}
+            <span className="mt-2 flex flex-wrap gap-1.5">
+              {shrinks && every.needPt !== null && every.needPt >= 4 && every.needPt < min && (
+                <Button size="sm" variant="outline" className="h-7 bg-white/70 text-xs dark:bg-black/20" onClick={() => onChange({ minSize: every.needPt! })}>
+                  Let it shrink to {every.needPt} pt
+                </Button>
+              )}
+              {!shrinks && (
+                <Button size="sm" variant="outline" className="h-7 bg-white/70 text-xs dark:bg-black/20" onClick={() => onChange({ fit: true })}>
+                  Shrink long text
+                </Button>
+              )}
+              {!l.wrap && (
+                <Button size="sm" variant="outline" className="h-7 bg-white/70 text-xs dark:bg-black/20" onClick={() => onChange({ wrap: true })}>
+                  Allow 2 lines
+                </Button>
+              )}
+            </span>
+            <p className="mt-1 text-xs opacity-80">Or make the box wider.</p>
+          </>
+        ) : every.checked ? (
+          <p>
+            All {every.checked} fit.
+            {every.smallest && every.smallest.pt < l.size ? (
+              <>
+                {" "}
+                Smallest is <strong>{every.smallest.pt} pt</strong>:
+                {names([every.smallest])}
+              </>
+            ) : (
+              <> Everyone prints at {l.size} pt.</>
+            )}
+          </p>
+        ) : (
+          <p className="text-xs">No camper has anything in this part.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function TemplateEditor({
   initial,
   fields,
@@ -240,6 +388,9 @@ export function TemplateEditor({
   const [preview, setPreview] = React.useState<string | null>(null);
   const frame = React.useRef<HTMLIFrameElement>(null);
   const [picking, setPicking] = React.useState(false);
+  // every camper's values for the fields used, to measure each text part for everyone
+  const [people, setPeople] = React.useState<FitPerson[] | null>(null);
+  const [fitResults, setFitResults] = React.useState<Record<string, FitResult>>({});
 
   // Undo / redo: a snapshot before each change. Changes to the same thing in quick succession
   // (a drag, typing a word, nudging) are one step.
@@ -477,6 +628,37 @@ export function TemplateEditor({
   const hidden = used.filter((k) => fields.some((f) => f.key === k && !f.enabled));
   // a field that doesn't exist prints nothing: usually a typo ({{BARCOD}}, {{first}})
   const unknown = used.filter((k) => !fields.some((f) => f.key === k)).map((k) => ({ key: k, like: fields.find((f) => f.key.toLowerCase() === k.toLowerCase() || f.key.replace(/_/g, "") === k.toUpperCase().replace(/[^A-Z0-9]/g, ""))?.key }));
+  // the fit check: every camper's values for the fields this template uses (fetched again
+  // when a new field is added), then each text part measured for each of them
+  const knownUsed = used.filter((k) => fields.some((f) => f.key === k)).sort();
+  const usedKey = knownUsed.join(",");
+  React.useEffect(() => {
+    let live = true;
+    setPeople(null);
+    fitCheckPeople(usedKey ? usedKey.split(",") : [])
+      .then((r) => live && setPeople(r.ok ? r.people : []))
+      .catch(() => live && setPeople([]));
+    return () => {
+      live = false;
+    };
+  }, [usedKey]);
+  const textLayersKey = JSON.stringify(t.layers.filter((l) => l.type === "text"));
+  React.useEffect(() => {
+    if (!people) return;
+    let live = true;
+    const timer = setTimeout(async () => {
+      await document.fonts?.ready.catch(() => undefined);
+      if (!live) return;
+      const out: Record<string, FitResult> = {};
+      for (const l of JSON.parse(textLayersKey) as Extract<Layer, { type: "text" }>[]) if (/\{\{/.test(l.text)) out[l.id] = checkFit(l, people);
+      setFitResults(out);
+    }, 400);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [people, textLayersKey]);
+  const cutParts = Object.entries(fitResults).filter(([id, r]) => r.cut.length && t.layers.some((l) => l.id === id));
   const sheet = t.sheet_layout;
   const preset = currentPreset(W, H, sheet);
   const placed = sheet ? sheetPlacement(sheet, W, H, sheet.paper === "a4" ? 210 : 215.9) : null;
@@ -676,6 +858,20 @@ export function TemplateEditor({
               </dl>
             </details>
           )}
+          {cutParts.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 rounded-md bg-red-50 px-2 py-1.5 text-xs text-red-800 dark:bg-red-950/40 dark:text-red-200">
+              <AlertTriangle className="size-3.5 shrink-0" />
+              <span>Text is cut off for some campers:</span>
+              {cutParts.map(([id, r]) => {
+                const l = t.layers.find((x) => x.id === id)!;
+                return (
+                  <button key={id} type="button" onClick={() => setSelected(id)} className="rounded border border-red-300 bg-white px-1.5 py-0.5 font-medium hover:bg-red-100 dark:border-red-800 dark:bg-transparent" dir="auto">
+                    {describe(l, labels)}: {r.cut.length} {r.cut.length === 1 ? "camper" : "campers"}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {unknown.length > 0 && (
             <p className="flex items-start gap-1.5 rounded-md bg-red-50 px-2 py-1.5 text-xs text-red-800 dark:bg-red-950/40 dark:text-red-200">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -751,19 +947,33 @@ export function TemplateEditor({
                 {sel.type !== "box" && sel.type !== "image" && <MergeText key={sel.id} label={sel.type === "text" ? "Says" : "Code"} value={sel.text} onChange={(v) => setLayer(sel.id, { text: v })} fields={fields} />}
                 {sel.type === "text" && (
                   <>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Num label="Text size (pt)" step={1} min={3} max={200} value={sel.size} onChange={(n) => setLayer(sel.id, { size: n, ...(sel.minSize !== undefined && sel.minSize > n ? { minSize: n } : {}) })} />
-                      <Num label="Never smaller than (pt)" step={1} min={3} max={sel.size} value={sel.minSize ?? Math.min(DEFAULT_MIN_PT, sel.size)} onChange={(n) => setLayer(sel.id, { minSize: n })} />
+                    <TextSizes
+                      l={sel}
+                      fit={fit}
+                      every={fitResults[sel.id]}
+                      checking={people === null}
+                      camper={sample.label}
+                      onChange={(patch) => setLayer(sel.id, patch)}
+                      onShow={(c) => {
+                        setWho("code");
+                        setCode(c);
+                      }}
+                    />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Select aria-label="Font" value={sel.font ?? "sans"} onChange={(e) => setLayer(sel.id, { font: e.target.value as FontKey })} className="h-9 w-auto flex-1">
+                        {(Object.entries(FONTS) as [FontKey, (typeof FONTS)[FontKey]][]).map(([k, f]) => (
+                          <option key={k} value={k}>
+                            {f.label} ({f.sample})
+                          </option>
+                        ))}
+                      </Select>
+                      <Button size="icon" variant={sel.italic ? "default" : "outline"} className="size-9" onClick={() => setLayer(sel.id, { italic: !sel.italic })} aria-label="Italic" aria-pressed={Boolean(sel.italic)}>
+                        <Italic />
+                      </Button>
+                      <Button size="icon" variant={sel.underline ? "default" : "outline"} className="size-9" onClick={() => setLayer(sel.id, { underline: !sel.underline })} aria-label="Underline" aria-pressed={Boolean(sel.underline)}>
+                        <Underline />
+                      </Button>
                     </div>
-                    <p className={cn("rounded-md px-2 py-1.5 text-xs", fit?.overflow ? "bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100" : "bg-muted text-muted-foreground")}>
-                      {!fit
-                        ? "Short text prints at this size; longer text shrinks to stay in the box."
-                        : fit.overflow
-                          ? `Too long for this box even at ${sel.minSize ?? DEFAULT_MIN_PT} pt: make the box bigger, allow more than one line, or lower the minimum.`
-                          : fit.pt < sel.size
-                            ? `Shrinks to ${fit.pt} pt for this camper (shorter text prints at ${sel.size} pt). Make the box wider to keep it bigger.`
-                            : `Fits at ${sel.size} pt.`}
-                    </p>
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Button size="icon" variant={sel.weight === 700 ? "default" : "outline"} className="size-9" onClick={() => setLayer(sel.id, { weight: sel.weight === 700 ? 400 : 700 })} aria-label="Bold" aria-pressed={sel.weight === 700}>
                         <Bold />
@@ -864,7 +1074,11 @@ export function TemplateEditor({
                       <span className="truncate font-mono text-xs" dir="auto">
                         {describe(l, labels)}
                       </span>
-                      {fits[l.id]?.overflow && <AlertTriangle className="size-3.5 shrink-0 text-amber-500" aria-label="Doesn't fit" />}
+                      {(fits[l.id]?.overflow || fitResults[l.id]?.cut.length) && (
+                        <span className="ml-auto flex shrink-0 items-center gap-1 rounded bg-red-100 px-1.5 text-[11px] font-medium text-red-800 dark:bg-red-950 dark:text-red-200" title="Cut off for some campers">
+                          <AlertTriangle className="size-3" /> {fitResults[l.id]?.cut.length || "cut"}
+                        </span>
+                      )}
                     </button>
                     <Button size="icon" variant="ghost" className="size-7" onClick={() => move(i, 1)} disabled={i === t.layers.length - 1} aria-label="Bring forward">
                       <ArrowUp />

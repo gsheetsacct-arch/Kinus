@@ -246,7 +246,7 @@ async function requireAdminUser() {
 
 const num = (min: number, max: number) => z.coerce.number().min(min).max(max);
 const layerSchema = z.discriminatedUnion("type", [
-  z.object({ id: z.string(), type: z.literal("text"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), size: num(3, 200), weight: z.union([z.literal(400), z.literal(700)]).optional(), align: z.enum(["left", "center", "right"]).optional(), color: z.string().max(40).optional(), fit: z.boolean().optional(), wrap: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(), minSize: num(3, 200).optional() }),
+  z.object({ id: z.string(), type: z.literal("text"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), size: num(3, 200), weight: z.union([z.literal(400), z.literal(700)]).optional(), align: z.enum(["left", "center", "right"]).optional(), color: z.string().max(40).optional(), fit: z.boolean().optional(), wrap: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(), minSize: num(3, 200).optional(), font: z.enum(["sans", "rounded", "serif", "display"]).optional(), italic: z.boolean().optional(), underline: z.boolean().optional() }),
   z.object({ id: z.string(), type: z.literal("barcode"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), showText: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional() }),
   z.object({ id: z.string(), type: z.literal("qr"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500) }),
   z.object({
@@ -642,6 +642,39 @@ export async function previewValues(
   const [setup, [c]] = await Promise.all([loadMergeSetup(admin), loadPrintCampers(admin, [id])]);
   if (!c) return { error: "Camper not found." };
   return { values: mergeValues(c, setup.fields, setup.maps), label: `${c.first_name} ${c.last_name}${who.kind === "longest" ? " (longest name)" : ""}` };
+}
+
+/**
+ * Every camper's values for these fields (the camp chosen at the top), for the editor's fit
+ * check: it measures each text part for each camper exactly as it prints.
+ */
+export async function fitCheckPeople(keys: string[]): Promise<{ ok: true; people: { name: string; code: string; values: Record<string, string> }[] } | { ok: false; error: string }> {
+  try {
+    await requirePrinter();
+    const session = await getActiveSession();
+    if (!session) return { ok: true, people: [] };
+    const wanted = [...new Set(keys.filter((k) => /^[A-Z0-9_]{1,40}$/.test(k)))].slice(0, 40);
+    if (!wanted.length) return { ok: true, people: [] };
+    const { fetchAll } = await import("@/lib/supabase/fetch-all");
+    const camp = await getCampContext();
+    const supabase = await createClient();
+    const rows = await fetchAll((from, to) => {
+      let q = supabase.from("campers").select("id").eq("session_id", session.id).is("archived_at", null);
+      if (camp.divisionIds) q = q.in("division_id", camp.divisionIds);
+      return q.order("id").range(from, to);
+    });
+    const admin = createAdminClient();
+    const [setup, campers] = await Promise.all([loadMergeSetup(admin), loadPrintCampers(admin, rows.slice(0, 3000).map((r) => r.id))]);
+    return {
+      ok: true,
+      people: campers.map((c) => {
+        const v = mergeValues(c, setup.fields, setup.maps);
+        return { name: `${c.first_name} ${c.last_name}`, code: String((c as { camper_code?: string }).camper_code ?? ""), values: Object.fromEntries(wanted.map((k) => [k, v[k] ?? ""])) };
+      }),
+    };
+  } catch (e) {
+    return { ok: false, error: errorMessage(e) };
+  }
 }
 
 /** Put a field on the merge list or take it off (it keeps printing where a template uses it). */
