@@ -513,3 +513,32 @@ export async function resetCheckinPassword(id: string, chosen?: string): Promise
     return fail(errorMessage(e));
   }
 }
+
+/**
+ * Final check-out for a check-in login: "gone home" for every division of its camp, on the
+ * Final check-out page. It reaches the whole camp, so only someone over all of that camp may
+ * turn it on or off.
+ */
+export async function setFinalCheckout(id: string, on: boolean): Promise<ActionResult> {
+  const me = await requireStaffManager();
+  try {
+    const admin = createAdminClient();
+    const [{ data: p }, { data: scopes }] = await Promise.all([
+      admin.from("profiles").select("id, login, full_name").eq("id", id).single(),
+      admin.from("staff_scopes").select("division_id").eq("user_id", id),
+    ]);
+    if (!p || p.login !== "shared") return fail("Final check-out is for check-in logins.");
+    await assertCanManage(me, [id]);
+    const groupOf = await divisionGroupLookup();
+    const camps = [...new Set((scopes ?? []).map((s) => (s.division_id ? groupOf(s.division_id) : null)).filter((g): g is string => Boolean(g)))];
+    if (!camps.length) return fail("This login isn't in a division.");
+    if (!canGrantAreas(me, camps.map((g) => ({ group_id: g, division_id: null, bunk_id: null })), false, groupOf))
+      return fail("Final check-out reaches every division of the camp: a director over the whole camp turns it on.");
+    const { error } = await admin.from("profiles").update({ final_checkout: on }).eq("id", id);
+    if (error) return fail(/final_checkout/.test(error.message) ? "The database needs updating first (migration 0029)." : error.message);
+    revalidatePath("/admin/users");
+    return ok(on ? "Final check-out is on for this login: it now has a Final check-out page for the whole camp." : "Final check-out is off for this login.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}

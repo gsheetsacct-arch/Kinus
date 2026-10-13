@@ -9,14 +9,31 @@ difference between modes is *what* the scan does, never *how many* scans it take
 | Mode | A scan of a camper… | If the camper is already in that state |
 |---|---|---|
 | **Check in** | records an arrival (or a return if they were out) → green flash, beep, 6-second Undo | "Already in since 9:12 (Rivky)" — soft flash, nothing recorded |
-| **Check out** | records a check-out → blue/amber flash, beep, 6-second Undo | "Already out since 13:40 (Shmuli)" — soft flash, nothing recorded |
+| **Check out · coming back** | records a check-out for now (status `out`) → amber flash, beep, Undo | "Already out since 13:40 (Shmuli)" — soft flash, nothing recorded |
 | **Lookup** | opens the camper card; nothing is recorded until a button is tapped | — |
 
-Check-out has a sticky sub-toggle, visible under the segmented control:
-**Coming back** (temporary, status `out`) / **Going home** (final, status
-`departed`). The default follows the "today" setting (normal day → Coming back;
-pickup day → Going home) and the user can flip it at any time. The current choice
-is always written on the flash so a mistake is obvious and undoable.
+Check out on this screen is always **coming back** (status `out`). Going home (status
+`departed`) at the end of camp is **Final check-out**, its own page (5.1a); a camper
+going home early (sick…) is "Not coming back" on their camper card, for head staff and
+directors (never check-in logins).
+
+## 5.1a Final check-out
+
+The end of camp is one place for all of a camp's divisions (American, Hebrew…). The
+**Final check-out** page (`/checkout`) has one mode: every scan or tap records **gone
+home** (`pickup` → `departed`), with the same camera, USB scanner, search, flash and Undo
+as Check in. At the top: how many are still here in the camp, per division, and (tap a
+division) who. A camper who never checked in says "Never checked in this session"; one
+from another camp says which ("Not in American: Hebrew Division").
+
+Who: **check-in logins given final check-out** (Staff → Check-in logins → *Final
+check-out*, turned on by a director over that whole camp), and directors over all of camp
+(for the camp chosen at the top of the menu). Such a login searches and checks out every
+camper of its camp **on this page only**; its lists, Who's here and Check in stay its own
+division. The database allows the same and no more (migration 0029:
+`profiles.final_checkout`, `my_checkout_divisions()`, `can_final_checkout()`;
+`record_attendance` and `undo_attendance` accept `pickup` for those campers; tests in
+`supabase/tests/final_checkout.sql`).
 
 Mode is per device (remembered locally). Admins can set the default mode and the
 day type for everyone in Settings. The segmented control is big enough to switch
@@ -72,8 +89,9 @@ Opened by Lookup mode, by tapping a row on the status board, or by tapping the
 - **Call parent** opens a sheet listing contacts (mother, father, emergency 1/2)
   with `tel:` links and copy; `sms:` on long-press. Only if contacts are visible to
   this user.
-- **Check out ▾** opens the Coming back / Going home choice plus an optional reason
-  (Parent · Doctor · Other) and note. **Check in** records arrival or return.
+- **Check out · coming back** records a check-out for now; **Not coming back** (head
+  staff and directors, not check-in logins) asks once more with an optional reason.
+  **Check in** records arrival or return.
 - **Details** → full camper page (contacts, medical per visibility, timeline,
   import history, bunk move, staff notes).
 

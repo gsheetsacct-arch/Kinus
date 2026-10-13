@@ -1,16 +1,17 @@
 "use client";
 import * as React from "react";
 import { toast } from "sonner";
-import { Camera as CameraIcon, CameraOff, LogIn, LogOut, Search, Undo2, Volume2, VolumeX } from "lucide-react";
+import { Camera as CameraIcon, CameraOff, DoorOpen, LogIn, LogOut, Search, Undo2, Volume2, VolumeX } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { normalizeName } from "@/lib/import/normalize";
-import { findScanCode, looksLikeScan, type OutKind, type ScanMode } from "@/lib/attendance/scan";
+import { findScanCode, looksLikeScan, type ScanMode } from "@/lib/attendance/scan";
 import type { CamperStatus } from "@/lib/attendance/machine";
 import { cn, formatTime } from "@/lib/utils";
 import { lookupCode, rosterStatuses, scanCamper, undoScan } from "@/app/(app)/scan/actions";
+import { checkoutStatuses, finalCheckout, lookupCheckoutCode } from "@/app/(app)/checkout/actions";
 import { CamperCard, type TemplateButton } from "./camper-card";
 import { Camera } from "./camera";
 import { feedback } from "./feedback";
@@ -33,15 +34,27 @@ const UNDO_MS = 25000;
 const MAX_RESULTS = 12;
 const MODE_KEEP_MS = 3 * 60 * 60 * 1000;
 
-export function Scanner({ roster, templates, canScan, divisions = [] }: { roster: RosterEntry[]; templates: TemplateButton[]; canScan: boolean; divisions?: Line[] }) {
+export function Scanner({
+  roster,
+  templates,
+  canScan,
+  divisions = [],
+  final,
+}: {
+  roster: RosterEntry[];
+  templates: TemplateButton[];
+  canScan: boolean;
+  divisions?: Line[];
+  /** Final check-out: every scan or tap records "gone home", for any division of the camp. */
+  final?: { campName: string; divisions: Line[] };
+}) {
   // someone who checks in more than one division says which line they're at, so a camper
-  // from another division isn't checked in by mistake
-  const multi = divisions.length > 1;
+  // from another division isn't checked in by mistake (final check-out is for all of them)
+  const multi = !final && divisions.length > 1;
   const [line, setLine] = React.useState<string | null>(null);
   const [wrong, setWrong] = React.useState<{ r: RosterEntry; method: "scan" | "manual" } | null>(null);
   const lineDiv = divisions.find((d) => d.id === line) ?? null;
-  const [mode, setMode] = React.useState<ScanMode>(canScan ? "in" : "lookup");
-  const [outKind, setOutKind] = React.useState<OutKind>("back");
+  const [mode, setMode] = React.useState<ScanMode>(final ? "out" : canScan ? "in" : "lookup");
   const [statuses, setStatuses] = React.useState<Record<string, CamperStatus>>(() => Object.fromEntries(roster.map((r) => [r.id, r.status])));
   const [q, setQ] = React.useState("");
   const [flash, setFlash] = React.useState<Flash | null>(null);
@@ -65,14 +78,10 @@ export function Scanner({ roster, templates, canScan, divisions = [] }: { roster
   // remember choices on this device
   React.useEffect(() => {
     try {
-      // a mode chosen recently (the same shift) carries over; the next morning starts on Check in
-      // the mode (and which kind of check-out) carries over within the same shift, so a phone
-      // that sleeps and reloads mid-pickup keeps checking kids out for good; next day it's Check in
-      const saved = JSON.parse(localStorage.getItem("kinus:scan-mode") ?? "null") as { m: ScanMode; o?: OutKind; at: number } | null;
-      if (saved && Date.now() - saved.at < MODE_KEEP_MS && (canScan || saved.m === "lookup")) {
-        setMode(saved.m);
-        if (saved.m === "out" && saved.o) setOutKind(saved.o);
-      }
+      // the mode carries over within the same shift, so a phone that sleeps and reloads
+      // mid-trip keeps checking kids out; the next morning starts on Check in
+      const saved = JSON.parse(localStorage.getItem("kinus:scan-mode") ?? "null") as { m: ScanMode; at: number } | null;
+      if (!final && saved && Date.now() - saved.at < MODE_KEEP_MS && (canScan || saved.m === "lookup")) setMode(saved.m);
       const savedLine = JSON.parse(localStorage.getItem("kinus:line") ?? "null") as { id: string; at: number } | null;
       if (savedLine && Date.now() - savedLine.at < MODE_KEEP_MS && (savedLine.id === ANY || divisions.some((d) => d.id === savedLine.id))) setLine(savedLine.id);
       setSound(localStorage.getItem("kinus:sound") !== "off");
@@ -91,25 +100,20 @@ export function Scanner({ roster, templates, canScan, divisions = [] }: { roster
   const choose = (m: ScanMode) => {
     setMode(m);
     try {
-      localStorage.setItem("kinus:scan-mode", JSON.stringify({ m, o: outKind, at: Date.now() }));
+      localStorage.setItem("kinus:scan-mode", JSON.stringify({ m, at: Date.now() }));
     } catch {}
     focusBox();
-  };
-  const chooseOut = (o: OutKind) => {
-    setOutKind(o);
-    try {
-      localStorage.setItem("kinus:scan-mode", JSON.stringify({ m: mode, o, at: Date.now() }));
-    } catch {}
   };
 
   // keep statuses fresh while the screen is open
   React.useEffect(() => {
-    const t = setInterval(() => rosterStatuses().then((s) => setStatuses((cur) => ({ ...cur, ...s }))).catch(() => undefined), 20000);
+    const t = setInterval(() => (final ? checkoutStatuses() : rosterStatuses()).then((s) => setStatuses((cur) => ({ ...cur, ...s }))).catch(() => undefined), 20000);
     const u = setInterval(() => setTick((x) => x + 1), 5000);
     return () => {
       clearInterval(t);
       clearInterval(u);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const show = React.useCallback((f: Flash) => {
@@ -133,7 +137,7 @@ export function Scanner({ roster, templates, canScan, divisions = [] }: { roster
       // (the camera itself ignores a tag held in view; a repeat scan here is on purpose and
       // gets "Already checked in" from the server)
       const now = Date.now();
-      const o = await scanCamper(r.id, mode, outKind, method);
+      const o = final ? await finalCheckout(r.id, method) : await scanCamper(r.id, mode as "in" | "out", "back", method);
       if (!o.ok) {
         feedback("error");
         show({ tone: "error", title: r.name, detail: o.error });
@@ -153,7 +157,7 @@ export function Scanner({ roster, templates, canScan, divisions = [] }: { roster
       }
       focusBox();
     },
-    [mode, outKind, show, focusBox, multi, line],
+    [mode, show, focusBox, multi, line, final],
   );
 
   const unreadable = React.useCallback(
@@ -176,7 +180,7 @@ export function Scanner({ roster, templates, canScan, divisions = [] }: { roster
         return true;
       }
       // not on this page: a walk-in added since, or a child in the wrong line
-      lookupCode(code)
+      ;(final ? lookupCheckoutCode(code) : lookupCode(code))
         .then((l) => {
           if (l.found) {
             setExtra((x) => [...x, l.entry]);
@@ -193,7 +197,7 @@ export function Scanner({ roster, templates, canScan, divisions = [] }: { roster
         });
       return true;
     },
-    [byCode, act, show],
+    [byCode, act, show, final],
   );
   const onCameraCode = React.useCallback((t: string) => void handleText(t, "scan"), [handleText]);
 
@@ -254,16 +258,26 @@ export function Scanner({ roster, templates, canScan, divisions = [] }: { roster
     toast.success(`Undone: ${r.name}`);
   };
 
-  const tint = mode === "in" ? "ring-status-present/40" : mode === "out" ? (outKind === "home" ? "ring-status-departed/40" : "ring-status-out/50") : "ring-border";
+  const tint = final ? "ring-status-departed/40" : mode === "in" ? "ring-status-present/40" : mode === "out" ? "ring-status-out/50" : "ring-border";
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       {multi && canScan && mode !== "lookup" && (
         <LineBar divisions={divisions} line={line} lineDiv={lineDiv} onChoose={chooseLine} />
       )}
+      {final && <CheckoutProgress campName={final.campName} divisions={final.divisions} roster={[...roster, ...extra]} statuses={statuses} />}
       <div className={cn("space-y-3 rounded-2xl border bg-card p-3 shadow-[var(--shadow-card)] ring-4", tint)}>
+        {final && (
+          <div className="flex items-center gap-3 rounded-xl bg-status-departed px-4 py-3 text-white">
+            <DoorOpen className="size-6 shrink-0" />
+            <span className="min-w-0">
+              <span className="block font-semibold">Final check-out · {final.campName}</span>
+              <span className="block text-sm opacity-90">Scanning a tag or tapping a name checks the camper out: going home.</span>
+            </span>
+          </div>
+        )}
         {!canScan && <p className="px-1 text-sm text-muted-foreground">Scan a tag or type a name to look a camper up. Your account can look campers up but not check them in.</p>}
-        <div className={cn("grid grid-cols-3 gap-2", !canScan && "hidden")} role="tablist" aria-label="What a scan does">
+        <div className={cn("grid grid-cols-3 gap-2", (!canScan || final) && "hidden")} role="tablist" aria-label="What a scan does">
           {(
             [
               ["in", "Check in", LogIn],
@@ -283,36 +297,16 @@ export function Scanner({ roster, templates, canScan, divisions = [] }: { roster
                   ? m === "in"
                     ? "bg-status-present text-white"
                     : m === "out"
-                      ? outKind === "home"
-                        ? "bg-status-departed text-white"
-                        : "bg-status-out text-amber-950"
+                      ? "bg-status-out text-amber-950"
                       : "bg-foreground text-background"
                   : "bg-muted text-muted-foreground hover:bg-muted/70",
               )}
             >
               <Icon className="size-5" />
-              {label}
+              {m === "out" ? "Check out · coming back" : label}
             </button>
           ))}
         </div>
-        {mode === "out" && (
-          <div className="grid grid-cols-2 gap-2">
-            {(
-              [
-                ["back", "Coming back later"],
-                ["home", "Not coming back"],
-              ] as const
-            ).map(([k, label]) => (
-              <button
-                key={k}
-                onClick={() => chooseOut(k)}
-                className={cn("h-10 rounded-lg border text-sm font-medium", outKind === k ? "border-foreground bg-foreground text-background" : "bg-card text-muted-foreground")}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -328,7 +322,7 @@ export function Scanner({ roster, templates, canScan, divisions = [] }: { roster
               if (matches.length === 1) act(matches[0], "manual");
               else if (!matches.length && looksLikeScan(q)) unreadable(q);
             }}
-            placeholder="Scan a tag or type a name"
+            placeholder={final ? `Scan a tag or type any camper in ${final.campName}` : "Scan a tag or type a name"}
             className="h-14 pl-11 text-lg"
             dir="auto"
             aria-label="Scan or search"
@@ -354,13 +348,13 @@ export function Scanner({ roster, templates, canScan, divisions = [] }: { roster
           ))}
         </ul>
       )}
-      {needle.length >= 2 && !matches.length && !findScanCode(q) && <p className="px-1 text-sm text-muted-foreground">No camper in your area matches “{q}”.</p>}
+      {needle.length >= 2 && !matches.length && !findScanCode(q) && <p className="px-1 text-sm text-muted-foreground">No camper {final ? `in ${final.campName}` : "in your area"} matches “{q}”.</p>}
       {allMatches.length > matches.length && <p className="px-1 text-sm text-muted-foreground">{allMatches.length - matches.length} more match: type more of the name.</p>}
 
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span className={cn(mode === "out" && "rounded-md px-2 py-1 text-sm font-semibold", mode === "out" && (outKind === "home" ? "bg-status-departed text-white" : "bg-status-out text-amber-950"))}>
+          <span className={cn(mode === "out" && !final && "rounded-md bg-status-out px-2 py-1 text-sm font-semibold text-amber-950")}>
             {mode === "in" && "Scanning a tag or tapping a name checks the camper in."}
-            {mode === "out" && (outKind === "home" ? "You're checking campers OUT for the day: not coming back." : "You're checking campers OUT: they'll come back.")}
+            {mode === "out" && !final && "You're checking campers OUT: they'll come back. Going home is Final check-out."}
             {mode === "lookup" && "Scanning a tag or tapping a name opens the camper. Nothing is recorded."}
           </span>
           <span className="flex gap-1">
@@ -407,7 +401,7 @@ export function Scanner({ roster, templates, canScan, divisions = [] }: { roster
           <ul className="divide-y overflow-hidden rounded-xl border bg-card">
             {recent.map((r) => (
               <li key={r.key} className="flex items-center gap-3 px-4 py-2.5">
-                <button className="min-w-0 flex-1 text-left" onClick={() => setCard(r.camperId)}>
+                <button className="min-w-0 flex-1 text-left disabled:cursor-default" disabled={Boolean(final)} onClick={() => setCard(r.camperId)}>
                   <span className={cn("block truncate font-medium", r.undone && "line-through opacity-60")} dir="auto">
                     {r.name}
                   </span>
@@ -474,7 +468,7 @@ export function Scanner({ roster, templates, canScan, divisions = [] }: { roster
         </DialogContent>
       </Dialog>
 
-      <Dialog open={mode !== "lookup" && Boolean(card)} onOpenChange={(o) => !o && setCard(null)}>
+      <Dialog open={!final && mode !== "lookup" && Boolean(card)} onOpenChange={(o) => !o && setCard(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="sr-only">Camper</DialogTitle>
@@ -522,5 +516,63 @@ function LineBar({ divisions, line, lineDiv, onChoose }: { divisions: Line[]; li
         Change
       </Button>
     </div>
+  );
+}
+
+/**
+ * Final check-out progress for the camp: how many are still here in each division, and (tap a
+ * division) who, so nobody is left waiting at the end.
+ */
+function CheckoutProgress({ campName, divisions, roster, statuses }: { campName: string; divisions: Line[]; roster: RosterEntry[]; statuses: Record<string, CamperStatus> }) {
+  const [open, setOpen] = React.useState<string | null>(null);
+  const status = (r: RosterEntry) => statuses[r.id] ?? r.status;
+  const here = (r: RosterEntry) => status(r) === "present" || status(r) === "out";
+  const per = divisions.map((d) => {
+    const mine = roster.filter((r) => r.div === d.id);
+    return { d, left: mine.filter(here), gone: mine.filter((r) => status(r) === "departed").length };
+  });
+  const left = per.reduce((n, p) => n + p.left.length, 0);
+  const gone = per.reduce((n, p) => n + p.gone, 0);
+  const shown = per.find((p) => p.d.id === open);
+  return (
+    <section className="space-y-2 rounded-2xl border bg-card p-3 shadow-[var(--shadow-card)]">
+      <p className="px-1 text-sm">
+        <span className="font-semibold" dir="auto">{campName}</span>: <strong>{left}</strong> still here · {gone} gone home
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {per.map((p) => (
+          <button
+            key={p.d.id}
+            type="button"
+            onClick={() => setOpen(open === p.d.id ? null : p.d.id)}
+            aria-pressed={open === p.d.id}
+            className={cn("flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm", open === p.d.id ? "border-foreground bg-foreground text-background" : "bg-background hover:bg-muted", !p.left.length && "opacity-60")}
+          >
+            <span className="size-2.5 rounded-full" style={{ background: p.d.color ?? "var(--muted-foreground)" }} />
+            <span dir="auto">{p.d.name}</span>
+            <span className="font-semibold">{p.left.length ? `${p.left.length} left` : "all gone"}</span>
+          </button>
+        ))}
+      </div>
+      {shown && (
+        <ul className="max-h-64 divide-y overflow-y-auto rounded-lg border text-sm">
+          {shown.left
+            .slice()
+            .sort((a, b) => a.where.localeCompare(b.where) || a.last.localeCompare(b.last))
+            .map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                <span className="truncate" dir="auto">
+                  {r.name}
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground" dir="auto">
+                  {r.where.split(" · ").slice(1).join(" · ")}
+                  {status(r) === "out" && " · out now"}
+                </span>
+              </li>
+            ))}
+          {!shown.left.length && <li className="px-3 py-3 text-muted-foreground">Everyone in {shown.d.name} has gone home.</li>}
+        </ul>
+      )}
+    </section>
   );
 }

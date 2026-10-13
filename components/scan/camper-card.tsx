@@ -173,7 +173,9 @@ export function CamperCard({
       )}
       {canScan && !confirming && (
         <div className="grid gap-2 sm:grid-cols-2">
-          {cardActions(card.status).map((a) => (
+          {cardActions(card.status)
+            .filter((a) => card.canSendHome !== false || a.tone !== "home")
+            .map((a) => (
             <Button
               key={a.event + a.label}
               size="xl"

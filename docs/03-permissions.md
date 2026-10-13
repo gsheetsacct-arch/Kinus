@@ -66,6 +66,10 @@ every division in it, including divisions added to the group later.
   my own*; *New password* asks the same, the bin removes it (its check-ins stay). A
   check-in login only gets Check in, Who's here, Not here yet, Campers and Phone book:
   no Home, Lists, Print or account settings (`CurrentUser.checkinLogin`, `buildNav`).
+  It checks out "coming back" only; going home is Final check-out.
+  **Final check-out** (a switch on each login, turned on by a director over that whole
+  camp) adds the Final check-out page, where the login finds and checks out (going home)
+  every camper of its camp; everything else stays its own division (05 §5.1a).
   Check-in helpers who sign in with their own email also get Not here yet.
   Head staff and directors check in with their own accounts.
 

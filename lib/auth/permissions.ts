@@ -20,6 +20,8 @@ export type CurrentUser = {
   coverage: { division_id: string; bunk_id: string | null }[];
   /** A division's shared check-in login (the phones at its check-in line): check-in pages only. */
   checkinLogin?: boolean;
+  /** A check-in login also used for final check-out: "gone home" for every division of its camp. */
+  finalCheckout?: boolean;
 };
 
 export const LEVEL_RANK: Record<AccessLevel, number> = { view: 1, scan: 2, edit: 3 };
@@ -127,3 +129,6 @@ export const phoneBookHeadsOnly = (u: CurrentUser) => u.role === "counselor" || 
 
 /** Not here yet (who hasn't arrived, and following up): everyone but bunk counselors, check-in helpers and check-in logins included. */
 export const canFollowUp = (u: CurrentUser) => u.role !== "counselor";
+
+/** The Final check-out page: check-in logins given it, and directors over all of camp (who can record going home anyway). */
+export const canFinalCheckout = (u: CurrentUser) => Boolean(u.finalCheckout) || (seesAllCamp(u) && LEVEL_RANK[effectiveLevel(u)] >= LEVEL_RANK.scan);
