@@ -91,7 +91,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
               <ActionForm action={sendSignInLink}>
                 <input type="hidden" name="email" value={p.email} />
                 <Button variant="outline" type="submit">
-                  <Mail /> Email a sign-in link
+                  <Mail /> {signIn && !signIn.confirmed ? "Email the invitation again" : "Email a sign-in link"}
                 </Button>
               </ActionForm>
               <FormDialog
