@@ -94,3 +94,53 @@ export async function saveExtraFields(fd: FormData): Promise<ActionResult> {
     return fail(errorMessage(e));
   }
 }
+
+/**
+ * Sends a real test to the office: a sample tag made into a PDF (the same way requests are)
+ * and emailed. Says exactly what worked and what didn't.
+ */
+export async function sendTestEmail(): Promise<ActionResult> {
+  await requireAdmin();
+  try {
+    const [{ createAdminClient }, { officeEmail }, { sendEmail, emailSetup }, { htmlToPdf }, { renderDocument }, { loadMergeSetup, toSpec, backgroundDataUrl }, { mergeValues, SAMPLE_CAMPER }] = await Promise.all([
+      import("@/lib/supabase/admin"),
+      import("@/lib/print/jobs"),
+      import("@/lib/print/email"),
+      import("@/lib/print/pdf"),
+      import("@/lib/print/render"),
+      import("@/lib/print/data"),
+      import("@/lib/print/merge"),
+    ]);
+    const office = await officeEmail();
+    if (!office.to) return fail("Set the office email above first (and save it).");
+    const setup = emailSetup();
+    if (!setup.configured) return fail("Email isn't set up yet: add RESEND_API_KEY in Vercel (Settings → Environment Variables), then redeploy.");
+    // a sample tag from the first template in use, made into a PDF like a real request
+    const admin = createAdminClient();
+    const { data: templates } = await admin.from("print_templates").select("*").not("name", "like", "(retired)%").order("sort_order").limit(1);
+    let pdf: Buffer | null = null;
+    let pdfNote = "No templates yet, so no PDF was attached.";
+    if (templates?.[0]) {
+      const spec = toSpec(templates[0]);
+      const merge = await loadMergeSetup(admin);
+      try {
+        const html = renderDocument({ ...spec, sheet_layout: null }, [{ values: mergeValues(SAMPLE_CAMPER as never, merge.fields, merge.maps), copies: 1 }], { background: await backgroundDataUrl(admin, spec.background_path) });
+        pdf = await htmlToPdf(html);
+        pdfNote = `A sample “${spec.name}” PDF is attached (${Math.max(1, Math.round(pdf.length / 1024))} KB).`;
+      } catch (e) {
+        pdfNote = `The PDF couldn't be made (${e instanceof Error ? e.message : String(e)}), so requests will arrive without one; the office can still print them from the queue.`;
+      }
+    }
+    const sent = await sendEmail({
+      to: office.to.split(/[,;\s]+/).filter(Boolean),
+      cc: office.cc,
+      subject: "Kinus test email: tag requests reach you",
+      html: `<p>This is a test from Kinus Settings. Name tag and luggage tag requests will arrive at this address like this.</p><p>${pdfNote}</p>`,
+      attachments: pdf ? [{ filename: "kinus-test-tag.pdf", content: pdf }] : undefined,
+    });
+    if (!sent.sent) return fail(`Not sent: ${sent.reason}`);
+    return ok(`Test email sent to ${[office.to, ...office.cc].join(", ")}. ${pdfNote} If it doesn't arrive within a few minutes, check the spam folder.`);
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}

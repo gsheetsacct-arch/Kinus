@@ -2,52 +2,10 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCheck, FileDown, Printer, Send } from "lucide-react";
+import { CheckCheck, FileDown, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cancelJobs, markPrinted, resendJob } from "@/app/(app)/print/actions";
-import { fitPreview } from "@/lib/print/fit-preview";
-
-/**
- * The job's tags in a frame, printable from here. With autoPrint (right after "Print a
- * batch") the print dialog opens as soon as the names have been sized to fit.
- */
-export function JobPreview({ id, autoPrint }: { id: string; autoPrint: boolean }) {
-  const frame = React.useRef<HTMLIFrameElement>(null);
-  const [ready, setReady] = React.useState(false);
-  const printFrame = React.useCallback(() => frame.current?.contentWindow?.print(), []);
-  React.useEffect(() => {
-    if (!ready || !autoPrint) return;
-    printFrame();
-    // don't print again on refresh
-    window.history.replaceState(window.history.state, "", window.location.pathname);
-  }, [ready, autoPrint, printFrame]);
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">Preview</h2>
-        <Button size="sm" onClick={printFrame} disabled={!ready}>
-          <Printer /> {ready ? "Print" : "Preparing…"}
-        </Button>
-      </div>
-      <iframe
-        ref={frame}
-        src={`/print/jobs/${id}/sheet`}
-        title="Tags to print"
-        className="h-[60vh] w-full rounded-xl border bg-muted"
-        onLoad={() => {
-          const doc = frame.current?.contentDocument;
-          const wait = () => {
-            if (!doc?.body?.getAttribute("data-fitted")) return void setTimeout(wait, 100);
-            fitPreview(frame.current);
-            setReady(true);
-          };
-          wait();
-        }}
-      />
-    </div>
-  );
-}
 
 export function JobActions({ id, status, pdf, deliverTo }: { id: string; status: string; pdf: boolean; deliverTo: string }) {
   const router = useRouter();

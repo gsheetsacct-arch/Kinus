@@ -25,7 +25,7 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
   const supabase = await createClient();
   let q = supabase
     .from("print_jobs")
-    .select("id, status, item_count, requested_at, deliver_to, error, pdf_path, printed_at, note, print_templates(name), requester:requested_by(full_name), printer:printed_by(full_name)")
+    .select("id, status, item_count, requested_at, deliver_to, error, pdf_path, printed_at, note, template_id, print_templates(name), requester:requested_by(full_name), printer:printed_by(full_name)")
     .eq("session_id", session.id)
     .order("requested_at", { ascending: false })
     .limit(150);
@@ -62,6 +62,7 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
     printedAt: j.printed_at,
     note: j.note,
     who: whoByJob.get(j.id)?.join(", ") ?? null,
+    templateId: j.template_id,
     template: (j.print_templates as { name: string } | null)?.name ?? "Deleted template",
     by: (j.requester as { full_name: string } | null)?.full_name ?? "—",
     printedBy: (j.printer as { full_name: string } | null)?.full_name ?? null,

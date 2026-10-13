@@ -8,7 +8,7 @@ export const maxDuration = 60;
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!(await visibleJob(id))) return new NextResponse("Not found", { status: 404 });
-  const { html } = await jobHtml(id);
+  const { html } = await jobHtml(id, { start: Number(request.nextUrl.searchParams.get("start")) || undefined });
   const auto = request.nextUrl.searchParams.get("print") === "1";
   // print once the names have been shrunk to fit (the page sets data-fitted)
   const script = auto ? `<script>(function w(){document.body.getAttribute("data-fitted")?setTimeout(function(){window.print()},200):setTimeout(w,100)})()</script>` : "";

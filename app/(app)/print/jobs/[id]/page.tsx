@@ -3,7 +3,9 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Callout } from "@/components/callout";
 import { Section } from "@/components/section";
-import { JobActions, JobPreview } from "@/components/print/job-actions";
+import { JobActions } from "@/components/print/job-actions";
+import { PrintPanel } from "@/components/print/print-panel";
+import { printSetSummary, sheetPositions } from "@/lib/print/jobs";
 import { JOB_STATUS } from "@/lib/print/labels";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { createClient } from "@/lib/supabase/server";
@@ -53,7 +55,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
             Making the PDF… this page updates when it&apos;s done.
           </p>
         ) : (
-          <JobPreview id={job.id} autoPrint={sp.print === "1"} />
+          <JobPrint id={job.id} open={job.status !== "printed" && job.status !== "cancelled"} autoPrint={sp.print === "1"} />
         )}
         <div className="space-y-6">
           <Section title="Actions">
@@ -80,5 +82,21 @@ export default async function JobPage({ params, searchParams }: { params: Promis
         </div>
       </div>
     </div>
+  );
+}
+
+async function JobPrint({ id, open, autoPrint }: { id: string; open: boolean; autoPrint: boolean }) {
+  const [summary, positions] = await Promise.all([printSetSummary([id]).catch((e: unknown) => (e instanceof Error ? e : new Error(String(e)))), sheetPositions()]);
+  if (summary instanceof Error) return <Callout tone="warning">{summary.message}</Callout>;
+  return (
+    <PrintPanel
+      jobIds={[id]}
+      stock={summary.stock}
+      remembered={summary.stock ? (positions[summary.stock.key] ?? 1) : 1}
+      parts={summary.parts}
+      tags={summary.tags}
+      open={open}
+      autoPrint={autoPrint}
+    />
   );
 }
