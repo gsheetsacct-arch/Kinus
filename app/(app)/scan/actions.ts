@@ -198,12 +198,13 @@ export async function requestTag(camperId: string, templateId: string, opts: { c
     const [{ data: staff }, office] = await Promise.all([createAdminClient().from("profiles").select("id").eq("email", deliverTo).eq("is_active", true).maybeSingle(), officeEmail()]);
     if (!staff && ![office.to, ...office.cc].some((a) => a.toLowerCase() === deliverTo)) return { ok: false, error: "Tags can go to the office, to you, or to someone on staff. That address isn't any of those." };
   }
-  const copies = Math.min(10, Math.max(1, Math.round(Number(opts.copies ?? 1)) || 1));
+  // how many: as asked, else the tag's usual number
+  const copies = opts.copies === undefined ? undefined : Math.min(10, Math.max(1, Math.round(Number(opts.copies)) || 1));
   try {
     const job = await createPrintJob(user, { sessionId: session.id, templateId, camperIds: [camperId], copies, deliverTo });
     const base = await appUrl();
     after(() => processPrintJob(job.id, base));
-    return { ok: true, message: `${copies > 1 ? `${copies} copies sent` : "Sent"} to ${deliverTo ?? "the office"}.` };
+    return { ok: true, message: `${job.copies > 1 ? `${job.copies} sent` : "Sent"} to ${deliverTo ?? "the office"}.` };
   } catch (e) {
     return { ok: false, error: errorMessage(e) };
   }

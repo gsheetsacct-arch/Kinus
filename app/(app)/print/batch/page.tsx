@@ -16,7 +16,8 @@ export default async function BatchPage() {
   const supabase = await createClient();
   const [tree, { data: templates }, office] = await Promise.all([
     loadAreaTree(supabase, session.id),
-    supabase.from("print_templates").select("id, name").not("name", "like", "(retired)%").order("sort_order").order("name"),
+    // whole rows: works before migration 0028 (copies), when every tag is one each
+    supabase.from("print_templates").select("*").not("name", "like", "(retired)%").order("sort_order").order("name"),
     officeEmail(),
   ]);
   const allowed = visibleDivisionIds(user);
@@ -25,7 +26,7 @@ export default async function BatchPage() {
     <div>
       <PageHeader title="Print a batch" description="Name tags or luggage tags for a whole camp, division or bunk, sorted by bunk." />
       <BatchForm
-        templates={templates ?? []}
+        templates={(templates ?? []).map((t) => ({ id: t.id, name: t.name, copies: Number((t as { copies?: number }).copies) || 1 }))}
         divisions={divisions}
         campLabel={camp.camps.length > 1 ? (camp.current ? `All of ${camp.current.name}` : "All camps") : "Everyone"}
         officeTo={office.to}

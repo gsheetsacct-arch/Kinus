@@ -91,8 +91,11 @@ export async function campersInScope(db: DB, sessionId: string, scope: { divisio
   return rows.map((r) => r.id);
 }
 
+/** Printing order: division (1, 2, 3, then the rest), bunk (Alef-Beis), name; no division or bunk yet comes last. */
 export const byBunkThenName = (a: PrintCamper, b: PrintCamper) =>
+  Number(!a.division_name) - Number(!b.division_name) ||
   compareDivisionNames(a.division_name ?? "", b.division_name ?? "") ||
+  Number(!a.bunk_name) - Number(!b.bunk_name) ||
   compareBunkNames(a.bunk_name ?? "", b.bunk_name ?? "") ||
   a.last_name.localeCompare(b.last_name) ||
   a.first_name.localeCompare(b.first_name);

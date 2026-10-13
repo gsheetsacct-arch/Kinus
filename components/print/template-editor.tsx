@@ -21,7 +21,7 @@ import { useCode } from "./code-image";
 import { fill } from "@/lib/print/merge";
 import { LeaveGuard } from "@/components/leave-guard";
 
-export type EditorTemplate = TemplateSpec & { show_on_card: boolean; auto_on_first_checkin: boolean };
+export type EditorTemplate = TemplateSpec & { show_on_card: boolean; auto_on_first_checkin: boolean; copies: number };
 export type MergeKey = { key: string; label: string; enabled: boolean };
 
 const ICON = { text: Type, barcode: Barcode, qr: QrCode, box: Square } as const;
@@ -557,6 +557,23 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
                   </div>
                 </details>
               )}
+              <label className="flex items-center justify-between gap-3">
+                <span className="text-sm">
+                  <span className="font-medium">How many per camper</span>
+                  <span className="block text-xs text-muted-foreground">
+                    For labels each camper needs more than one of (luggage, bedding…). Used for batches, requests from the camper card and automatic prints; it can still be changed each time.
+                  </span>
+                </span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={t.copies}
+                  onChange={(e) => update({ copies: Math.min(10, Math.max(1, Math.round(Number(e.target.value) || 1))) })}
+                  className="w-20 shrink-0"
+                  aria-label="How many per camper"
+                />
+              </label>
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm">
                   <span className="font-medium">Print button at check-in</span>

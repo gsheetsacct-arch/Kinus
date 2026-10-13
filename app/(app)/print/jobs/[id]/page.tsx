@@ -98,6 +98,7 @@ async function JobPrint({ id, open, autoPrint }: { id: string; open: boolean; au
       remembered={sheet.used}
       parts={summary.parts}
       tags={summary.tags}
+      campers={summary.campers}
       open={open}
       autoPrint={autoPrint}
     />

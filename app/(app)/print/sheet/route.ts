@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
       start: Number(sp.get("start")) || undefined,
       used: used === null ? undefined : used.split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0),
       divisionId: division === null ? undefined : division === "none" ? null : division,
+      copies: Number(sp.get("copies")) || undefined,
     });
     const auto = sp.get("print") === "1";
     const script = auto ? `<script>(function w(){document.body.getAttribute("data-fitted")?setTimeout(function(){window.print()},200):setTimeout(w,100)})()</script>` : "";

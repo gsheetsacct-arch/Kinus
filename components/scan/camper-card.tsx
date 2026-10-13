@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { AlertTriangle, ChevronRight, MoreHorizontal, Phone, Printer, Undo2 } from "lucide-react";
+import { AlertTriangle, ChevronRight, Phone, Printer, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -13,7 +13,8 @@ import type { AttendanceEventType, CamperStatus } from "@/lib/attendance/machine
 import { cn, formatPhone, formatTime, formatWhen } from "@/lib/utils";
 import { loadCard, recordFromCard, requestTag, undoScan, type CardData, type ScanOutcome } from "@/app/(app)/scan/actions";
 
-export type TemplateButton = { id: string; name: string };
+export type { TemplateButton } from "@/lib/print/card-templates";
+import type { TemplateButton } from "@/lib/print/card-templates";
 const TONE: Record<string, string> = {
   in: "bg-status-present text-white hover:bg-status-present/90",
   out: "bg-status-out text-amber-950 hover:bg-status-out/90",
@@ -201,14 +202,21 @@ export function CamperCard({
                     aria-label={`Send ${t.name} to the office to print`}
                   >
                     <Printer className="size-4" /> {t.name}
+                    {t.copies > 1 && <span className="rounded bg-muted px-1.5 text-xs font-semibold">×{t.copies}</span>}
                     {p && (
                       <span className={cn("text-xs font-normal", p.status === "failed" ? "text-destructive" : "text-muted-foreground")}>
                         · {PRINT_LABEL[p.status] ?? p.status} {formatTime(p.at)}
                       </span>
                     )}
                   </button>
-                  <button type="button" className="border-l bg-card px-2.5 text-muted-foreground hover:bg-muted" onClick={() => setPrintOpts(t)} aria-label={`Copies or send ${t.name} somewhere else`} title="Copies / send to…">
-                    <MoreHorizontal className="size-4" />
+                  <button
+                    type="button"
+                    className="border-l bg-card px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted"
+                    onClick={() => setPrintOpts(t)}
+                    aria-label={`How many ${t.name}, or send it somewhere else`}
+                    title="How many, or send it somewhere else"
+                  >
+                    How many?
                   </button>
                 </span>
               );
@@ -248,17 +256,45 @@ function PrintOptions({ template, onClose, onSend }: { template: TemplateButton 
   const [copies, setCopies] = React.useState(1);
   const [to, setTo] = React.useState("");
   React.useEffect(() => {
-    if (template) setTo(localStorage.getItem("kinus:print-to") ?? "");
+    if (!template) return;
+    // starts at the tag's usual number
+    setCopies(template.copies);
+    try {
+      setTo(localStorage.getItem("kinus:print-to") ?? "");
+    } catch {}
   }, [template]);
   return (
     <Dialog open={Boolean(template)} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{template?.name}</DialogTitle>
+          <DialogTitle>{template?.name}: how many?</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <Field label="Copies" htmlFor="copies">
-            <Input id="copies" type="number" min={1} max={10} value={copies} onChange={(e) => setCopies(Number(e.target.value) || 1)} onBlur={() => setCopies((c) => Math.min(10, Math.max(1, Math.round(c))))} className="w-24" />
+          <Field label="How many" htmlFor="copies" hint={template && template.copies > 1 ? `Usually ${template.copies} for each camper.` : undefined}>
+            <div className="flex flex-wrap items-center gap-2">
+              {[1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setCopies(n)}
+                  aria-pressed={copies === n}
+                  className={cn("size-11 rounded-lg border text-base font-semibold", copies === n ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:bg-muted")}
+                >
+                  {n}
+                </button>
+              ))}
+              <Input
+                id="copies"
+                type="number"
+                min={1}
+                max={10}
+                value={copies}
+                onChange={(e) => setCopies(Number(e.target.value) || 1)}
+                onBlur={() => setCopies((c) => Math.min(10, Math.max(1, Math.round(c))))}
+                className="w-20"
+                aria-label="Or type how many"
+              />
+            </div>
           </Field>
           <Field label="Send to (leave empty for the office)" htmlFor="send-to" hint="For example if the office printer is down today. Remembered on this device.">
             <Input id="send-to" type="email" value={to} onChange={(e) => setTo(e.target.value)} placeholder="office email" />

@@ -46,6 +46,7 @@ export default async function PrintTogetherPage({ searchParams }: { searchParams
         remembered={sheet.used}
         parts={summary.parts}
         tags={summary.tags}
+      campers={summary.campers}
         open={open}
         canSplit
       />

@@ -275,6 +275,7 @@ const templateSchema = z.object({
   sheet_layout: sheetSchema.nullable(),
   show_on_card: z.boolean(),
   auto_on_first_checkin: z.boolean(),
+  copies: z.coerce.number().int().min(1).max(10).default(1),
 });
 export type TemplateInput = z.input<typeof templateSchema>;
 
@@ -283,16 +284,38 @@ export async function saveTemplate(input: TemplateInput): Promise<ActionResult &
     await requireAdminUser();
     const t = templateSchema.parse(input);
     const supabase = await createClient();
-    const row = { name: t.name, kind: t.kind, page_width_mm: t.page_width_mm, page_height_mm: t.page_height_mm, layers: t.layers, sheet_layout: t.sheet_layout, show_on_card: t.show_on_card, auto_on_first_checkin: t.auto_on_first_checkin, updated_at: new Date().toISOString() };
+    const row = {
+      name: t.name,
+      kind: t.kind,
+      page_width_mm: t.page_width_mm,
+      page_height_mm: t.page_height_mm,
+      layers: t.layers,
+      sheet_layout: t.sheet_layout,
+      show_on_card: t.show_on_card,
+      auto_on_first_checkin: t.auto_on_first_checkin,
+      copies: t.copies,
+      updated_at: new Date().toISOString(),
+    };
+    // before migration 0028 there's no "copies": save the rest, and say so only if it matters
+    const noCopiesYet = (e: { message: string } | null) => Boolean(e && /copies/.test(e.message));
+    const withoutCopies = Object.fromEntries(Object.entries(row).filter(([k]) => k !== "copies")) as Omit<typeof row, "copies">;
     if (t.id) {
-      const { error } = await supabase.from("print_templates").update(row).eq("id", t.id);
+      let { error } = await supabase.from("print_templates").update(row).eq("id", t.id);
+      if (noCopiesYet(error)) {
+        if (t.copies !== 1) throw new Error("To set how many per camper, run migration 0028 in Supabase first.");
+        ({ error } = await supabase.from("print_templates").update(withoutCopies).eq("id", t.id));
+      }
       if (error) throw error;
       revalidatePath("/print/templates");
       return { ...ok("Template saved."), id: t.id };
     }
     const { count } = await supabase.from("print_templates").select("id", { count: "exact", head: true });
-    const { data, error } = await supabase.from("print_templates").insert({ ...row, sort_order: (count ?? 0) + 1 }).select("id").single();
-    if (error) throw error;
+    let { data, error } = await supabase.from("print_templates").insert({ ...row, sort_order: (count ?? 0) + 1 }).select("id").single();
+    if (noCopiesYet(error)) {
+      if (t.copies !== 1) throw new Error("To set how many per camper, run migration 0028 in Supabase first.");
+      ({ data, error } = await supabase.from("print_templates").insert({ ...withoutCopies, sort_order: (count ?? 0) + 1 }).select("id").single());
+    }
+    if (error || !data) throw error ?? new Error("The template wasn't saved.");
     revalidatePath("/print/templates");
     return { ...ok("Template created.", `/print/templates/${data.id}`), id: data.id };
   } catch (e) {
@@ -306,7 +329,17 @@ export async function duplicateTemplate(fd: FormData): Promise<ActionResult> {
     const supabase = await createClient();
     const { data: t } = await supabase.from("print_templates").select("*").eq("id", String(fd.get("id"))).single();
     if (!t) return fail("Template not found.");
-    const copy = { kind: t.kind, division_id: t.division_id, page_width_mm: t.page_width_mm, page_height_mm: t.page_height_mm, background_path: t.background_path, layers: t.layers, sheet_layout: t.sheet_layout, sort_order: t.sort_order + 1 };
+    const copy = {
+      kind: t.kind,
+      division_id: t.division_id,
+      page_width_mm: t.page_width_mm,
+      page_height_mm: t.page_height_mm,
+      background_path: t.background_path,
+      layers: t.layers,
+      sheet_layout: t.sheet_layout,
+      sort_order: t.sort_order + 1,
+      ...("copies" in t ? { copies: t.copies } : {}),
+    };
     const { data, error } = await supabase.from("print_templates").insert({ ...copy, name: `${t.name} (copy)`, show_on_card: false, auto_on_first_checkin: false }).select("id").single();
     if (error) throw error;
     revalidatePath("/print/templates");

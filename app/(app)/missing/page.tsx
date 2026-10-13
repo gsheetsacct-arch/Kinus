@@ -14,6 +14,7 @@ import { loadBoard } from "@/lib/data/board";
 import { everyoneLabel, getCampContext } from "@/lib/data/camp";
 import { campStarted, loadFollowups, loadRules } from "@/lib/data/missing";
 import { defaultScope } from "@/lib/attendance/board";
+import { loadCardTemplates } from "@/lib/print/card-templates";
 
 // tag requests (and the test email) make a PDF in the background
 export const maxDuration = 60;
@@ -30,7 +31,7 @@ export default async function MissingPage() {
   const [{ data: fv }, tree, { data: templates }, rules, followups] = await Promise.all([
     supabase.from("field_visibility").select("field_group, roles"),
     loadAreaTree(supabase, session.id),
-    supabase.from("print_templates").select("id, name").eq("show_on_card", true).order("sort_order").order("name"),
+    loadCardTemplates(supabase).then((data) => ({ data })),
     loadRules(supabase),
     loadFollowups(supabase, session.id),
   ]);

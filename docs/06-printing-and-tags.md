@@ -194,6 +194,28 @@ template + merge fields + camper(s) ─► HTML (React, print CSS, mm units, emb
    **Open PDF**, **Mark printed**, **Re-send** (with "to" override). Marking printed
    updates the card ("Printed 9:44").
 
+### How many of each
+
+A template says how many labels each camper usually gets (`print_templates.copies`,
+migration 0028; Template settings → **How many per camper**, 1–10; the templates list shows
+"2 per camper"). It's the starting number everywhere:
+- the camper card's button ("Luggage tag ×2": one tap asks for 2) and its **How many?**
+  (quick 1–4, or type up to 10; remembers nothing, starts at the usual number each time);
+- batches (Copies of each starts at it); automatic prints at first check-in; "print the
+  new ones".
+When printing (one request or several together) **How many of each** can override it for
+that print: *As asked* (each request's own number) or 1–4 of each.
+
+Before migration 0028 everything keeps working with one of each (templates are read
+whole; saving a number other than 1 asks for the migration).
+
+### Printing order
+
+Every print is sorted by division (1, 2, 3…, then the rest), bunk (Alef-Beis order), then
+name; campers without a division or bunk come last, and copies of a label sit together
+(`byBunkThenName`). That holds for single requests, batches, requests printed together
+(the left-overs from check-in) and each division printed on its own.
+
 ### Printing requests together
 
 The queue groups waiting requests for the same template ("Name tag: 4 requests

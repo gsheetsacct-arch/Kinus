@@ -16,7 +16,7 @@ import { deleteTemplate, uploadBackground } from "../../actions";
 export const metadata = { title: "Template" };
 export const maxDuration = 60;
 
-const BLANK: EditorTemplate = { name: "New template", kind: "name_tag", page_width_mm: 90, page_height_mm: 55, layers: [], sheet_layout: null, show_on_card: false, auto_on_first_checkin: false };
+const BLANK: EditorTemplate = { name: "New template", kind: "name_tag", page_width_mm: 90, page_height_mm: 55, layers: [], sheet_layout: null, show_on_card: false, auto_on_first_checkin: false, copies: 1 };
 
 export default async function TemplatePage({ params }: { params: Promise<{ id: string }> }) {
   const [user, { id }] = await Promise.all([requireUser(), params]);
@@ -29,7 +29,7 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
     if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
     const { data: t } = await supabase.from("print_templates").select("*").eq("id", id).maybeSingle();
     if (!t) notFound();
-    initial = { ...toSpec(t), show_on_card: t.show_on_card, auto_on_first_checkin: t.auto_on_first_checkin };
+    initial = { ...toSpec(t), show_on_card: t.show_on_card, auto_on_first_checkin: t.auto_on_first_checkin, copies: Number((t as { copies?: number }).copies) || 1 };
   }
   // the background and the print fonts, so the canvas looks and measures like the print
   const backgroundUrl = initial.background_path ? await backgroundDataUrl(createAdminClient(), initial.background_path) : null;

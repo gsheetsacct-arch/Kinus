@@ -13,6 +13,7 @@ import { campStarted, loadFollowups, loadRules } from "@/lib/data/missing";
 import { everyoneLabel, getCampContext } from "@/lib/data/camp";
 import { decodeScope, defaultScope } from "@/lib/attendance/board";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
+import { loadCardTemplates } from "@/lib/print/card-templates";
 
 export const metadata = { title: "Who's here" };
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ export default async function StatusPage({ searchParams }: { searchParams: Promi
   const [{ data: fv }, tree, { data: templates }] = await Promise.all([
     supabase.from("field_visibility").select("field_group, roles"),
     loadAreaTree(supabase, session.id),
-    supabase.from("print_templates").select("id, name").eq("show_on_card", true).order("sort_order").order("name"),
+    loadCardTemplates(supabase).then((data) => ({ data })),
   ]);
   const [rows, rules, followups, started] = await Promise.all([
     loadBoard(supabase, session.id, visibleFieldGroups(user, fv ?? []).has("contacts"), camp.divisionIds),

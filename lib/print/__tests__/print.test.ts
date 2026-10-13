@@ -182,3 +182,12 @@ describe("labels gone here and there", async () => {
     expect(html.match(/class="tag used"/g)).toHaveLength(3);
   });
 });
+
+describe("printing order", async () => {
+  const { byBunkThenName } = await import("../data");
+  it("goes by division, bunk (Alef-Beis) and name, with no bunk last", () => {
+    const c = (division_name: string | null, bunk_name: string | null, first_name: string) => ({ division_name, bunk_name, first_name, last_name: "X" }) as never;
+    const list = [c("Division 2", "Bunk Yud", "A"), c("Division 1", null, "B"), c("Division 1", "Bunk Beis", "C"), c("BMD", "Bunk Alef", "D"), c("Division 1", "Bunk Alef", "E"), c(null, null, "F"), c("Division 1", "Bunk Yud Alef", "G"), c("Division 1", "Bunk Yud", "H")];
+    expect(list.sort(byBunkThenName).map((x: { first_name: string }) => x.first_name).join("")).toBe("ECHGBADF");
+  });
+});

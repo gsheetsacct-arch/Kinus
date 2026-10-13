@@ -9,7 +9,7 @@ import { fitPreview } from "@/lib/print/fit-preview";
 import { cleanUsed, freeLabels, sheetsUsed, usedAfter, usedBefore, type SheetStock } from "@/lib/print/sheet-position";
 import { cn, plural } from "@/lib/utils";
 
-export type PrintPart = { divisionId: string | null; name: string; color: string | null; tags: number };
+export type PrintPart = { divisionId: string | null; name: string; color: string | null; tags: number; campers: number };
 
 /**
  * Prints one request, or several for the same tag together (all at once or one division at
@@ -23,6 +23,7 @@ export function PrintPanel({
   remembered,
   parts,
   tags,
+  campers,
   open,
   autoPrint,
   canSplit,
@@ -33,6 +34,8 @@ export function PrintPanel({
   remembered: number[];
   parts: PrintPart[];
   tags: number;
+  /** How many campers (tags can be more: copies). */
+  campers: number;
   /** Not marked printed yet. */
   open: boolean;
   autoPrint?: boolean;
@@ -45,6 +48,8 @@ export function PrintPanel({
   // what Kinus has saved for this sheet (changes here are saved when printed, or with Save)
   const [saved, setSaved] = React.useState<number[]>(stock ? cleanUsed(remembered, per) : []);
   const [picking, setPicking] = React.useState(false);
+  // how many of each: null = as asked (each request's own number)
+  const [each, setEach] = React.useState<number | null>(null);
   const [split, setSplit] = React.useState(false);
   const [part, setPart] = React.useState<PrintPart | null>(null);
   const [done, setDone] = React.useState<Set<string>>(new Set());
@@ -56,11 +61,12 @@ export function PrintPanel({
 
   const multi = split && parts.length > 1;
   const current = multi ? part : null;
-  const count = current ? current.tags : tags;
+  const count = each ? (current ? current.campers : campers) * each : current ? current.tags : tags;
   const partKey = (p: PrintPart) => p.divisionId ?? "none";
   const params = new URLSearchParams({ jobs: jobIds.join(",") });
   if (stock && used.length) params.set("used", used.join(","));
   if (current) params.set("division", partKey(current));
+  if (each) params.set("copies", String(each));
   const src = `/print/sheet?${params}`;
 
   React.useEffect(() => setReady(false), [src]);
@@ -158,6 +164,24 @@ export function PrintPanel({
           )}
         </div>
       )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium">How many of each</span>
+        <div className="inline-flex flex-wrap gap-1 rounded-lg bg-muted p-1">
+          {([null, 1, 2, 3, 4] as const).map((n) => (
+            <button
+              key={String(n)}
+              type="button"
+              onClick={() => setEach(n)}
+              aria-pressed={each === n}
+              className={cn("min-w-9 rounded-md px-2.5 py-1 text-sm", each === n ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}
+            >
+              {n ?? "As asked"}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-muted-foreground">{plural(count, "tag")} for {plural(current ? current.campers : campers, "camper")}</span>
+      </div>
 
       {stock && (
         <div className="space-y-3 rounded-xl border bg-card p-3">

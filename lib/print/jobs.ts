@@ -45,7 +45,7 @@ export async function officeEmail(): Promise<{ to: string; cc: string[] }> {
 export async function createPrintJob(
   user: CurrentUser,
   opts: { sessionId: string; templateId: string; camperIds: string[]; copies?: number; deliverTo?: string | null; note?: string | null },
-): Promise<{ id: string; count: number }> {
+): Promise<{ id: string; count: number; copies: number }> {
   const admin = createAdminClient();
   const { data: template } = await admin.from("print_templates").select("*").eq("id", opts.templateId).single();
   if (!template) throw new Error("That template no longer exists.");
@@ -64,13 +64,14 @@ export async function createPrintJob(
     .select("id")
     .single();
   if (error) throw error;
-  const copies = Math.min(Math.max(opts.copies ?? 1, 1), 10);
+  // how many of each: as asked, else the template's usual number (migration 0028)
+  const copies = Math.min(Math.max(Math.round(opts.copies ?? (Number((template as { copies?: number }).copies) || 1)), 1), 10);
   const hashes = await labelHashes(admin, toSpec(template), ids);
   for (let i = 0; i < ids.length; i += 500) {
     const { error: e } = await admin.from("print_job_items").insert(ids.slice(i, i + 500).map((camper_id) => ({ job_id: job.id, camper_id, copies, content_hash: hashes.get(camper_id) ?? null })));
     if (e) throw e;
   }
-  return { id: job.id, count: ids.length };
+  return { id: job.id, count: ids.length, copies };
 }
 
 type PrintSet = Awaited<ReturnType<typeof loadPrintSet>>;
@@ -103,19 +104,20 @@ async function loadPrintSet(jobIds: string[]) {
 
 const divisionOf = (c: { division_id?: string | null }) => c.division_id ?? null;
 
-function setHtml(set: PrintSet, opts: { start?: number; used?: number[]; divisionId?: string | null }) {
+function setHtml(set: PrintSet, opts: { start?: number; used?: number[]; divisionId?: string | null; copies?: number }) {
   const campers = opts.divisionId === undefined ? set.campers : set.campers.filter((c) => divisionOf(c as never) === opts.divisionId);
   const stock = sheetStock(set.spec);
   const html = renderDocument(
     set.spec,
-    campers.map((c) => ({ values: mergeValues(c, set.setup.fields, set.setup.maps), copies: set.copiesOf.get(c.id) ?? 1 })),
+    // copies: as asked, or the same number of each chosen when printing
+    campers.map((c) => ({ values: mergeValues(c, set.setup.fields, set.setup.maps), copies: opts.copies ? Math.min(10, Math.max(1, Math.round(opts.copies))) : (set.copiesOf.get(c.id) ?? 1) })),
     { background: set.background, usedSlots: stock ? (opts.used ?? (opts.start ? usedBefore(opts.start, stock.perSheet) : [])) : [] },
   );
   return { html, campers };
 }
 
 /** The printable page for requests printed together (all, or one division), starting at a label on a part-used sheet. */
-export async function printSetHtml(jobIds: string[], opts: { start?: number; used?: number[]; divisionId?: string | null } = {}): Promise<string> {
+export async function printSetHtml(jobIds: string[], opts: { start?: number; used?: number[]; divisionId?: string | null; copies?: number } = {}): Promise<string> {
   return setHtml(await loadPrintSet(jobIds), opts).html;
 }
 
@@ -123,12 +125,13 @@ export async function printSetHtml(jobIds: string[], opts: { start?: number; use
 export async function printSetSummary(jobIds: string[]) {
   const set = await loadPrintSet(jobIds);
   const tagsOf = (cs: typeof set.campers) => cs.reduce((n, c) => n + (set.copiesOf.get(c.id) ?? 1), 0);
-  const parts = new Map<string, { divisionId: string | null; name: string; color: string | null; tags: number }>();
+  const parts = new Map<string, { divisionId: string | null; name: string; color: string | null; tags: number; campers: number }>();
   for (const c of set.campers) {
     const id = divisionOf(c as never);
     const k = id ?? "none";
-    const p = parts.get(k) ?? { divisionId: id, name: c.division_name ?? "No division", color: c.division_color, tags: 0 };
+    const p = parts.get(k) ?? { divisionId: id, name: c.division_name ?? "No division", color: c.division_color, tags: 0, campers: 0 };
     p.tags += set.copiesOf.get(c.id) ?? 1;
+    p.campers += 1;
     parts.set(k, p);
   }
   return {
