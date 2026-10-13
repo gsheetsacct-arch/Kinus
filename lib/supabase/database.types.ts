@@ -570,14 +570,14 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "access_level": Database["public"]['Enums']["access_level"],"all_areas": boolean,"created_at": string,"email": string,"full_name": string,"id": string,"is_active": boolean,"login": string,"phone": string | null,"title": string | null,"role": Database["public"]['Enums']["staff_role"]
+                    "access_level": Database["public"]['Enums']["access_level"],"all_areas": boolean,"created_at": string,"email": string,"full_name": string,"id": string,"final_checkout": boolean,"is_active": boolean,"login": string,"phone": string | null,"title": string | null,"role": Database["public"]['Enums']["staff_role"]
                   }
                   ComputedFields: never
                   Insert: {
-                    "access_level"?: Database["public"]['Enums']["access_level"],"all_areas"?: boolean,"created_at"?: string,"email": string,"full_name": string,"id": string,"is_active"?: boolean,"login"?: string,"phone"?: string | null,"title"?: string | null,"role"?: Database["public"]['Enums']["staff_role"]
+                    "access_level"?: Database["public"]['Enums']["access_level"],"all_areas"?: boolean,"created_at"?: string,"email": string,"full_name": string,"id": string,"final_checkout"?: boolean,"is_active"?: boolean,"login"?: string,"phone"?: string | null,"title"?: string | null,"role"?: Database["public"]['Enums']["staff_role"]
                   }
                   Update: {
-                    "access_level"?: Database["public"]['Enums']["access_level"],"all_areas"?: boolean,"created_at"?: string,"email"?: string,"full_name"?: string,"id"?: string,"is_active"?: boolean,"login"?: string,"phone"?: string | null,"title"?: string | null,"role"?: Database["public"]['Enums']["staff_role"]
+                    "access_level"?: Database["public"]['Enums']["access_level"],"all_areas"?: boolean,"created_at"?: string,"email"?: string,"full_name"?: string,"id"?: string,"final_checkout"?: boolean,"is_active"?: boolean,"login"?: string,"phone"?: string | null,"title"?: string | null,"role"?: Database["public"]['Enums']["staff_role"]
                   }
                   Relationships: [
                     
@@ -867,6 +867,12 @@ isOneToOne: false
                            },
 "my_bunks":
 { Args: Record<PropertyKey, never>; Returns: string[]
+                           },
+"my_checkout_divisions":
+{ Args: Record<PropertyKey, never>; Returns: string[]
+                           },
+"can_final_checkout":
+{ Args: { p_camper_id: string }; Returns: boolean
                            },
 "my_level":
 { Args: Record<PropertyKey, never>; Returns: Database["public"]['Enums']["access_level"]

@@ -37,6 +37,11 @@ const loadAccount = cache(async (): Promise<Account> => {
     ...rows.filter((a) => a.division_id).map((a) => ({ division_id: a.division_id!, bunk_id: a.bunk_id })),
     ...grouped.map((d) => ({ division_id: d.id, bunk_id: null })),
   ];
+  // final check-out (whole camp, going home): only check-in logins get it. Read on its own, so
+  // a database without migration 0029 yet still signs everyone in.
+  const finalCheckout =
+    profile.login === "shared" &&
+    Boolean((await supabase.from("profiles").select("final_checkout").eq("id", profile.id).maybeSingle().then((r) => r.data?.final_checkout, () => false)));
   return {
     user: {
       id: profile.id,
@@ -48,6 +53,7 @@ const loadAccount = cache(async (): Promise<Account> => {
       areas: rows,
       coverage,
       checkinLogin: profile.login === "shared",
+      finalCheckout,
     },
   };
 });

@@ -65,6 +65,8 @@ export async function scanCamper(camperId: string, mode: "in" | "out", outKind: 
   // a page opened before the office switched to a new session still lists last session's campers
   const session = await getActiveSession();
   if (c.session_id !== session?.id) return { ok: false, error: "This page is from an earlier session. Reload it." };
+  // going home is recorded on Final check-out; the Check in page only checks out "coming back"
+  if (outKind === "home") outKind = "back";
   const d = decide(mode, outKind, c.status!);
   if (d.kind !== "act") return { ok: true, kind: d.kind, camperId: c.id, name: c.display_name ?? "", status: c.status!, message: d.message, since: c.last_event_at, by: c.last_event_by };
   // someone had marked them "not coming": say so, so the helper can tell the head counselor
@@ -83,12 +85,13 @@ export async function scanCamper(camperId: string, mode: "in" | "out", outKind: 
 
 /** A button on the camper card. */
 export async function recordFromCard(camperId: string, event: AttendanceEventType, note?: string): Promise<ScanOutcome> {
-  await requireUser();
+  const user = await requireUser();
   const supabase = await createClient();
   const { data: c } = await supabase.from("campers_board").select("id, display_name, session_id, archived_at").eq("id", camperId).maybeSingle();
   if (!c?.id) return { ok: false, error: "This camper isn't in your area." };
   if (c.archived_at) return { ok: false, error: "This camper is archived. Restore them from their page first." };
   if (c.session_id !== (await getActiveSession())?.id) return { ok: false, error: "This camper is from an earlier session." };
+  if (event === "pickup" && user.checkinLogin) return { ok: false, error: "Going home is recorded on Final check-out." };
   const verb = event === "arrival" ? "Checked in" : event === "return" ? "Back in" : event === "pickup" ? "Checked out · not coming back" : "Checked out · coming back";
   const tone = event === "pickup" ? "home" : event === "leave" ? "out" : "in";
   return record(c.id, c.display_name ?? "", c.session_id!, event, "manual", verb, tone, note);
@@ -150,6 +153,8 @@ export type CardData = {
   medicalFlag: boolean;
   contacts: { label: string; name: string | null; phone: string | null; tel: string | null }[] | null;
   prints: Record<string, { status: string; at: string; by: string | null }>;
+  /** "Not coming back": not for check-in logins (going home is Final check-out). */
+  canSendHome: boolean;
 };
 
 const ROLE_LABEL: Record<string, string> = { mother: "Mother", father: "Father", guardian: "Guardian", emergency: "Emergency", host: "Host", authorized_pickup: "Pickup" };
@@ -183,6 +188,7 @@ export async function loadCard(camperId: string): Promise<CardData | null> {
       ? (contacts ?? []).map((k) => ({ label: `${ROLE_LABEL[k.role] ?? k.role}${k.role === "emergency" ? ` ${k.slot}` : ""}`, name: k.name, phone: k.phone, tel: k.phone_e164 ?? k.phone }))
       : null,
     prints: Object.fromEntries((prints ?? []).filter((p) => p.template_id).map((p) => [p.template_id!, { status: p.printed_at ? "printed" : p.status, at: p.printed_at ?? p.requested_at, by: p.requested_by_name }])),
+    canSendHome: !user.checkinLogin,
   };
 }
 

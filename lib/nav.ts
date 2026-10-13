@@ -1,7 +1,7 @@
 import type { CurrentUser } from "@/lib/auth/permissions";
-import { LEVEL_RANK, canFollowUp, canUsePhoneBook, canUsePrintArea, effectiveLevel, isAdmin, isStaffManager } from "@/lib/auth/permissions";
+import { LEVEL_RANK, canFinalCheckout, canFollowUp, canUsePhoneBook, canUsePrintArea, effectiveLevel, isAdmin, isStaffManager } from "@/lib/auth/permissions";
 
-export type NavIcon = "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser" | "ShieldCheck";
+export type NavIcon = "DoorOpen" | "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser" | "ShieldCheck";
 export type NavItem = { href: string; label: string; icon: NavIcon; description: string; section: "main" | "admin"; mobile?: boolean };
 
 export function buildNav(user: CurrentUser): NavItem[] {
@@ -10,6 +10,7 @@ export function buildNav(user: CurrentUser): NavItem[] {
   if (user.checkinLogin)
     return [
       { href: "/scan", label: "Check in", icon: "ScanLine", description: "Scan or search to check campers in and out", section: "main", mobile: true },
+      ...(user.finalCheckout ? [{ href: "/checkout", label: "Final check-out", icon: "DoorOpen" as const, description: "Going home: every division of the camp", section: "main" as const, mobile: true }] : []),
       { href: "/status", label: "Who's here", icon: "Activity", description: "Live status by bunk or division", section: "main", mobile: true },
       { href: "/missing", label: "Not here yet", icon: "UserSearch", description: "Who hasn't arrived yet", section: "main", mobile: true },
       { href: "/campers", label: "Campers", icon: "Users", description: "Find any camper", section: "main", mobile: true },
@@ -20,6 +21,7 @@ export function buildNav(user: CurrentUser): NavItem[] {
     canScan
       ? { href: "/scan", label: "Check in", icon: "ScanLine", description: "Scan or search to check campers in and out", section: "main", mobile: true }
       : { href: "/scan", label: "Look up", icon: "ScanLine", description: "Scan a tag or search to open a camper", section: "main", mobile: true },
+    ...(canFinalCheckout(user) ? [{ href: "/checkout", label: "Final check-out", icon: "DoorOpen" as const, description: "Going home: every division of the camp", section: "main" as const }] : []),
     { href: "/status", label: "Who's here", icon: "Activity", description: "Live status by bunk or division", section: "main", mobile: true },
     ...(canFollowUp(user) ? [{ href: "/missing", label: "Not here yet", icon: "UserSearch" as const, description: "Who hasn't arrived, and who to check up on", section: "main" as const, mobile: true }] : []),
     { href: "/campers", label: "Campers", icon: "Users", description: "Find any camper", section: "main", mobile: true },

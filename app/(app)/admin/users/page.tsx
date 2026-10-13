@@ -65,13 +65,19 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   // the check-in logins of each division this person looks after (any number per division)
   const grantable = grantableTree(me, tree);
   const shared = (profiles ?? []).filter((p) => p.login === "shared");
+  // final check-out (read on its own: a database without migration 0029 still shows the page)
+  const { data: finals } = shared.length ? await admin.from("profiles").select("id, final_checkout").in("id", shared.map((p) => p.id)) : { data: [] };
+  const finalOn = new Set((finals ?? []).filter((f) => f.final_checkout).map((f) => f.id));
   const checkinLogins = grantable.divisions.map((d) => ({
     divisionId: d.id,
     divisionName: d.name,
     color: d.color,
+    // final check-out reaches the whole camp: only someone over all of it gives it
+    campName: tree.groups?.find((g) => g.id === d.group_id)?.name ?? null,
+    canGiveFinal: Boolean(d.group_id) && canGrantAreas(me, [{ group_id: d.group_id, division_id: null, bunk_id: null }], false, groupOf),
     accounts: shared
       .filter((p) => (areas ?? []).some((a) => a.user_id === p.id && a.division_id === d.id))
-      .map((p) => ({ id: p.id, name: checkinNameOf(p.email) ?? p.email, active: p.is_active, lastSignIn: info.get(p.id)?.lastSignInAt ?? null }))
+      .map((p) => ({ id: p.id, name: checkinNameOf(p.email) ?? p.email, active: p.is_active, lastSignIn: info.get(p.id)?.lastSignInAt ?? null, finalCheckout: finalOn.has(p.id) }))
       .sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true })),
   }));
 

@@ -2,17 +2,26 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Copy, KeyRound, Plus, RefreshCw, ScanLine, Trash2 } from "lucide-react";
+import { Copy, DoorOpen, KeyRound, Plus, RefreshCw, ScanLine, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { checkinLoginProblem, checkinName, generatePassword } from "@/lib/staff/login-kinds";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { createCheckinLogin, deletePeople, resetCheckinPassword, type CheckinResult } from "@/app/(app)/admin/users/actions";
+import { createCheckinLogin, deletePeople, resetCheckinPassword, setFinalCheckout, type CheckinResult } from "@/app/(app)/admin/users/actions";
 import { cn, formatDateTime, plural } from "@/lib/utils";
 
-export type CheckinAccount = { id: string; name: string; active: boolean; lastSignIn: string | null };
-export type CheckinLoginRow = { divisionId: string; divisionName: string; color: string | null; accounts: CheckinAccount[] };
+export type CheckinAccount = { id: string; name: string; active: boolean; lastSignIn: string | null; finalCheckout?: boolean };
+export type CheckinLoginRow = {
+  divisionId: string;
+  divisionName: string;
+  color: string | null;
+  accounts: CheckinAccount[];
+  /** The camp the division is in (American, Hebrew…), for final check-out. */
+  campName?: string | null;
+  /** Whether this person may turn final check-out on (it reaches the whole camp). */
+  canGiveFinal?: boolean;
+};
 
 /**
  * Check-in logins: shared sign-ins for the phones at a division's check-in line. A division
@@ -86,7 +95,8 @@ export function CheckinLogins({ logins }: { logins: CheckinLoginRow[] }) {
         </h2>
         <p className="text-sm text-muted-foreground">
           For the phones at a division&apos;s check-in line: they sign in with a check-in name and password. Add as many as you need, one per gate or per phone. Head staff and directors
-          check in with their own accounts.
+          check in with their own accounts. <strong className="font-medium text-foreground">Final check-out</strong> on a login adds a page for going home at the end of camp, where it
+          checks out every division of its camp (American, Hebrew…) at one place; everything else stays its own division.
         </p>
       </div>
       <ul className="divide-y">
@@ -113,6 +123,29 @@ export function CheckinLogins({ logins }: { logins: CheckinLoginRow[] }) {
                       {!a.active && " · deactivated"}
                       {a.lastSignIn ? ` · last used ${formatDateTime(a.lastSignIn)}` : " · not used yet"}
                     </span>
+                    {(l.canGiveFinal || a.finalCheckout) && (
+                      <Button
+                        size="sm"
+                        variant={a.finalCheckout ? "default" : "outline"}
+                        className={cn(a.finalCheckout && "bg-status-departed text-white hover:bg-status-departed/90")}
+                        disabled={busy !== null || !l.canGiveFinal}
+                        aria-pressed={Boolean(a.finalCheckout)}
+                        onClick={() => run(a.id, l.divisionName, async () => {
+                          const r = await setFinalCheckout(a.id, !a.finalCheckout);
+                          if (r.ok) toast.success(r.message);
+                          return r;
+                        })}
+                        title={
+                          l.canGiveFinal
+                            ? a.finalCheckout
+                              ? `Final check-out is on: this login checks out every division of ${l.campName ?? "the camp"} on the Final check-out page. Tap to turn it off.`
+                              : `Give this login final check-out: going home for every division of ${l.campName ?? "the camp"}, on its own page.`
+                            : "A director over the whole camp changes this."
+                        }
+                      >
+                        <DoorOpen /> Final check-out{a.finalCheckout ? ": on" : ""}
+                      </Button>
+                    )}
                     <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => setEditing({ division: l, account: a, name: a.name, password: "" })}>
                       <KeyRound /> {busy === a.id ? "Working…" : "New password"}
                     </Button>
