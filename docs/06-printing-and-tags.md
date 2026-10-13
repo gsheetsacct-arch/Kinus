@@ -148,15 +148,22 @@ A canvas of the tag at real proportions (Print → Templates):
 - "+ Add a field" drops a text box with that field; also plain text, barcode, QR and
   a colour block (division colour or any colour).
 - Text size is a **target**: short text prints at that size, longer text shrinks to
-  stay inside its box, never below "never smaller than". The size can't be set bigger
+  stay inside its box, down to its "smallest size". The size can't be set bigger
   than the box holds ("This box holds text up to 37 pt"; typing more settles there; a
   box made shorter afterwards says "too big for it" with a one-tap fix).
 - The panel says what happens for the camper shown ("Shrinks to 21 pt for …"), and
   **Every camper** measures the part for every camper in the camp, in the same fonts and
   steps as print: who'd be cut off even at the smallest size (names, tap one to show
-  that camper), or the smallest size anyone gets. Fixes: **Let it shrink to N pt** (the
-  size everyone fits at), **Allow 2 lines**, or a wider box. Cut-off parts are outlined
-  red with "Cut off" on the canvas, counted in the parts list and listed under the tag.
+  that camper), or the smallest size anyone gets.
+- **Longer names later** (a camper added after the template was made): a name that
+  doesn't fit at the smallest size still prints **whole**: it keeps shrinking, down to
+  4 pt (`FLOOR_PT`), and is never cut off for that. The printed page marks it
+  (`data-small`), and the office is told: on the print screen ("Printed smaller to fit:
+  Yisroel Menachem Mendel (16 pt)") and in the request email. The editor shows the same
+  in amber ("1 of 610 go under 30 pt so they fit", "Smaller to fit" on the canvas), with
+  **Allow 2 lines**, a wider box, or "**16 pt is fine**" (makes that the smallest size).
+  Only text that doesn't fit even at 4 pt is cut (red "Cut off"), or text in a part with
+  shrinking turned off.
 - **Fonts**: Clear (Noto Sans, the default), Friendly (Rubik), Classic (Frank Ruhl
   Libre), Bold display (Secular One), all with Hebrew; plus bold, italic, underline.
   Each is embedded in the printed page (`lib/print/fonts`, OFL).

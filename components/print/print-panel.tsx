@@ -2,7 +2,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, CheckCheck, Printer, RotateCcw, Save } from "lucide-react";
+import { AlertTriangle, Check, CheckCheck, Printer, RotateCcw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { markPrinted, saveSheetPosition } from "@/app/(app)/print/actions";
 import { fitPreview } from "@/lib/print/fit-preview";
@@ -69,7 +69,12 @@ export function PrintPanel({
   if (each) params.set("copies", String(each));
   const src = `/print/sheet?${params}`;
 
-  React.useEffect(() => setReady(false), [src]);
+  // names longer than the template was made for: printed smaller (whole), or cut off even so
+  const [fitNotes, setFitNotes] = React.useState<{ smaller: { text: string; pt: number }[]; cut: string[] }>({ smaller: [], cut: [] });
+  React.useEffect(() => {
+    setReady(false);
+    setFitNotes({ smaller: [], cut: [] });
+  }, [src]);
   const print = React.useCallback(() => {
     frame.current?.contentWindow?.print();
     setAsking(true);
@@ -291,6 +296,37 @@ export function PrintPanel({
         </div>
       )}
 
+      {(fitNotes.smaller.length > 0 || fitNotes.cut.length > 0) && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <div className="space-y-1">
+            {fitNotes.smaller.length > 0 && (
+              <p>
+                <strong>Printed smaller to fit</strong> (longer than the template was made for):{" "}
+                {fitNotes.smaller.slice(0, 8).map((x, i) => (
+                  <React.Fragment key={x.text}>
+                    {i > 0 && ", "}
+                    <span dir="auto">{x.text}</span> ({x.pt} pt)
+                  </React.Fragment>
+                ))}
+                {fitNotes.smaller.length > 8 && ` and ${fitNotes.smaller.length - 8} more`}. Check they&apos;re easy to read.
+              </p>
+            )}
+            {fitNotes.cut.length > 0 && (
+              <p className="text-red-800 dark:text-red-200">
+                <strong>Too long to fit at all:</strong>{" "}
+                {fitNotes.cut.slice(0, 8).map((x, i) => (
+                  <React.Fragment key={x}>
+                    {i > 0 && ", "}
+                    <span dir="auto">{x}</span>
+                  </React.Fragment>
+                ))}
+                . Make that part of the template bigger first.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
       <iframe
         key={src}
         ref={frame}
@@ -303,6 +339,14 @@ export function PrintPanel({
           const wait = () => {
             if (!doc?.body?.getAttribute("data-fitted") && tries++ < 150) return void setTimeout(wait, 100);
             fitPreview(frame.current);
+            if (doc) {
+              const seen = new Set<string>();
+              const smaller = [...doc.querySelectorAll("[data-small]:not([data-cut])")]
+                .map((el) => ({ text: (el.textContent ?? "").trim(), pt: Number(el.getAttribute("data-small")) }))
+                .filter((x) => !seen.has(x.text) && seen.add(x.text));
+              const cut = [...new Set([...doc.querySelectorAll("[data-cut]")].map((el) => (el.textContent ?? "").trim()))];
+              setFitNotes({ smaller, cut });
+            }
             setReady(true);
           };
           wait();

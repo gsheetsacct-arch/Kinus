@@ -1,7 +1,7 @@
 "use client";
 import { fill } from "@/lib/print/merge";
 import { fitText } from "@/lib/print/fit";
-import { minPt } from "@/lib/print/render-constants";
+import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
 import type { Layer } from "@/lib/print/types";
 import { fontStack, lineHeightOf } from "@/lib/print/font-families";
 
@@ -11,9 +11,11 @@ export type FitResult = {
   checked: number;
   /** The camper whose text prints smallest, and at what size. */
   smallest: { name: string; code: string; pt: number } | null;
-  /** Campers whose text doesn't fit even at the smallest size allowed. */
+  /** Campers whose text only fits under the part's smallest size: it prints that much smaller, whole. */
+  small: { name: string; code: string; pt: number }[];
+  /** Campers whose text doesn't fit even at the floor (FLOOR_PT): cut off. */
   cut: { name: string; code: string }[];
-  /** The smallest size needed so everyone fits (rounded down to half a point), or null if nobody is cut. */
+  /** The smallest size anyone needs to fit (the smallest of `small`), or null if nobody goes under. */
   needPt: number | null;
 };
 
@@ -42,9 +44,9 @@ export function checkFit(l: TextLayer, people: FitPerson[]): FitResult {
   document.body.appendChild(host);
   const target = l.size * MM_PER_PT * S;
   const min = minPt(l) * MM_PER_PT * S;
+  const floor = Math.min(FLOOR_PT, minPt(l)) * MM_PER_PT * S;
   const fields = [...l.text.matchAll(/\{\{[^{}]+\}\}/g)];
-  const out: FitResult = { checked: 0, smallest: null, cut: [], needPt: null };
-  let need = Infinity;
+  const out: FitResult = { checked: 0, smallest: null, small: [], cut: [], needPt: null };
   try {
     for (const p of people) {
       const get = (k: string) => p.values[k] ?? "";
@@ -60,19 +62,20 @@ export function checkFit(l: TextLayer, people: FitPerson[]): FitResult {
         if (over) out.cut.push({ name: p.name, code: p.code });
         continue;
       }
-      const r = fitText(box, span, target, min);
+      const r = fitText(box, span, target, min, floor);
       const pt = Math.round((r.px / (MM_PER_PT * S)) * 2) / 2;
       if (r.overflow) {
         out.cut.push({ name: p.name, code: p.code });
-        // how small it would have to go
-        const free = fitText(box, span, target, 1);
-        need = Math.min(need, free.px / (MM_PER_PT * S));
-      } else if (!out.smallest || pt < out.smallest.pt) out.smallest = { name: p.name, code: p.code, pt };
+        continue;
+      }
+      if (r.below) out.small.push({ name: p.name, code: p.code, pt });
+      if (!out.smallest || pt < out.smallest.pt) out.smallest = { name: p.name, code: p.code, pt };
     }
   } finally {
     host.remove();
   }
-  if (out.cut.length && Number.isFinite(need)) out.needPt = Math.floor(need * 2) / 2;
+  out.small.sort((a, b) => a.pt - b.pt);
+  if (out.small.length) out.needPt = out.small[0].pt;
   return out;
 }
 

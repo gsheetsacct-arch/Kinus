@@ -213,7 +213,10 @@ describe("hidden parts and line height", async () => {
   });
   it("sets each font's line height, and never lets the smallest size be above the size", async () => {
     const { minPt } = await import("../render-constants");
-    expect(renderDocument(tpl, [{ values: { FIRST: "Yossi" }, copies: 1 }])).toContain("line-height:1.5");
+    const html = renderDocument(tpl, [{ values: { FIRST: "Yossi" }, copies: 1 }]);
+    expect(html).toContain("line-height:1.5");
+    // a longer name than the template was made for goes under the smallest size (to 4 pt) rather than be cut
+    expect(html).toContain(`data-min="${(6 * 96 / 72).toFixed(2)}" data-floor="${(4 * 96 / 72).toFixed(2)}"`);
     expect(minPt({ size: 5 })).toBe(5);
     expect(minPt({ size: 20 })).toBe(6);
     expect(minPt({ size: 20, minSize: 9 })).toBe(9);

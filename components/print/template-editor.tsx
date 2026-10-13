@@ -44,7 +44,7 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { minPt } from "@/lib/print/render-constants";
+import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
 import { fitPreview } from "@/lib/print/fit-preview";
 import { sheetPlacement, type Layer, type SheetLayout, type TemplateSpec } from "@/lib/print/types";
 import { presetSummary, type LabelPreset } from "@/lib/print/presets";
@@ -351,7 +351,7 @@ function TextSizes({
       <div className="grid grid-cols-2 gap-2">
         <Num label="Text size (pt)" step={1} min={3} max={cap} value={l.size} onChange={(n) => onChange({ size: n, ...(l.minSize !== undefined && l.minSize > n ? { minSize: n } : {}) })} />
         {shrinks ? (
-          <Num label="Never smaller than (pt)" step={1} min={3} max={l.size} value={min} onChange={(n) => onChange({ minSize: n })} />
+          <Num label="Smallest size (pt)" step={1} min={3} max={l.size} value={min} onChange={(n) => onChange({ minSize: n })} />
         ) : (
           <p className="self-end pb-2 text-xs text-muted-foreground">Doesn&apos;t shrink: long text is cut off.</p>
         )}
@@ -370,11 +370,16 @@ function TextSizes({
           )
         )}
       </p>
+      {shrinks && <p className="text-xs text-muted-foreground">A longer name (one added later too) still prints whole: if it has to, it goes under the smallest size, down to {FLOOR_PT} pt, and the office is told.</p>}
       {fit && (
-        <p className={cn("rounded-md border px-2.5 py-2 text-sm", tone(fit.overflow ? "bad" : fit.pt < l.size ? "warn" : "ok"))}>
+        <p className={cn("rounded-md border px-2.5 py-2 text-sm", tone(fit.overflow ? "bad" : fit.below ? "warn" : "ok"))}>
           {fit.overflow ? (
             <>
-              <strong>Cut off</strong> for {camper || "this camper"}, even at {min} pt.
+              <strong>Cut off</strong> for {camper || "this camper"}{shrinks ? `, even at ${Math.min(FLOOR_PT, min)} pt` : ""}.
+            </>
+          ) : fit.below ? (
+            <>
+              Too long for {min} pt: goes down to <strong>{fit.pt} pt</strong> for {camper || "this camper"} so it fits.
             </>
           ) : fit.pt < l.size ? (
             <>
@@ -387,7 +392,7 @@ function TextSizes({
           )}
         </p>
       )}
-      <div className={cn("rounded-md border px-2.5 py-2 text-sm", every ? tone(every.cut.length ? "bad" : every.smallest && every.smallest.pt < l.size ? "warn" : "ok") : "bg-muted text-muted-foreground")}>
+      <div className={cn("rounded-md border px-2.5 py-2 text-sm", every ? tone(every.cut.length ? "bad" : every.small.length ? "warn" : "ok") : "bg-muted text-muted-foreground")}>
         <p className="text-xs font-semibold uppercase tracking-wide opacity-80">Every camper</p>
         {!every ? (
           <p className="text-xs">{checking ? "Checking every camper…" : "Nothing to check: this part has no fields."}</p>
@@ -397,15 +402,10 @@ function TextSizes({
               <strong>
                 {every.cut.length} of {every.checked}
               </strong>{" "}
-              {every.cut.length === 1 ? "camper is" : "campers are"} cut off{shrinks ? ` even at ${min} pt` : ""}:
+              {every.cut.length === 1 ? "camper is" : "campers are"} cut off{shrinks ? ` even at ${Math.min(FLOOR_PT, min)} pt` : ""}:
             </p>
             {names(every.cut)}
             <span className="mt-2 flex flex-wrap gap-1.5">
-              {shrinks && every.needPt !== null && every.needPt >= 4 && every.needPt < min && (
-                <Button size="sm" variant="outline" className="h-7 bg-white/70 text-xs dark:bg-black/20" onClick={() => onChange({ minSize: every.needPt! })}>
-                  Let it shrink to {every.needPt} pt
-                </Button>
-              )}
               {!shrinks && (
                 <Button size="sm" variant="outline" className="h-7 bg-white/70 text-xs dark:bg-black/20" onClick={() => onChange({ fit: true })}>
                   Shrink long text
@@ -418,6 +418,29 @@ function TextSizes({
               )}
             </span>
             <p className="mt-1 text-xs opacity-80">Or make the box wider.</p>
+          </>
+        ) : every.small.length ? (
+          <>
+            <p>
+              <strong>
+                {every.small.length} of {every.checked}
+              </strong>{" "}
+              go under {min} pt so they fit (down to {every.small[0].pt} pt). They print whole:
+            </p>
+            {names(every.small.map((c) => ({ ...c, name: `${c.name} · ${c.pt} pt` })))}
+            <span className="mt-2 flex flex-wrap gap-1.5">
+              {!l.wrap && (
+                <Button size="sm" variant="outline" className="h-7 bg-white/70 text-xs dark:bg-black/20" onClick={() => onChange({ wrap: true })}>
+                  Allow 2 lines
+                </Button>
+              )}
+              {every.needPt !== null && every.needPt >= 3 && (
+                <Button size="sm" variant="outline" className="h-7 bg-white/70 text-xs dark:bg-black/20" onClick={() => onChange({ minSize: every.needPt! })} title="Fine as they are: stop warning about them">
+                  {every.needPt} pt is fine
+                </Button>
+              )}
+            </span>
+            <p className="mt-1 text-xs opacity-80">Or make the box wider so they stay bigger.</p>
           </>
         ) : every.checked ? (
           <p>
@@ -630,7 +653,7 @@ export function TemplateEditor({
     [ls[i], ls[j]] = [ls[j], ls[i]];
     update({ layers: ls });
   };
-  const onFit = React.useCallback((id: string, info: FitInfo) => setFits((cur) => (cur[id]?.pt === info.pt && cur[id]?.overflow === info.overflow ? cur : { ...cur, [id]: info })), []);
+  const onFit = React.useCallback((id: string, info: FitInfo) => setFits((cur) => (cur[id]?.pt === info.pt && cur[id]?.overflow === info.overflow && cur[id]?.below === info.below ? cur : { ...cur, [id]: info })), []);
 
   // whose details fill the canvas; "longest" looks for the camper whose text is longest for its
   // box on this template's parts (checked again a moment after the parts change)
@@ -761,6 +784,7 @@ export function TemplateEditor({
     };
   }, [people, textLayersKey]);
   const cutParts = Object.entries(fitResults).filter(([id, r]) => r.cut.length && t.layers.some((l) => l.id === id && !l.hidden));
+  const smallParts = Object.entries(fitResults).filter(([id, r]) => !r.cut.length && r.small.length && t.layers.some((l) => l.id === id && !l.hidden));
   const sheet = t.sheet_layout;
   const preset = currentPreset(W, H, sheet);
   const placed = sheet ? sheetPlacement(sheet, W, H, sheet.paper === "a4" ? 210 : 215.9) : null;
@@ -969,6 +993,20 @@ export function TemplateEditor({
                 return (
                   <button key={id} type="button" onClick={() => setSelected([id])} className="rounded border border-red-300 bg-white px-1.5 py-0.5 font-medium hover:bg-red-100 dark:border-red-800 dark:bg-transparent" dir="auto">
                     {describe(l, labels)}: {r.cut.length} {r.cut.length === 1 ? "camper" : "campers"}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {smallParts.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+              <AlertTriangle className="size-3.5 shrink-0" />
+              <span>Some names go under the smallest size to fit:</span>
+              {smallParts.map(([id, r]) => {
+                const l = t.layers.find((x) => x.id === id)!;
+                return (
+                  <button key={id} type="button" onClick={() => setSelected([id])} className="rounded border border-amber-300 bg-white px-1.5 py-0.5 font-medium hover:bg-amber-100 dark:border-amber-800 dark:bg-transparent" dir="auto">
+                    {describe(l, labels)}: {r.small.length} {r.small.length === 1 ? "camper" : "campers"}
                   </button>
                 );
               })}
@@ -1212,10 +1250,17 @@ export function TemplateEditor({
                       <span className="truncate font-mono text-xs" dir="auto">
                         {describe(l, labels)}
                       </span>
-                      {!l.hidden && (fits[l.id]?.overflow || (fitResults[l.id]?.cut.length ?? 0) > 0) && (
+                      {!l.hidden && (fits[l.id]?.overflow || (fitResults[l.id]?.cut.length ?? 0) > 0) ? (
                         <span className="ml-auto flex shrink-0 items-center gap-1 rounded bg-red-100 px-1.5 text-[11px] font-medium text-red-800 dark:bg-red-950 dark:text-red-200" title="Cut off for some campers">
                           <AlertTriangle className="size-3" /> {fitResults[l.id]?.cut.length || "cut"}
                         </span>
+                      ) : (
+                        !l.hidden &&
+                        (fitResults[l.id]?.small.length ?? 0) > 0 && (
+                          <span className="ml-auto flex shrink-0 items-center gap-1 rounded bg-amber-100 px-1.5 text-[11px] font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200" title="Some names go under the smallest size to fit">
+                            <AlertTriangle className="size-3" /> {fitResults[l.id]!.small.length}
+                          </span>
+                        )
                       )}
                     </button>
                     <Button size="icon" variant="ghost" className={cn("size-7", !l.locked && "text-muted-foreground/50")} onClick={() => setLayer(l.id, { locked: l.locked ? undefined : true })} aria-pressed={Boolean(l.locked)} aria-label={l.locked ? "Unlock" : "Lock"} title={l.locked ? "Locked. Click to unlock." : "Lock in place"}>

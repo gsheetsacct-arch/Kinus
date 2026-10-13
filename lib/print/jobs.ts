@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { canAccessBunk, seesAllCamp, type CurrentUser } from "@/lib/auth/permissions";
 import { renderDocument } from "./render";
 import { mergeValues } from "./merge";
-import { htmlToPdf } from "./pdf";
+import { htmlToPdf, type FitNotes } from "./pdf";
 import { sendEmail } from "./email";
 import { backgroundDataUrl, byBunkThenName, imageDataUrls, loadMergeSetup, loadPrintCampers, toSpec } from "./data";
 import { contentHash, sameContent, templateKeys } from "./content";
@@ -194,10 +194,11 @@ export async function processPrintJob(jobId: string, appUrl: string, opts: { ret
     const { html, job } = await jobHtml(jobId);
     let pdf: Buffer | null = null;
     let pdfError: string | null = null;
+    let fit: FitNotes | null = null;
     try {
       // a very big batch could run out of time making the PDF: the email links to the queue instead
       if (job.tags > PDF_MAX_TAGS) throw new Error(`more than ${PDF_MAX_TAGS} tags; print it from Kinus`);
-      pdf = await htmlToPdf(html);
+      pdf = await htmlToPdf(html, (n) => (fit = n));
       const { error } = await admin.storage.from("print-output").upload(`${jobId}.pdf`, pdf, { contentType: "application/pdf", upsert: true });
       if (error) throw error;
       await admin.from("print_jobs").update({ pdf_path: `${jobId}.pdf` }).eq("id", jobId);
@@ -217,7 +218,7 @@ export async function processPrintJob(jobId: string, appUrl: string, opts: { ret
       to,
       cc: job.deliver_to && job.deliver_to !== office.to ? [] : office.cc,
       subject,
-      html: requestEmailHtml({ ...job, link, queueLink: `${appUrl}/print`, attached: Boolean(pdf) }),
+      html: requestEmailHtml({ ...job, link, queueLink: `${appUrl}/print`, attached: Boolean(pdf), fit }),
       attachments: pdf ? [{ filename: `${job.template_name.replace(/[^\w-]+/g, "-")}-${jobId.slice(0, 8)}.pdf`, content: pdf }] : undefined,
     });
     if (sent.sent) await finish({ status: "sent", email_message_id: sent.id, error: pdfError });
@@ -233,13 +234,29 @@ const escHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").re
  * The office's email for a request: who asked and for whom, and why printing from Kinus
  * (the print queue) beats printing this PDF.
  */
-export function requestEmailHtml(j: { requested_by_name: string; count: number; template_name: string; campers: string[]; note: string | null; link: string; queueLink: string; attached: boolean }): string {
+export function requestEmailHtml(j: { requested_by_name: string; count: number; template_name: string; campers: string[]; note: string | null; link: string; queueLink: string; attached: boolean; fit?: FitNotes | null }): string {
   const list = j.campers.map((c) => `<li dir="auto">${escHtml(c)}</li>`).join("");
+  // a long name that went under the template's smallest size, so it prints whole: worth a look
+  const uniq = <T,>(xs: T[], key: (x: T) => string) => [...new Map(xs.map((x) => [key(x), x])).values()];
+  const smaller = uniq(j.fit?.smaller ?? [], (x) => x.text);
+  const cut = uniq(j.fit?.cut ?? [], (x) => x);
+  const fitNote =
+    smaller.length || cut.length
+      ? `<p style="margin:0 0 16px;padding:8px 12px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;font-size:14px">${
+          smaller.length
+            ? `<strong>Printed smaller to fit:</strong> ${smaller
+                .slice(0, 8)
+                .map((x) => `<span dir="auto">${escHtml(x.text)}</span> (${x.pt} pt)`)
+                .join(", ")}${smaller.length > 8 ? ` and ${smaller.length - 8} more` : ""}. They're longer than the template was made for; check they're easy to read, or make that part of the template bigger.`
+            : ""
+        }${cut.length ? `${smaller.length ? "<br>" : ""}<strong>Too long to fit even at the smallest print:</strong> ${cut.slice(0, 8).map((x) => `<span dir="auto">${escHtml(x)}</span>`).join(", ")}. Make that part of the template bigger, then print these again.` : ""}</p>`
+      : "";
   const more = j.count > j.campers.length ? `<li>and ${j.count - j.campers.length} more</li>` : "";
   const button = "display:inline-block;background:#0f5f8a;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px;font-weight:bold";
   return `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:560px">
 <p><strong>${escHtml(j.requested_by_name)}</strong> asked for <strong>${j.count} × ${escHtml(j.template_name)}</strong>${j.note ? ` (${escHtml(j.note)})` : ""}.</p>
 ${list ? `<ul style="padding-left:20px;margin:0 0 16px">${list}${more}</ul>` : ""}
+${fitNote}
 <p style="margin:0 0 8px"><a href="${escHtml(j.queueLink)}" style="${button}">Open the print queue in Kinus</a></p>
 <p style="margin:0 0 16px;font-size:13px"><a href="${escHtml(j.link)}" style="color:#0f5f8a">or just this request</a></p>
 <p style="margin:0 0 6px"><strong>Please print from Kinus rather than from this email:</strong></p>

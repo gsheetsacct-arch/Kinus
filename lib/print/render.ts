@@ -3,7 +3,7 @@ import { embeddedFontCss } from "./fonts";
 import { FONTS, fontStack, lineHeightOf } from "./font-families";
 import { fill } from "./merge";
 import { sheetPlacement, type Layer, type PrintItem, type SheetLayout, type TemplateSpec } from "./types";
-import { minPt, PX_PER_PT } from "./render-constants";
+import { FLOOR_PT, minPt, PX_PER_PT } from "./render-constants";
 
 /** A CSS class for a stored picture (the same path always gets the same class). */
 export function imageClass(path: string): string {
@@ -38,7 +38,7 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
       if (fields.length && fields.every((m) => fill(m[0], get).trim() === "")) return "";
       const text = fill(l.text, get);
       const style = `${pos}font-size:${l.size}pt;font-weight:${l.weight ?? 400};text-align:${l.align ?? "left"};color:${safeColor(l.color, "#111111")};justify-content:${l.align === "center" ? "center" : l.align === "right" ? "flex-end" : "flex-start"};${l.font && l.font !== "sans" ? `font-family:${fontStack(l.font)};` : ""}line-height:${lineHeightOf(l.font)};${l.italic ? "font-style:italic;" : ""}`;
-      const fitAttr = l.fit !== false ? `data-fit data-min="${(minPt(l) * PX_PER_PT).toFixed(2)}"` : "";
+      const fitAttr = l.fit !== false ? `data-fit data-min="${(minPt(l) * PX_PER_PT).toFixed(2)}" data-floor="${(Math.min(FLOOR_PT, minPt(l)) * PX_PER_PT).toFixed(2)}"` : "";
       return `<div class="l t${l.wrap ? " wrap" : ""}" ${fitAttr} style="${esc(style)}"><span dir="auto"${l.underline ? ' style="text-decoration:underline"' : ""}>${esc(text)}</span></div>`;
     }
     case "barcode": {
@@ -135,7 +135,9 @@ body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-w
 .used{background:repeating-linear-gradient(45deg,#f1f5f9 0 2mm,#fff 2mm 4mm);outline:0.3mm dashed #94a3b8}
 @media print{body{display:block}.used{display:none}}
 </style></head><body>${body}<script>
-(function(){function fit(){document.querySelectorAll("[data-fit]").forEach(function(el){var span=el.firstElementChild;var min=parseFloat(el.getAttribute("data-min"))||8;var s=parseFloat(getComputedStyle(el).fontSize);var over=function(){return span.scrollWidth>el.clientWidth+0.5||el.scrollHeight>el.clientHeight+0.5};if(!over())return;var r=Math.min(el.clientWidth/Math.max(span.scrollWidth,1),el.clientHeight/Math.max(el.scrollHeight,1));s=Math.max(min,Math.floor(s*Math.min(1,r)*2)/2);el.style.fontSize=s+"px";var guard=80;while(guard-->0&&s>min&&over()){s=Math.max(min,s-0.5);el.style.fontSize=s+"px";}});document.body.setAttribute("data-fitted","1");}
+(function(){function fit(){document.querySelectorAll("[data-fit]").forEach(function(el){var span=el.firstElementChild;var min=parseFloat(el.getAttribute("data-min"))||8;var floor=parseFloat(el.getAttribute("data-floor"))||min;var s=parseFloat(getComputedStyle(el).fontSize);var over=function(){return span.scrollWidth>el.clientWidth+0.5||el.scrollHeight>el.clientHeight+0.5};if(!over())return;var r=Math.min(el.clientWidth/Math.max(span.scrollWidth,1),el.clientHeight/Math.max(el.scrollHeight,1));s=Math.max(min,Math.floor(s*Math.min(1,r)*2)/2);el.style.fontSize=s+"px";var guard=80;while(guard-->0&&s>min&&over()){s=Math.max(min,s-0.5);el.style.fontSize=s+"px";}
+/* a name too long even at the smallest size goes smaller, so it prints whole: marked for the office */
+guard=400;while(guard-->0&&s>floor&&over()){s=Math.max(floor,s-0.5);el.style.fontSize=s+"px";}if(s<min)el.setAttribute("data-small",(Math.round(s*0.75*2)/2).toString());if(over())el.setAttribute("data-cut","1");});document.body.setAttribute("data-fitted","1");}
 if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fit)}else{window.addEventListener("load",fit)}})();
 </script></body></html>`;
 }

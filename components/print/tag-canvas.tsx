@@ -2,14 +2,15 @@
 import * as React from "react";
 import { fill } from "@/lib/print/merge";
 import { fitText } from "@/lib/print/fit";
-import { minPt } from "@/lib/print/render-constants";
+import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
 import type { Layer } from "@/lib/print/types";
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CodeImage, useCode } from "./code-image";
 import { fontStack, lineHeightOf } from "@/lib/print/font-families";
 
-export type FitInfo = { pt: number; overflow: boolean };
+/** pt: the size it prints at; below: under the part's smallest size (to fit); overflow: cut off even so. */
+export type FitInfo = { pt: number; overflow: boolean; below?: boolean };
 export type Box = { x: number; y: number; w: number; h: number };
 type Handle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 const HANDLES: Handle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
@@ -676,8 +677,8 @@ function TextPart({
 }) {
   const box = React.useRef<HTMLDivElement>(null);
   const span = React.useRef<HTMLSpanElement>(null);
-  // cut off even at the smallest size: shown on the tag, not only in the side panel
-  const [cut, setCut] = React.useState(false);
+  // cut off, or printing under its smallest size to fit: shown on the tag, not only in the side panel
+  const [cut, setCut] = React.useState<"cut" | "small" | null>(null);
   const text = fill(l.text, (k) => values[k] ?? "");
   // like print: "T-shirt: {{TSHIRT}}" with no T-shirt prints nothing at all
   const fields = [...l.text.matchAll(/\{\{[^{}]+\}\}/g)];
@@ -688,6 +689,7 @@ function TextPart({
   // 1 pt = 0.3528 mm; on the canvas, mm are `scale` px
   const target = l.size * MM_PER_PT * scale;
   const min = minPt(l) * MM_PER_PT * scale;
+  const floor = Math.min(FLOOR_PT, minPt(l)) * MM_PER_PT * scale;
   React.useLayoutEffect(() => {
     if (!box.current || !span.current) return;
     const run = () => {
@@ -698,15 +700,16 @@ function TextPart({
           !empty &&
           (span.current.scrollWidth > box.current.clientWidth + 0.5 ||
             box.current.scrollHeight > box.current.clientHeight + 0.5);
-        setCut(over);
+        setCut(over ? "cut" : null);
         onFit(l.id, { pt: l.size, overflow: over });
         return;
       }
-      const r = fitText(box.current, span.current, target, min);
-      setCut(r.overflow);
+      const r = fitText(box.current, span.current, target, min, floor);
+      setCut(r.overflow ? "cut" : r.below ? "small" : null);
       onFit(l.id, {
         pt: Math.round((r.px / (MM_PER_PT * scale)) * 2) / 2,
         overflow: r.overflow,
+        below: r.below,
       });
     };
     run();
@@ -716,6 +719,7 @@ function TextPart({
     text,
     target,
     min,
+    floor,
     l.fit,
     l.wrap,
     l.w,
@@ -733,9 +737,21 @@ function TextPart({
   return (
     <>
       {cut && (
-        <span className="pointer-events-none absolute inset-0 z-10 shadow-[inset_0_0_0_2px_#dc2626]">
-          <span className="absolute right-0 top-0 rounded-bl bg-red-600 px-1 text-[9px] font-semibold leading-tight text-white">
-            Cut off
+        <span
+          className={cn(
+            "pointer-events-none absolute inset-0 z-10",
+            cut === "cut"
+              ? "shadow-[inset_0_0_0_2px_#dc2626]"
+              : "shadow-[inset_0_0_0_2px_#f59e0b]",
+          )}
+        >
+          <span
+            className={cn(
+              "absolute right-0 top-0 rounded-bl px-1 text-[9px] font-semibold leading-tight text-white",
+              cut === "cut" ? "bg-red-600" : "bg-amber-500",
+            )}
+          >
+            {cut === "cut" ? "Cut off" : "Smaller to fit"}
           </span>
         </span>
       )}
