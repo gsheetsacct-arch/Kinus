@@ -2,9 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import * as XLSX from "xlsx";
-import { createClient as createPlainClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { publicEnv } from "@/lib/env";
 import { appUrl } from "@/lib/auth/app-url";
 import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
 import { canGrantAreas, canManageRole, isAdmin, type AccessLevel, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
@@ -14,7 +12,7 @@ import { planRows, readRows, type BulkPlanRow } from "@/lib/staff/bulk";
 import { decodeText } from "@/lib/import/decode";
 import { normalizeName } from "@/lib/import/normalize";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
-import { checkinEmail, generatePassword, placeholderEmail, setLoginKind } from "@/lib/staff/accounts";
+import { checkinEmail, emailWayIn, generatePassword, placeholderEmail, setLoginKind } from "@/lib/staff/accounts";
 import { checkinName, isPlaceholderEmail, type LoginKind } from "@/lib/staff/login-kinds";
 
 const ROLES = ["owner", "director", "division_head", "head_counselor", "counselor", "scanner", "office", "logistics"] as const;
@@ -349,7 +347,7 @@ export async function bulkSendLinks(fd: FormData): Promise<ActionResult> {
     const failed: string[] = [];
     for (const p of people) {
       const r = await sendLink(p.email);
-      if (r) failed.push(`${p.full_name}: ${r}`);
+      if (r.error) failed.push(`${p.full_name}: ${r.error}`);
     }
     return failed.length ? fail(`Sent ${people.length - failed.length}. Not sent: ${failed.join("; ")}`) : ok(`Sign-in links emailed to ${people.length} ${people.length === 1 ? "person" : "people"}.`);
   } catch (e) {
@@ -375,10 +373,10 @@ export async function bulkSetActive(fd: FormData): Promise<ActionResult> {
 // ---------------------------------------------------------------------------
 // One person: sign-in help and deactivation
 // ---------------------------------------------------------------------------
-async function sendLink(email: string): Promise<string | null> {
-  const client = createPlainClient(publicEnv.NEXT_PUBLIC_SUPABASE_URL, publicEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY, { auth: { flowType: "implicit", persistSession: false, autoRefreshToken: false } });
-  const { error } = await client.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: await signInRedirect() } });
-  return error ? error.message : null;
+/** A sign-in link, or the invitation again for someone who never accepted it. */
+async function sendLink(email: string): Promise<{ sent: "invite" | "link"; error: string | null }> {
+  const r = await emailWayIn(email, await signInRedirect());
+  return { ...r, error: r.error && /rate limit|security purposes|too many/i.test(r.error) ? "Too many emails just now. Wait a minute and try again." : r.error };
 }
 
 export async function sendSignInLink(fd: FormData): Promise<ActionResult> {
@@ -392,8 +390,9 @@ export async function sendSignInLink(fd: FormData): Promise<ActionResult> {
   } catch (e) {
     return fail(errorMessage(e));
   }
-  const err = await sendLink(email);
-  return err ? fail(err) : ok(`Sign-in link emailed to ${email}. It also lets them choose a new password.`);
+  const r = await sendLink(email);
+  if (r.error) return fail(r.error);
+  return ok(r.sent === "invite" ? `They hadn't accepted their invitation yet, so it was sent again to ${email} with a new link.` : `Sign-in link emailed to ${email}. It also lets them choose a new password.`);
 }
 
 export async function setUserPassword(fd: FormData): Promise<ActionResult> {

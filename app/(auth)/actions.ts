@@ -5,6 +5,7 @@ import { createClient as createPlainClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkinName } from "@/lib/staff/login-kinds";
+import { emailWayIn } from "@/lib/staff/accounts";
 import { publicEnv } from "@/lib/env";
 import { appUrl } from "@/lib/auth/app-url";
 import { fail, ok, type ActionResult } from "@/lib/actions/result";
@@ -45,13 +46,11 @@ const noAccount = (m: string) => /signups? not allowed|not allowed for otp|user 
 export async function sendMagicLink(formData: FormData): Promise<ActionResult> {
   const email = z.string().email().safeParse(formData.get("email"));
   if (!email.success) return fail("Enter a valid email.");
-  const { error } = await linkClient().auth.signInWithOtp({
-    email: email.data,
-    options: { shouldCreateUser: false, emailRedirectTo: `${await appUrl()}/login` },
-  });
-  if (error && tooMany(error.message)) return fail("Too many links requested. Wait a minute and try again.");
-  if (error && !noAccount(error.message)) return fail(error.message);
-  return ok("If that email has a Kinus account, a sign-in link is on its way. It works on any device.");
+  // someone who never accepted their invitation gets it again (a sign-in link would be refused)
+  const { error } = await emailWayIn(email.data, `${await appUrl()}/login`);
+  if (error && tooMany(error)) return fail("Too many links requested. Wait a minute and try again.");
+  if (error && !noAccount(error)) return fail(error);
+  return ok("If that email has a Kinus account, a sign-in link is on its way (or your invitation again, if you hadn't accepted it yet). It works on any device.");
 }
 
 /** Forgot password: an email with a link to choose a new one (it opens “Set a new password”). */

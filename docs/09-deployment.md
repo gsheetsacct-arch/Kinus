@@ -99,6 +99,11 @@ which completes the sign-in and continues to `/set-password` for invitations. Op
 `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite` (resp.
 `type=magiclink`) for a fully server-side flow.
 
+With sign-ups off, Supabase refuses a sign-in link for someone who never accepted their
+invitation (their email isn't confirmed, so it counts as a sign-up: "Signups not allowed").
+Kinus sends such people their invitation again instead, from the Staff page and from the
+sign-in page's "emailed link", with a fresh link (`emailWayIn` in `lib/staff/accounts.ts`).
+
 ## 9.3 GitHub
 
 - Repo `gsheetsacct-arch/Kinus`. Current working branch:
