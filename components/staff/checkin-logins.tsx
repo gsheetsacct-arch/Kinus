@@ -9,7 +9,7 @@ import { checkinLoginProblem, checkinName, generatePassword } from "@/lib/staff/
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { createCheckinLogin, deletePeople, resetCheckinPassword, type CheckinResult } from "@/app/(app)/admin/users/actions";
-import { formatDateTime, plural } from "@/lib/utils";
+import { cn, formatDateTime, plural } from "@/lib/utils";
 
 export type CheckinAccount = { id: string; name: string; active: boolean; lastSignIn: string | null };
 export type CheckinLoginRow = { divisionId: string; divisionName: string; color: string | null; accounts: CheckinAccount[] };
@@ -24,7 +24,16 @@ export function CheckinLogins({ logins }: { logins: CheckinLoginRow[] }) {
   const [shown, setShown] = React.useState<{ division: string; username: string; password: string } | null>(null);
   const [removing, setRemoving] = React.useState<CheckinAccount | null>(null);
   // choosing a name and password before creating a login, or a new password for one
-  const [editing, setEditing] = React.useState<{ division: CheckinLoginRow; account?: CheckinAccount; name: string; password: string } | null>(null);
+  // mode: asked first — made up by Kinus ("random") or typed by the person ("manual")
+  const [editing, setEditing] = React.useState<{ division: CheckinLoginRow; account?: CheckinAccount; mode?: "random" | "manual"; name: string; password: string } | null>(null);
+  const choose = (mode: "random" | "manual") =>
+    editing &&
+    setEditing({
+      ...editing,
+      mode,
+      name: editing.account ? editing.account.name : mode === "random" ? suggestName(editing.division.divisionName) : "",
+      password: mode === "random" ? generatePassword() : "",
+    });
   const allNames = new Set(logins.flatMap((l) => l.accounts.map((a) => a.name)));
   const suggestName = (divisionName: string) => {
     const base = checkinName(divisionName);
@@ -34,7 +43,8 @@ export function CheckinLogins({ logins }: { logins: CheckinLoginRow[] }) {
   };
   const save = () => {
     if (!editing) return;
-    const { division, account, name, password } = editing;
+    const { division, account, name, password, mode } = editing;
+    if (!mode) return;
     const problem = checkinLoginProblem(account ? account.name : name, password);
     if (problem) return void toast.error(problem);
     setEditing(null);
@@ -90,7 +100,7 @@ export function CheckinLogins({ logins }: { logins: CheckinLoginRow[] }) {
                 </span>
                 <span className="ml-2 text-xs text-muted-foreground">{l.accounts.length ? plural(l.accounts.length, "login") : "No check-in login yet"}</span>
               </span>
-              <Button size="sm" variant={l.accounts.length ? "outline" : "default"} disabled={busy !== null} onClick={() => setEditing({ division: l, name: suggestName(l.divisionName), password: generatePassword() })}>
+              <Button size="sm" variant={l.accounts.length ? "outline" : "default"} disabled={busy !== null} onClick={() => setEditing({ division: l, name: "", password: "" })}>
                 <Plus /> {busy === `add:${l.divisionId}` ? "Creating…" : l.accounts.length ? "Add another" : "Create login"}
               </Button>
             </div>
@@ -103,7 +113,7 @@ export function CheckinLogins({ logins }: { logins: CheckinLoginRow[] }) {
                       {!a.active && " · deactivated"}
                       {a.lastSignIn ? ` · last used ${formatDateTime(a.lastSignIn)}` : " · not used yet"}
                     </span>
-                    <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => setEditing({ division: l, account: a, name: a.name, password: generatePassword() })}>
+                    <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => setEditing({ division: l, account: a, name: a.name, password: "" })}>
                       <KeyRound /> {busy === a.id ? "Working…" : "New password"}
                     </Button>
                     <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive" disabled={busy !== null} onClick={() => setRemoving(a)} aria-label={`Remove ${a.name}`}>
@@ -123,7 +133,7 @@ export function CheckinLogins({ logins }: { logins: CheckinLoginRow[] }) {
             <DialogDescription>
               {editing?.account
                 ? "Phones already signed in stay signed in. Next time, they sign in with the new password."
-                : "The phones at this check-in line sign in with this name and password. Change them to anything you like."}
+                : "The phones at this check-in line sign in with a name and a password."}
             </DialogDescription>
           </DialogHeader>
           {editing && (
@@ -134,24 +144,67 @@ export function CheckinLogins({ logins }: { logins: CheckinLoginRow[] }) {
                 save();
               }}
             >
-              {!editing.account && (
-                <Field label="Sign-in name" htmlFor="checkin-name" hint={editing.name && checkinName(editing.name) !== editing.name ? `They'll type: ${checkinName(editing.name)}` : "Letters, numbers and dashes, e.g. gate-2."}>
-                  <Input id="checkin-name" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} autoCapitalize="none" autoCorrect="off" spellCheck={false} required />
-                </Field>
-              )}
-              <Field label="Password" htmlFor="checkin-password" hint="At least 8 characters. Shown here so you can read it out.">
-                <div className="flex gap-2">
-                  <Input id="checkin-password" value={editing.password} onChange={(e) => setEditing({ ...editing, password: e.target.value })} autoCapitalize="none" autoCorrect="off" spellCheck={false} minLength={8} required className="font-mono" />
-                  <Button type="button" variant="outline" onClick={() => setEditing({ ...editing, password: generatePassword() })} title="Make up a new one">
-                    <RefreshCw /> <span className="sr-only sm:not-sr-only">Suggest</span>
-                  </Button>
+              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={editing.account ? "How to set the password" : "How to set the name and password"}>
+                {(
+                  [
+                    ["random", editing.account ? "Make one up for me" : "Make them up for me", editing.account ? "Kinus makes up an easy-to-type password." : "Kinus picks the name and an easy-to-type password."],
+                    ["manual", "I'll type my own", editing.account ? "Type the password you want." : "Type the name and password you want."],
+                  ] as const
+                ).map(([m, label, desc]) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={editing.mode === m}
+                    onClick={() => choose(m)}
+                    className={cn("rounded-lg border bg-card p-3 text-left text-sm hover:bg-muted/40", editing.mode === m && "border-primary bg-primary-soft/50 ring-1 ring-primary")}
+                  >
+                    <span className="block font-medium">{label}</span>
+                    <span className="block text-xs text-muted-foreground">{desc}</span>
+                  </button>
+                ))}
+              </div>
+
+              {editing.mode === "random" && (
+                <div className="space-y-2 rounded-lg border bg-muted/40 p-3">
+                  {!editing.account && (
+                    <p className="text-sm">
+                      <span className="block text-xs text-muted-foreground">Sign-in name</span>
+                      <code className="text-base font-semibold">{editing.name}</code>
+                    </p>
+                  )}
+                  <div className="flex items-end justify-between gap-2">
+                    <p className="text-sm">
+                      <span className="block text-xs text-muted-foreground">Password</span>
+                      <code className="text-base font-semibold">{editing.password}</code>
+                    </p>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setEditing({ ...editing, password: generatePassword() })}>
+                      <RefreshCw /> Another
+                    </Button>
+                  </div>
                 </div>
-              </Field>
+              )}
+
+              {editing.mode === "manual" && (
+                <div className="space-y-4">
+                  {!editing.account && (
+                    <Field label="Sign-in name" htmlFor="checkin-name" hint={editing.name && checkinName(editing.name) !== editing.name ? `They'll type: ${checkinName(editing.name)}` : "Letters, numbers and dashes, e.g. gate-2."}>
+                      <Input id="checkin-name" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} placeholder={suggestName(editing.division.divisionName)} autoCapitalize="none" autoCorrect="off" spellCheck={false} autoFocus required />
+                    </Field>
+                  )}
+                  <Field label="Password" htmlFor="checkin-password" hint="At least 8 characters. Shown here so you can read it out.">
+                    <Input id="checkin-password" value={editing.password} onChange={(e) => setEditing({ ...editing, password: e.target.value })} autoCapitalize="none" autoCorrect="off" spellCheck={false} minLength={8} required autoFocus={Boolean(editing.account)} className="font-mono" />
+                  </Field>
+                </div>
+              )}
+
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditing(null)}>
                   Cancel
                 </Button>
-                <Button type="submit">{editing.account ? "Set password" : "Create login"}</Button>
+                <Button type="submit" disabled={!editing.mode}>
+                  {editing.account ? "Set password" : "Create login"}
+                </Button>
               </DialogFooter>
             </form>
           )}
