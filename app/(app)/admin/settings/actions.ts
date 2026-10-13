@@ -124,7 +124,11 @@ export async function sendTestEmail(): Promise<ActionResult> {
       const spec = toSpec(templates[0]);
       const merge = await loadMergeSetup(admin);
       try {
-        const html = renderDocument({ ...spec, sheet_layout: null }, [{ values: mergeValues(SAMPLE_CAMPER as never, merge.fields, merge.maps), copies: 1 }], { background: await backgroundDataUrl(admin, spec.background_path) });
+        const { imageDataUrls } = await import("@/lib/print/data");
+        const html = renderDocument({ ...spec, sheet_layout: null }, [{ values: mergeValues(SAMPLE_CAMPER as never, merge.fields, merge.maps), copies: 1 }], {
+          background: await backgroundDataUrl(admin, spec.background_path),
+          images: await imageDataUrls(admin, spec.layers),
+        });
         pdf = await htmlToPdf(html);
         pdfNote = `A sample “${spec.name}” PDF is attached (${Math.max(1, Math.round(pdf.length / 1024))} KB).`;
       } catch (e) {

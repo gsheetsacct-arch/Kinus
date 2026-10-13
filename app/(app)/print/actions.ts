@@ -37,11 +37,11 @@ async function requirePrinter() {
  * Mark jobs printed (or not printed again). With `sheet`, also remembers where the part-used
  * label sheet now continues (the first free label after this print).
  */
-export async function markPrinted(ids: string[], printed = true, sheet?: { stock: string; next: number }, printedNow = false): Promise<ActionResult> {
+export async function markPrinted(ids: string[], printed = true, sheet?: { stock: string; used: number[] }, printedNow = false): Promise<ActionResult> {
   try {
     const user = await requirePrinter();
     if (!(await visibleJobs(ids))) return fail(NOT_YOURS);
-    if (sheet) await rememberSheetPosition(z.string().min(1).max(120).parse(sheet.stock), z.number().int().min(1).max(500).parse(sheet.next), user.id);
+    if (sheet) await rememberSheetPosition(z.string().min(1).max(120).parse(sheet.stock), usedSchema.parse(sheet.used), user.id);
     const { error } = await createAdminClient()
       .from("print_jobs")
       .update(printed ? { status: "printed", printed_at: new Date().toISOString(), printed_by: user.id } : { status: "ready", printed_at: null, printed_by: null })
@@ -100,12 +100,15 @@ export async function resendJob(id: string, deliverTo?: string): Promise<ActionR
   }
 }
 
-/** Remember where the part-used label sheet continues, without marking anything printed (one division of several, or a fresh sheet). */
-export async function saveSheetPosition(stock: string, next: number): Promise<ActionResult> {
+const usedSchema = z.array(z.number().int().min(1).max(500)).max(500);
+
+/** Remember the sheet in the printer (which labels are used), without marking anything printed: one division of several, a fresh sheet, or another part-used sheet. */
+export async function saveSheetPosition(stock: string, used: number[]): Promise<ActionResult> {
   try {
     const user = await requirePrinter();
-    await rememberSheetPosition(z.string().min(1).max(120).parse(stock), z.number().int().min(1).max(500).parse(next), user.id);
-    return ok(next === 1 ? "Next print starts on a fresh sheet." : `Next print starts at label ${next}.`);
+    const u = usedSchema.parse(used);
+    await rememberSheetPosition(z.string().min(1).max(120).parse(stock), u, user.id);
+    return ok(u.length ? `Saved: ${u.length === 1 ? "1 label" : `${u.length} labels`} on the sheet already used.` : "Saved: the next print starts on a fresh sheet.");
   } catch (e) {
     return fail(errorMessage(e));
   }
@@ -242,18 +245,32 @@ async function requireAdminUser() {
 }
 
 const num = (min: number, max: number) => z.coerce.number().min(min).max(max);
+// lock (can't be moved on the canvas) and hide (doesn't show or print) work on every kind of part
+const partFlags = { locked: z.boolean().optional(), hidden: z.boolean().optional() };
 const layerSchema = z.discriminatedUnion("type", [
-  z.object({ id: z.string(), type: z.literal("text"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), size: num(3, 200), weight: z.union([z.literal(400), z.literal(700)]).optional(), align: z.enum(["left", "center", "right"]).optional(), color: z.string().max(40).optional(), fit: z.boolean().optional(), wrap: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(), minSize: num(3, 200).optional() }),
-  z.object({ id: z.string(), type: z.literal("barcode"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(5, 500), h: num(3, 500), showText: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional() }),
-  z.object({ id: z.string(), type: z.literal("qr"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(5, 500), h: num(5, 500) }),
-  z.object({ id: z.string(), type: z.literal("box"), x: num(-50, 500), y: num(-50, 500), w: num(0.1, 500), h: num(0.1, 500), fill: z.string().max(60).optional(), radius: num(0, 100).optional(), border: z.string().max(40).optional() }),
+  z.object({ ...partFlags, id: z.string(), type: z.literal("text"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), size: num(3, 200), weight: z.union([z.literal(400), z.literal(700)]).optional(), align: z.enum(["left", "center", "right"]).optional(), color: z.string().max(40).optional(), fit: z.boolean().optional(), wrap: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(), minSize: num(3, 200).optional(), font: z.enum(["sans", "rounded", "serif", "display"]).optional(), italic: z.boolean().optional(), underline: z.boolean().optional() }),
+  z.object({ ...partFlags, id: z.string(), type: z.literal("barcode"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), showText: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional() }),
+  z.object({ ...partFlags, id: z.string(), type: z.literal("qr"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500) }),
+  z.object({
+    ...partFlags,
+    id: z.string(),
+    type: z.literal("image"),
+    // a picture uploaded for templates (uploadTemplateImage): never a path outside that
+    path: z.string().max(200).regex(/^pictures\/[\w.-]+$/, "That picture isn't one of the uploaded ones."),
+    x: num(-50, 500),
+    y: num(-50, 500),
+    w: num(1, 500),
+    h: num(1, 500),
+    fit: z.enum(["contain", "cover"]).optional(),
+  }),
+  z.object({ ...partFlags, id: z.string(), type: z.literal("box"), x: num(-50, 500), y: num(-50, 500), w: num(0.1, 500), h: num(0.1, 500), fill: z.string().max(60).optional(), radius: num(0, 100).optional(), border: z.string().max(40).optional() }),
 ]);
 const sheetSchema = z.object({
   paper: z.enum(["letter", "a4"]),
-  cols: z.coerce.number().int().min(1).max(10),
-  rows: z.coerce.number().int().min(1).max(30),
-  leftMm: num(0, 200).optional(),
-  topMm: num(0, 200).optional(),
+  cols: z.coerce.number().min(1).max(10).transform(Math.round),
+  rows: z.coerce.number().min(1).max(30).transform(Math.round),
+  leftMm: num(-50, 200).optional(),
+  topMm: num(-50, 200).optional(),
   pitchXMm: num(1, 300).optional(),
   pitchYMm: num(1, 300).optional(),
   marginMm: num(0, 50).optional(),
@@ -272,24 +289,64 @@ const templateSchema = z.object({
   sheet_layout: sheetSchema.nullable(),
   show_on_card: z.boolean(),
   auto_on_first_checkin: z.boolean(),
+  copies: z.coerce.number().int().min(1).max(10).default(1),
 });
 export type TemplateInput = z.input<typeof templateSchema>;
+
+/** A save problem in words: which part ("Part 3, the barcode") and what's wrong with it. */
+function templateProblem(e: z.ZodError, input: TemplateInput): string {
+  const issue = e.issues[0];
+  const [first, i, field] = issue.path;
+  const what: Record<string, string> = { w: "its width", h: "its height", x: "how far from the left", y: "how far from the top", size: "the text size", minSize: "the smallest text size", radius: "the rounded corners" };
+  if (first === "layers" && typeof i === "number") {
+    const l = input.layers?.[i] as { type?: string } | undefined;
+    const kind = l?.type === "text" ? "the text" : l?.type === "barcode" ? "the barcode" : l?.type === "qr" ? "the QR code" : l?.type === "image" ? "the picture" : "the colour block";
+    return `Part ${i + 1} (${kind}): ${typeof field === "string" && what[field] ? `${what[field]} is out of range` : issue.message}.`;
+  }
+  if (first === "sheet_layout") return `The label sheet settings: ${issue.message}.`;
+  if (first === "layers") return "Up to 60 parts on one template.";
+  return issue.message;
+}
 
 export async function saveTemplate(input: TemplateInput): Promise<ActionResult & { id?: string }> {
   try {
     await requireAdminUser();
-    const t = templateSchema.parse(input);
+    const parsed = templateSchema.safeParse(input);
+    if (!parsed.success) return fail(templateProblem(parsed.error, input));
+    const t = parsed.data;
     const supabase = await createClient();
-    const row = { name: t.name, kind: t.kind, page_width_mm: t.page_width_mm, page_height_mm: t.page_height_mm, layers: t.layers, sheet_layout: t.sheet_layout, show_on_card: t.show_on_card, auto_on_first_checkin: t.auto_on_first_checkin, updated_at: new Date().toISOString() };
+    const row = {
+      name: t.name,
+      kind: t.kind,
+      page_width_mm: t.page_width_mm,
+      page_height_mm: t.page_height_mm,
+      layers: t.layers,
+      sheet_layout: t.sheet_layout,
+      show_on_card: t.show_on_card,
+      auto_on_first_checkin: t.auto_on_first_checkin,
+      copies: t.copies,
+      updated_at: new Date().toISOString(),
+    };
+    // before migration 0028 there's no "copies": save the rest, and say so only if it matters
+    const noCopiesYet = (e: { message: string } | null) => Boolean(e && /copies/.test(e.message));
+    const withoutCopies = Object.fromEntries(Object.entries(row).filter(([k]) => k !== "copies")) as Omit<typeof row, "copies">;
     if (t.id) {
-      const { error } = await supabase.from("print_templates").update(row).eq("id", t.id);
+      let { error } = await supabase.from("print_templates").update(row).eq("id", t.id);
+      if (noCopiesYet(error)) {
+        if (t.copies !== 1) throw new Error("To set how many per camper, run migration 0028 in Supabase first.");
+        ({ error } = await supabase.from("print_templates").update(withoutCopies).eq("id", t.id));
+      }
       if (error) throw error;
       revalidatePath("/print/templates");
       return { ...ok("Template saved."), id: t.id };
     }
     const { count } = await supabase.from("print_templates").select("id", { count: "exact", head: true });
-    const { data, error } = await supabase.from("print_templates").insert({ ...row, sort_order: (count ?? 0) + 1 }).select("id").single();
-    if (error) throw error;
+    let { data, error } = await supabase.from("print_templates").insert({ ...row, sort_order: (count ?? 0) + 1 }).select("id").single();
+    if (noCopiesYet(error)) {
+      if (t.copies !== 1) throw new Error("To set how many per camper, run migration 0028 in Supabase first.");
+      ({ data, error } = await supabase.from("print_templates").insert({ ...withoutCopies, sort_order: (count ?? 0) + 1 }).select("id").single());
+    }
+    if (error || !data) throw error ?? new Error("The template wasn't saved.");
     revalidatePath("/print/templates");
     return { ...ok("Template created.", `/print/templates/${data.id}`), id: data.id };
   } catch (e) {
@@ -303,8 +360,23 @@ export async function duplicateTemplate(fd: FormData): Promise<ActionResult> {
     const supabase = await createClient();
     const { data: t } = await supabase.from("print_templates").select("*").eq("id", String(fd.get("id"))).single();
     if (!t) return fail("Template not found.");
-    const copy = { kind: t.kind, division_id: t.division_id, page_width_mm: t.page_width_mm, page_height_mm: t.page_height_mm, background_path: t.background_path, layers: t.layers, sheet_layout: t.sheet_layout, sort_order: t.sort_order + 1 };
-    const { data, error } = await supabase.from("print_templates").insert({ ...copy, name: `${t.name} (copy)`, show_on_card: false, auto_on_first_checkin: false }).select("id").single();
+    const copy = {
+      kind: t.kind,
+      division_id: t.division_id,
+      page_width_mm: t.page_width_mm,
+      page_height_mm: t.page_height_mm,
+      background_path: t.background_path,
+      layers: t.layers,
+      sheet_layout: t.sheet_layout,
+      sort_order: t.sort_order + 1,
+      ...("copies" in t ? { copies: t.copies } : {}),
+    };
+    // a copy of a retired template is a fresh, working one
+    const { data, error } = await supabase
+      .from("print_templates")
+      .insert({ ...copy, name: `${t.name.replace(/^(\(retired\)\s*)+/, "")} (copy)`, show_on_card: false, auto_on_first_checkin: false })
+      .select("id")
+      .single();
     if (error) throw error;
     revalidatePath("/print/templates");
     return ok("Copied.", `/print/templates/${data.id}`);
@@ -321,7 +393,8 @@ export async function deleteTemplate(fd: FormData): Promise<ActionResult> {
     const { count } = await supabase.from("print_jobs").select("id", { count: "exact", head: true }).eq("template_id", id);
     if (count) {
       // keep the history readable: hide it instead
-      const { error } = await supabase.from("print_templates").update({ show_on_card: false, auto_on_first_checkin: false, name: `(retired) ${String(fd.get("name") ?? "")}`.trim() }).eq("id", id);
+      const name = String(fd.get("name") ?? "").replace(/^(\(retired\)\s*)+/, "");
+      const { error } = await supabase.from("print_templates").update({ show_on_card: false, auto_on_first_checkin: false, name: `(retired) ${name}`.trim() }).eq("id", id);
       if (error) throw error;
       revalidatePath("/print/templates");
       return ok("It was used before, so it's retired instead of deleted.", "/print/templates");
@@ -332,6 +405,25 @@ export async function deleteTemplate(fd: FormData): Promise<ActionResult> {
     return ok("Template deleted.", "/print/templates");
   } catch (e) {
     return fail(errorMessage(e));
+  }
+}
+
+/** A picture for a template part (a camp logo…). Returns where it's stored and a data URL to show it right away. */
+export async function uploadTemplateImage(fd: FormData): Promise<{ ok: true; path: string; url: string } | { ok: false; error: string }> {
+  try {
+    await requireAdminUser();
+    const file = fd.get("file");
+    if (!(file instanceof File) || !file.size) return { ok: false, error: "Choose a picture." };
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) return { ok: false, error: "Use a PNG, JPG or WebP picture." };
+    if (file.size > 2 * 1024 * 1024) return { ok: false, error: "Pictures up to 2 MB, please (a logo rarely needs more). Save it smaller and try again." };
+    const ext = file.type.split("/")[1].replace("jpeg", "jpg");
+    const path = `pictures/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const buf = Buffer.from(await file.arrayBuffer());
+    const { error } = await createAdminClient().storage.from("templates").upload(path, buf, { contentType: file.type, upsert: false });
+    if (error) throw error;
+    return { ok: true, path, url: `data:${file.type};base64,${buf.toString("base64")}` };
+  } catch (e) {
+    return { ok: false, error: errorMessage(e) };
   }
 }
 
@@ -373,19 +465,23 @@ export async function codePreviews(items: { type: "barcode" | "qr"; text: string
   });
 }
 
-export async function previewTemplate(spec: TemplateSpec, who: { kind: "sample" } | { kind: "code"; code: string } | { kind: "longest" }, opts: { fullSheet?: boolean } = {}): Promise<string> {
+export async function previewTemplate(spec: TemplateSpec, who: { kind: "sample" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] }, opts: { fullSheet?: boolean } = {}): Promise<string> {
   await requirePrinter();
   const r = await previewValues(who);
   const values = "error" in r ? await sampleValues() : r.values;
   const admin = createAdminClient();
-  let background: string | null = null;
-  if (spec.background_path) {
-    const { backgroundDataUrl } = await import("@/lib/print/data");
-    background = await backgroundDataUrl(admin, spec.background_path);
-  }
+  const { backgroundDataUrl, imageDataUrls } = await import("@/lib/print/data");
+  // the background as saved (one uploaded this visit included), never a path the browser names
+  const bgPath = spec.id ? (await admin.from("print_templates").select("background_path").eq("id", spec.id).maybeSingle()).data?.background_path : null;
+  const background = bgPath ? await backgroundDataUrl(admin, bgPath) : null;
+  // only uploaded pictures
+  const images = await imageDataUrls(
+    admin,
+    spec.layers.filter((l) => l.type !== "image" || /^pictures\/[\w.-]+$/.test(l.path)),
+  );
   // a test sheet: the whole sheet filled, with outlines, to hold against the labels
   const sheet = opts.fullSheet ? spec.sheet_layout : null;
-  return renderDocument({ ...spec, sheet_layout: sheet }, [{ values, copies: sheet ? sheet.cols * sheet.rows : 1 }], { background, outlines: true });
+  return renderDocument({ ...spec, sheet_layout: sheet }, [{ values, copies: sheet ? sheet.cols * sheet.rows : 1 }], { background, images, outlines: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -506,7 +602,9 @@ async function sampleValues(): Promise<Record<string, string>> {
  * Merge values for the editor's canvas: the built-in sample, a camper by code, or the
  * camper with the longest name (to check long names still fit).
  */
-export async function previewValues(who: { kind: "sample" } | { kind: "code"; code: string } | { kind: "longest" }): Promise<{ values: Record<string, string>; label: string } | { error: string }> {
+export async function previewValues(
+  who: { kind: "sample" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] },
+): Promise<{ values: Record<string, string>; label: string } | { error: string }> {
   await requirePrinter();
   const session = await getActiveSession();
   if (who.kind === "sample" || !session) return { values: await sampleValues(), label: "a sample camper" };
@@ -525,13 +623,61 @@ export async function previewValues(who: { kind: "sample" } | { kind: "code"; co
       if (camp.divisionIds) q = q.in("division_id", camp.divisionIds);
       return q.order("id").range(from, to);
     });
-    id = rows.reduce<{ id: string; n: number } | null>((best, r) => ((r.display_name?.length ?? 0) > (best?.n ?? -1) ? { id: r.id, n: r.display_name?.length ?? 0 } : best), null)?.id ?? null;
+    const texts = (who.texts ?? []).filter((t) => t.text.includes("{{") && t.w > 0).slice(0, 30);
+    if (texts.length && rows.length) {
+      // the camper whose text is longest for its box, on any part of this template (names, bunks, Hebrew…)
+      const admin = createAdminClient();
+      const [setup, campers] = await Promise.all([loadMergeSetup(admin), loadPrintCampers(admin, rows.map((r) => r.id))]);
+      const { fill } = await import("@/lib/print/merge");
+      let best: { id: string; score: number } | null = null;
+      for (const c of campers) {
+        const v = mergeValues(c, setup.fields, setup.maps);
+        const score = Math.max(...texts.map((t) => fill(t.text, (k) => v[k] ?? "").length / t.w));
+        if (!best || score > best.score) best = { id: c.id, score };
+      }
+      id = best?.id ?? null;
+    } else {
+      id = rows.reduce<{ id: string; n: number } | null>((best, r) => ((r.display_name?.length ?? 0) > (best?.n ?? -1) ? { id: r.id, n: r.display_name?.length ?? 0 } : best), null)?.id ?? null;
+    }
     if (!id) return { values: await sampleValues(), label: "a sample camper (no campers yet)" };
   }
   const admin = createAdminClient();
   const [setup, [c]] = await Promise.all([loadMergeSetup(admin), loadPrintCampers(admin, [id])]);
   if (!c) return { error: "Camper not found." };
   return { values: mergeValues(c, setup.fields, setup.maps), label: `${c.first_name} ${c.last_name}${who.kind === "longest" ? " (longest name)" : ""}` };
+}
+
+/**
+ * Every camper's values for these fields (the camp chosen at the top), for the editor's fit
+ * check: it measures each text part for each camper exactly as it prints.
+ */
+export async function fitCheckPeople(keys: string[]): Promise<{ ok: true; people: { name: string; code: string; values: Record<string, string> }[] } | { ok: false; error: string }> {
+  try {
+    await requirePrinter();
+    const session = await getActiveSession();
+    if (!session) return { ok: true, people: [] };
+    const wanted = [...new Set(keys.filter((k) => /^[A-Z0-9_]{1,40}$/.test(k)))].slice(0, 40);
+    if (!wanted.length) return { ok: true, people: [] };
+    const { fetchAll } = await import("@/lib/supabase/fetch-all");
+    const camp = await getCampContext();
+    const supabase = await createClient();
+    const rows = await fetchAll((from, to) => {
+      let q = supabase.from("campers").select("id").eq("session_id", session.id).is("archived_at", null);
+      if (camp.divisionIds) q = q.in("division_id", camp.divisionIds);
+      return q.order("id").range(from, to);
+    });
+    const admin = createAdminClient();
+    const [setup, campers] = await Promise.all([loadMergeSetup(admin), loadPrintCampers(admin, rows.slice(0, 3000).map((r) => r.id))]);
+    return {
+      ok: true,
+      people: campers.map((c) => {
+        const v = mergeValues(c, setup.fields, setup.maps);
+        return { name: `${c.first_name} ${c.last_name}`, code: String((c as { camper_code?: string }).camper_code ?? ""), values: Object.fromEntries(wanted.map((k) => [k, v[k] ?? ""])) };
+      }),
+    };
+  } catch (e) {
+    return { ok: false, error: errorMessage(e) };
+  }
 }
 
 /** Put a field on the merge list or take it off (it keeps printing where a template uses it). */

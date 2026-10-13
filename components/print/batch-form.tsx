@@ -12,8 +12,10 @@ import { countBatch, createBatch } from "@/app/(app)/print/actions";
 
 type Division = { id: string; name: string; bunks: { id: string; name: string }[] };
 
-export function BatchForm({ templates, divisions, campLabel, officeTo }: { templates: { id: string; name: string }[]; divisions: Division[]; campLabel: string; officeTo: string }) {
+export function BatchForm({ templates, divisions, campLabel, officeTo }: { templates: { id: string; name: string; copies: number }[]; divisions: Division[]; campLabel: string; officeTo: string }) {
   const [template, setTemplate] = React.useState(templates[0]?.id ?? "");
+  // starts at the tag's usual number per camper
+  const [copies, setCopies] = React.useState(templates[0]?.copies ?? 1);
   const [where, setWhere] = React.useState("");
   const [which, setWhich] = React.useState<BatchWhichKey>("not_printed");
   const [deliver, setDeliver] = React.useState<"here" | "email">("here");
@@ -33,7 +35,10 @@ export function BatchForm({ templates, divisions, campLabel, officeTo }: { templ
   return (
     <ActionForm action={createBatch} className="grid max-w-2xl gap-5 rounded-xl border bg-card p-5 shadow-[var(--shadow-card)]">
       <Field label="What to print" htmlFor="template_id">
-        <Select id="template_id" name="template_id" value={template} onChange={(e) => setTemplate(e.target.value)}>
+        <Select id="template_id" name="template_id" value={template} onChange={(e) => {
+            setTemplate(e.target.value);
+            setCopies(templates.find((t) => t.id === e.target.value)?.copies ?? 1);
+          }}>
           {templates.map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
@@ -74,7 +79,7 @@ export function BatchForm({ templates, divisions, campLabel, officeTo }: { templ
         </Select>
       </Field>
       <Field label="Copies of each" htmlFor="copies">
-        <Input id="copies" name="copies" type="number" min={1} max={10} defaultValue={1} className="w-24" />
+        <Input id="copies" name="copies" type="number" min={1} max={10} value={copies} onChange={(e) => setCopies(Math.min(10, Math.max(1, Math.round(Number(e.target.value) || 1))))} className="w-24" />
       </Field>
       <RadioCards
         name="deliver"

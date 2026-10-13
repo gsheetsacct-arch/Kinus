@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { Callout } from "@/components/callout";
 import { PageHeader } from "@/components/page-header";
 import { ActionForm } from "@/components/action-form";
 import { FormDialog } from "@/components/form-dialog";
@@ -8,15 +9,16 @@ import { TemplateEditor, type EditorTemplate } from "@/components/print/template
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/current-user";
 import { isAdmin } from "@/lib/auth/permissions";
-import { backgroundDataUrl, toSpec } from "@/lib/print/data";
+import { imageDataUrls, backgroundDataUrl, toSpec } from "@/lib/print/data";
 import { embeddedFontCss } from "@/lib/print/fonts";
+import { FONTS } from "@/lib/print/font-families";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { deleteTemplate, uploadBackground } from "../../actions";
 
 export const metadata = { title: "Template" };
 export const maxDuration = 60;
 
-const BLANK: EditorTemplate = { name: "New template", kind: "name_tag", page_width_mm: 90, page_height_mm: 55, layers: [], sheet_layout: null, show_on_card: false, auto_on_first_checkin: false };
+const BLANK: EditorTemplate = { name: "New template", kind: "name_tag", page_width_mm: 90, page_height_mm: 55, layers: [], sheet_layout: null, show_on_card: false, auto_on_first_checkin: false, copies: 1 };
 
 export default async function TemplatePage({ params }: { params: Promise<{ id: string }> }) {
   const [user, { id }] = await Promise.all([requireUser(), params]);
@@ -29,10 +31,13 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
     if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
     const { data: t } = await supabase.from("print_templates").select("*").eq("id", id).maybeSingle();
     if (!t) notFound();
-    initial = { ...toSpec(t), show_on_card: t.show_on_card, auto_on_first_checkin: t.auto_on_first_checkin };
+    initial = { ...toSpec(t), show_on_card: t.show_on_card, auto_on_first_checkin: t.auto_on_first_checkin, copies: Number((t as { copies?: number }).copies) || 1 };
   }
   // the background and the print fonts, so the canvas looks and measures like the print
-  const backgroundUrl = initial.background_path ? await backgroundDataUrl(createAdminClient(), initial.background_path) : null;
+  const [backgroundUrl, pictures] = await Promise.all([
+    initial.background_path ? backgroundDataUrl(createAdminClient(), initial.background_path) : null,
+    imageDataUrls(createAdminClient(), initial.layers),
+  ]);
   const background = initial.id ? (
     <section className="space-y-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)]">
       <h2 className="font-semibold">Background image</h2>
@@ -85,8 +90,11 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
           ) : undefined
         }
       />
-      <style dangerouslySetInnerHTML={{ __html: embeddedFontCss() }} />
-      <TemplateEditor key={initial.id ?? "new"} initial={initial} fields={fields} background={background} backgroundUrl={backgroundUrl} />
+      <style dangerouslySetInnerHTML={{ __html: embeddedFontCss(Object.values(FONTS).map((f) => f.family)) }} />
+      {initial.name.startsWith("(retired)") && (
+        <Callout tone="warning">This template is retired: it isn&apos;t offered for printing or on camper cards. To use it again, copy it (the copy is a normal template).</Callout>
+      )}
+      <TemplateEditor key={initial.id ?? "new"} initial={initial} fields={fields} background={background} backgroundUrl={backgroundUrl} pictures={pictures} />
     </div>
   );
 }

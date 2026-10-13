@@ -20,7 +20,7 @@ export default async function TemplatesPage({ searchParams }: { searchParams: Pr
   const user = await requireUser();
   if (!isAdmin(user)) redirect("/print");
   const supabase = await createClient();
-  const { data } = await supabase.from("print_templates").select("id, name, kind, page_width_mm, page_height_mm, show_on_card, auto_on_first_checkin, sheet_layout, background_path, layers").order("sort_order").order("name");
+  const { data } = await supabase.from("print_templates").select("*").order("sort_order").order("name");
   // retired: used before, so kept for the print history, but no longer offered
   const isRetired = (t: { name: string }) => t.name.startsWith("(retired)");
   const retired = (data ?? []).filter(isRetired);
@@ -61,6 +61,7 @@ export default async function TemplatesPage({ searchParams }: { searchParams: Pr
                 {sheet ? ` · ${sheet.cols * sheet.rows} per ${sheet.paper === "a4" ? "A4" : "Letter"} sheet` : " · one per label"}
               </p>
               <div className="flex flex-wrap gap-1.5">
+                {Number((t as { copies?: number }).copies) > 1 && <Badge variant="secondary">{(t as { copies?: number }).copies} per camper</Badge>}
                 {t.show_on_card && <Badge variant="secondary">print button at check-in</Badge>}
                 {t.auto_on_first_checkin && <Badge variant="warning">prints by itself at first check-in</Badge>}
                 {t.background_path && <Badge variant="outline">background image</Badge>}

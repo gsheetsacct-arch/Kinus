@@ -132,12 +132,45 @@ A canvas of the tag at real proportions (Print → Templates):
 - Click a part to select it, drag to move, pull the handles to resize; arrow keys
   nudge 0.5 mm (Shift: 5 mm), Delete removes. Parts snap to a 0.5 mm grid and to the
   tag's centre lines and edges, and stay on the tag.
+- **Several parts at once**: Shift-click (or Ctrl/⌘-click) parts on the tag or in the
+  parts list, drag a box around them on an empty spot (works with a finger on an iPad),
+  or Ctrl+A. Dragging any of them moves them together (the group snaps and stays on the
+  tag as one); arrows nudge them together; Ctrl+D copies them; Delete removes them.
+- **Line up**: with one part, its left / centre / right / top / middle / bottom goes to
+  the tag's; with several, they line up with each other (the box around them), and
+  three or more can be **spread out evenly** across or up and down.
+- **Lock** (padlock, in the panel or the parts list): a locked part can't be dragged,
+  resized, nudged or removed with the Delete key, and dragging across it draws a
+  selection box instead, so a background colour block stops getting in the way.
+  Clicking it still selects it, to unlock it. **Hide** (eye): a hidden part isn't shown
+  and doesn't print (nor count for "changed since printed"); it stays in the parts list,
+  crossed out, to show again. Saved as `locked` / `hidden` on the part.
 - "+ Add a field" drops a text box with that field; also plain text, barcode, QR and
   a colour block (division colour or any colour).
 - Text size is a **target**: short text prints at that size, longer text shrinks to
-  stay inside its box, never below "never smaller than". The panel says what happens
-  for the camper shown ("Shrinks to 21 pt for this camper"), and warns when it
-  doesn't fit at all. Give long fields a wider box rather than a smaller size.
+  stay inside its box, down to its "smallest size". The size can't be set bigger
+  than the box holds ("This box holds text up to 37 pt"; typing more settles there; a
+  box made shorter afterwards says "too big for it" with a one-tap fix).
+- The panel says what happens for the camper shown ("Shrinks to 21 pt for …"), and
+  **Every camper** measures the part for every camper in the camp, in the same fonts and
+  steps as print: who'd be cut off even at the smallest size (names, tap one to show
+  that camper), or the smallest size anyone gets.
+- **Longer names later** (a camper added after the template was made): a name that
+  doesn't fit at the smallest size still prints **whole**: it keeps shrinking, down to
+  4 pt (`FLOOR_PT`), and is never cut off for that. The printed page marks it
+  (`data-small`), and the office is told: on the print screen ("Printed smaller to fit:
+  Yisroel Menachem Mendel (16 pt)") and in the request email. The editor shows the same
+  in amber ("1 of 610 go under 30 pt so they fit", "Smaller to fit" on the canvas), with
+  **Allow 2 lines**, a wider box, or "**16 pt is fine**" (makes that the smallest size).
+  Only text that doesn't fit even at 4 pt is cut (red "Cut off"), or text in a part with
+  shrinking turned off.
+- **Fonts**: Clear (Noto Sans, the default), Friendly (Rubik), Classic (Frank Ruhl
+  Libre), Bold display (Secular One), all with Hebrew; plus bold, italic, underline.
+  Each is embedded in the printed page (`lib/print/fonts`, OFL).
+- **Line height** is per font (1.3 × the size; 1.5 for Bold display), measured from the
+  fonts so accents (É, Å), tails (g, y, ק) and Hebrew vowel points are never clipped.
+  The canvas, the every-camper check and the printed page use the same CSS
+  (`lineHeightOf`, `minPt`), so the size the editor shows is the printed size.
 - Show it with a sample camper, the camper with the longest name, or any camper by
   code; "Print preview" shows the exact print rendering for the same camper.
 - The canvas uses the print fonts, so what fits on screen fits on paper, and shows
@@ -155,6 +188,37 @@ A canvas of the tag at real proportions (Print → Templates):
   every camper's card (Check in and the camper's page), for staff to send a
   replacement tag to the office. **Print by itself at first check-in** queues it
   automatically the first time each camper is checked in.
+
+- **Undo / redo** (buttons, Ctrl+Z / Ctrl+Shift+Z or Ctrl+Y; up to 100 steps; a drag,
+  a typed word or a run of nudges is one step). **Copy** (button or Ctrl+D), **Ctrl+S**
+  saves.
+- **Pictures** (a camp logo…): "Picture" uploads a PNG/JPG/WebP up to 2 MB
+  (`uploadTemplateImage`, storage `templates/pictures/…`) and places it at its own
+  shape; "Whole picture" or "Fill the box"; "Another picture" swaps it. In print each
+  picture is in the page once (`renderDocument(…, { images })`, `imageDataUrls`).
+- Colour blocks can be **outline only** or have a **border**; new colour blocks go to the
+  back (they're backgrounds and strips). Selecting a part keeps it in its place in the
+  stack: its outline and handles are drawn on top, so a full-tag block doesn't cover the
+  text.
+- Warnings: a field that doesn't exist (`{{BARCOD}}`, `{{first}}`) is named, with the
+  likely one ("did you mean {{FIRST}}?"), since it prints empty. A barcode or QR code
+  that's empty for the camper shown shows as a red "empty" box; a text part whose fields
+  are all empty is faded (it prints nothing for that camper). **What the fields say**
+  lists every field the template uses and its value for the camper shown.
+- "Show it with: **The longest text**" checks every camper and shows the one whose text
+  is longest for its box on this template's parts (names, bunks, Hebrew…).
+- Number boxes only take numbers they can use (an emptied box goes back to its number,
+  never 0); parts stay on the label when its size is typed. The save check accepts what
+  the editor allows and names the part when something's off ("Part 3 (the barcode): its
+  width is out of range").
+- Changes made while saving stay "unsaved". Unsaved work is kept on that computer:
+  leaving by Back, closing the laptop or a crash offers **Bring them back** next time.
+- **Turn the label sideways** (label printers) turns the design with the label: parts keep
+  their places, text and barcodes turn; turning again turns it back.
+- Retired templates say so in the editor and aren't offered on camper cards; a copy of
+  one is a normal template.
+- The print preview uses the background as saved (one uploaded this visit included).
+- Shrink-to-fit uses the same half-pixel steps in the editor and in print.
 
 Fields: only fields **on the merge list** (Print → Fields & conversions) are offered
 in the editor and included in the data for Publisher. Contact details start off the
@@ -174,7 +238,8 @@ template + merge fields + camper(s) ─► HTML (React, print CSS, mm units, emb
 - Barcodes via `bwip-js` as inline SVG, Code 128 with a 10-bar-width blank margin
   each side built in (scanners need it; a colour block drawn next to the bars can't
   take it away), QR codes with a 2-square margin.
-- Fonts: Noto Sans + Noto Sans Hebrew bundled; the PDF embeds them.
+- Fonts: Noto Sans + Noto Sans Hebrew, and the template's other fonts (Rubik, Frank Ruhl
+  Libre, Secular One) bundled; the page embeds the ones it uses, so the PDF does too.
 - The same HTML is served at `GET /print/jobs/<id>/preview` so the office can also
   press **Print** in the browser. Zero-dependency fallback.
 
@@ -194,6 +259,28 @@ template + merge fields + camper(s) ─► HTML (React, print CSS, mm units, emb
    **Open PDF**, **Mark printed**, **Re-send** (with "to" override). Marking printed
    updates the card ("Printed 9:44").
 
+### How many of each
+
+A template says how many labels each camper usually gets (`print_templates.copies`,
+migration 0028; Template settings → **How many per camper**, 1–10; the templates list shows
+"2 per camper"). It's the starting number everywhere:
+- the camper card's button ("Luggage tag ×2": one tap asks for 2) and its **How many?**
+  (quick 1–4, or type up to 10; remembers nothing, starts at the usual number each time);
+- batches (Copies of each starts at it); automatic prints at first check-in; "print the
+  new ones".
+When printing (one request or several together) **How many of each** can override it for
+that print: *As asked* (each request's own number) or 1–4 of each.
+
+Before migration 0028 everything keeps working with one of each (templates are read
+whole; saving a number other than 1 asks for the migration).
+
+### Printing order
+
+Every print is sorted by division (1, 2, 3…, then the rest), bunk (Alef-Beis order), then
+name; campers without a division or bunk come last, and copies of a label sit together
+(`byBunkThenName`). That holds for single requests, batches, requests printed together
+(the left-overs from check-in) and each division printed on its own.
+
 ### Printing requests together
 
 The queue groups waiting requests for the same template ("Name tag: 4 requests
@@ -206,16 +293,24 @@ asked for in more than one request prints once, with the most copies asked
 
 ### Part-used label sheets
 
-For templates on label sheets (Avery 5160: 30 to a sheet…) Kinus remembers, per label
-stock (the sheet preset, or paper + grid + label size), the first free label on the
-sheet in the printer (`settings.label_sheets`, `lib/print/sheet-position.ts`). The
-print screen shows the sheet with the used labels hatched and starts there; tapping a
-label changes it, **Use a fresh sheet** starts at 1. The used labels show on screen
-only, never print. After printing, "Did they print properly? → Yes" marks the
-requests printed and saves the next free label (e.g. 7 + 3 tags on an 8-label sheet →
-label 2 of the next). Templates on the same stock share it (it's one physical sheet).
-The emailed PDF always starts at label 1; the email says to print from Kinus to use a
-part-used sheet.
+For templates on label sheets (Avery 5160: 30 to a sheet…) Kinus remembers, per camp and
+label stock (the sheet preset, or paper + grid + label size), **which labels on the sheet
+in the printer are used** (`settings.label_sheet:<camp>/<stock>` → `{ used: [1, 2, 5] }`,
+`lib/print/sheet-position.ts`). Templates on the same stock share it (it's one physical
+sheet). The print screen shows the sheet: used labels hatched, the labels this print fills
+in blue. Tags go into the free labels in order; later sheets fill from the top.
+
+- **Tap where it starts** (default): tap the first free label of whatever sheet is in the
+  printer; everything before it counts as used.
+- **Tap each used label**: for a sheet with labels gone here and there; tap again to undo.
+- **Fresh sheet**: the last sheet was thrown out or can't be found. Saved at once.
+- **Remember this sheet**: saves a set-up sheet without printing.
+- After printing, "Did they print properly? → Yes" marks the requests printed and saves the
+  sheet as it is now (a sheet that ends full means a fresh one next).
+
+The used labels show on screen only, never print (`renderDocument(…, { usedSlots })`).
+Older saved positions (`next`, or the single `label_sheets` row) still count. The emailed
+PDF always starts at label 1; the email says to print from Kinus to use a part-used sheet.
 
 ### New and changed since the print
 

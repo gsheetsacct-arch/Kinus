@@ -95,9 +95,10 @@ async function JobPrint({ id, open, autoPrint }: { id: string; open: boolean; au
     <PrintPanel
       jobIds={[id]}
       stock={sheet.stock}
-      remembered={sheet.next}
+      remembered={sheet.used}
       parts={summary.parts}
       tags={summary.tags}
+      campers={summary.campers}
       open={open}
       autoPrint={autoPrint}
     />

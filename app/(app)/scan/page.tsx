@@ -9,6 +9,7 @@ import { LEVEL_RANK, effectiveLevel } from "@/lib/auth/permissions";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { loadAreaTree } from "@/lib/data/areas";
 import { getCampContext } from "@/lib/data/camp";
+import { loadCardTemplates } from "@/lib/print/card-templates";
 
 export const metadata = { title: "Check in" };
 export const maxDuration = 60;
@@ -23,7 +24,7 @@ export default async function ScanPage() {
       supabase.from("campers").select("id, camper_code, first_name, last_name, division_id, bunk_id, status").eq("session_id", session.id).is("archived_at", null).order("id").range(from, to),
     ),
     loadAreaTree(supabase, session.id),
-    supabase.from("print_templates").select("id, name").eq("show_on_card", true).order("sort_order").order("name"),
+    loadCardTemplates(supabase).then((data) => ({ data })),
   ]);
   const div = new Map(tree.divisions.map((d) => [d.id, d]));
   const roster: RosterEntry[] = rows.map((c) => {

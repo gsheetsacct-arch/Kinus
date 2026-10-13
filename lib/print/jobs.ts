@@ -3,14 +3,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { canAccessBunk, seesAllCamp, type CurrentUser } from "@/lib/auth/permissions";
 import { renderDocument } from "./render";
 import { mergeValues } from "./merge";
-import { htmlToPdf } from "./pdf";
+import { htmlToPdf, type FitNotes } from "./pdf";
 import { sendEmail } from "./email";
-import { backgroundDataUrl, byBunkThenName, loadMergeSetup, loadPrintCampers, toSpec } from "./data";
+import { backgroundDataUrl, byBunkThenName, imageDataUrls, loadMergeSetup, loadPrintCampers, toSpec } from "./data";
 import { contentHash, sameContent, templateKeys } from "./content";
 import type { TemplateSpec } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 import { isProgressMark, RETRY_MARK, STARTED_MARK } from "./labels";
-import { clampPosition, sheetStock } from "./sheet-position";
+import { cleanUsed, sheetStock, usedBefore } from "./sheet-position";
 
 /** Office, directors and admins print for anyone; others need check-in access to the camper. */
 export function canPrintFor(user: CurrentUser, camper: { division_id: string | null; bunk_id: string | null }) {
@@ -45,7 +45,7 @@ export async function officeEmail(): Promise<{ to: string; cc: string[] }> {
 export async function createPrintJob(
   user: CurrentUser,
   opts: { sessionId: string; templateId: string; camperIds: string[]; copies?: number; deliverTo?: string | null; note?: string | null },
-): Promise<{ id: string; count: number }> {
+): Promise<{ id: string; count: number; copies: number }> {
   const admin = createAdminClient();
   const { data: template } = await admin.from("print_templates").select("*").eq("id", opts.templateId).single();
   if (!template) throw new Error("That template no longer exists.");
@@ -64,13 +64,14 @@ export async function createPrintJob(
     .select("id")
     .single();
   if (error) throw error;
-  const copies = Math.min(Math.max(opts.copies ?? 1, 1), 10);
+  // how many of each: as asked, else the template's usual number (migration 0028)
+  const copies = Math.min(Math.max(Math.round(opts.copies ?? (Number((template as { copies?: number }).copies) || 1)), 1), 10);
   const hashes = await labelHashes(admin, toSpec(template), ids);
   for (let i = 0; i < ids.length; i += 500) {
     const { error: e } = await admin.from("print_job_items").insert(ids.slice(i, i + 500).map((camper_id) => ({ job_id: job.id, camper_id, copies, content_hash: hashes.get(camper_id) ?? null })));
     if (e) throw e;
   }
-  return { id: job.id, count: ids.length };
+  return { id: job.id, count: ids.length, copies };
 }
 
 type PrintSet = Awaited<ReturnType<typeof loadPrintSet>>;
@@ -96,26 +97,32 @@ async function loadPrintSet(jobIds: string[]) {
   );
   const copiesOf = new Map<string, number>();
   for (const i of items) copiesOf.set(i.camper_id, Math.max(copiesOf.get(i.camper_id) ?? 0, i.copies));
-  const [campers, setup, background] = await Promise.all([loadPrintCampers(admin, [...copiesOf.keys()]), loadMergeSetup(admin), backgroundDataUrl(admin, spec.background_path)]);
+  const [campers, setup, background, images] = await Promise.all([
+    loadPrintCampers(admin, [...copiesOf.keys()]),
+    loadMergeSetup(admin),
+    backgroundDataUrl(admin, spec.background_path),
+    imageDataUrls(admin, spec.layers),
+  ]);
   campers.sort(byBunkThenName);
-  return { jobs, spec, campers, copiesOf, setup, background, askedMoreThanOnce: items.length > copiesOf.size };
+  return { jobs, spec, campers, copiesOf, setup, background, images, askedMoreThanOnce: items.length > copiesOf.size };
 }
 
 const divisionOf = (c: { division_id?: string | null }) => c.division_id ?? null;
 
-function setHtml(set: PrintSet, opts: { start?: number; divisionId?: string | null }) {
+function setHtml(set: PrintSet, opts: { start?: number; used?: number[]; divisionId?: string | null; copies?: number }) {
   const campers = opts.divisionId === undefined ? set.campers : set.campers.filter((c) => divisionOf(c as never) === opts.divisionId);
   const stock = sheetStock(set.spec);
   const html = renderDocument(
     set.spec,
-    campers.map((c) => ({ values: mergeValues(c, set.setup.fields, set.setup.maps), copies: set.copiesOf.get(c.id) ?? 1 })),
-    { background: set.background, skip: stock && opts.start ? clampPosition(opts.start, stock.perSheet) - 1 : 0 },
+    // copies: as asked, or the same number of each chosen when printing
+    campers.map((c) => ({ values: mergeValues(c, set.setup.fields, set.setup.maps), copies: opts.copies ? Math.min(10, Math.max(1, Math.round(opts.copies))) : (set.copiesOf.get(c.id) ?? 1) })),
+    { background: set.background, images: set.images, usedSlots: stock ? (opts.used ?? (opts.start ? usedBefore(opts.start, stock.perSheet) : [])) : [] },
   );
   return { html, campers };
 }
 
 /** The printable page for requests printed together (all, or one division), starting at a label on a part-used sheet. */
-export async function printSetHtml(jobIds: string[], opts: { start?: number; divisionId?: string | null } = {}): Promise<string> {
+export async function printSetHtml(jobIds: string[], opts: { start?: number; used?: number[]; divisionId?: string | null; copies?: number } = {}): Promise<string> {
   return setHtml(await loadPrintSet(jobIds), opts).html;
 }
 
@@ -123,12 +130,13 @@ export async function printSetHtml(jobIds: string[], opts: { start?: number; div
 export async function printSetSummary(jobIds: string[]) {
   const set = await loadPrintSet(jobIds);
   const tagsOf = (cs: typeof set.campers) => cs.reduce((n, c) => n + (set.copiesOf.get(c.id) ?? 1), 0);
-  const parts = new Map<string, { divisionId: string | null; name: string; color: string | null; tags: number }>();
+  const parts = new Map<string, { divisionId: string | null; name: string; color: string | null; tags: number; campers: number }>();
   for (const c of set.campers) {
     const id = divisionOf(c as never);
     const k = id ?? "none";
-    const p = parts.get(k) ?? { divisionId: id, name: c.division_name ?? "No division", color: c.division_color, tags: 0 };
+    const p = parts.get(k) ?? { divisionId: id, name: c.division_name ?? "No division", color: c.division_color, tags: 0, campers: 0 };
     p.tags += set.copiesOf.get(c.id) ?? 1;
+    p.campers += 1;
     parts.set(k, p);
   }
   return {
@@ -186,10 +194,11 @@ export async function processPrintJob(jobId: string, appUrl: string, opts: { ret
     const { html, job } = await jobHtml(jobId);
     let pdf: Buffer | null = null;
     let pdfError: string | null = null;
+    let fit: FitNotes | null = null;
     try {
       // a very big batch could run out of time making the PDF: the email links to the queue instead
       if (job.tags > PDF_MAX_TAGS) throw new Error(`more than ${PDF_MAX_TAGS} tags; print it from Kinus`);
-      pdf = await htmlToPdf(html);
+      pdf = await htmlToPdf(html, (n) => (fit = n));
       const { error } = await admin.storage.from("print-output").upload(`${jobId}.pdf`, pdf, { contentType: "application/pdf", upsert: true });
       if (error) throw error;
       await admin.from("print_jobs").update({ pdf_path: `${jobId}.pdf` }).eq("id", jobId);
@@ -209,7 +218,7 @@ export async function processPrintJob(jobId: string, appUrl: string, opts: { ret
       to,
       cc: job.deliver_to && job.deliver_to !== office.to ? [] : office.cc,
       subject,
-      html: requestEmailHtml({ ...job, link, queueLink: `${appUrl}/print`, attached: Boolean(pdf) }),
+      html: requestEmailHtml({ ...job, link, queueLink: `${appUrl}/print`, attached: Boolean(pdf), fit }),
       attachments: pdf ? [{ filename: `${job.template_name.replace(/[^\w-]+/g, "-")}-${jobId.slice(0, 8)}.pdf`, content: pdf }] : undefined,
     });
     if (sent.sent) await finish({ status: "sent", email_message_id: sent.id, error: pdfError });
@@ -225,13 +234,29 @@ const escHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").re
  * The office's email for a request: who asked and for whom, and why printing from Kinus
  * (the print queue) beats printing this PDF.
  */
-export function requestEmailHtml(j: { requested_by_name: string; count: number; template_name: string; campers: string[]; note: string | null; link: string; queueLink: string; attached: boolean }): string {
+export function requestEmailHtml(j: { requested_by_name: string; count: number; template_name: string; campers: string[]; note: string | null; link: string; queueLink: string; attached: boolean; fit?: FitNotes | null }): string {
   const list = j.campers.map((c) => `<li dir="auto">${escHtml(c)}</li>`).join("");
+  // a long name that went under the template's smallest size, so it prints whole: worth a look
+  const uniq = <T,>(xs: T[], key: (x: T) => string) => [...new Map(xs.map((x) => [key(x), x])).values()];
+  const smaller = uniq(j.fit?.smaller ?? [], (x) => x.text);
+  const cut = uniq(j.fit?.cut ?? [], (x) => x);
+  const fitNote =
+    smaller.length || cut.length
+      ? `<p style="margin:0 0 16px;padding:8px 12px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;font-size:14px">${
+          smaller.length
+            ? `<strong>Printed smaller to fit:</strong> ${smaller
+                .slice(0, 8)
+                .map((x) => `<span dir="auto">${escHtml(x.text)}</span> (${x.pt} pt)`)
+                .join(", ")}${smaller.length > 8 ? ` and ${smaller.length - 8} more` : ""}. They're longer than the template was made for; check they're easy to read, or make that part of the template bigger.`
+            : ""
+        }${cut.length ? `${smaller.length ? "<br>" : ""}<strong>Too long to fit even at the smallest print:</strong> ${cut.slice(0, 8).map((x) => `<span dir="auto">${escHtml(x)}</span>`).join(", ")}. Make that part of the template bigger, then print these again.` : ""}</p>`
+      : "";
   const more = j.count > j.campers.length ? `<li>and ${j.count - j.campers.length} more</li>` : "";
   const button = "display:inline-block;background:#0f5f8a;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px;font-weight:bold";
   return `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:560px">
 <p><strong>${escHtml(j.requested_by_name)}</strong> asked for <strong>${j.count} × ${escHtml(j.template_name)}</strong>${j.note ? ` (${escHtml(j.note)})` : ""}.</p>
 ${list ? `<ul style="padding-left:20px;margin:0 0 16px">${list}${more}</ul>` : ""}
+${fitNote}
 <p style="margin:0 0 8px"><a href="${escHtml(j.queueLink)}" style="${button}">Open the print queue in Kinus</a></p>
 <p style="margin:0 0 16px;font-size:13px"><a href="${escHtml(j.link)}" style="color:#0f5f8a">or just this request</a></p>
 <p style="margin:0 0 6px"><strong>Please print from Kinus rather than from this email:</strong></p>
@@ -246,32 +271,39 @@ ${list ? `<ul style="padding-left:20px;margin:0 0 16px">${list}${more}</ul>` : "
 }
 
 /**
- * The first free label on each part-used sheet: one settings row per camp and label stock
- * ("label_sheet:<camp>/<stock>"), so each camp's office and printer keeps its own and two
- * writers never overwrite each other's. Older positions (one "label_sheets" row) still count.
+ * The sheet in each printer: which labels on it are used. One settings row per camp and label
+ * stock ("label_sheet:<camp>/<stock>" → { used: [1, 2, 5] }), so each camp's office keeps its own
+ * and two writers never overwrite each other's. Older rows ("next": first free label, or the
+ * one "label_sheets" row) still count.
  */
-export async function sheetPositions(): Promise<Record<string, number>> {
+export async function sheetPositions(): Promise<Record<string, number[]>> {
   const { data } = await createAdminClient().from("settings").select("key, value").or("key.like.label_sheet:%,key.eq.label_sheets");
-  const out: Record<string, number> = {};
+  const read = (x: unknown): number[] => {
+    if (typeof x === "number") return usedBefore(x, 500);
+    const v = (x ?? {}) as { used?: number[]; next?: number };
+    return Array.isArray(v.used) ? v.used.filter((n) => Number.isInteger(n)) : usedBefore(v.next ?? 1, 500);
+  };
+  const out: Record<string, number[]> = {};
   for (const r of data ?? []) {
     if (r.key === "label_sheets") {
-      for (const [k, x] of Object.entries((r.value ?? {}) as Record<string, { next?: number } | number>)) out[k] ??= typeof x === "number" ? x : (x?.next ?? 1);
-    } else out[r.key.slice("label_sheet:".length)] = Number((r.value as { next?: number } | null)?.next) || 1;
+      for (const [k, x] of Object.entries((r.value ?? {}) as Record<string, unknown>)) out[k] ??= read(x);
+    } else out[r.key.slice("label_sheet:".length)] = read(r.value);
   }
   return out;
 }
 
-/** The label stock as remembered for this camp ("<camp>/<stock>"), and where its sheet continues. */
-export function campStock<T extends { key: string }>(stock: T | null, campId: string | null | undefined, positions: Record<string, number>): { stock: T | null; next: number } {
-  if (!stock) return { stock: null, next: 1 };
+/** The label stock as remembered for this camp ("<camp>/<stock>"), and which labels on its sheet are used. */
+export function campStock<T extends { key: string; perSheet: number }>(stock: T | null, campId: string | null | undefined, positions: Record<string, number[]>): { stock: T | null; used: number[] } {
+  if (!stock) return { stock: null, used: [] };
   const key = `${campId ?? "camp"}/${stock.key}`;
-  return { stock: { ...stock, key }, next: positions[key] ?? positions[stock.key] ?? 1 };
+  return { stock: { ...stock, key }, used: cleanUsed(positions[key] ?? positions[stock.key] ?? [], stock.perSheet) };
 }
 
-export async function rememberSheetPosition(stock: string, next: number, userId: string): Promise<void> {
+export async function rememberSheetPosition(stock: string, used: number[], userId: string): Promise<void> {
+  const clean = [...new Set(used.filter((n) => Number.isInteger(n) && n >= 1 && n <= 500))].sort((a, b) => a - b);
   const { error } = await createAdminClient()
     .from("settings")
-    .upsert({ key: `label_sheet:${stock}`, value: { next, at: new Date().toISOString() }, updated_by: userId, updated_at: new Date().toISOString() });
+    .upsert({ key: `label_sheet:${stock}`, value: { used: clean, at: new Date().toISOString() }, updated_by: userId, updated_at: new Date().toISOString() });
   if (error) throw error;
 }
 

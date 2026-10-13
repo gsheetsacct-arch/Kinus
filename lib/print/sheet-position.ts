@@ -20,12 +20,35 @@ export function sheetStock(spec: Pick<TemplateSpec, "sheet_layout" | "page_width
 /** A label number (1-based) kept inside the sheet. */
 export const clampPosition = (n: number, perSheet: number) => (Number.isFinite(n) && n >= 1 && n <= perSheet ? Math.floor(n) : 1);
 
-/** Where the next print starts after printing `tags` labels from `start`: 1 again when the last sheet ended full. */
-export function nextPosition(start: number, tags: number, perSheet: number): number {
-  return ((clampPosition(start, perSheet) - 1 + Math.max(0, tags)) % perSheet) + 1;
+/** The labels already used on the sheet in the printer (1-based), cleaned up: inside the sheet, sorted, never all of it. */
+export function cleanUsed(used: Iterable<number>, perSheet: number): number[] {
+  const out = [...new Set([...used].filter((n) => Number.isInteger(n) && n >= 1 && n <= perSheet))].sort((a, b) => a - b);
+  return out.length >= perSheet ? [] : out;
 }
 
-/** How many sheets a print uses, starting at `start`. */
-export function sheetsUsed(start: number, tags: number, perSheet: number): number {
-  return Math.ceil((clampPosition(start, perSheet) - 1 + Math.max(0, tags)) / perSheet);
+/** "Labels 1–6 used" as a list. */
+export const usedBefore = (start: number, perSheet: number) => Array.from({ length: clampPosition(start, perSheet) - 1 }, (_, i) => i + 1);
+
+/** The free labels on the sheet in the printer, in printing order. */
+export const freeLabels = (used: number[], perSheet: number) => Array.from({ length: perSheet }, (_, i) => i + 1).filter((n) => !used.includes(n));
+
+/** How many sheets a print of `tags` labels uses, starting on a sheet with `used` labels gone. */
+export function sheetsUsed(used: number[], tags: number, perSheet: number): number {
+  const free = freeLabels(cleanUsed(used, perSheet), perSheet).length;
+  return tags <= free ? (tags > 0 ? 1 : 0) : 1 + Math.ceil((tags - free) / perSheet);
+}
+
+/** The sheet in the printer after printing `tags` labels: which labels are used then ([] = a fresh sheet). */
+export function usedAfter(used: number[], tags: number, perSheet: number): number[] {
+  const clean = cleanUsed(used, perSheet);
+  const free = freeLabels(clean, perSheet);
+  if (tags < free.length) return cleanUsed([...clean, ...free.slice(0, tags)], perSheet);
+  const left = (tags - free.length) % perSheet;
+  // the sheet ended full: the next print starts on a fresh one; else part of the last sheet is used
+  return usedBefore(left + 1, perSheet);
+}
+
+/** The first free label after printing `tags` labels from `start` (1: a fresh sheet). */
+export function nextPosition(start: number, tags: number, perSheet: number): number {
+  return freeLabels(usedAfter(usedBefore(start, perSheet), tags, perSheet), perSheet)[0] ?? 1;
 }

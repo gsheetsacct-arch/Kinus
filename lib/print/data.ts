@@ -43,6 +43,13 @@ export async function backgroundDataUrl(admin: DB, path: string | null | undefin
   return `data:${data.type || "image/png"};base64,${buf.toString("base64")}`;
 }
 
+/** The pictures a template's parts show (logos…), as data URLs for the page, by stored path. */
+export async function imageDataUrls(admin: DB, layers: { type: string; path?: string }[]): Promise<Record<string, string>> {
+  const paths = [...new Set(layers.filter((l) => l.type === "image" && l.path).map((l) => l.path!))];
+  const urls = await Promise.all(paths.map((p) => backgroundDataUrl(admin, p).catch(() => null)));
+  return Object.fromEntries(paths.flatMap((p, i) => (urls[i] ? [[p, urls[i]!]] : [])));
+}
+
 /** Full camper rows (service role) for the given ids, with division/bunk names, colours and contacts. */
 export async function loadPrintCampers(admin: DB, ids: string[]): Promise<PrintCamper[]> {
   const unique = [...new Set(ids)];
@@ -91,8 +98,11 @@ export async function campersInScope(db: DB, sessionId: string, scope: { divisio
   return rows.map((r) => r.id);
 }
 
+/** Printing order: division (1, 2, 3, then the rest), bunk (Alef-Beis), name; no division or bunk yet comes last. */
 export const byBunkThenName = (a: PrintCamper, b: PrintCamper) =>
+  Number(!a.division_name) - Number(!b.division_name) ||
   compareDivisionNames(a.division_name ?? "", b.division_name ?? "") ||
+  Number(!a.bunk_name) - Number(!b.bunk_name) ||
   compareBunkNames(a.bunk_name ?? "", b.bunk_name ?? "") ||
   a.last_name.localeCompare(b.last_name) ||
   a.first_name.localeCompare(b.first_name);

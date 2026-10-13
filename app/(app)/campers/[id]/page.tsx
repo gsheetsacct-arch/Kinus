@@ -26,6 +26,7 @@ import { formatDateTime, formatPhone } from "@/lib/utils";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
 import { FIELD_BY_KEY } from "@/lib/fields";
 import { addContact, archiveCamper, removeContact, updateCamper } from "../actions";
+import { loadCardTemplates } from "@/lib/print/card-templates";
 
 export const metadata = { title: "Camper" };
 
@@ -56,7 +57,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
     supabase.from("attendance_events").select("id, event_type, method, occurred_at, note, resulting_status, profiles:recorded_by(full_name)").eq("camper_id", id).order("occurred_at", { ascending: false }).limit(100),
     supabase.rpc("camper_history", { p_camper_id: id }),
     session ? divisionsFor(session.id) : Promise.resolve({ data: [] }),
-    supabase.from("print_templates").select("id, name").eq("show_on_card", true).order("sort_order").order("name"),
+    loadCardTemplates(supabase).then((data) => ({ data })),
     loadCard(id),
   ]);
   if (!c) notFound();

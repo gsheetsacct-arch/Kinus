@@ -5,7 +5,9 @@ import "server-only";
  * @sparticuz/chromium build is used. Throws if no browser is available; callers fall
  * back to the printable HTML page.
  */
-export async function htmlToPdf(html: string): Promise<Buffer> {
+export type FitNotes = { smaller: { text: string; pt: number }[]; cut: string[] };
+
+export async function htmlToPdf(html: string, onFit?: (notes: FitNotes) => void): Promise<Buffer> {
   const puppeteer = (await import("puppeteer-core")).default;
   let executablePath = process.env.CHROMIUM_PATH;
   let args = ["--no-sandbox", "--disable-gpu", "--font-render-hinting=none"];
@@ -27,6 +29,14 @@ export async function htmlToPdf(html: string): Promise<Buffer> {
     await page.waitForSelector("body[data-fitted]", { timeout: 8000 }).catch(() => {
       throw new Error("the names couldn't be sized to fit in time");
     });
+    // names that had to go under their part's smallest size to fit (or didn't fit at all), for the office
+    if (onFit)
+      onFit(
+        await page.evaluate(() => ({
+          smaller: [...document.querySelectorAll("[data-small]:not([data-cut])")].map((el) => ({ text: (el.textContent ?? "").trim(), pt: Number(el.getAttribute("data-small")) })),
+          cut: [...document.querySelectorAll("[data-cut]")].map((el) => (el.textContent ?? "").trim()),
+        })),
+      );
     const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true, timeout: 15000 });
     return Buffer.from(pdf);
   } finally {
