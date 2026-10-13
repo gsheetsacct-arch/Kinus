@@ -450,7 +450,7 @@ export async function removePasskeys(fd: FormData): Promise<ActionResult> {
 }
 
 // ---------------------------------------------------------------------------
-// Check-in logins: one per division, shared by that division's check-in phones
+// Check-in logins: as many per division as it needs, each shared by some of its check-in phones
 // ---------------------------------------------------------------------------
 export type CheckinResult = ActionResult & { username?: string; password?: string };
 
@@ -459,7 +459,7 @@ async function assertCheckinDivision(me: CurrentUser, divisionId: string) {
   if (!canGrantAreas(me, [{ group_id: null, division_id: divisionId, bunk_id: null }], false, await divisionGroupLookup())) throw new Error("That division isn't yours.");
 }
 
-/** Creates the check-in login for a division: a short name ("division-1") and a password. */
+/** Adds a check-in login to a division: a short name ("division-1", then "division-1-2"…) and a password. */
 export async function createCheckinLogin(divisionId: string): Promise<CheckinResult> {
   const me = await requireStaffManager();
   try {
@@ -468,14 +468,14 @@ export async function createCheckinLogin(divisionId: string): Promise<CheckinRes
     const admin = createAdminClient();
     const { data: division } = await admin.from("divisions").select("id, name").eq("id", divisionId).single();
     if (!division) return fail("Division not found.");
-    const { data: has } = await admin.from("staff_scopes").select("user_id, profiles!staff_scopes_user_id_fkey!inner(login)").eq("division_id", divisionId).eq("profiles.login", "shared").limit(1);
-    if (has?.length) return fail(`${division.name} already has a check-in login. Set a new password instead.`);
     // a short, unique name to type on the phone
     let name = checkinName(division.name);
-    for (let n = 2; (await admin.from("profiles").select("id").ilike("email", `checkin.${name}@%`).maybeSingle()).data; n++) name = `${checkinName(division.name)}-${n}`;
+    let n = 1;
+    while ((await admin.from("profiles").select("id").ilike("email", `checkin.${name}@%`).maybeSingle()).data) name = `${checkinName(division.name)}-${++n}`;
+    const fullName = n === 1 ? `${division.name} check-in` : `${division.name} check-in ${n}`;
     const password = generatePassword();
-    const id = await createAccount(await checkinEmail(name), `${division.name} check-in`, "scanner", { password });
-    await writeAccess(id, { role: "scanner", allAreas: false, areas: [{ group_id: null, division_id: divisionId, bunk_id: null }], full_name: `${division.name} check-in`, title: "Check-in phones" });
+    const id = await createAccount(await checkinEmail(name), fullName, "scanner", { password });
+    await writeAccess(id, { role: "scanner", allAreas: false, areas: [{ group_id: null, division_id: divisionId, bunk_id: null }], full_name: fullName, title: "Check-in phones" });
     await setLoginKind(id, "shared");
     revalidatePath("/admin/users");
     return { ok: true, message: "Check-in login created.", username: name, password };
@@ -484,7 +484,7 @@ export async function createCheckinLogin(divisionId: string): Promise<CheckinRes
   }
 }
 
-/** A new password for a division's check-in login (the old one stops working). */
+/** A new password for a check-in login (the old one stops working). */
 export async function resetCheckinPassword(id: string): Promise<CheckinResult> {
   const me = await requireStaffManager();
   try {

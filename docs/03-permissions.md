@@ -59,11 +59,11 @@ every division in it, including divisions added to the group later.
   never sign in: no email needed, their Supabase sign-in is blocked (banned), and the app
   refuses them too. New counselors default to this; bulk upload has an optional *Signs in*
   column (yes/no).
-- **Check-in login** (`shared`): one per division, created on the Staff page (*Check-in
-  logins*) by directors, division heads and head counselors for their divisions. The
-  division's check-in phones sign in with its short name (`division-1`) and a generated
-  password; *New password* replaces it. Head staff and directors check in with their own
-  accounts.
+- **Check-in login** (`shared`): as many per division as it needs (one per gate or per
+  phone), created on the Staff page (*Check-in logins*) by directors, division heads and
+  head counselors for their divisions. Each has its own short name (`division-1`,
+  `division-1-2`…) and a generated password; *New password* replaces it, the bin removes
+  it (its check-ins stay). Head staff and directors check in with their own accounts.
 
 Anyone who can check in more than one division picks **which line they're at** on Check in
 (remembered for the shift). A camper from another division then asks "Not your line"

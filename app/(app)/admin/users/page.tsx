@@ -62,13 +62,18 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     };
   });
   const roles = rolesInUse(setup, ROLE_ORDER).filter((r) => canManageRole(me, r as StaffRole));
-  // one check-in login per division this person looks after
+  // the check-in logins of each division this person looks after (any number per division)
   const grantable = grantableTree(me, tree);
   const shared = (profiles ?? []).filter((p) => p.login === "shared");
-  const checkinLogins = grantable.divisions.map((d) => {
-    const acct = shared.find((p) => (areas ?? []).some((a) => a.user_id === p.id && a.division_id === d.id));
-    return { divisionId: d.id, divisionName: d.name, color: d.color, account: acct ? { id: acct.id, name: checkinNameOf(acct.email) ?? acct.email, active: acct.is_active, lastSignIn: info.get(acct.id)?.lastSignInAt ?? null } : null };
-  });
+  const checkinLogins = grantable.divisions.map((d) => ({
+    divisionId: d.id,
+    divisionName: d.name,
+    color: d.color,
+    accounts: shared
+      .filter((p) => (areas ?? []).some((a) => a.user_id === p.id && a.division_id === d.id))
+      .map((p) => ({ id: p.id, name: checkinNameOf(p.email) ?? p.email, active: p.is_active, lastSignIn: info.get(p.id)?.lastSignInAt ?? null }))
+      .sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true })),
+  }));
 
   return (
     <div className="space-y-6">
