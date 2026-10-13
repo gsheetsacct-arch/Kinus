@@ -1,4 +1,6 @@
+import { Send } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { Callout } from "@/components/callout";
 import { Section } from "@/components/section";
 import { ActionForm } from "@/components/action-form";
 import { Button } from "@/components/ui/button";
@@ -9,7 +11,8 @@ import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
 import { extraAnswers } from "@/lib/data/extra-fields";
 import type { ExtraField } from "@/lib/import/extra-fields";
 import Link from "next/link";
-import { saveExtraFields, saveImportSettings, saveMissingRules, saveOfficeEmail } from "./actions";
+import { saveExtraFields, saveImportSettings, saveMissingRules, saveOfficeEmail, sendTestEmail } from "./actions";
+import { emailSetup } from "@/lib/print/email";
 import { parseExtraFields } from "@/lib/import/extra-fields";
 import { DEFAULT_RULES, type MissingRules } from "@/lib/attendance/missing";
 
@@ -22,6 +25,7 @@ export default async function SettingsPage() {
   const { data: settings } = await supabase.from("settings").select("key, value");
   const setting = (k: string) => (settings?.find((s) => s.key === k)?.value ?? {}) as Record<string, unknown>;
   const officeEmail = setting("office_email");
+  const email = emailSetup();
   const imp = setting("import");
   const extraFields = parseExtraFields(settings?.find((x) => x.key === "extra_fields")?.value);
   const session = await getActiveSession();
@@ -104,6 +108,23 @@ export default async function SettingsPage() {
               <span className="hidden text-sm font-medium text-amber-700 group-data-[dirty=true]:inline dark:text-amber-300">Unsaved changes</span>
             </span>
           </ActionForm>
+          <div className="mt-5 space-y-2 border-t pt-4 text-sm">
+            <p className="text-muted-foreground">
+              Sent from <code className="rounded bg-muted px-1">{email.from}</code>
+              {!email.configured && " · not set up yet (RESEND_API_KEY missing in Vercel)"}
+            </p>
+            {email.configured && email.testSender && (
+              <Callout tone="warning">
+                That&apos;s Resend&apos;s test sender: it only delivers to the Resend account&apos;s own address. To reach the office, verify your camp&apos;s domain at resend.com/domains and set EMAIL_FROM in Vercel to an address on it.
+              </Callout>
+            )}
+            <ActionForm action={sendTestEmail}>
+              <Button type="submit" variant="outline" size="sm">
+                <Send /> Send a test email
+              </Button>
+            </ActionForm>
+            <p className="text-xs text-muted-foreground">Sends a sample tag as a PDF to the address above, the same way a real request is sent, and tells you if anything is wrong.</p>
+          </div>
         </Section>
         <Section title="Imports" description="Get a clear warning when an uploaded export looks incomplete.">
           <ActionForm action={saveImportSettings} warnUnsaved className="group space-y-4">

@@ -55,9 +55,14 @@ function tagHtml(t: TemplateSpec, values: Record<string, string>, background: st
  * out N-up on letter/A4 sheets. The same HTML is printed by the browser and turned
  * into a PDF by Chromium.
  */
-export function renderDocument(t: TemplateSpec, items: PrintItem[], opts: { background?: string | null; outlines?: boolean } = {}): string {
-  const tags = items.flatMap((it) => Array.from({ length: Math.max(1, it.copies) }, () => tagHtml(t, it.values, opts.background ?? null)));
+export function renderDocument(t: TemplateSpec, items: PrintItem[], opts: { background?: string | null; outlines?: boolean; skip?: number } = {}): string {
   const sheet = t.sheet_layout;
+  // a part-used label sheet: leave the labels already peeled off empty (only on the first sheet)
+  const skip = sheet && sheet.cols > 0 && sheet.rows > 0 ? Math.min(Math.max(0, Math.floor(opts.skip ?? 0)), sheet.cols * sheet.rows - 1) : 0;
+  const tags: (string | null)[] = [
+    ...Array.from({ length: skip }, () => null),
+    ...items.flatMap((it) => Array.from({ length: Math.max(1, it.copies) }, () => tagHtml(t, it.values, opts.background ?? null))),
+  ];
   let pageCss: string;
   let body: string;
   if (sheet && sheet.cols > 0 && sheet.rows > 0) {
@@ -73,6 +78,8 @@ export function renderDocument(t: TemplateSpec, items: PrintItem[], opts: { back
       const slots = tags.slice(i, i + per).map((tag, k) => {
         const x = at.left + (k % sheet.cols) * at.pitchX + dx;
         const y = at.top + Math.floor(k / sheet.cols) * at.pitchY + dy;
+        // a label already used on the part-used sheet: marked on screen, never printed
+        if (tag === null) return `<div class="tag used" style="left:${x.toFixed(2)}mm;top:${y.toFixed(2)}mm;width:${t.page_width_mm}mm;height:${t.page_height_mm}mm;"></div>`;
         return tag.replace('<div class="tag" style="', `<div class="tag" style="left:${x.toFixed(2)}mm;top:${y.toFixed(2)}mm;`);
       });
       pages.push(`<div class="sheet">${slots.join("")}</div>`);
@@ -97,7 +104,8 @@ body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-w
 .bc-text{font-size:7pt;text-align:center;letter-spacing:0.5pt;line-height:1.2;padding-top:0.4mm}
 .qr svg{width:100%;height:100%;display:block}
 @media screen{body{background:#e2e8f0;padding:8mm;display:flex;flex-wrap:wrap;gap:6mm;align-items:flex-start}.tag,.sheet{flex-shrink:0;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}}
-@media print{body{display:block}}
+.used{background:repeating-linear-gradient(45deg,#f1f5f9 0 2mm,#fff 2mm 4mm);outline:0.3mm dashed #94a3b8}
+@media print{body{display:block}.used{display:none}}
 </style></head><body>${body}<script>
 (function(){function fit(){document.querySelectorAll("[data-fit]").forEach(function(el){var span=el.firstElementChild;var min=parseFloat(el.getAttribute("data-min"))||8;var s=parseFloat(getComputedStyle(el).fontSize);var over=function(){return span.scrollWidth>el.clientWidth+0.5||el.scrollHeight>el.clientHeight+0.5};if(!over())return;var r=Math.min(el.clientWidth/Math.max(span.scrollWidth,1),el.clientHeight/Math.max(el.scrollHeight,1));s=Math.max(min,Math.floor(s*Math.min(1,r)*2)/2);el.style.fontSize=s+"px";var guard=80;while(guard-->0&&s>min&&over()){s=Math.max(min,s-0.5);el.style.fontSize=s+"px";}});document.body.setAttribute("data-fitted","1");}
 if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fit)}else{window.addEventListener("load",fit)}})();

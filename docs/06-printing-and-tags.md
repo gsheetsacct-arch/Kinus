@@ -194,6 +194,29 @@ template + merge fields + camper(s) ─► HTML (React, print CSS, mm units, emb
    **Open PDF**, **Mark printed**, **Re-send** (with "to" override). Marking printed
    updates the card ("Printed 9:44").
 
+### Printing requests together
+
+The queue groups waiting requests for the same template ("Name tag: 4 requests
+waiting · 6 tags → **Print together**"); selecting several and **Print together**
+does the same. `/print/together?jobs=…` prints them as one document, sorted by
+division and bunk: **All together**, or **One division at a time** (each division
+its own print; the requests are marked printed once the last one is done). A camper
+asked for in more than one request prints once, with the most copies asked
+(`loadPrintSet` in `lib/print/jobs.ts`; page `/print/sheet?jobs=…&division=…&start=…`).
+
+### Part-used label sheets
+
+For templates on label sheets (Avery 5160: 30 to a sheet…) Kinus remembers, per label
+stock (the sheet preset, or paper + grid + label size), the first free label on the
+sheet in the printer (`settings.label_sheets`, `lib/print/sheet-position.ts`). The
+print screen shows the sheet with the used labels hatched and starts there; tapping a
+label changes it, **Use a fresh sheet** starts at 1. The used labels show on screen
+only, never print. After printing, "Did they print properly? → Yes" marks the
+requests printed and saves the next free label (e.g. 7 + 3 tags on an 8-label sheet →
+label 2 of the next). Templates on the same stock share it (it's one physical sheet).
+The emailed PDF always starts at label 1; the email says to print from Kinus to use a
+part-used sheet.
+
 ## 6.7 Batch printing (before the program)
 
 `/print/batch`: template, scope (division / bunk / all / only campers without a
@@ -208,7 +231,20 @@ Publisher data-source export (6.3 B) from the same screen.
 
 ## 6.8 Email (Resend)
 
-- Verified domain (SPF/DKIM); from `tags@<your-domain>`.
+- Verified domain (SPF/DKIM); from `tags@<your-domain>` (`EMAIL_FROM`). Without it,
+  Resend's test sender (`onboarding@resend.dev`) only delivers to the Resend account's
+  own address: Settings warns about this.
+- **Settings → Office email → Send a test email** makes a sample tag into a PDF (the
+  same way requests are) and emails it to the office, then says what worked or, in
+  plain words, what didn't (test mode, unverified domain, bad API key, rate limit).
+  The same explanations show on a request that couldn't be emailed, in the print
+  queue (`explainEmailError` in `lib/print/email.ts`).
+- The request email ("To print: Name tag · … · from …") names the campers (up to 12)
+  and who asked, leads with **Open the print queue in Kinus**, and says why printing
+  from Kinus beats the attached PDF: everything waiting in one place, same-tag
+  requests printed together, part-used label sheets continued, and "printed" showing
+  on the camper's card. The PDF stays attached as a fallback.
+- Testing against a stand-in: `RESEND_API_URL` replaces `https://api.resend.com`.
 - Attachment limit 40 MB covers hundreds of tags; above that the email carries a
   signed Storage link (7 days) and says so.
 - React Email templates: `PrintJobEmail`, `StaffInviteEmail`, optional

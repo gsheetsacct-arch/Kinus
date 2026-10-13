@@ -8,6 +8,8 @@ import { sendEmail } from "./email";
 import { backgroundDataUrl, byBunkThenName, loadMergeSetup, loadPrintCampers, toSpec } from "./data";
 import { contentHash, templateKeys } from "./content";
 import type { TemplateSpec } from "./types";
+import type { Json } from "@/lib/supabase/database.types";
+import { clampPosition, sheetStock } from "./sheet-position";
 
 /** Office, directors and admins print for anyone; others need check-in access to the camper. */
 export function canPrintFor(user: CurrentUser, camper: { division_id: string | null; bunk_id: string | null }) {
@@ -61,34 +63,97 @@ export async function createPrintJob(
   return { id: job.id, count: ids.length };
 }
 
-/** Builds the printable HTML for a job (used by the PDF, the browser print page and previews). */
-export async function jobHtml(jobId: string): Promise<{ html: string; job: { id: string; deliver_to: string; template_name: string; count: number; requested_by_name: string; first_camper: string } }> {
+type PrintSet = Awaited<ReturnType<typeof loadPrintSet>>;
+
+/**
+ * One or more requests for the same template, as one thing to print. A camper asked for in
+ * two requests (a double tap, or two people asking) prints once, with the most copies asked.
+ */
+async function loadPrintSet(jobIds: string[]) {
   const admin = createAdminClient();
-  const { data: job, error } = await admin.from("print_jobs").select("*, print_templates(*), profiles:requested_by(full_name)").eq("id", jobId).single();
-  if (error || !job) throw error ?? new Error("Job not found.");
-  if (!job.print_templates) throw new Error("The template for this job was deleted.");
-  const spec = toSpec(job.print_templates as never);
+  const ids = [...new Set(jobIds)];
+  if (!ids.length) throw new Error("Nothing to print.");
+  const { data: jobs, error } = await admin.from("print_jobs").select("*, print_templates(*), profiles:requested_by(full_name)").in("id", ids);
+  if (error) throw error;
+  if (!jobs || jobs.length !== ids.length) throw new Error("Some of these requests are gone. Go back to the print queue.");
+  const templateIds = new Set(jobs.map((j) => j.template_id));
+  if (templateIds.size > 1) throw new Error("Only requests for the same tag can be printed together.");
+  const template = jobs[0].print_templates;
+  if (!template) throw new Error("The template for this job was deleted.");
+  const spec = toSpec(template as never);
   const items = await import("@/lib/supabase/fetch-all").then(({ fetchAll }) =>
-    fetchAll((from, to) => admin.from("print_job_items").select("camper_id, copies").eq("job_id", jobId).order("camper_id").range(from, to)),
+    fetchAll((from, to) => admin.from("print_job_items").select("camper_id, copies").in("job_id", ids).order("camper_id").range(from, to)),
   );
-  const [campers, setup, bg] = await Promise.all([loadPrintCampers(admin, items.map((i) => i.camper_id)), loadMergeSetup(admin), backgroundDataUrl(admin, spec.background_path)]);
+  const copiesOf = new Map<string, number>();
+  for (const i of items) copiesOf.set(i.camper_id, Math.max(copiesOf.get(i.camper_id) ?? 0, i.copies));
+  const [campers, setup, background] = await Promise.all([loadPrintCampers(admin, [...copiesOf.keys()]), loadMergeSetup(admin), backgroundDataUrl(admin, spec.background_path)]);
   campers.sort(byBunkThenName);
-  const copiesOf = new Map(items.map((i) => [i.camper_id, i.copies]));
+  return { jobs, spec, campers, copiesOf, setup, background, askedMoreThanOnce: items.length > copiesOf.size };
+}
+
+const divisionOf = (c: { division_id?: string | null }) => c.division_id ?? null;
+
+function setHtml(set: PrintSet, opts: { start?: number; divisionId?: string | null }) {
+  const campers = opts.divisionId === undefined ? set.campers : set.campers.filter((c) => divisionOf(c as never) === opts.divisionId);
+  const stock = sheetStock(set.spec);
   const html = renderDocument(
-    spec,
-    campers.map((c) => ({ values: mergeValues(c, setup.fields, setup.maps), copies: copiesOf.get(c.id) ?? 1 })),
-    { background: bg },
+    set.spec,
+    campers.map((c) => ({ values: mergeValues(c, set.setup.fields, set.setup.maps), copies: set.copiesOf.get(c.id) ?? 1 })),
+    { background: set.background, skip: stock && opts.start ? clampPosition(opts.start, stock.perSheet) - 1 : 0 },
   );
+  return { html, campers };
+}
+
+/** The printable page for requests printed together (all, or one division), starting at a label on a part-used sheet. */
+export async function printSetHtml(jobIds: string[], opts: { start?: number; divisionId?: string | null } = {}): Promise<string> {
+  return setHtml(await loadPrintSet(jobIds), opts).html;
+}
+
+/** What a set of requests holds: the template, its label stock, and the tags per division. */
+export async function printSetSummary(jobIds: string[]) {
+  const set = await loadPrintSet(jobIds);
+  const tagsOf = (cs: typeof set.campers) => cs.reduce((n, c) => n + (set.copiesOf.get(c.id) ?? 1), 0);
+  const parts = new Map<string, { divisionId: string | null; name: string; color: string | null; tags: number }>();
+  for (const c of set.campers) {
+    const id = divisionOf(c as never);
+    const k = id ?? "none";
+    const p = parts.get(k) ?? { divisionId: id, name: c.division_name ?? "No division", color: c.division_color, tags: 0 };
+    p.tags += set.copiesOf.get(c.id) ?? 1;
+    parts.set(k, p);
+  }
+  return {
+    templateId: set.spec.id ?? set.jobs[0].template_id,
+    templateName: set.spec.name,
+    spec: set.spec,
+    stock: sheetStock(set.spec),
+    tags: tagsOf(set.campers),
+    campers: set.campers.length,
+    requests: set.jobs.length,
+    parts: [...parts.values()],
+    statuses: set.jobs.map((j) => j.status),
+    askedMoreThanOnce: set.askedMoreThanOnce,
+  };
+}
+
+/** Builds the printable HTML for a job (used by the PDF, the browser print page and previews). */
+export async function jobHtml(jobId: string, opts: { start?: number } = {}): Promise<{ html: string; job: { id: string; deliver_to: string; template_name: string; count: number; requested_by_name: string; first_camper: string; campers: string[]; note: string | null } }> {
+  const set = await loadPrintSet([jobId]);
+  const job = set.jobs[0];
+  const { html, campers } = setHtml(set, { start: opts.start });
+  const copiesOf = set.copiesOf;
   const first = campers[0];
   return {
     html,
     job: {
       id: job.id,
       deliver_to: job.deliver_to,
-      template_name: spec.name,
+      template_name: set.spec.name,
       count: campers.length,
       requested_by_name: (job.profiles as { full_name: string } | null)?.full_name ?? "someone",
       first_camper: first ? `${first.first_name} ${first.last_name}${first.bunk_name ? ` · ${first.bunk_name}` : ""}` : "",
+      // who the tags are for (the first few), for the email
+      campers: campers.slice(0, 12).map((c) => `${c.first_name} ${c.last_name}${[c.division_name, c.bunk_name].filter(Boolean).length ? ` (${[c.division_name, c.bunk_name].filter(Boolean).join(" · ")})` : ""}${(copiesOf.get(c.id) ?? 1) > 1 ? ` × ${copiesOf.get(c.id)}` : ""}`),
+      note: job.note ?? null,
     },
   };
 }
@@ -114,7 +179,7 @@ export async function processPrintJob(jobId: string, appUrl: string): Promise<vo
       pdf = null;
     }
     const link = `${appUrl}/print/jobs/${jobId}`;
-    const subject = job.count === 1 ? `${job.template_name} · ${job.first_camper} · from ${job.requested_by_name}` : `${job.template_name} × ${job.count} · from ${job.requested_by_name}`;
+    const subject = `To print: ${job.count === 1 ? `${job.template_name} · ${job.first_camper}` : `${job.template_name} × ${job.count}`} · from ${job.requested_by_name}`;
     const office = await officeEmail();
     const to = (job.deliver_to || office.to).split(/[,;\s]+/).filter(Boolean);
     if (!to.length) {
@@ -125,7 +190,7 @@ export async function processPrintJob(jobId: string, appUrl: string): Promise<vo
       to,
       cc: job.deliver_to && job.deliver_to !== office.to ? [] : office.cc,
       subject,
-      html: `<p>${job.requested_by_name} asked for <strong>${job.count} × ${job.template_name}</strong>.</p><p>${pdf ? "The PDF is attached." : "Open the link to print it."}</p><p><a href="${link}">Open in Kinus</a> to print again or mark it printed.</p>`,
+      html: requestEmailHtml({ ...job, link, queueLink: `${appUrl}/print`, attached: Boolean(pdf) }),
       attachments: pdf ? [{ filename: `${job.template_name.replace(/[^\w-]+/g, "-")}-${jobId.slice(0, 8)}.pdf`, content: pdf }] : undefined,
     });
     if (sent.sent) await admin.from("print_jobs").update({ status: "sent", email_message_id: sent.id, error: pdfError }).eq("id", jobId);
@@ -133,4 +198,45 @@ export async function processPrintJob(jobId: string, appUrl: string): Promise<vo
   } catch (e) {
     await admin.from("print_jobs").update({ status: "failed", error: e instanceof Error ? e.message : String(e) }).eq("id", jobId);
   }
+}
+
+const escHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/**
+ * The office's email for a request: who asked and for whom, and why printing from Kinus
+ * (the print queue) beats printing this PDF.
+ */
+export function requestEmailHtml(j: { requested_by_name: string; count: number; template_name: string; campers: string[]; note: string | null; link: string; queueLink: string; attached: boolean }): string {
+  const list = j.campers.map((c) => `<li dir="auto">${escHtml(c)}</li>`).join("");
+  const more = j.count > j.campers.length ? `<li>and ${j.count - j.campers.length} more</li>` : "";
+  const button = "display:inline-block;background:#0f5f8a;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px;font-weight:bold";
+  return `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:560px">
+<p><strong>${escHtml(j.requested_by_name)}</strong> asked for <strong>${j.count} × ${escHtml(j.template_name)}</strong>${j.note ? ` (${escHtml(j.note)})` : ""}.</p>
+${list ? `<ul style="padding-left:20px;margin:0 0 16px">${list}${more}</ul>` : ""}
+<p style="margin:0 0 8px"><a href="${escHtml(j.queueLink)}" style="${button}">Open the print queue in Kinus</a></p>
+<p style="margin:0 0 16px;font-size:13px"><a href="${escHtml(j.link)}" style="color:#0f5f8a">or just this request</a></p>
+<p style="margin:0 0 6px"><strong>Please print from Kinus rather than from this email:</strong></p>
+<ul style="padding-left:20px;margin:0 0 16px">
+<li><strong>Everything waiting, in one place.</strong> Other requests may have come in since this one: the queue shows them all.</li>
+<li><strong>Fewer prints.</strong> Requests for the same tag print together in one go, sorted by division and bunk, or one division at a time.</li>
+<li><strong>No wasted label sheets.</strong> Kinus remembers how much of the label sheet is used and starts on the next free label. This PDF always starts at the top of a fresh sheet.</li>
+<li><strong>Staff can see it's done.</strong> Marking it printed shows on the camper's card, so nobody asks twice.</li>
+</ul>
+<p style="color:#666;font-size:13px">${j.attached ? "The PDF is attached in case you can't open Kinus right now." : "There's no PDF this time: print it from Kinus."}</p>
+</div>`;
+}
+
+/** The first free label on each part-used sheet (settings "label_sheets": stock → label number). */
+export async function sheetPositions(): Promise<Record<string, number>> {
+  const { data } = await createAdminClient().from("settings").select("value").eq("key", "label_sheets").maybeSingle();
+  const v = (data?.value ?? {}) as Record<string, { next?: number } | number>;
+  return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, typeof x === "number" ? x : (x?.next ?? 1)]));
+}
+
+export async function rememberSheetPosition(stock: string, next: number, userId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { data } = await admin.from("settings").select("value").eq("key", "label_sheets").maybeSingle();
+  const value = { ...((data?.value ?? {}) as Record<string, Json>), [stock]: { next, at: new Date().toISOString() } };
+  const { error } = await admin.from("settings").upsert({ key: "label_sheets", value, updated_by: userId, updated_at: new Date().toISOString() });
+  if (error) throw error;
 }

@@ -113,3 +113,39 @@ const FROM_TIDY = [
   { type: "replace" as const, pattern: ",\\s+", replacement: ", ", flags: "g" },
   { type: "replace" as const, pattern: "\\s{2,}", replacement: " ", flags: "g" },
 ];
+
+describe("part-used label sheets", async () => {
+  const { sheetStock, nextPosition, sheetsUsed, clampPosition } = await import("../sheet-position");
+  const { renderDocument } = await import("../render");
+  const spec = { name: "Avery 5160", kind: "name_tag", page_width_mm: 66.7, page_height_mm: 25.4, layers: [{ id: "a", type: "text" as const, text: "{{NAME}}", x: 1, y: 1, w: 60, h: 10, size: 12 }], sheet_layout: { paper: "letter" as const, cols: 3, rows: 10, leftMm: 4.8, topMm: 12.7, pitchXMm: 69.85, pitchYMm: 25.4, preset: "avery-5160" } };
+
+  it("knows the stock, and label printers have none", () => {
+    expect(sheetStock(spec)).toMatchObject({ key: "avery-5160", perSheet: 30, cols: 3, rows: 10 });
+    expect(sheetStock({ ...spec, sheet_layout: null })).toBeNull();
+    expect(sheetStock({ ...spec, sheet_layout: { ...spec.sheet_layout, preset: undefined } })?.key).toBe("letter-3x10-667x254");
+  });
+
+  it("continues where the last print stopped", () => {
+    expect(nextPosition(1, 7, 30)).toBe(8);
+    expect(nextPosition(8, 23, 30)).toBe(1); // the sheet ended full: a fresh one next
+    expect(nextPosition(28, 5, 30)).toBe(3); // 3 on the old sheet, 2 on a new one
+    expect(sheetsUsed(28, 5, 30)).toBe(2);
+    expect(sheetsUsed(1, 30, 30)).toBe(1);
+    expect(clampPosition(0, 30)).toBe(1);
+    expect(clampPosition(31, 30)).toBe(1);
+  });
+
+  it("leaves the used labels empty and fills from the start position", () => {
+    const html = renderDocument(spec, [{ values: { NAME: "Chaya" }, copies: 1 }, { values: { NAME: "Mendy" }, copies: 1 }], { skip: 7 });
+    const tags = [...html.matchAll(/<div class="tag" style="left:([\d.]+)mm;top:([\d.]+)mm;/g)].map((m) => [Number(m[1]), Number(m[2])]);
+    expect(tags).toHaveLength(2);
+    // the used ones are only marked on screen
+    expect(html.match(/class="tag used"/g)).toHaveLength(7);
+    expect(html).toContain("@media print{body{display:block}.used{display:none}}");
+    // label 8 = row 3, column 2
+    expect(tags[0]).toEqual([74.65, 63.5]);
+    expect(html.match(/class="sheet"/g)).toHaveLength(1);
+    // skipping a whole sheet or more is never allowed
+    expect(renderDocument(spec, [{ values: { NAME: "A" }, copies: 1 }], { skip: 99 }).match(/class="sheet"/g)).toHaveLength(1);
+  });
+});

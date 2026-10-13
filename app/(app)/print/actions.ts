@@ -10,7 +10,7 @@ import { canUsePrintArea, isAdmin } from "@/lib/auth/permissions";
 import { appUrl } from "@/lib/auth/app-url";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { getCampContext } from "@/lib/data/camp";
-import { createPrintJob, processPrintJob } from "@/lib/print/jobs";
+import { createPrintJob, processPrintJob, rememberSheetPosition } from "@/lib/print/jobs";
 import { batchCamperIds, BATCH_WHICH, type BatchWhich } from "@/lib/print/batch";
 import { renderDocument } from "@/lib/print/render";
 import { loadMergeSetup, loadPrintCampers } from "@/lib/print/data";
@@ -28,10 +28,14 @@ async function requirePrinter() {
 // Queue
 // ---------------------------------------------------------------------------
 
-/** Mark jobs printed (or not printed again). */
-export async function markPrinted(ids: string[], printed = true): Promise<ActionResult> {
+/**
+ * Mark jobs printed (or not printed again). With `sheet`, also remembers where the part-used
+ * label sheet now continues (the first free label after this print).
+ */
+export async function markPrinted(ids: string[], printed = true, sheet?: { stock: string; next: number }): Promise<ActionResult> {
   try {
     const user = await requirePrinter();
+    if (sheet) await rememberSheetPosition(z.string().min(1).max(80).parse(sheet.stock), z.number().int().min(1).max(500).parse(sheet.next), user.id);
     const { error } = await createAdminClient()
       .from("print_jobs")
       .update(printed ? { status: "printed", printed_at: new Date().toISOString(), printed_by: user.id } : { status: "ready", printed_at: null, printed_by: null })
@@ -73,6 +77,17 @@ export async function resendJob(id: string, deliverTo?: string): Promise<ActionR
     after(() => processPrintJob(id, base));
     revalidatePath("/print");
     return ok("Sending again…");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+/** Remember where the part-used label sheet continues, without marking anything printed (one division of several, or a fresh sheet). */
+export async function saveSheetPosition(stock: string, next: number): Promise<ActionResult> {
+  try {
+    const user = await requirePrinter();
+    await rememberSheetPosition(z.string().min(1).max(80).parse(stock), z.number().int().min(1).max(500).parse(next), user.id);
+    return ok(next === 1 ? "Next print starts on a fresh sheet." : `Next print starts at label ${next}.`);
   } catch (e) {
     return fail(errorMessage(e));
   }
