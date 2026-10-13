@@ -156,6 +156,37 @@ A canvas of the tag at real proportions (Print → Templates):
   replacement tag to the office. **Print by itself at first check-in** queues it
   automatically the first time each camper is checked in.
 
+- **Undo / redo** (buttons, Ctrl+Z / Ctrl+Shift+Z or Ctrl+Y; up to 100 steps; a drag,
+  a typed word or a run of nudges is one step). **Copy** a part (button or Ctrl+D),
+  **Centre across / up–down** on the tag, **Ctrl+S** saves.
+- **Pictures** (a camp logo…): "Picture" uploads a PNG/JPG/WebP up to 2 MB
+  (`uploadTemplateImage`, storage `templates/pictures/…`) and places it at its own
+  shape; "Whole picture" or "Fill the box"; "Another picture" swaps it. In print each
+  picture is in the page once (`renderDocument(…, { images })`, `imageDataUrls`).
+- Colour blocks can be **outline only** or have a **border**; new colour blocks go to the
+  back (they're backgrounds and strips). Selecting a part keeps it in its place in the
+  stack: its outline and handles are drawn on top, so a full-tag block doesn't cover the
+  text.
+- Warnings: a field that doesn't exist (`{{BARCOD}}`, `{{first}}`) is named, with the
+  likely one ("did you mean {{FIRST}}?"), since it prints empty. A barcode or QR code
+  that's empty for the camper shown shows as a red "empty" box; a text part whose fields
+  are all empty is faded (it prints nothing for that camper). **What the fields say**
+  lists every field the template uses and its value for the camper shown.
+- "Show it with: **The longest text**" checks every camper and shows the one whose text
+  is longest for its box on this template's parts (names, bunks, Hebrew…).
+- Number boxes only take numbers they can use (an emptied box goes back to its number,
+  never 0); parts stay on the label when its size is typed. The save check accepts what
+  the editor allows and names the part when something's off ("Part 3 (the barcode): its
+  width is out of range").
+- Changes made while saving stay "unsaved". Unsaved work is kept on that computer:
+  leaving by Back, closing the laptop or a crash offers **Bring them back** next time.
+- **Turn the label sideways** (label printers) turns the design with the label: parts keep
+  their places, text and barcodes turn; turning again turns it back.
+- Retired templates say so in the editor and aren't offered on camper cards; a copy of
+  one is a normal template.
+- The print preview uses the background as saved (one uploaded this visit included).
+- Shrink-to-fit uses the same half-pixel steps in the editor and in print.
+
 Fields: only fields **on the merge list** (Print → Fields & conversions) are offered
 in the editor and included in the data for Publisher. Contact details start off the
 list. A template that already uses an off-list field still prints it, and the editor

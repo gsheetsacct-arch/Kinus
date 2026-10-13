@@ -10,6 +10,6 @@ export type TemplateButton = { id: string; name: string; copies: number };
  * before migration 0028 (copies) is run: then every tag is one each.
  */
 export async function loadCardTemplates(db: SupabaseClient<Database>): Promise<TemplateButton[]> {
-  const { data } = await db.from("print_templates").select("*").eq("show_on_card", true).order("sort_order").order("name");
+  const { data } = await db.from("print_templates").select("*").eq("show_on_card", true).not("name", "like", "(retired)%").order("sort_order").order("name");
   return (data ?? []).map((t) => ({ id: t.id, name: t.name, copies: Math.min(10, Math.max(1, Number((t as { copies?: number }).copies) || 1)) }));
 }

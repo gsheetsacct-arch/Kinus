@@ -9,10 +9,11 @@ export function fitText(box: HTMLElement, text: HTMLElement, targetPx: number, m
   box.style.fontSize = `${s}px`;
   if (!over()) return { px: s, overflow: false };
   const r = Math.min(box.clientWidth / Math.max(text.scrollWidth, 1), box.clientHeight / Math.max(box.scrollHeight, 1));
-  s = Math.max(minPx, Math.floor(s * Math.min(1, r) * 4) / 4);
+  // the same steps as the printed page (half a pixel), so the editor's size is the printed size
+  s = Math.max(minPx, Math.floor(s * Math.min(1, r) * 2) / 2);
   box.style.fontSize = `${s}px`;
   for (let guard = 0; guard < 200 && s > minPx && over(); guard++) {
-    s = Math.max(minPx, s - 0.25);
+    s = Math.max(minPx, s - 0.5);
     box.style.fontSize = `${s}px`;
   }
   return { px: s, overflow: over() };

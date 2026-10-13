@@ -43,6 +43,13 @@ export async function backgroundDataUrl(admin: DB, path: string | null | undefin
   return `data:${data.type || "image/png"};base64,${buf.toString("base64")}`;
 }
 
+/** The pictures a template's parts show (logos…), as data URLs for the page, by stored path. */
+export async function imageDataUrls(admin: DB, layers: { type: string; path?: string }[]): Promise<Record<string, string>> {
+  const paths = [...new Set(layers.filter((l) => l.type === "image" && l.path).map((l) => l.path!))];
+  const urls = await Promise.all(paths.map((p) => backgroundDataUrl(admin, p).catch(() => null)));
+  return Object.fromEntries(paths.flatMap((p, i) => (urls[i] ? [[p, urls[i]!]] : [])));
+}
+
 /** Full camper rows (service role) for the given ids, with division/bunk names, colours and contacts. */
 export async function loadPrintCampers(admin: DB, ids: string[]): Promise<PrintCamper[]> {
   const unique = [...new Set(ids)];

@@ -31,6 +31,7 @@ export function TagCanvas({
   layers,
   values,
   background,
+  images = {},
   selected,
   onSelect,
   onChange,
@@ -42,6 +43,8 @@ export function TagCanvas({
   layers: Layer[];
   values: Record<string, string>;
   background: string | null;
+  /** Pictures for picture parts, by stored path (data URLs). */
+  images?: Record<string, string>;
   selected: string | null;
   onSelect: (id: string | null) => void;
   onChange: (id: string, box: Partial<Box>) => void;
@@ -192,8 +195,12 @@ export function TagCanvas({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {background && <img src={background} alt="" className="pointer-events-none absolute inset-0 size-full object-cover" />}
         {layers.map((l) => (
-          <Part key={l.id} l={l} scale={scale} values={values} selected={l.id === selected} onStart={start} onFit={onFit} />
+          <Part key={l.id} l={l} scale={scale} values={values} images={images} selected={l.id === selected} onStart={start} onFit={onFit} />
         ))}
+        {(() => {
+          const sel = layers.find((l) => l.id === selected);
+          return sel ? <Selection l={sel} scale={scale} onStart={start} /> : null;
+        })()}
         {guides.v.map((x) => (
           <div key={`v${x}`} className="pointer-events-none absolute inset-y-0 w-px bg-fuchsia-500" style={{ left: x * scale }} />
         ))}
@@ -209,6 +216,7 @@ function Part({
   l,
   scale,
   values,
+  images,
   selected,
   onStart,
   onFit,
@@ -216,6 +224,7 @@ function Part({
   l: Layer;
   scale: number;
   values: Record<string, string>;
+  images: Record<string, string>;
   selected: boolean;
   onStart: (e: React.PointerEvent, l: Layer, mode: "move" | Handle) => void;
   onFit: (id: string, info: FitInfo) => void;
@@ -230,43 +239,70 @@ function Part({
 
   return (
     <div
-      className={cn("absolute cursor-move", selected ? "z-10 outline outline-2 outline-primary" : "outline outline-1 outline-dashed outline-slate-300 hover:outline-primary/60")}
+      // a selected part keeps its place in the stack (a full-tag colour block doesn't cover the text); its outline and handles are drawn on top
+      className={cn("absolute cursor-move", selected ? "" : "outline outline-1 outline-dashed outline-slate-300 hover:outline-primary/60")}
       style={{ left: l.x * scale, top: l.y * scale, width: l.w * scale, height: l.h * scale }}
       onPointerDown={(e) => onStart(e, l, "move")}
     >
       <div style={inner} className="pointer-events-none overflow-hidden">
         {l.type === "text" && <TextPart l={l} scale={scale} values={values} onFit={onFit} />}
         {l.type === "box" && (
-          <div className="size-full" style={{ background: safeColor(fill(l.fill ?? "", (k) => values[k] ?? ""), "transparent"), borderRadius: (l.radius ?? 0) * scale }} />
-        )}
-        {l.type === "barcode" && <BarcodePart l={l} scale={scale} values={values} />}
-        {l.type === "qr" && <QrPart text={fill(l.text, (k) => values[k] ?? "") || l.text} />}
-      </div>
-      {selected &&
-        HANDLES.map((h) => (
-          <span
-            key={h}
-            onPointerDown={(e) => onStart(e, l, h)}
-            className="absolute z-20 size-3 rounded-sm border-2 border-primary bg-white"
+          <div
+            className="size-full"
             style={{
-              left: h.includes("w") ? -6 : h.includes("e") ? "calc(100% - 6px)" : "calc(50% - 6px)",
-              top: h.includes("n") ? -6 : h.includes("s") ? "calc(100% - 6px)" : "calc(50% - 6px)",
-              cursor: `${h}-resize`,
+              background: safeColor(fill(l.fill ?? "", (k) => values[k] ?? ""), "transparent"),
+              borderRadius: (l.radius ?? 0) * scale,
+              border: l.border ? `${0.3 * scale}px solid ${safeColor(l.border, "#000")}` : undefined,
             }}
           />
-        ))}
+        )}
+        {l.type === "barcode" && <BarcodePart l={l} scale={scale} values={values} />}
+        {l.type === "qr" && (fill(l.text, (k) => values[k] ?? "").trim() ? <QrPart text={fill(l.text, (k) => values[k] ?? "")} /> : <EmptyCode what="QR code" />)}
+        {l.type === "image" &&
+          (images[l.path] ? (
+            <div className="size-full bg-center bg-no-repeat" style={{ backgroundImage: `url("${images[l.path]}")`, backgroundSize: l.fit === "cover" ? "cover" : "contain" }} />
+          ) : (
+            <div className="flex size-full items-center justify-center bg-slate-100 text-[10px] text-slate-500">Picture</div>
+          ))}
+      </div>
     </div>
   );
 }
 
+/** The selected part's outline and resize handles, above everything (only the handles take clicks). */
+function Selection({ l, scale, onStart }: { l: Layer; scale: number; onStart: (e: React.PointerEvent, l: Layer, mode: "move" | Handle) => void }) {
+  return (
+    <div className="pointer-events-none absolute z-30 outline outline-2 outline-primary" style={{ left: l.x * scale, top: l.y * scale, width: l.w * scale, height: l.h * scale }}>
+      {HANDLES.map((h) => (
+        <span
+          key={h}
+          onPointerDown={(e) => onStart(e, l, h)}
+          className="pointer-events-auto absolute size-3 rounded-sm border-2 border-primary bg-white"
+          style={{
+            left: h.includes("w") ? -6 : h.includes("e") ? "calc(100% - 6px)" : "calc(50% - 6px)",
+            top: h.includes("n") ? -6 : h.includes("s") ? "calc(100% - 6px)" : "calc(50% - 6px)",
+            cursor: `${h}-resize`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** A code with nothing in it for this camper: prints as an empty box, so it shows as one. */
+function EmptyCode({ what }: { what: string }) {
+  return <div className="flex size-full items-center justify-center bg-red-50 p-0.5 text-center text-[10px] leading-tight text-red-700 outline outline-1 outline-red-300">{what} is empty for this camper</div>;
+}
+
 function BarcodePart({ l, scale, values }: { l: Extract<Layer, { type: "barcode" }>; scale: number; values: Record<string, string> }) {
-  const text = fill(l.text, (k) => values[k] ?? "") || l.text;
+  const text = fill(l.text, (k) => values[k] ?? "");
   const code = useCode("barcode", text);
+  if (!text.trim()) return <EmptyCode what="Barcode" />;
   return (
     <div className="flex size-full flex-col bg-white">
       <div className="min-h-0 flex-1">{code?.svg ? <CodeImage svg={code.svg} stretch /> : <div className="size-full bg-slate-200" />}</div>
       {l.showText !== false && (
-        <div className="text-center leading-tight" style={{ fontSize: 7 * MM_PER_PT * scale }}>
+        <div className="text-center leading-[1.2]" style={{ fontSize: 7 * MM_PER_PT * scale, letterSpacing: 0.5 * MM_PER_PT * scale, paddingTop: 0.4 * scale }}>
           {text}
         </div>
       )}
@@ -283,7 +319,10 @@ function TextPart({ l, scale, values, onFit }: { l: Extract<Layer, { type: "text
   const box = React.useRef<HTMLDivElement>(null);
   const span = React.useRef<HTMLSpanElement>(null);
   const text = fill(l.text, (k) => values[k] ?? "");
-  const empty = text.trim() === "";
+  // like print: "T-shirt: {{TSHIRT}}" with no T-shirt prints nothing at all
+  const fields = [...l.text.matchAll(/\{\{[^{}]+\}\}/g)];
+  const skipped = fields.length > 0 && fields.every((m) => fill(m[0], (k) => values[k] ?? "").trim() === "");
+  const empty = text.trim() === "" || skipped;
   // 1 pt = 0.3528 mm; on the canvas, mm are `scale` px
   const target = l.size * MM_PER_PT * scale;
   const min = (l.minSize ?? DEFAULT_MIN_PT) * MM_PER_PT * scale;
@@ -313,7 +352,9 @@ function TextPart({ l, scale, values, onFit }: { l: Extract<Layer, { type: "text
         textAlign: l.align ?? "left",
         justifyContent: l.align === "center" ? "center" : l.align === "right" ? "flex-end" : "flex-start",
         fontStyle: empty ? "italic" : undefined,
+        opacity: skipped ? 0.45 : undefined,
       }}
+      title={skipped ? "Prints nothing for this camper: its fields are empty" : undefined}
     >
       <span ref={span} dir="auto" className="max-w-full [unicode-bidi:plaintext]">
         {empty ? l.text : text}

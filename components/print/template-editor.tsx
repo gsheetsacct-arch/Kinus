@@ -2,7 +2,30 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, AlignCenter, AlignLeft, AlignRight, ArrowDown, ArrowUp, Barcode, Bold, Check, Eye, Plus, Printer, QrCode, Square, Trash2, Type } from "lucide-react";
+import {
+  AlertTriangle,
+  AlignCenter,
+  AlignHorizontalJustifyCenter,
+  AlignLeft,
+  AlignRight,
+  AlignVerticalJustifyCenter,
+  ArrowDown,
+  ArrowUp,
+  Barcode,
+  Bold,
+  Check,
+  Copy,
+  Eye,
+  Image as ImageIcon,
+  Plus,
+  Printer,
+  QrCode,
+  Redo2,
+  Square,
+  Trash2,
+  Type,
+  Undo2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -15,7 +38,7 @@ import { fitPreview } from "@/lib/print/fit-preview";
 import { sheetPlacement, type Layer, type SheetLayout, type TemplateSpec } from "@/lib/print/types";
 import { presetSummary, type LabelPreset } from "@/lib/print/presets";
 import { currentPreset, LabelPicker, SheetDiagram, sizeText } from "./label-picker";
-import { previewTemplate, previewValues, saveTemplate } from "@/app/(app)/print/actions";
+import { previewTemplate, previewValues, saveTemplate, uploadTemplateImage } from "@/app/(app)/print/actions";
 import { TagCanvas, type FitInfo } from "./tag-canvas";
 import { useCode } from "./code-image";
 import { fill } from "@/lib/print/merge";
@@ -24,16 +47,31 @@ import { LeaveGuard } from "@/components/leave-guard";
 export type EditorTemplate = TemplateSpec & { show_on_card: boolean; auto_on_first_checkin: boolean; copies: number };
 export type MergeKey = { key: string; label: string; enabled: boolean };
 
-const ICON = { text: Type, barcode: Barcode, qr: QrCode, box: Square } as const;
+const ICON = { text: Type, barcode: Barcode, qr: QrCode, box: Square, image: ImageIcon } as const;
 const uid = () => Math.random().toString(36).slice(2, 8);
 /** "{{LAST}}, {{FIRST}}" → "Last name, First name" for the parts list. */
 const describe = (l: Layer, labels: Map<string, string>) => {
   const words = (t: string) => t.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, k: string) => k.split("|").map((x) => labels.get(x.trim()) ?? x.trim()).join(" or "));
-  return l.type === "box" ? "Colour block" : l.type === "text" ? words(l.text) || "Text" : `${l.type === "qr" ? "QR code" : "Barcode"}: ${words(l.text)}`;
+  return l.type === "box" ? "Colour block" : l.type === "image" ? "Picture" : l.type === "text" ? words(l.text) || "Text" : `${l.type === "qr" ? "QR code" : "Barcode"}: ${words(l.text)}`;
 };
-const usedKeys = (layers: Layer[]) => new Set(layers.flatMap((l) => [...("text" in l ? l.text : (l.fill ?? "")).matchAll(/\{\{\s*([^{}|]+)/g)].map((m) => m[1].trim())));
+/** Every field a template uses, including each choice in {{A|B}}. */
+const usedKeys = (layers: Layer[]) =>
+  new Set(
+    layers.flatMap((l) =>
+      [...("text" in l ? l.text : l.type === "box" ? (l.fill ?? "") : "").matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].flatMap((m) => m[1].split("|").map((k) => k.trim()).filter(Boolean)),
+    ),
+  );
 
 const tidy = (n: number) => Math.round(n * 100) / 100;
+
+/** Parts moved and shrunk just enough to be on a tag of w × h (when the size is typed by hand). */
+function keepOnTag(layers: Layer[], w: number, h: number): Layer[] {
+  return layers.map((l) => {
+    const lw = Math.min(l.w, w);
+    const lh = Math.min(l.h, h);
+    return { ...l, w: lw, h: lh, x: tidy(Math.min(Math.max(0, l.x), w - lw)), y: tidy(Math.min(Math.max(0, l.y), h - lh)) };
+  });
+}
 
 /** Scales every part of the design by sx × sy (text by the smaller of the two). */
 function scaleLayers(layers: Layer[], sx: number, sy: number): Layer[] {
@@ -45,6 +83,22 @@ function scaleLayers(layers: Layer[], sx: number, sy: number): Layer[] {
       const side = Math.min(box.w, box.h);
       return { ...l, ...box, w: side, h: side };
     }
+    return { ...l, ...box };
+  });
+}
+
+/**
+ * The design turned a quarter (for a label printer fed the other way round): every part keeps
+ * its place on the turned label, and text and barcodes turn with it. Clockwise, or back again
+ * when it was turned before. Null when it can't (parts already turned both ways).
+ */
+function turnDesign(layers: Layer[], W: number, H: number): Layer[] | null {
+  const turned = layers.map((l) => ("rotate" in l ? (l.rotate ?? 0) : 0));
+  if (turned.includes(90) && turned.includes(-90)) return null;
+  const back = turned.includes(90); // turned clockwise before: turn back
+  return layers.map((l) => {
+    const box = back ? { x: l.y, y: tidy(W - (l.x + l.w)), w: l.h, h: l.w } : { x: tidy(H - (l.y + l.h)), y: l.x, w: l.h, h: l.w };
+    if (l.type === "text" || l.type === "barcode") return { ...l, ...box, rotate: ((l.rotate ?? 0) + (back ? -90 : 90)) as 0 | 90 | -90 };
     return { ...l, ...box };
   });
 }
@@ -62,11 +116,40 @@ function sheetFit(s: SheetLayout, w: number, h: number): string | null {
   return null;
 }
 
-function Num({ label, value, onChange, step = 0.5, min }: { label: string; value: number; onChange: (n: number) => void; step?: number; min?: number }) {
+/**
+ * A number box that only passes on numbers it can use: while it's empty or half-typed ("-",
+ * "2.") nothing changes, and leaving it puts the last good number back. Never a 0 by accident.
+ */
+function Num({ label, value, onChange, step = 0.5, min, max, whole }: { label: string; value: number; onChange: (n: number) => void; step?: number; min?: number; max?: number; whole?: boolean }) {
+  const [text, setText] = React.useState(Number.isFinite(value) ? String(value) : "");
+  const focused = React.useRef(false);
+  React.useEffect(() => {
+    if (!focused.current) setText(Number.isFinite(value) ? String(value) : "");
+  }, [value]);
   return (
     <label className="min-w-0 space-y-1">
       <span className="block text-xs text-muted-foreground">{label}</span>
-      <Input type="number" step={step} min={min} value={Number.isFinite(value) ? value : 0} onChange={(e) => onChange(Number(e.target.value))} className="h-9" />
+      <Input
+        type="number"
+        inputMode="decimal"
+        step={step}
+        min={min}
+        max={max}
+        value={text}
+        onFocus={() => (focused.current = true)}
+        onChange={(e) => {
+          setText(e.target.value);
+          const n = Number(e.target.value);
+          if (e.target.value.trim() === "" || !Number.isFinite(n)) return;
+          if ((min !== undefined && n < min) || (max !== undefined && n > max) || (whole && !Number.isInteger(n))) return;
+          onChange(n);
+        }}
+        onBlur={() => {
+          focused.current = false;
+          setText(Number.isFinite(value) ? String(value) : "");
+        }}
+        className="h-9"
+      />
     </label>
   );
 }
@@ -123,40 +206,171 @@ function BarcodeCheck({ l, values }: { l: Extract<Layer, { type: "barcode" }>; v
   );
 }
 
-export function TemplateEditor({ initial, fields, background, backgroundUrl }: { initial: EditorTemplate; fields: MergeKey[]; background: React.ReactNode; backgroundUrl: string | null }) {
+export function TemplateEditor({
+  initial,
+  fields,
+  background,
+  backgroundUrl,
+  pictures = {},
+}: {
+  initial: EditorTemplate;
+  fields: MergeKey[];
+  background: React.ReactNode;
+  backgroundUrl: string | null;
+  /** Pictures the template's picture parts show, by stored path. */
+  pictures?: Record<string, string>;
+}) {
   const router = useRouter();
   const [t, setT] = React.useState<EditorTemplate>(() => ({ ...initial, layers: initial.layers.map((l) => ({ ...l, id: l.id || uid() })) }));
   const [selected, setSelected] = React.useState<string | null>(null);
+  const selectedRef = React.useRef<string | null>(null);
+  selectedRef.current = selected;
   const [fits, setFits] = React.useState<Record<string, FitInfo>>({});
   const [sample, setSample] = React.useState<{ values: Record<string, string>; label: string }>({ values: {}, label: "" });
   const [who, setWho] = React.useState<"sample" | "longest" | "code">("sample");
   const [code, setCode] = React.useState("");
   const [saving, startSave] = React.useTransition();
   const [dirty, setDirty] = React.useState(false);
+  // each change bumps the version, so a save only clears "unsaved" if nothing changed while it ran
+  const version = React.useRef(0);
+  const markDirty = React.useCallback(() => {
+    version.current++;
+    setDirty(true);
+  }, []);
   const [preview, setPreview] = React.useState<string | null>(null);
   const frame = React.useRef<HTMLIFrameElement>(null);
   const [picking, setPicking] = React.useState(false);
 
+  // Undo / redo: a snapshot before each change. Changes to the same thing in quick succession
+  // (a drag, typing a word, nudging) are one step.
+  const tRef = React.useRef(t);
+  tRef.current = t;
+  const past = React.useRef<EditorTemplate[]>([]);
+  const future = React.useRef<EditorTemplate[]>([]);
+  const lastStep = React.useRef<{ key: string; at: number } | null>(null);
+  const [, historyChanged] = React.useReducer((n: number) => n + 1, 0);
+  const remember = React.useCallback((key: string) => {
+    const now = Date.now();
+    if (lastStep.current?.key === key && now - lastStep.current.at < 800) {
+      lastStep.current.at = now;
+      return;
+    }
+    past.current.push(tRef.current);
+    if (past.current.length > 100) past.current.shift();
+    future.current = [];
+    lastStep.current = { key, at: now };
+    historyChanged();
+  }, []);
+  const step = React.useCallback((from: React.RefObject<EditorTemplate[]>, to: React.RefObject<EditorTemplate[]>) => {
+    const snap = from.current.pop();
+    if (!snap) return;
+    to.current.push(tRef.current);
+    lastStep.current = null;
+    setT(snap);
+    markDirty();
+    setSelected((id) => (id && snap.layers.some((l) => l.id === id) ? id : null));
+    historyChanged();
+  }, [markDirty]);
+  const undo = React.useCallback(() => step(past, future), [step]);
+  const redo = React.useCallback(() => step(future, past), [step]);
+
   const update = (patch: Partial<EditorTemplate>) => {
+    remember(`t:${Object.keys(patch).sort().join()}`);
     setT((cur) => ({ ...cur, ...patch }));
-    setDirty(true);
+    markDirty();
   };
-  const setLayer = React.useCallback((id: string, patch: Partial<Layer>) => {
-    setT((cur) => ({ ...cur, layers: cur.layers.map((l) => (l.id === id ? ({ ...l, ...patch } as Layer) : l)) }));
-    setDirty(true);
-  }, []);
-  const remove = React.useCallback((id: string) => {
-    setT((cur) => ({ ...cur, layers: cur.layers.filter((l) => l.id !== id) }));
-    setSelected(null);
-    setDirty(true);
-  }, []);
+  const setLayer = React.useCallback(
+    (id: string, patch: Partial<Layer>) => {
+      remember(`l:${id}:${Object.keys(patch).sort().join()}`);
+      setT((cur) => ({ ...cur, layers: cur.layers.map((l) => (l.id === id ? ({ ...l, ...patch } as Layer) : l)) }));
+      markDirty();
+    },
+    [remember, markDirty],
+  );
+  const remove = React.useCallback(
+    (id: string) => {
+      remember(`rm:${id}`);
+      setT((cur) => ({ ...cur, layers: cur.layers.filter((l) => l.id !== id) }));
+      setSelected(null);
+      markDirty();
+    },
+    [remember, markDirty],
+  );
   const add = (l: Omit<Layer, "id">) => {
     const id = uid();
-    setT((cur) => ({ ...cur, layers: [...cur.layers, { ...l, id } as Layer] }));
+    remember(`add:${id}`);
+    // colour blocks go to the back (they're backgrounds and strips); everything else on top
+    setT((cur) => ({ ...cur, layers: l.type === "box" ? [{ ...l, id } as Layer, ...cur.layers] : [...cur.layers, { ...l, id } as Layer] }));
     setSelected(id);
-    setDirty(true);
+    markDirty();
     (document.activeElement as HTMLElement | null)?.blur();
   };
+  // pictures (a camp logo…): uploaded, then placed at their own shape, 20 mm wide
+  const [images, setImages] = React.useState<Record<string, string>>(pictures);
+  const [uploading, setUploading] = React.useState(false);
+  const pictureInput = React.useRef<HTMLInputElement>(null);
+  const replacing = React.useRef<string | null>(null);
+  const pickPicture = (replace: string | null) => {
+    replacing.current = replace;
+    pictureInput.current?.click();
+  };
+  const uploadPicture = async (file: File) => {
+    if (file.size > 2 * 1024 * 1024) return void toast.error("Pictures up to 2 MB, please (a logo rarely needs more). Save it smaller and try again.");
+    setUploading(true);
+    try {
+      const ratio = await createImageBitmap(file)
+        .then((b) => b.height / b.width)
+        .catch(() => 1);
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await uploadTemplateImage(fd).catch(() => ({ ok: false as const, error: "That didn't upload. Check the connection and try again." }));
+      if (!r.ok) return void toast.error(r.error);
+      setImages((cur) => ({ ...cur, [r.path]: r.url }));
+      if (replacing.current) setLayer(replacing.current, { path: r.path } as Partial<Layer>);
+      else {
+        const w = Math.min(20, W - 2);
+        const h = Math.min(Math.max(2, tidy(w * ratio)), H);
+        add({ type: "image", path: r.path, fit: "contain", ...center(w, h) } as Omit<Layer, "id">);
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  /** A copy of a part, a little down and to the right (still on the tag), selected. */
+  const duplicate = React.useCallback(
+    (id: string) => {
+      const l = tRef.current.layers.find((x) => x.id === id);
+      if (!l) return;
+      const copy = { ...l, id: uid(), x: tidy(Math.min(l.x + 2, Math.max(0, tRef.current.page_width_mm - l.w))), y: tidy(Math.min(l.y + 2, Math.max(0, tRef.current.page_height_mm - l.h))) } as Layer;
+      remember(`dup:${copy.id}`);
+      setT((cur) => ({ ...cur, layers: [...cur.layers, copy] }));
+      setSelected(copy.id);
+      markDirty();
+    },
+    [remember, markDirty],
+  );
+  // Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl+Y redo, Ctrl/Cmd+D duplicate (text boxes keep their own undo)
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const el = e.target as HTMLElement | null;
+      const typing = el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
+      const k = e.key.toLowerCase();
+      if (k === "d" && selectedRef.current && !typing) {
+        e.preventDefault();
+        duplicate(selectedRef.current);
+      } else if (!typing && ((k === "z" && e.shiftKey) || k === "y")) {
+        e.preventDefault();
+        redo();
+      } else if (!typing && k === "z") {
+        e.preventDefault();
+        undo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [duplicate, undo, redo]);
   const move = (i: number, d: -1 | 1) => {
     const ls = [...t.layers];
     const j = i + d;
@@ -166,27 +380,47 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
   };
   const onFit = React.useCallback((id: string, info: FitInfo) => setFits((cur) => (cur[id]?.pt === info.pt && cur[id]?.overflow === info.overflow ? cur : { ...cur, [id]: info })), []);
 
-  // whose details fill the canvas
+  // whose details fill the canvas; "longest" looks for the camper whose text is longest for its
+  // box on this template's parts (checked again a moment after the parts change)
+  const textsKey = JSON.stringify(t.layers.filter((l) => l.type === "text").map((l) => ({ text: (l as { text: string }).text, w: l.w })));
+  const whoArg = React.useMemo(
+    () => (who === "code" ? ({ kind: "code", code } as const) : who === "longest" ? ({ kind: "longest", texts: JSON.parse(textsKey) } as const) : ({ kind: "sample" } as const)),
+    [who, code, textsKey],
+  );
   React.useEffect(() => {
     if (who === "code" && !/^\D*\d{6}\D*$/.test(code)) return;
     let live = true;
-    previewValues(who === "code" ? { kind: "code", code } : { kind: who }).then((r) => {
-      if (!live) return;
-      if ("error" in r) toast.error(r.error);
-      else setSample(r);
-    });
+    const timer = setTimeout(
+      () =>
+        previewValues(whoArg)
+          .then((r) => {
+            if (!live) return;
+            if ("error" in r) toast.error(r.error);
+            else setSample(r);
+          })
+          .catch(() => undefined),
+      who === "longest" ? 600 : 0,
+    );
     return () => {
       live = false;
+      clearTimeout(timer);
     };
-  }, [who, code]);
+  }, [whoArg, who, code]);
 
   const persist = async (leaving = false) => {
-    const r = await saveTemplate({ ...t, id: t.id || undefined, kind: t.kind as "name_tag", layers: t.layers, sheet_layout: t.sheet_layout });
+    const sent = version.current;
+    const r = await saveTemplate({ ...t, id: t.id || undefined, kind: t.kind as "name_tag", layers: t.layers, sheet_layout: t.sheet_layout }).catch(() => ({
+      ok: false as const,
+      error: "Couldn't save: check the connection and try again. Your changes are still here.",
+    }));
     if (!r.ok) {
       toast.error(r.error);
       return false;
     }
-    setDirty(false);
+    if (version.current === sent) {
+      setDirty(false);
+      clearDraft();
+    }
     toast.success(r.message);
     if (leaving) return true;
     if (r.redirect) router.push(r.redirect);
@@ -194,6 +428,44 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
     return true;
   };
   const save = () => startSave(async () => void (await persist()));
+  const saveRef = React.useRef(save);
+  saveRef.current = save;
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        saveRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // unsaved work is kept on this computer, so leaving by Back, a crash or a closed laptop loses nothing
+  const draftKey = `kinus:template-draft:${initial.id ?? "new"}`;
+  const [draft, setDraft] = React.useState<{ t: EditorTemplate; at: string } | null>(null);
+  function clearDraft() {
+    try {
+      localStorage.removeItem(draftKey);
+    } catch {}
+  }
+  React.useEffect(() => {
+    try {
+      const d = JSON.parse(localStorage.getItem(draftKey) ?? "null") as { t: EditorTemplate; at: string } | null;
+      if (d?.t && JSON.stringify(d.t.layers) !== JSON.stringify(initial.layers) && Date.now() - Date.parse(d.at) < 14 * 86400_000) setDraft(d);
+      else clearDraft();
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  React.useEffect(() => {
+    if (!dirty) return;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify({ t, at: new Date().toISOString() }));
+      } catch {}
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [t, dirty, draftKey]);
 
   const W = t.page_width_mm;
   const H = t.page_height_mm;
@@ -201,7 +473,10 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
   const sel = t.layers.find((l) => l.id === selected) ?? null;
   const labels = new Map(fields.map((f) => [f.key, f.label]));
   const fit = sel ? fits[sel.id] : undefined;
-  const hidden = [...usedKeys(t.layers)].filter((k) => fields.some((f) => f.key === k && !f.enabled));
+  const used = [...usedKeys(t.layers)];
+  const hidden = used.filter((k) => fields.some((f) => f.key === k && !f.enabled));
+  // a field that doesn't exist prints nothing: usually a typo ({{BARCOD}}, {{first}})
+  const unknown = used.filter((k) => !fields.some((f) => f.key === k)).map((k) => ({ key: k, like: fields.find((f) => f.key.toLowerCase() === k.toLowerCase() || f.key.replace(/_/g, "") === k.toUpperCase().replace(/[^A-Z0-9]/g, ""))?.key }));
   const sheet = t.sheet_layout;
   const preset = currentPreset(W, H, sheet);
   const placed = sheet ? sheetPlacement(sheet, W, H, sheet.paper === "a4" ? 210 : 215.9) : null;
@@ -229,7 +504,7 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
     resize(p.widthMm, p.heightMm, p.sheet ? { ...p.sheet, preset: p.id, shiftXMm: sheet?.shiftXMm, shiftYMm: sheet?.shiftYMm } : null);
   };
   const testSheet = async () => {
-    const html = await previewTemplate(t, who === "code" ? { kind: "code", code } : { kind: who }, { fullSheet: true });
+    const html = await previewTemplate(t, whoArg, { fullSheet: true });
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
     const w = window.open(url, "_blank");
     if (!w) toast.error("Allow pop-ups for Kinus to print the test sheet.");
@@ -239,6 +514,34 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
   return (
     <div className="space-y-4">
       <LeaveGuard dirty={dirty} onSave={() => persist(true)} />
+      {draft && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm dark:border-amber-700 dark:bg-amber-950/40">
+          <span className="mr-auto">
+            You left this template with changes that weren&apos;t saved ({new Date(draft.at).toLocaleString()}).
+          </span>
+          <Button
+            size="sm"
+            onClick={() => {
+              remember("draft");
+              setT({ ...draft.t, id: t.id });
+              markDirty();
+              setDraft(null);
+            }}
+          >
+            Bring them back
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              clearDraft();
+              setDraft(null);
+            }}
+          >
+            Throw them away
+          </Button>
+        </div>
+      )}
       {/* top bar */}
       <div className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-3 shadow-[var(--shadow-card)]">
         <label className="min-w-48 flex-1 space-y-1">
@@ -249,7 +552,7 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
           <span className="block text-xs text-muted-foreground">Show it with</span>
           <Select value={who} onChange={(e) => setWho(e.target.value as typeof who)} className="h-9 w-48">
             <option value="sample">A sample camper</option>
-            <option value="longest">The longest name</option>
+            <option value="longest">The longest text (checks every camper)</option>
             <option value="code">A camper by code…</option>
           </Select>
         </label>
@@ -261,7 +564,7 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
         )}
         <div className="ml-auto flex items-center gap-2">
           {dirty && <span className="text-sm font-medium text-amber-700 dark:text-amber-300">Unsaved changes</span>}
-          <Button variant="outline" onClick={async () => setPreview(await previewTemplate(t, who === "code" ? { kind: "code", code } : { kind: who }))}>
+          <Button variant="outline" onClick={async () => setPreview(await previewTemplate(t, whoArg).catch(() => null))}>
             <Eye /> Print preview
           </Button>
           <Button onClick={save} disabled={saving}>
@@ -313,6 +616,28 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
             <Button size="sm" variant="outline" onClick={() => add({ type: "box", x: 0, y: 0, w: 4, h: H, fill: "{{DIVISION_COLOR}}" } as Omit<Layer, "id">)}>
               <Square /> Colour
             </Button>
+            <Button size="sm" variant="outline" onClick={() => pickPicture(null)} disabled={uploading}>
+              <ImageIcon /> {uploading ? "Uploading…" : "Picture"}
+            </Button>
+            <input
+              ref={pictureInput}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) uploadPicture(f);
+              }}
+            />
+            <span className="ml-auto flex gap-1">
+              <Button size="icon" variant="ghost" className="size-9" onClick={undo} disabled={!past.current.length} aria-label="Undo" title="Undo (Ctrl+Z)">
+                <Undo2 />
+              </Button>
+              <Button size="icon" variant="ghost" className="size-9" onClick={redo} disabled={!future.current.length} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
+                <Redo2 />
+              </Button>
+            </span>
           </div>
           <div className="rounded-xl border bg-muted/60 p-4 sm:p-6">
             <TagCanvas
@@ -321,6 +646,7 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
               layers={t.layers}
               values={sample.values}
               background={backgroundUrl}
+              images={images}
               selected={selected}
               onSelect={setSelected}
               onChange={setLayer}
@@ -330,8 +656,40 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
           </div>
           <p className="text-xs text-muted-foreground">
             {sample.label && <>Showing {sample.label}. </>}
-            Drag a part to move it, pull its handles to resize. Arrow keys nudge (Shift: 5 mm), Delete removes. Text stays inside its box.
+            Drag a part to move it, pull its handles to resize. Arrow keys nudge (Shift: 5 mm), Delete removes, Ctrl+D copies, Ctrl+Z undoes. Text stays inside its box.
           </p>
+          {used.length > 0 && (
+            <details className="rounded-lg border bg-card text-sm">
+              <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
+                What the fields say for {sample.label || "this camper"}
+                {used.some((k) => fields.some((f) => f.key === k) && !(sample.values[k] ?? "").trim()) && <span className="ml-1 text-amber-700 dark:text-amber-400">· some are empty</span>}
+              </summary>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border-t px-3 py-2 text-xs">
+                {used.map((k) => (
+                  <React.Fragment key={k}>
+                    <dt className="font-mono text-muted-foreground">{`{{${k}}}`}</dt>
+                    <dd dir="auto" className={cn("truncate", !(sample.values[k] ?? "").trim() && "italic text-amber-700 dark:text-amber-400")}>
+                      {(sample.values[k] ?? "").trim() || (fields.some((f) => f.key === k) ? "empty for this camper" : "not a field")}
+                    </dd>
+                  </React.Fragment>
+                ))}
+              </dl>
+            </details>
+          )}
+          {unknown.length > 0 && (
+            <p className="flex items-start gap-1.5 rounded-md bg-red-50 px-2 py-1.5 text-xs text-red-800 dark:bg-red-950/40 dark:text-red-200">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              <span>
+                {unknown.map((u, i) => (
+                  <React.Fragment key={u.key}>
+                    {i > 0 && "; "}
+                    <code>{`{{${u.key}}}`}</code> isn&apos;t a field{u.like ? <>: did you mean <code>{`{{${u.like}}}`}</code>?</> : ""}
+                  </React.Fragment>
+                ))}
+                . It prints empty. Fields are listed under Fields &amp; conversions.
+              </span>
+            </p>
+          )}
           {hidden.length > 0 && (
             <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
               <AlertTriangle className="size-3.5" /> Uses fields that are off the merge list: {hidden.join(", ")}. They still print here.
@@ -347,17 +705,55 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
             ) : (
               <>
                 <div className="flex items-center justify-between gap-2">
-                  <h2 className="font-semibold">{sel.type === "text" ? "Text" : sel.type === "box" ? "Colour block" : sel.type === "qr" ? "QR code" : "Barcode"}</h2>
-                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => remove(sel.id)}>
-                    <Trash2 /> Remove
+                  <h2 className="font-semibold">{sel.type === "text" ? "Text" : sel.type === "box" ? "Colour block" : sel.type === "image" ? "Picture" : sel.type === "qr" ? "QR code" : "Barcode"}</h2>
+                  <span className="flex gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => duplicate(sel.id)} title="Copy (Ctrl+D)">
+                      <Copy /> Copy
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => remove(sel.id)}>
+                      <Trash2 /> Remove
+                    </Button>
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <Button size="sm" variant="outline" onClick={() => setLayer(sel.id, { x: tidy(Math.max(0, (W - sel.w) / 2)) })} title="Centre across the tag">
+                    <AlignHorizontalJustifyCenter /> Centre across
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setLayer(sel.id, { y: tidy(Math.max(0, (H - sel.h) / 2)) })} title="Centre up and down on the tag">
+                    <AlignVerticalJustifyCenter /> Centre up–down
                   </Button>
                 </div>
-                {sel.type !== "box" && <MergeText key={sel.id} label={sel.type === "text" ? "Says" : "Code"} value={sel.text} onChange={(v) => setLayer(sel.id, { text: v })} fields={fields} />}
+                {sel.type === "image" && (
+                  <div className="space-y-2">
+                    <div className="inline-flex w-full gap-1 rounded-lg bg-muted p-1">
+                      {(
+                        [
+                          ["contain", "Whole picture"],
+                          ["cover", "Fill the box"],
+                        ] as const
+                      ).map(([v, label]) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setLayer(sel.id, { fit: v })}
+                          aria-pressed={(sel.fit ?? "contain") === v}
+                          className={cn("flex-1 rounded-md px-2 py-1 text-sm", (sel.fit ?? "contain") === v ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => pickPicture(sel.id)}>
+                      <ImageIcon /> Another picture
+                    </Button>
+                  </div>
+                )}
+                {sel.type !== "box" && sel.type !== "image" && <MergeText key={sel.id} label={sel.type === "text" ? "Says" : "Code"} value={sel.text} onChange={(v) => setLayer(sel.id, { text: v })} fields={fields} />}
                 {sel.type === "text" && (
                   <>
                     <div className="grid grid-cols-2 gap-2">
-                      <Num label="Text size (pt)" step={1} min={4} value={sel.size} onChange={(n) => setLayer(sel.id, { size: n })} />
-                      <Num label="Never smaller than (pt)" step={1} min={3} value={sel.minSize ?? DEFAULT_MIN_PT} onChange={(n) => setLayer(sel.id, { minSize: n })} />
+                      <Num label="Text size (pt)" step={1} min={3} max={200} value={sel.size} onChange={(n) => setLayer(sel.id, { size: n, ...(sel.minSize !== undefined && sel.minSize > n ? { minSize: n } : {}) })} />
+                      <Num label="Never smaller than (pt)" step={1} min={3} max={sel.size} value={sel.minSize ?? Math.min(DEFAULT_MIN_PT, sel.size)} onChange={(n) => setLayer(sel.id, { minSize: n })} />
                     </div>
                     <p className={cn("rounded-md px-2 py-1.5 text-xs", fit?.overflow ? "bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100" : "bg-muted text-muted-foreground")}>
                       {!fit
@@ -417,7 +813,19 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
                         <input type="color" value={/^#[0-9a-f]{6}$/i.test(sel.fill ?? "") ? sel.fill : "#2563eb"} onChange={(e) => setLayer(sel.id, { fill: e.target.value })} className="h-8 w-10 cursor-pointer rounded border bg-transparent" />
                       </label>
                     </div>
-                    <Num label="Rounded corners (mm)" value={sel.radius ?? 0} onChange={(n) => setLayer(sel.id, { radius: n })} />
+                    <Num label="Rounded corners (mm)" min={0} max={50} value={sel.radius ?? 0} onChange={(n) => setLayer(sel.id, { radius: n })} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button size="sm" variant={sel.fill === "transparent" ? "default" : "outline"} onClick={() => setLayer(sel.id, { fill: "transparent", border: sel.border ?? "#111111" })}>
+                        Outline only
+                      </Button>
+                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <input type="checkbox" checked={Boolean(sel.border)} onChange={(e) => setLayer(sel.id, { border: e.target.checked ? "#111111" : undefined })} className="size-4" />
+                        Border
+                      </label>
+                      {sel.border && (
+                        <input type="color" value={/^#[0-9a-f]{6}$/i.test(sel.border) ? sel.border : "#111111"} onChange={(e) => setLayer(sel.id, { border: e.target.value })} className="h-8 w-10 cursor-pointer rounded border bg-transparent" aria-label="Border colour" />
+                      )}
+                    </div>
                   </div>
                 )}
                 {(sel.type === "text" || sel.type === "barcode") && (
@@ -433,10 +841,10 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
                 <details className="text-sm">
                   <summary className="cursor-pointer text-xs text-muted-foreground">Exact position (mm)</summary>
                   <div className="mt-2 grid grid-cols-4 gap-2">
-                    <Num label="Left" value={sel.x} onChange={(n) => setLayer(sel.id, { x: n })} />
-                    <Num label="Top" value={sel.y} onChange={(n) => setLayer(sel.id, { y: n })} />
-                    <Num label="Width" value={sel.w} onChange={(n) => setLayer(sel.id, { w: n })} />
-                    <Num label="Height" value={sel.h} onChange={(n) => setLayer(sel.id, { h: n })} />
+                    <Num label="Left" min={0} max={Math.max(0, W - sel.w)} value={sel.x} onChange={(n) => setLayer(sel.id, { x: n })} />
+                    <Num label="Top" min={0} max={Math.max(0, H - sel.h)} value={sel.y} onChange={(n) => setLayer(sel.id, { y: n })} />
+                    <Num label="Width" min={1} max={W - sel.x} value={sel.w} onChange={(n) => setLayer(sel.id, { w: n })} />
+                    <Num label="Height" min={1} max={H - sel.y} value={sel.h} onChange={(n) => setLayer(sel.id, { h: n })} />
                   </div>
                 </details>
               </>
@@ -505,12 +913,25 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
                 <summary className="cursor-pointer text-xs text-muted-foreground">Size and layout by hand</summary>
                 <div className="mt-2 space-y-3">
                   <div className="grid grid-cols-2 gap-2">
-                    <Num label="Label width (mm)" value={W} onChange={(n) => update({ page_width_mm: n, sheet_layout: sheet ? { ...sheet, preset: undefined } : null })} />
-                    <Num label="Label height (mm)" value={H} onChange={(n) => update({ page_height_mm: n, sheet_layout: sheet ? { ...sheet, preset: undefined } : null })} />
+                    <Num label="Label width (mm)" min={10} max={600} value={W} onChange={(n) => update({ page_width_mm: n, sheet_layout: sheet ? { ...sheet, preset: undefined } : null, layers: keepOnTag(t.layers, n, H) })} />
+                    <Num label="Label height (mm)" min={10} max={600} value={H} onChange={(n) => update({ page_height_mm: n, sheet_layout: sheet ? { ...sheet, preset: undefined } : null, layers: keepOnTag(t.layers, W, n) })} />
                   </div>
-                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => resize(H, W, sheet)}>
-                    Turn the label sideways ({+H.toFixed(1)} × {+W.toFixed(1)} mm)
-                  </Button>
+                  {!sheet && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => {
+                        const layers = turnDesign(t.layers, W, H);
+                        if (!layers) return void toast.error("Some parts are turned one way and some the other: turn them back to Across first.");
+                        update({ page_width_mm: H, page_height_mm: W, layers });
+                        if (t.layers.some((l) => l.type === "image")) toast.message("Pictures don't turn: check them.");
+                      }}
+                      title="For a label printer fed the other way round: the design turns with the label"
+                    >
+                      Turn the label sideways ({+H.toFixed(1)} × {+W.toFixed(1)} mm)
+                    </Button>
+                  )}
                   <Select
                     aria-label="Paper"
                     value={sheet ? "sheet" : "label"}
@@ -530,12 +951,12 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
                         </Select>
                       </label>
                       <span />
-                      <Num label="Across" step={1} min={1} value={sheet.cols} onChange={(n) => setSheet({ cols: n })} />
-                      <Num label="Down" step={1} min={1} value={sheet.rows} onChange={(n) => setSheet({ rows: n })} />
-                      <Num label="First label from left (mm)" step={0.1} value={placed!.left} onChange={(n) => setSheet({ leftMm: n })} />
-                      <Num label="First label from top (mm)" step={0.1} value={placed!.top} onChange={(n) => setSheet({ topMm: n })} />
-                      <Num label="Left of one to left of next (mm)" step={0.1} value={placed!.pitchX} onChange={(n) => setSheet({ pitchXMm: n })} />
-                      <Num label="Top of one to top of next (mm)" step={0.1} value={placed!.pitchY} onChange={(n) => setSheet({ pitchYMm: n })} />
+                      <Num label="Across" step={1} min={1} max={10} whole value={sheet.cols} onChange={(n) => setSheet({ cols: n })} />
+                      <Num label="Down" step={1} min={1} max={30} whole value={sheet.rows} onChange={(n) => setSheet({ rows: n })} />
+                      <Num label="First label from left (mm)" step={0.1} min={-20} max={200} value={placed!.left} onChange={(n) => setSheet({ leftMm: n })} />
+                      <Num label="First label from top (mm)" step={0.1} min={-20} max={200} value={placed!.top} onChange={(n) => setSheet({ topMm: n })} />
+                      <Num label="Left of one to left of next (mm)" step={0.1} min={1} max={300} value={placed!.pitchX} onChange={(n) => setSheet({ pitchXMm: n })} />
+                      <Num label="Top of one to top of next (mm)" step={0.1} min={1} max={300} value={placed!.pitchY} onChange={(n) => setSheet({ pitchYMm: n })} />
                     </div>
                   )}
                 </div>
@@ -548,8 +969,8 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
                       Print a test sheet on plain paper (at <strong>Actual size / 100%</strong>, not “Fit to page”), hold it over a sheet of labels against the light, and move everything until the outlines line up. Each printer is a little different.
                     </p>
                     <div className="grid grid-cols-2 gap-2">
-                      <Num label="Move right (mm)" step={0.5} value={sheet.shiftXMm ?? 0} onChange={(n) => setSheet({ shiftXMm: n })} />
-                      <Num label="Move down (mm)" step={0.5} value={sheet.shiftYMm ?? 0} onChange={(n) => setSheet({ shiftYMm: n })} />
+                      <Num label="Move right (mm)" step={0.5} min={-10} max={10} value={sheet.shiftXMm ?? 0} onChange={(n) => setSheet({ shiftXMm: n })} />
+                      <Num label="Move down (mm)" step={0.5} min={-10} max={10} value={sheet.shiftYMm ?? 0} onChange={(n) => setSheet({ shiftYMm: n })} />
                     </div>
                     <Button size="sm" variant="outline" onClick={testSheet}>
                       <Printer /> Print a test sheet

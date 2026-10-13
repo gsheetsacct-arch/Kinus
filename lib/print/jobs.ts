@@ -5,7 +5,7 @@ import { renderDocument } from "./render";
 import { mergeValues } from "./merge";
 import { htmlToPdf } from "./pdf";
 import { sendEmail } from "./email";
-import { backgroundDataUrl, byBunkThenName, loadMergeSetup, loadPrintCampers, toSpec } from "./data";
+import { backgroundDataUrl, byBunkThenName, imageDataUrls, loadMergeSetup, loadPrintCampers, toSpec } from "./data";
 import { contentHash, sameContent, templateKeys } from "./content";
 import type { TemplateSpec } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
@@ -97,9 +97,14 @@ async function loadPrintSet(jobIds: string[]) {
   );
   const copiesOf = new Map<string, number>();
   for (const i of items) copiesOf.set(i.camper_id, Math.max(copiesOf.get(i.camper_id) ?? 0, i.copies));
-  const [campers, setup, background] = await Promise.all([loadPrintCampers(admin, [...copiesOf.keys()]), loadMergeSetup(admin), backgroundDataUrl(admin, spec.background_path)]);
+  const [campers, setup, background, images] = await Promise.all([
+    loadPrintCampers(admin, [...copiesOf.keys()]),
+    loadMergeSetup(admin),
+    backgroundDataUrl(admin, spec.background_path),
+    imageDataUrls(admin, spec.layers),
+  ]);
   campers.sort(byBunkThenName);
-  return { jobs, spec, campers, copiesOf, setup, background, askedMoreThanOnce: items.length > copiesOf.size };
+  return { jobs, spec, campers, copiesOf, setup, background, images, askedMoreThanOnce: items.length > copiesOf.size };
 }
 
 const divisionOf = (c: { division_id?: string | null }) => c.division_id ?? null;
@@ -111,7 +116,7 @@ function setHtml(set: PrintSet, opts: { start?: number; used?: number[]; divisio
     set.spec,
     // copies: as asked, or the same number of each chosen when printing
     campers.map((c) => ({ values: mergeValues(c, set.setup.fields, set.setup.maps), copies: opts.copies ? Math.min(10, Math.max(1, Math.round(opts.copies))) : (set.copiesOf.get(c.id) ?? 1) })),
-    { background: set.background, usedSlots: stock ? (opts.used ?? (opts.start ? usedBefore(opts.start, stock.perSheet) : [])) : [] },
+    { background: set.background, images: set.images, usedSlots: stock ? (opts.used ?? (opts.start ? usedBefore(opts.start, stock.perSheet) : [])) : [] },
   );
   return { html, campers };
 }
