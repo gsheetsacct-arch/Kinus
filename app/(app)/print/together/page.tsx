@@ -43,7 +43,7 @@ export default async function PrintTogetherPage({ searchParams }: { searchParams
       <PrintPanel
         jobIds={ids}
         stock={sheet.stock}
-        remembered={sheet.next}
+        remembered={sheet.used}
         parts={summary.parts}
         tags={summary.tags}
         open={open}

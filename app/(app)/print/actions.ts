@@ -37,11 +37,11 @@ async function requirePrinter() {
  * Mark jobs printed (or not printed again). With `sheet`, also remembers where the part-used
  * label sheet now continues (the first free label after this print).
  */
-export async function markPrinted(ids: string[], printed = true, sheet?: { stock: string; next: number }, printedNow = false): Promise<ActionResult> {
+export async function markPrinted(ids: string[], printed = true, sheet?: { stock: string; used: number[] }, printedNow = false): Promise<ActionResult> {
   try {
     const user = await requirePrinter();
     if (!(await visibleJobs(ids))) return fail(NOT_YOURS);
-    if (sheet) await rememberSheetPosition(z.string().min(1).max(120).parse(sheet.stock), z.number().int().min(1).max(500).parse(sheet.next), user.id);
+    if (sheet) await rememberSheetPosition(z.string().min(1).max(120).parse(sheet.stock), usedSchema.parse(sheet.used), user.id);
     const { error } = await createAdminClient()
       .from("print_jobs")
       .update(printed ? { status: "printed", printed_at: new Date().toISOString(), printed_by: user.id } : { status: "ready", printed_at: null, printed_by: null })
@@ -100,12 +100,15 @@ export async function resendJob(id: string, deliverTo?: string): Promise<ActionR
   }
 }
 
-/** Remember where the part-used label sheet continues, without marking anything printed (one division of several, or a fresh sheet). */
-export async function saveSheetPosition(stock: string, next: number): Promise<ActionResult> {
+const usedSchema = z.array(z.number().int().min(1).max(500)).max(500);
+
+/** Remember the sheet in the printer (which labels are used), without marking anything printed: one division of several, a fresh sheet, or another part-used sheet. */
+export async function saveSheetPosition(stock: string, used: number[]): Promise<ActionResult> {
   try {
     const user = await requirePrinter();
-    await rememberSheetPosition(z.string().min(1).max(120).parse(stock), z.number().int().min(1).max(500).parse(next), user.id);
-    return ok(next === 1 ? "Next print starts on a fresh sheet." : `Next print starts at label ${next}.`);
+    const u = usedSchema.parse(used);
+    await rememberSheetPosition(z.string().min(1).max(120).parse(stock), u, user.id);
+    return ok(u.length ? `Saved: ${u.length === 1 ? "1 label" : `${u.length} labels`} on the sheet already used.` : "Saved: the next print starts on a fresh sheet.");
   } catch (e) {
     return fail(errorMessage(e));
   }

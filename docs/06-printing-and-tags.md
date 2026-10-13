@@ -206,16 +206,24 @@ asked for in more than one request prints once, with the most copies asked
 
 ### Part-used label sheets
 
-For templates on label sheets (Avery 5160: 30 to a sheet…) Kinus remembers, per label
-stock (the sheet preset, or paper + grid + label size), the first free label on the
-sheet in the printer (`settings.label_sheets`, `lib/print/sheet-position.ts`). The
-print screen shows the sheet with the used labels hatched and starts there; tapping a
-label changes it, **Use a fresh sheet** starts at 1. The used labels show on screen
-only, never print. After printing, "Did they print properly? → Yes" marks the
-requests printed and saves the next free label (e.g. 7 + 3 tags on an 8-label sheet →
-label 2 of the next). Templates on the same stock share it (it's one physical sheet).
-The emailed PDF always starts at label 1; the email says to print from Kinus to use a
-part-used sheet.
+For templates on label sheets (Avery 5160: 30 to a sheet…) Kinus remembers, per camp and
+label stock (the sheet preset, or paper + grid + label size), **which labels on the sheet
+in the printer are used** (`settings.label_sheet:<camp>/<stock>` → `{ used: [1, 2, 5] }`,
+`lib/print/sheet-position.ts`). Templates on the same stock share it (it's one physical
+sheet). The print screen shows the sheet: used labels hatched, the labels this print fills
+in blue. Tags go into the free labels in order; later sheets fill from the top.
+
+- **Tap where it starts** (default): tap the first free label of whatever sheet is in the
+  printer; everything before it counts as used.
+- **Tap each used label**: for a sheet with labels gone here and there; tap again to undo.
+- **Fresh sheet**: the last sheet was thrown out or can't be found. Saved at once.
+- **Remember this sheet**: saves a set-up sheet without printing.
+- After printing, "Did they print properly? → Yes" marks the requests printed and saves the
+  sheet as it is now (a sheet that ends full means a fresh one next).
+
+The used labels show on screen only, never print (`renderDocument(…, { usedSlots })`).
+Older saved positions (`next`, or the single `label_sheets` row) still count. The emailed
+PDF always starts at label 1; the email says to print from Kinus to use a part-used sheet.
 
 ### New and changed since the print
 

@@ -57,14 +57,22 @@ function tagHtml(t: TemplateSpec, values: Record<string, string>, background: st
  * out N-up on letter/A4 sheets. The same HTML is printed by the browser and turned
  * into a PDF by Chromium.
  */
-export function renderDocument(t: TemplateSpec, items: PrintItem[], opts: { background?: string | null; outlines?: boolean; skip?: number } = {}): string {
+export function renderDocument(t: TemplateSpec, items: PrintItem[], opts: { background?: string | null; outlines?: boolean; skip?: number; usedSlots?: number[] } = {}): string {
   const sheet = t.sheet_layout;
-  // a part-used label sheet: leave the labels already peeled off empty (only on the first sheet)
-  const skip = sheet && sheet.cols > 0 && sheet.rows > 0 ? Math.min(Math.max(0, Math.floor(opts.skip ?? 0)), sheet.cols * sheet.rows - 1) : 0;
-  const tags: (string | null)[] = [
-    ...Array.from({ length: skip }, () => null),
-    ...items.flatMap((it) => Array.from({ length: Math.max(1, it.copies) }, () => tagHtml(t, it.values, opts.background ?? null))),
-  ];
+  const per = sheet && sheet.cols > 0 && sheet.rows > 0 ? sheet.cols * sheet.rows : 0;
+  // a part-used label sheet: the labels already peeled off stay empty (only on the first sheet).
+  // `usedSlots` names them (1-based, anywhere on the sheet); `skip` is "the first n".
+  const used = new Set(per ? (opts.usedSlots ?? Array.from({ length: Math.max(0, Math.floor(opts.skip ?? 0)) }, (_, i) => i + 1)).filter((n) => n >= 1 && n <= per) : []);
+  if (used.size >= per) used.clear();
+  const printed = items.flatMap((it) => Array.from({ length: Math.max(1, it.copies) }, () => tagHtml(t, it.values, opts.background ?? null)));
+  // null: a label already used (marked on screen, never printed)
+  const tags: (string | null)[] = [];
+  if (used.size) {
+    for (let slot = 1; slot <= per && printed.length; slot++) tags.push(used.has(slot) ? null : printed.shift()!);
+    // later sheets are filled from the top
+    while (printed.length && tags.length % per) tags.push(null);
+  }
+  tags.push(...printed);
   let pageCss: string;
   let body: string;
   if (sheet && sheet.cols > 0 && sheet.rows > 0) {

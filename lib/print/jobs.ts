@@ -10,7 +10,7 @@ import { contentHash, sameContent, templateKeys } from "./content";
 import type { TemplateSpec } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 import { isProgressMark, RETRY_MARK, STARTED_MARK } from "./labels";
-import { clampPosition, sheetStock } from "./sheet-position";
+import { cleanUsed, sheetStock, usedBefore } from "./sheet-position";
 
 /** Office, directors and admins print for anyone; others need check-in access to the camper. */
 export function canPrintFor(user: CurrentUser, camper: { division_id: string | null; bunk_id: string | null }) {
@@ -103,19 +103,19 @@ async function loadPrintSet(jobIds: string[]) {
 
 const divisionOf = (c: { division_id?: string | null }) => c.division_id ?? null;
 
-function setHtml(set: PrintSet, opts: { start?: number; divisionId?: string | null }) {
+function setHtml(set: PrintSet, opts: { start?: number; used?: number[]; divisionId?: string | null }) {
   const campers = opts.divisionId === undefined ? set.campers : set.campers.filter((c) => divisionOf(c as never) === opts.divisionId);
   const stock = sheetStock(set.spec);
   const html = renderDocument(
     set.spec,
     campers.map((c) => ({ values: mergeValues(c, set.setup.fields, set.setup.maps), copies: set.copiesOf.get(c.id) ?? 1 })),
-    { background: set.background, skip: stock && opts.start ? clampPosition(opts.start, stock.perSheet) - 1 : 0 },
+    { background: set.background, usedSlots: stock ? (opts.used ?? (opts.start ? usedBefore(opts.start, stock.perSheet) : [])) : [] },
   );
   return { html, campers };
 }
 
 /** The printable page for requests printed together (all, or one division), starting at a label on a part-used sheet. */
-export async function printSetHtml(jobIds: string[], opts: { start?: number; divisionId?: string | null } = {}): Promise<string> {
+export async function printSetHtml(jobIds: string[], opts: { start?: number; used?: number[]; divisionId?: string | null } = {}): Promise<string> {
   return setHtml(await loadPrintSet(jobIds), opts).html;
 }
 
@@ -246,32 +246,39 @@ ${list ? `<ul style="padding-left:20px;margin:0 0 16px">${list}${more}</ul>` : "
 }
 
 /**
- * The first free label on each part-used sheet: one settings row per camp and label stock
- * ("label_sheet:<camp>/<stock>"), so each camp's office and printer keeps its own and two
- * writers never overwrite each other's. Older positions (one "label_sheets" row) still count.
+ * The sheet in each printer: which labels on it are used. One settings row per camp and label
+ * stock ("label_sheet:<camp>/<stock>" → { used: [1, 2, 5] }), so each camp's office keeps its own
+ * and two writers never overwrite each other's. Older rows ("next": first free label, or the
+ * one "label_sheets" row) still count.
  */
-export async function sheetPositions(): Promise<Record<string, number>> {
+export async function sheetPositions(): Promise<Record<string, number[]>> {
   const { data } = await createAdminClient().from("settings").select("key, value").or("key.like.label_sheet:%,key.eq.label_sheets");
-  const out: Record<string, number> = {};
+  const read = (x: unknown): number[] => {
+    if (typeof x === "number") return usedBefore(x, 500);
+    const v = (x ?? {}) as { used?: number[]; next?: number };
+    return Array.isArray(v.used) ? v.used.filter((n) => Number.isInteger(n)) : usedBefore(v.next ?? 1, 500);
+  };
+  const out: Record<string, number[]> = {};
   for (const r of data ?? []) {
     if (r.key === "label_sheets") {
-      for (const [k, x] of Object.entries((r.value ?? {}) as Record<string, { next?: number } | number>)) out[k] ??= typeof x === "number" ? x : (x?.next ?? 1);
-    } else out[r.key.slice("label_sheet:".length)] = Number((r.value as { next?: number } | null)?.next) || 1;
+      for (const [k, x] of Object.entries((r.value ?? {}) as Record<string, unknown>)) out[k] ??= read(x);
+    } else out[r.key.slice("label_sheet:".length)] = read(r.value);
   }
   return out;
 }
 
-/** The label stock as remembered for this camp ("<camp>/<stock>"), and where its sheet continues. */
-export function campStock<T extends { key: string }>(stock: T | null, campId: string | null | undefined, positions: Record<string, number>): { stock: T | null; next: number } {
-  if (!stock) return { stock: null, next: 1 };
+/** The label stock as remembered for this camp ("<camp>/<stock>"), and which labels on its sheet are used. */
+export function campStock<T extends { key: string; perSheet: number }>(stock: T | null, campId: string | null | undefined, positions: Record<string, number[]>): { stock: T | null; used: number[] } {
+  if (!stock) return { stock: null, used: [] };
   const key = `${campId ?? "camp"}/${stock.key}`;
-  return { stock: { ...stock, key }, next: positions[key] ?? positions[stock.key] ?? 1 };
+  return { stock: { ...stock, key }, used: cleanUsed(positions[key] ?? positions[stock.key] ?? [], stock.perSheet) };
 }
 
-export async function rememberSheetPosition(stock: string, next: number, userId: string): Promise<void> {
+export async function rememberSheetPosition(stock: string, used: number[], userId: string): Promise<void> {
+  const clean = [...new Set(used.filter((n) => Number.isInteger(n) && n >= 1 && n <= 500))].sort((a, b) => a - b);
   const { error } = await createAdminClient()
     .from("settings")
-    .upsert({ key: `label_sheet:${stock}`, value: { next, at: new Date().toISOString() }, updated_by: userId, updated_at: new Date().toISOString() });
+    .upsert({ key: `label_sheet:${stock}`, value: { used: clean, at: new Date().toISOString() }, updated_by: userId, updated_at: new Date().toISOString() });
   if (error) throw error;
 }
 
