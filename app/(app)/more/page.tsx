@@ -42,7 +42,7 @@ export default async function MorePage() {
       <PageHeader title="More" />
       <Group title="Everyday" items={nav.filter((n) => n.section === "main")} />
       <Group title="Setup" items={nav.filter((n) => n.section === "admin")} />
-      <Group title="You" items={[{ href: "/account", label: "Your account", icon: "CircleUser", description: "Name, phone and password", section: "main" }]} />
+      <Group title="You" items={user.checkinLogin ? [] : [{ href: "/account", label: "Your account", icon: "CircleUser", description: "Name, phone and password", section: "main" }]} />
       <form action={signOut}>
         <button type="submit" className="flex w-full items-center justify-center gap-2 rounded-xl border bg-card px-4 py-3 text-sm font-medium text-destructive hover:bg-destructive/5">
           <LogOut className="size-4" /> Sign out

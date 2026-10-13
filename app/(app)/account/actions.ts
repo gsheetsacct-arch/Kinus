@@ -10,6 +10,7 @@ const profile = z.object({ full_name: z.string().trim().min(1, "Enter your name.
 
 export async function updateMyProfile(fd: FormData): Promise<ActionResult> {
   const me = await requireUser();
+  if (me.checkinLogin) return fail("Check-in logins are changed on the Staff page.");
   try {
     const d = profile.parse(Object.fromEntries(fd));
     const supabase = await createClient();
@@ -23,7 +24,8 @@ export async function updateMyProfile(fd: FormData): Promise<ActionResult> {
 }
 
 export async function changeMyPassword(fd: FormData): Promise<ActionResult> {
-  await requireUser();
+  // a shared login's password is set on the Staff page (changing it here would sign the other phones out)
+  if ((await requireUser()).checkinLogin) return fail("Check-in logins get a new password on the Staff page.");
   const pw = String(fd.get("password") ?? "");
   if (pw.length < 8) return fail("Use at least 8 characters.");
   if (fd.get("confirm") !== pw) return fail("The two passwords don't match.");

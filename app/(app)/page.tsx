@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Users, ListChecks, Upload, ArrowRight, Layers, Check, Circle, ScanLine, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/section";
@@ -52,6 +53,8 @@ async function setupSteps(user: CurrentUser, sessionId: string | null) {
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
   const [user, session, camp, { denied }] = await Promise.all([requireUser(), getActiveSession(), getCampContext(), searchParams]);
+  // a check-in line's phones start on the check-in page
+  if (user.checkinLogin) redirect("/scan");
   const supabase = await createClient();
   const inCamp = (id: string | null) => !camp.divisionIds || (id !== null && camp.divisionIds.includes(id));
   const [divisionRows, allCampers, steps] = await Promise.all([

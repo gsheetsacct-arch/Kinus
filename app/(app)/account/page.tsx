@@ -24,6 +24,24 @@ export default async function AccountPage() {
   const session = await getActiveSession();
   const [{ data: profile }, tree] = await Promise.all([createAdminClient().from("profiles").select("full_name, phone, email").eq("id", me.id).single(), loadAreaTree(supabase, session?.id)]);
   const names = areaNames(tree);
+  // a check-in line's shared login: nothing to set up here (name and password live on the Staff page)
+  if (me.checkinLogin)
+    return (
+      <div className="max-w-3xl space-y-6">
+        <PageHeader title={profile?.full_name ?? "Check-in login"} description="A check-in login, shared by the phones at this check-in line." />
+        <Section title="Where">
+          <p className="text-sm" dir="auto">
+            {me.areas.length ? me.areas.map((a) => areaLabel(a, names)).join(", ") : "Nowhere yet."}
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">Its name and password are set by head staff on the Staff page, under Check-in logins.</p>
+        </Section>
+        <form action={signOut}>
+          <Button variant="outline" type="submit">
+            <LogOut /> Sign out
+          </Button>
+        </form>
+      </div>
+    );
 
   return (
     <div className="max-w-3xl space-y-6">

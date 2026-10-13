@@ -6,6 +6,15 @@ export type NavItem = { href: string; label: string; icon: NavIcon; description:
 
 export function buildNav(user: CurrentUser): NavItem[] {
   const canScan = LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan;
+  // the phones at a check-in line: checking in and out, and finding campers and staff. Nothing else.
+  if (user.checkinLogin)
+    return [
+      { href: "/scan", label: "Check in", icon: "ScanLine", description: "Scan or search to check campers in and out", section: "main", mobile: true },
+      { href: "/status", label: "Who's here", icon: "Activity", description: "Live status by bunk or division", section: "main", mobile: true },
+      { href: "/missing", label: "Not here yet", icon: "UserSearch", description: "Who hasn't arrived yet", section: "main", mobile: true },
+      { href: "/campers", label: "Campers", icon: "Users", description: "Find any camper", section: "main", mobile: true },
+      { href: "/phone-book", label: "Phone book", icon: "BookUser", description: "Call or text the staff you work with", section: "main" },
+    ];
   const nav: NavItem[] = [
     { href: "/", label: "Home", icon: "LayoutGrid", description: "Overview and next steps", section: "main" },
     canScan

@@ -15,12 +15,7 @@ export async function accountDomain(): Promise<string> {
 export const placeholderEmail = async () => `no-email.${randomBytes(5).toString("hex")}@${await accountDomain()}`;
 export const checkinEmail = async (name: string) => `checkin.${name}@${await accountDomain()}`;
 
-/** Three short words and a number: easy to read out and type on a phone. */
-export function generatePassword() {
-  const words = ["camp", "bunk", "sun", "lake", "tent", "fire", "pine", "trail", "star", "canoe", "hike", "song"];
-  const pick = () => words[randomBytes(1)[0] % words.length];
-  return `${pick()}-${pick()}-${1000 + (randomBytes(2).readUInt16BE(0) % 9000)}`;
-}
+export { generatePassword } from "./login-kinds";
 
 /**
  * Sets how someone signs in. Listed-only people have their sign-in blocked at Supabase
