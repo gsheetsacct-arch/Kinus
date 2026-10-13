@@ -1,9 +1,9 @@
 import { code128Svg, qrSvg } from "./barcode";
 import { embeddedFontCss } from "./fonts";
-import { FONTS, fontStack } from "./font-families";
+import { FONTS, fontStack, lineHeightOf } from "./font-families";
 import { fill } from "./merge";
 import { sheetPlacement, type Layer, type PrintItem, type SheetLayout, type TemplateSpec } from "./types";
-import { DEFAULT_MIN_PT, PX_PER_PT } from "./render-constants";
+import { minPt, PX_PER_PT } from "./render-constants";
 
 /** A CSS class for a stored picture (the same path always gets the same class). */
 export function imageClass(path: string): string {
@@ -37,8 +37,8 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
       const fields = [...l.text.matchAll(/\{\{[^{}]+\}\}/g)];
       if (fields.length && fields.every((m) => fill(m[0], get).trim() === "")) return "";
       const text = fill(l.text, get);
-      const style = `${pos}font-size:${l.size}pt;font-weight:${l.weight ?? 400};text-align:${l.align ?? "left"};color:${safeColor(l.color, "#111111")};justify-content:${l.align === "center" ? "center" : l.align === "right" ? "flex-end" : "flex-start"};${l.font && l.font !== "sans" ? `font-family:${fontStack(l.font)};` : ""}${l.italic ? "font-style:italic;" : ""}`;
-      const fitAttr = l.fit !== false ? `data-fit data-min="${((l.minSize ?? DEFAULT_MIN_PT) * PX_PER_PT).toFixed(2)}"` : "";
+      const style = `${pos}font-size:${l.size}pt;font-weight:${l.weight ?? 400};text-align:${l.align ?? "left"};color:${safeColor(l.color, "#111111")};justify-content:${l.align === "center" ? "center" : l.align === "right" ? "flex-end" : "flex-start"};${l.font && l.font !== "sans" ? `font-family:${fontStack(l.font)};` : ""}line-height:${lineHeightOf(l.font)};${l.italic ? "font-style:italic;" : ""}`;
+      const fitAttr = l.fit !== false ? `data-fit data-min="${(minPt(l) * PX_PER_PT).toFixed(2)}"` : "";
       return `<div class="l t${l.wrap ? " wrap" : ""}" ${fitAttr} style="${esc(style)}"><span dir="auto"${l.underline ? ' style="text-decoration:underline"' : ""}>${esc(text)}</span></div>`;
     }
     case "barcode": {
@@ -60,7 +60,7 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
 // the background image is in the page once (CSS); each tag only refers to it, so a big image
 // doesn't make a 500-tag page hundreds of megabytes
 function tagHtml(t: TemplateSpec, values: Record<string, string>, background: string | null): string {
-  return `<div class="tag" style="width:${t.page_width_mm}mm;height:${t.page_height_mm}mm;">${background ? `<div class="bg"></div>` : ""}${t.layers.map((l) => layerHtml(l, values)).join("")}</div>`;
+  return `<div class="tag" style="width:${t.page_width_mm}mm;height:${t.page_height_mm}mm;">${background ? `<div class="bg"></div>` : ""}${t.layers.map((l) => (l.hidden ? "" : layerHtml(l, values))).join("")}</div>`;
 }
 
 /**
@@ -115,7 +115,7 @@ export function renderDocument(
     body = tags.join("");
   }
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(t.name)}</title><style>
-${embeddedFontCss(t.layers.flatMap((l) => (l.type === "text" && l.font ? [FONTS[l.font]?.family ?? "Kinus Sans"] : [])))}
+${embeddedFontCss(t.layers.flatMap((l) => (l.type === "text" && l.font && !l.hidden ? [FONTS[l.font]?.family ?? "Kinus Sans"] : [])))}
 ${pageCss}
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}
 body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -125,7 +125,7 @@ body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-w
     .map(([path, url]) => `.${imageClass(path)}{background-image:url("${url.replace(/"/g, "%22")}")}`)
     .join("")}
 .l{position:absolute;overflow:hidden}
-.t{display:flex;align-items:center;white-space:nowrap;line-height:1.15}
+.t{display:flex;align-items:center;white-space:nowrap}
 .t span{max-width:100%;overflow:hidden;text-overflow:clip;unicode-bidi:plaintext}
 .t.wrap{white-space:normal;align-items:flex-start}
 .bc{display:flex;flex-direction:column;background:#fff}.bc .bars{flex:1;min-height:0}.bc svg{width:100%;height:100%;display:block}

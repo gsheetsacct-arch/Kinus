@@ -132,12 +132,38 @@ A canvas of the tag at real proportions (Print → Templates):
 - Click a part to select it, drag to move, pull the handles to resize; arrow keys
   nudge 0.5 mm (Shift: 5 mm), Delete removes. Parts snap to a 0.5 mm grid and to the
   tag's centre lines and edges, and stay on the tag.
+- **Several parts at once**: Shift-click (or Ctrl/⌘-click) parts on the tag or in the
+  parts list, drag a box around them on an empty spot (works with a finger on an iPad),
+  or Ctrl+A. Dragging any of them moves them together (the group snaps and stays on the
+  tag as one); arrows nudge them together; Ctrl+D copies them; Delete removes them.
+- **Line up**: with one part, its left / centre / right / top / middle / bottom goes to
+  the tag's; with several, they line up with each other (the box around them), and
+  three or more can be **spread out evenly** across or up and down.
+- **Lock** (padlock, in the panel or the parts list): a locked part can't be dragged,
+  resized, nudged or removed with the Delete key, and dragging across it draws a
+  selection box instead, so a background colour block stops getting in the way.
+  Clicking it still selects it, to unlock it. **Hide** (eye): a hidden part isn't shown
+  and doesn't print (nor count for "changed since printed"); it stays in the parts list,
+  crossed out, to show again. Saved as `locked` / `hidden` on the part.
 - "+ Add a field" drops a text box with that field; also plain text, barcode, QR and
   a colour block (division colour or any colour).
 - Text size is a **target**: short text prints at that size, longer text shrinks to
-  stay inside its box, never below "never smaller than". The panel says what happens
-  for the camper shown ("Shrinks to 21 pt for this camper"), and warns when it
-  doesn't fit at all. Give long fields a wider box rather than a smaller size.
+  stay inside its box, never below "never smaller than". The size can't be set bigger
+  than the box holds ("This box holds text up to 37 pt"; typing more settles there; a
+  box made shorter afterwards says "too big for it" with a one-tap fix).
+- The panel says what happens for the camper shown ("Shrinks to 21 pt for …"), and
+  **Every camper** measures the part for every camper in the camp, in the same fonts and
+  steps as print: who'd be cut off even at the smallest size (names, tap one to show
+  that camper), or the smallest size anyone gets. Fixes: **Let it shrink to N pt** (the
+  size everyone fits at), **Allow 2 lines**, or a wider box. Cut-off parts are outlined
+  red with "Cut off" on the canvas, counted in the parts list and listed under the tag.
+- **Fonts**: Clear (Noto Sans, the default), Friendly (Rubik), Classic (Frank Ruhl
+  Libre), Bold display (Secular One), all with Hebrew; plus bold, italic, underline.
+  Each is embedded in the printed page (`lib/print/fonts`, OFL).
+- **Line height** is per font (1.3 × the size; 1.5 for Bold display), measured from the
+  fonts so accents (É, Å), tails (g, y, ק) and Hebrew vowel points are never clipped.
+  The canvas, the every-camper check and the printed page use the same CSS
+  (`lineHeightOf`, `minPt`), so the size the editor shows is the printed size.
 - Show it with a sample camper, the camper with the longest name, or any camper by
   code; "Print preview" shows the exact print rendering for the same camper.
 - The canvas uses the print fonts, so what fits on screen fits on paper, and shows
@@ -157,8 +183,8 @@ A canvas of the tag at real proportions (Print → Templates):
   automatically the first time each camper is checked in.
 
 - **Undo / redo** (buttons, Ctrl+Z / Ctrl+Shift+Z or Ctrl+Y; up to 100 steps; a drag,
-  a typed word or a run of nudges is one step). **Copy** a part (button or Ctrl+D),
-  **Centre across / up–down** on the tag, **Ctrl+S** saves.
+  a typed word or a run of nudges is one step). **Copy** (button or Ctrl+D), **Ctrl+S**
+  saves.
 - **Pictures** (a camp logo…): "Picture" uploads a PNG/JPG/WebP up to 2 MB
   (`uploadTemplateImage`, storage `templates/pictures/…`) and places it at its own
   shape; "Whole picture" or "Fill the box"; "Another picture" swaps it. In print each
@@ -205,7 +231,8 @@ template + merge fields + camper(s) ─► HTML (React, print CSS, mm units, emb
 - Barcodes via `bwip-js` as inline SVG, Code 128 with a 10-bar-width blank margin
   each side built in (scanners need it; a colour block drawn next to the bars can't
   take it away), QR codes with a 2-square margin.
-- Fonts: Noto Sans + Noto Sans Hebrew bundled; the PDF embeds them.
+- Fonts: Noto Sans + Noto Sans Hebrew, and the template's other fonts (Rubik, Frank Ruhl
+  Libre, Secular One) bundled; the page embeds the ones it uses, so the PDF does too.
 - The same HTML is served at `GET /print/jobs/<id>/preview` so the office can also
   press **Print** in the browser. Zero-dependency fallback.
 

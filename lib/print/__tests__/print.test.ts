@@ -191,3 +191,31 @@ describe("printing order", async () => {
     expect(list.sort(byBunkThenName).map((x: { first_name: string }) => x.first_name).join("")).toBe("ECHGBADF");
   });
 });
+
+describe("hidden parts and line height", async () => {
+  const { templateKeys } = await import("../content");
+  const tpl = {
+    name: "Tag",
+    kind: "name_tag",
+    page_width_mm: 80,
+    page_height_mm: 50,
+    sheet_layout: null,
+    layers: [
+      { id: "a", type: "text" as const, text: "{{FIRST}}", x: 0, y: 0, w: 80, h: 20, size: 20, font: "display" as const },
+      { id: "b", type: "text" as const, text: "{{TSHIRT}}", x: 0, y: 25, w: 80, h: 10, size: 10, hidden: true },
+    ],
+  };
+  it("leaves hidden parts off the page and out of what counts as changed", () => {
+    const html = renderDocument(tpl, [{ values: { FIRST: "Yossi", TSHIRT: "YS" }, copies: 1 }]);
+    expect(html).toContain("Yossi");
+    expect(html).not.toContain(">YS<");
+    expect(templateKeys(tpl)).toEqual(["FIRST"]);
+  });
+  it("sets each font's line height, and never lets the smallest size be above the size", async () => {
+    const { minPt } = await import("../render-constants");
+    expect(renderDocument(tpl, [{ values: { FIRST: "Yossi" }, copies: 1 }])).toContain("line-height:1.5");
+    expect(minPt({ size: 5 })).toBe(5);
+    expect(minPt({ size: 20 })).toBe(6);
+    expect(minPt({ size: 20, minSize: 9 })).toBe(9);
+  });
+});

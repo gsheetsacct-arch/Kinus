@@ -1,9 +1,9 @@
 "use client";
 import { fill } from "@/lib/print/merge";
 import { fitText } from "@/lib/print/fit";
-import { DEFAULT_MIN_PT } from "@/lib/print/render-constants";
+import { minPt } from "@/lib/print/render-constants";
 import type { Layer } from "@/lib/print/types";
-import { fontStack } from "@/lib/print/font-families";
+import { fontStack, lineHeightOf } from "@/lib/print/font-families";
 
 export type FitPerson = { name: string; code: string; values: Record<string, string> };
 export type FitResult = {
@@ -33,15 +33,15 @@ export function checkFit(l: TextLayer, people: FitPerson[]): FitResult {
   const host = document.createElement("div");
   host.style.cssText = "position:fixed;left:-20000px;top:0;visibility:hidden;pointer-events:none";
   const box = document.createElement("div");
-  box.style.cssText = `display:flex;align-items:${l.wrap ? "flex-start" : "center"};overflow:hidden;line-height:1.15;width:${w}px;height:${h}px;white-space:${l.wrap ? "normal" : "nowrap"};font-weight:${l.weight ?? 400};font-style:${l.italic ? "italic" : "normal"};font-family:${fontStack(l.font)};text-align:${l.align ?? "left"}`;
+  box.style.cssText = `display:flex;align-items:${l.wrap ? "flex-start" : "center"};overflow:hidden;line-height:${lineHeightOf(l.font)};width:${w}px;height:${h}px;white-space:${l.wrap ? "normal" : "nowrap"};font-weight:${l.weight ?? 400};font-style:${l.italic ? "italic" : "normal"};font-family:${fontStack(l.font)};text-align:${l.align ?? "left"}`;
   const span = document.createElement("span");
   span.dir = "auto";
-  span.style.cssText = `max-width:100%;unicode-bidi:plaintext;text-decoration:${l.underline ? "underline" : "none"}`;
+  span.style.cssText = `max-width:100%;overflow:hidden;unicode-bidi:plaintext;text-decoration:${l.underline ? "underline" : "none"}`;
   box.appendChild(span);
   host.appendChild(box);
   document.body.appendChild(host);
   const target = l.size * MM_PER_PT * S;
-  const min = (l.minSize ?? Math.min(DEFAULT_MIN_PT, l.size)) * MM_PER_PT * S;
+  const min = minPt(l) * MM_PER_PT * S;
   const fields = [...l.text.matchAll(/\{\{[^{}]+\}\}/g)];
   const out: FitResult = { checked: 0, smallest: null, cut: [], needPt: null };
   let need = Infinity;
@@ -76,8 +76,8 @@ export function checkFit(l: TextLayer, people: FitPerson[]): FitResult {
   return out;
 }
 
-/** The biggest text size (pt) one line can have in a box this tall. */
+/** The biggest text size (pt) one line can have in a box this tall, with every letter whole. */
 export function boxCapPt(l: TextLayer): number {
   const tall = l.rotate ? l.w : l.h;
-  return Math.max(3, Math.floor(tall / 1.15 / MM_PER_PT));
+  return Math.max(3, Math.floor(tall / lineHeightOf(l.font) / MM_PER_PT));
 }

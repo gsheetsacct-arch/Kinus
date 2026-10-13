@@ -5,10 +5,16 @@ import { toast } from "sonner";
 import {
   AlertTriangle,
   AlignCenter,
-  AlignHorizontalJustifyCenter,
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignEndHorizontal,
+  AlignEndVertical,
+  AlignHorizontalDistributeCenter,
   AlignLeft,
   AlignRight,
-  AlignVerticalJustifyCenter,
+  AlignStartHorizontal,
+  AlignStartVertical,
+  AlignVerticalDistributeCenter,
   ArrowDown,
   ArrowUp,
   Barcode,
@@ -16,8 +22,11 @@ import {
   Check,
   Copy,
   Eye,
+  EyeOff,
   Image as ImageIcon,
   Italic,
+  Lock,
+  LockOpen,
   Plus,
   Printer,
   QrCode,
@@ -35,13 +44,13 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { DEFAULT_MIN_PT } from "@/lib/print/render-constants";
+import { minPt } from "@/lib/print/render-constants";
 import { fitPreview } from "@/lib/print/fit-preview";
 import { sheetPlacement, type Layer, type SheetLayout, type TemplateSpec } from "@/lib/print/types";
 import { presetSummary, type LabelPreset } from "@/lib/print/presets";
 import { currentPreset, LabelPicker, SheetDiagram, sizeText } from "./label-picker";
 import { fitCheckPeople, previewTemplate, previewValues, saveTemplate, uploadTemplateImage } from "@/app/(app)/print/actions";
-import { TagCanvas, type FitInfo } from "./tag-canvas";
+import { boundsOf, TagCanvas, type Box, type FitInfo } from "./tag-canvas";
 import { boxCapPt, checkFit, type FitPerson, type FitResult } from "./fit-check";
 import { FONTS, type FontKey } from "@/lib/print/font-families";
 import { useCode } from "./code-image";
@@ -173,8 +182,10 @@ function MergeText({ value, onChange, fields, label }: { value: string; onChange
   const ref = React.useRef<HTMLInputElement>(null);
   return (
     <div className="space-y-1">
-      <span className="block text-xs text-muted-foreground">{label}</span>
-      <Input ref={ref} value={value} onChange={(e) => onChange(e.target.value)} dir="auto" className="h-9 font-mono text-sm" />
+      <label className="block space-y-1">
+        <span className="block text-xs text-muted-foreground">{label}</span>
+        <Input ref={ref} value={value} onChange={(e) => onChange(e.target.value)} dir="auto" className="h-9 font-mono text-sm" />
+      </label>
       <Select
         aria-label="Insert a field"
         value=""
@@ -220,6 +231,81 @@ function BarcodeCheck({ l, values }: { l: Extract<Layer, { type: "barcode" }>; v
   );
 }
 
+type Align = "left" | "centerX" | "right" | "top" | "centerY" | "bottom" | "spreadX" | "spreadY";
+
+/**
+ * New positions to line parts up: one part against the tag, several against each other (the
+ * box around them). Spreading puts equal gaps between three or more. Locked parts stay put.
+ */
+function lineUp(parts: Layer[], how: Align, W: number, H: number): Record<string, Partial<Box>> {
+  const out: Record<string, Partial<Box>> = {};
+  const free = parts.filter((l) => !l.locked);
+  const r = parts.length > 1 ? boundsOf(parts) : { x: 0, y: 0, w: W, h: H };
+  if (how === "spreadX" || how === "spreadY") {
+    const across = how === "spreadX";
+    const sorted = [...parts].sort((a, b) => (across ? a.x + a.w / 2 - (b.x + b.w / 2) : a.y + a.h / 2 - (b.y + b.h / 2)));
+    if (sorted.length < 3) return out;
+    const gap = ((across ? r.w : r.h) - sorted.reduce((n, l) => n + (across ? l.w : l.h), 0)) / (sorted.length - 1);
+    let at = across ? r.x : r.y;
+    for (const l of sorted) {
+      if (!l.locked) out[l.id] = across ? { x: tidy(at) } : { y: tidy(at) };
+      at += (across ? l.w : l.h) + gap;
+    }
+    return out;
+  }
+  for (const l of free) {
+    out[l.id] =
+      how === "left"
+        ? { x: tidy(r.x) }
+        : how === "centerX"
+          ? { x: tidy(r.x + (r.w - l.w) / 2) }
+          : how === "right"
+            ? { x: tidy(r.x + r.w - l.w) }
+            : how === "top"
+              ? { y: tidy(r.y) }
+              : how === "centerY"
+                ? { y: tidy(r.y + (r.h - l.h) / 2) }
+                : { y: tidy(r.y + r.h - l.h) };
+  }
+  return out;
+}
+
+/** Buttons to line parts up (on the tag, or with each other) and spread them out evenly. */
+function LineUp({ parts, onLineUp }: { parts: Layer[]; onLineUp: (how: Align) => void }) {
+  const many = parts.length > 1;
+  const items: [Align, React.ComponentType, string][] = [
+    ["left", AlignStartVertical, "Left edges"],
+    ["centerX", AlignCenterVertical, "Centres, across"],
+    ["right", AlignEndVertical, "Right edges"],
+    ["top", AlignStartHorizontal, "Top edges"],
+    ["centerY", AlignCenterHorizontal, "Centres, up and down"],
+    ["bottom", AlignEndHorizontal, "Bottom edges"],
+  ];
+  const locked = parts.every((l) => l.locked);
+  return (
+    <div className="space-y-1">
+      <span className="block text-xs text-muted-foreground">{many ? "Line them up" : "Line it up on the tag"}</span>
+      <div className="flex flex-wrap gap-1">
+        {items.map(([how, Icon, label]) => (
+          <Button key={how} size="icon" variant="outline" className="size-8" disabled={locked} onClick={() => onLineUp(how)} aria-label={many ? label : `${label} of the tag`} title={many ? label : `${label} of the tag`}>
+            <Icon />
+          </Button>
+        ))}
+        {many && (
+          <>
+            <Button size="icon" variant="outline" className="ml-1.5 size-8" disabled={parts.length < 3 || locked} onClick={() => onLineUp("spreadX")} aria-label="Spread out evenly, across" title={parts.length < 3 ? "Select 3 or more parts to spread them out" : "Spread out evenly, across"}>
+              <AlignHorizontalDistributeCenter />
+            </Button>
+            <Button size="icon" variant="outline" className="size-8" disabled={parts.length < 3 || locked} onClick={() => onLineUp("spreadY")} aria-label="Spread out evenly, up and down" title={parts.length < 3 ? "Select 3 or more parts to spread them out" : "Spread out evenly, up and down"}>
+              <AlignVerticalDistributeCenter />
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Size and fitting for a text part, said plainly: the biggest size the box can hold, what
  * happens for the camper shown, and, measured for every camper, who'd be cut off and how to fix it.
@@ -242,7 +328,7 @@ function TextSizes({
   onShow: (code: string) => void;
 }) {
   const cap = boxCapPt(l);
-  const min = l.minSize ?? Math.min(DEFAULT_MIN_PT, l.size);
+  const min = minPt(l);
   const shrinks = l.fit !== false;
   const tone = (t: "ok" | "warn" | "bad") =>
     t === "bad"
@@ -263,7 +349,7 @@ function TextSizes({
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        <Num label="Text size (pt)" step={1} min={3} max={cap} value={Math.min(l.size, Math.max(cap, 3))} onChange={(n) => onChange({ size: n, ...(l.minSize !== undefined && l.minSize > n ? { minSize: n } : {}) })} />
+        <Num label="Text size (pt)" step={1} min={3} max={cap} value={l.size} onChange={(n) => onChange({ size: n, ...(l.minSize !== undefined && l.minSize > n ? { minSize: n } : {}) })} />
         {shrinks ? (
           <Num label="Never smaller than (pt)" step={1} min={3} max={l.size} value={min} onChange={(n) => onChange({ minSize: n })} />
         ) : (
@@ -370,8 +456,9 @@ export function TemplateEditor({
 }) {
   const router = useRouter();
   const [t, setT] = React.useState<EditorTemplate>(() => ({ ...initial, layers: initial.layers.map((l) => ({ ...l, id: l.id || uid() })) }));
-  const [selected, setSelected] = React.useState<string | null>(null);
-  const selectedRef = React.useRef<string | null>(null);
+  // the selected parts (Shift-click or drag a box to select several)
+  const [selected, setSelected] = React.useState<string[]>([]);
+  const selectedRef = React.useRef<string[]>([]);
   selectedRef.current = selected;
   const [fits, setFits] = React.useState<Record<string, FitInfo>>({});
   const [sample, setSample] = React.useState<{ values: Record<string, string>; label: string }>({ values: {}, label: "" });
@@ -419,7 +506,7 @@ export function TemplateEditor({
     lastStep.current = null;
     setT(snap);
     markDirty();
-    setSelected((id) => (id && snap.layers.some((l) => l.id === id) ? id : null));
+    setSelected((ids) => ids.filter((id) => snap.layers.some((l) => l.id === id)));
     historyChanged();
   }, [markDirty]);
   const undo = React.useCallback(() => step(past, future), [step]);
@@ -438,11 +525,23 @@ export function TemplateEditor({
     },
     [remember, markDirty],
   );
+  /** Several parts changed at once (a group dragged, lined up…): one step to undo. */
+  const setLayers = React.useCallback(
+    (changes: Record<string, Partial<Layer>>, key = "") => {
+      const ids = Object.keys(changes);
+      if (!ids.length) return;
+      if (ids.length === 1 && !key) return setLayer(ids[0], changes[ids[0]]);
+      remember(key || `ls:${ids.sort().join()}:${Object.keys(changes[ids[0]]).sort().join()}`);
+      setT((cur) => ({ ...cur, layers: cur.layers.map((l) => (changes[l.id] ? ({ ...l, ...changes[l.id] } as Layer) : l)) }));
+      markDirty();
+    },
+    [remember, markDirty, setLayer],
+  );
   const remove = React.useCallback(
-    (id: string) => {
-      remember(`rm:${id}`);
-      setT((cur) => ({ ...cur, layers: cur.layers.filter((l) => l.id !== id) }));
-      setSelected(null);
+    (ids: string[]) => {
+      remember(`rm:${ids.join()}`);
+      setT((cur) => ({ ...cur, layers: cur.layers.filter((l) => !ids.includes(l.id)) }));
+      setSelected([]);
       markDirty();
     },
     [remember, markDirty],
@@ -452,7 +551,7 @@ export function TemplateEditor({
     remember(`add:${id}`);
     // colour blocks go to the back (they're backgrounds and strips); everything else on top
     setT((cur) => ({ ...cur, layers: l.type === "box" ? [{ ...l, id } as Layer, ...cur.layers] : [...cur.layers, { ...l, id } as Layer] }));
-    setSelected(id);
+    setSelected([id]);
     markDirty();
     (document.activeElement as HTMLElement | null)?.blur();
   };
@@ -488,15 +587,17 @@ export function TemplateEditor({
     }
   };
 
-  /** A copy of a part, a little down and to the right (still on the tag), selected. */
+  /** Copies of parts, a little down and to the right (still on the tag), selected; never locked or hidden. */
   const duplicate = React.useCallback(
-    (id: string) => {
-      const l = tRef.current.layers.find((x) => x.id === id);
-      if (!l) return;
-      const copy = { ...l, id: uid(), x: tidy(Math.min(l.x + 2, Math.max(0, tRef.current.page_width_mm - l.w))), y: tidy(Math.min(l.y + 2, Math.max(0, tRef.current.page_height_mm - l.h))) } as Layer;
-      remember(`dup:${copy.id}`);
-      setT((cur) => ({ ...cur, layers: [...cur.layers, copy] }));
-      setSelected(copy.id);
+    (ids: string[]) => {
+      const { page_width_mm: tw, page_height_mm: th } = tRef.current;
+      const copies = tRef.current.layers
+        .filter((l) => ids.includes(l.id))
+        .map((l) => ({ ...l, id: uid(), locked: undefined, hidden: undefined, x: tidy(Math.min(l.x + 2, Math.max(0, tw - l.w))), y: tidy(Math.min(l.y + 2, Math.max(0, th - l.h))) }) as Layer);
+      if (!copies.length) return;
+      remember(`dup:${copies[0].id}`);
+      setT((cur) => ({ ...cur, layers: [...cur.layers, ...copies] }));
+      setSelected(copies.map((c) => c.id));
       markDirty();
     },
     [remember, markDirty],
@@ -508,7 +609,7 @@ export function TemplateEditor({
       const el = e.target as HTMLElement | null;
       const typing = el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
       const k = e.key.toLowerCase();
-      if (k === "d" && selectedRef.current && !typing) {
+      if (k === "d" && selectedRef.current.length && !typing) {
         e.preventDefault();
         duplicate(selectedRef.current);
       } else if (!typing && ((k === "z" && e.shiftKey) || k === "y")) {
@@ -621,7 +722,8 @@ export function TemplateEditor({
   const W = t.page_width_mm;
   const H = t.page_height_mm;
   const center = (w: number, h: number) => ({ x: Math.max(0, Math.round((W - w) / 2)), y: Math.max(0, Math.round((H - h) / 2)), w: Math.min(w, W), h: Math.min(h, H) });
-  const sel = t.layers.find((l) => l.id === selected) ?? null;
+  const chosen = t.layers.filter((l) => selected.includes(l.id));
+  const sel = chosen.length === 1 ? chosen[0] : null;
   const labels = new Map(fields.map((f) => [f.key, f.label]));
   const fit = sel ? fits[sel.id] : undefined;
   const used = [...usedKeys(t.layers)];
@@ -642,7 +744,7 @@ export function TemplateEditor({
       live = false;
     };
   }, [usedKey]);
-  const textLayersKey = JSON.stringify(t.layers.filter((l) => l.type === "text"));
+  const textLayersKey = JSON.stringify(t.layers.filter((l) => l.type === "text" && !l.hidden));
   React.useEffect(() => {
     if (!people) return;
     let live = true;
@@ -658,7 +760,7 @@ export function TemplateEditor({
       clearTimeout(timer);
     };
   }, [people, textLayersKey]);
-  const cutParts = Object.entries(fitResults).filter(([id, r]) => r.cut.length && t.layers.some((l) => l.id === id));
+  const cutParts = Object.entries(fitResults).filter(([id, r]) => r.cut.length && t.layers.some((l) => l.id === id && !l.hidden));
   const sheet = t.sheet_layout;
   const preset = currentPreset(W, H, sheet);
   const placed = sheet ? sheetPlacement(sheet, W, H, sheet.paper === "a4" ? 210 : 215.9) : null;
@@ -831,14 +933,14 @@ export function TemplateEditor({
               images={images}
               selected={selected}
               onSelect={setSelected}
-              onChange={setLayer}
+              onChange={(c) => setLayers(c, `drag:${Object.keys(c).sort().join()}:${Object.keys(Object.values(c)[0] ?? {}).sort().join()}`)}
               onDelete={remove}
               onFit={onFit}
             />
           </div>
           <p className="text-xs text-muted-foreground">
             {sample.label && <>Showing {sample.label}. </>}
-            Drag a part to move it, pull its handles to resize. Arrow keys nudge (Shift: 5 mm), Delete removes, Ctrl+D copies, Ctrl+Z undoes. Text stays inside its box.
+            Drag a part to move it, pull its handles to resize. Shift-click or drag a box around parts to select several. Arrow keys nudge (Shift: 5 mm), Delete removes, Ctrl+D copies, Ctrl+A selects all, Ctrl+Z undoes.
           </p>
           {used.length > 0 && (
             <details className="rounded-lg border bg-card text-sm">
@@ -865,7 +967,7 @@ export function TemplateEditor({
               {cutParts.map(([id, r]) => {
                 const l = t.layers.find((x) => x.id === id)!;
                 return (
-                  <button key={id} type="button" onClick={() => setSelected(id)} className="rounded border border-red-300 bg-white px-1.5 py-0.5 font-medium hover:bg-red-100 dark:border-red-800 dark:bg-transparent" dir="auto">
+                  <button key={id} type="button" onClick={() => setSelected([id])} className="rounded border border-red-300 bg-white px-1.5 py-0.5 font-medium hover:bg-red-100 dark:border-red-800 dark:bg-transparent" dir="auto">
                     {describe(l, labels)}: {r.cut.length} {r.cut.length === 1 ? "camper" : "campers"}
                   </button>
                 );
@@ -896,29 +998,60 @@ export function TemplateEditor({
         {/* side panel */}
         <div className="space-y-4">
           <section className="space-y-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)]">
-            {!sel ? (
-              <p className="text-sm text-muted-foreground">Click a part of the tag to change it, or add one above.</p>
+            {chosen.length > 1 ? (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="font-semibold">{chosen.length} parts selected</h2>
+                  <Button size="sm" variant="ghost" onClick={() => setSelected([])}>
+                    Clear
+                  </Button>
+                </div>
+                <LineUp parts={chosen} onLineUp={(how) => setLayers(lineUp(chosen, how, W, H), `line:${how}:${selected.join()}`)} />
+                <div className="flex flex-wrap gap-1.5">
+                  <Button size="sm" variant="outline" onClick={() => duplicate(selected)} title="Copy (Ctrl+D)">
+                    <Copy /> Copy all
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setLayers(Object.fromEntries(chosen.map((l) => [l.id, { locked: chosen.every((c) => c.locked) ? undefined : true }])), `lock:${selected.join()}`)}>
+                    {chosen.every((c) => c.locked) ? <LockOpen /> : <Lock />} {chosen.every((c) => c.locked) ? "Unlock" : "Lock"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setLayers(Object.fromEntries(chosen.map((l) => [l.id, { hidden: chosen.every((c) => c.hidden) ? undefined : true }])), `hide:${selected.join()}`)}>
+                    {chosen.every((c) => c.hidden) ? <Eye /> : <EyeOff />} {chosen.every((c) => c.hidden) ? "Show" : "Hide"}
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => remove(selected)}>
+                    <Trash2 /> Remove {chosen.length}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Drag any of them to move them together. Shift-click a part to add it or take it out.</p>
+              </>
+            ) : !sel ? (
+              <p className="text-sm text-muted-foreground">Click a part of the tag to change it, or add one above. Shift-click or drag a box around parts to select several.</p>
             ) : (
               <>
                 <div className="flex items-center justify-between gap-2">
                   <h2 className="font-semibold">{sel.type === "text" ? "Text" : sel.type === "box" ? "Colour block" : sel.type === "image" ? "Picture" : sel.type === "qr" ? "QR code" : "Barcode"}</h2>
-                  <span className="flex gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => duplicate(sel.id)} title="Copy (Ctrl+D)">
-                      <Copy /> Copy
+                  <span className="flex gap-0.5">
+                    <Button size="icon" variant={sel.locked ? "default" : "ghost"} className="size-8" onClick={() => setLayer(sel.id, { locked: sel.locked ? undefined : true })} aria-pressed={Boolean(sel.locked)} aria-label={sel.locked ? "Unlock" : "Lock"} title={sel.locked ? "Locked: it can't be moved or resized. Click to unlock." : "Lock it in place"}>
+                      {sel.locked ? <Lock /> : <LockOpen />}
                     </Button>
-                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => remove(sel.id)}>
-                      <Trash2 /> Remove
+                    <Button size="icon" variant={sel.hidden ? "default" : "ghost"} className="size-8" onClick={() => setLayer(sel.id, { hidden: sel.hidden ? undefined : true })} aria-pressed={Boolean(sel.hidden)} aria-label={sel.hidden ? "Show" : "Hide"} title={sel.hidden ? "Hidden: it doesn't show or print. Click to show it." : "Hide it (it won't print)"}>
+                      {sel.hidden ? <EyeOff /> : <Eye />}
+                    </Button>
+                    <Button size="icon" variant="ghost" className="size-8" onClick={() => duplicate([sel.id])} aria-label="Copy" title="Copy (Ctrl+D)">
+                      <Copy />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => remove([sel.id])} aria-label="Remove" title="Remove">
+                      <Trash2 />
                     </Button>
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  <Button size="sm" variant="outline" onClick={() => setLayer(sel.id, { x: tidy(Math.max(0, (W - sel.w) / 2)) })} title="Centre across the tag">
-                    <AlignHorizontalJustifyCenter /> Centre across
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setLayer(sel.id, { y: tidy(Math.max(0, (H - sel.h) / 2)) })} title="Centre up and down on the tag">
-                    <AlignVerticalJustifyCenter /> Centre up–down
-                  </Button>
-                </div>
+                {(sel.locked || sel.hidden) && (
+                  <p className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                    {sel.hidden ? "Hidden: it isn't shown and doesn't print. " : ""}
+                    {sel.locked ? "Locked: it can't be moved or resized on the tag, so it doesn't get in the way. " : ""}
+                    Use the buttons above to change that.
+                  </p>
+                )}
+                <LineUp parts={[sel]} onLineUp={(how) => setLayers(lineUp([sel], how, W, H), `line:${how}:${sel.id}`)} />
                 {sel.type === "image" && (
                   <div className="space-y-2">
                     <div className="inline-flex w-full gap-1 rounded-lg bg-muted p-1">
@@ -1068,18 +1201,29 @@ export function TemplateEditor({
                 const i = t.layers.indexOf(l);
                 const Icon = ICON[l.type];
                 return (
-                  <li key={l.id} className={cn("flex items-center gap-1 px-2 py-1", l.id === selected && "bg-primary-soft/60")}>
-                    <button type="button" onClick={() => setSelected(l.id)} className="flex min-w-0 flex-1 items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted">
+                  <li key={l.id} className={cn("flex items-center gap-0.5 px-2 py-1", selected.includes(l.id) && "bg-primary-soft/60", l.hidden && "opacity-60")}>
+                    <button
+                      type="button"
+                      onClick={(e) => setSelected(e.shiftKey || e.metaKey || e.ctrlKey ? (selected.includes(l.id) ? selected.filter((id) => id !== l.id) : [...selected, l.id]) : [l.id])}
+                      className={cn("flex min-w-0 flex-1 items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted", l.hidden && "line-through")}
+                      title="Shift-click to select several"
+                    >
                       <Icon className="size-4 shrink-0 text-muted-foreground" />
                       <span className="truncate font-mono text-xs" dir="auto">
                         {describe(l, labels)}
                       </span>
-                      {(fits[l.id]?.overflow || fitResults[l.id]?.cut.length) && (
+                      {!l.hidden && (fits[l.id]?.overflow || (fitResults[l.id]?.cut.length ?? 0) > 0) && (
                         <span className="ml-auto flex shrink-0 items-center gap-1 rounded bg-red-100 px-1.5 text-[11px] font-medium text-red-800 dark:bg-red-950 dark:text-red-200" title="Cut off for some campers">
                           <AlertTriangle className="size-3" /> {fitResults[l.id]?.cut.length || "cut"}
                         </span>
                       )}
                     </button>
+                    <Button size="icon" variant="ghost" className={cn("size-7", !l.locked && "text-muted-foreground/50")} onClick={() => setLayer(l.id, { locked: l.locked ? undefined : true })} aria-pressed={Boolean(l.locked)} aria-label={l.locked ? "Unlock" : "Lock"} title={l.locked ? "Locked. Click to unlock." : "Lock in place"}>
+                      {l.locked ? <Lock /> : <LockOpen />}
+                    </Button>
+                    <Button size="icon" variant="ghost" className={cn("size-7", !l.hidden && "text-muted-foreground/50")} onClick={() => setLayer(l.id, { hidden: l.hidden ? undefined : true })} aria-pressed={Boolean(l.hidden)} aria-label={l.hidden ? "Show" : "Hide"} title={l.hidden ? "Hidden: doesn't print. Click to show." : "Hide (won't print)"}>
+                      {l.hidden ? <EyeOff /> : <Eye />}
+                    </Button>
                     <Button size="icon" variant="ghost" className="size-7" onClick={() => move(i, 1)} disabled={i === t.layers.length - 1} aria-label="Bring forward">
                       <ArrowUp />
                     </Button>

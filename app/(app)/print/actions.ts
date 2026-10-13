@@ -245,11 +245,14 @@ async function requireAdminUser() {
 }
 
 const num = (min: number, max: number) => z.coerce.number().min(min).max(max);
+// lock (can't be moved on the canvas) and hide (doesn't show or print) work on every kind of part
+const partFlags = { locked: z.boolean().optional(), hidden: z.boolean().optional() };
 const layerSchema = z.discriminatedUnion("type", [
-  z.object({ id: z.string(), type: z.literal("text"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), size: num(3, 200), weight: z.union([z.literal(400), z.literal(700)]).optional(), align: z.enum(["left", "center", "right"]).optional(), color: z.string().max(40).optional(), fit: z.boolean().optional(), wrap: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(), minSize: num(3, 200).optional(), font: z.enum(["sans", "rounded", "serif", "display"]).optional(), italic: z.boolean().optional(), underline: z.boolean().optional() }),
-  z.object({ id: z.string(), type: z.literal("barcode"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), showText: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional() }),
-  z.object({ id: z.string(), type: z.literal("qr"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500) }),
+  z.object({ ...partFlags, id: z.string(), type: z.literal("text"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), size: num(3, 200), weight: z.union([z.literal(400), z.literal(700)]).optional(), align: z.enum(["left", "center", "right"]).optional(), color: z.string().max(40).optional(), fit: z.boolean().optional(), wrap: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(), minSize: num(3, 200).optional(), font: z.enum(["sans", "rounded", "serif", "display"]).optional(), italic: z.boolean().optional(), underline: z.boolean().optional() }),
+  z.object({ ...partFlags, id: z.string(), type: z.literal("barcode"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), showText: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional() }),
+  z.object({ ...partFlags, id: z.string(), type: z.literal("qr"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500) }),
   z.object({
+    ...partFlags,
     id: z.string(),
     type: z.literal("image"),
     // a picture uploaded for templates (uploadTemplateImage): never a path outside that
@@ -260,7 +263,7 @@ const layerSchema = z.discriminatedUnion("type", [
     h: num(1, 500),
     fit: z.enum(["contain", "cover"]).optional(),
   }),
-  z.object({ id: z.string(), type: z.literal("box"), x: num(-50, 500), y: num(-50, 500), w: num(0.1, 500), h: num(0.1, 500), fill: z.string().max(60).optional(), radius: num(0, 100).optional(), border: z.string().max(40).optional() }),
+  z.object({ ...partFlags, id: z.string(), type: z.literal("box"), x: num(-50, 500), y: num(-50, 500), w: num(0.1, 500), h: num(0.1, 500), fill: z.string().max(60).optional(), radius: num(0, 100).optional(), border: z.string().max(40).optional() }),
 ]);
 const sheetSchema = z.object({
   paper: z.enum(["letter", "a4"]),

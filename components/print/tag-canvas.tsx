@@ -2,14 +2,15 @@
 import * as React from "react";
 import { fill } from "@/lib/print/merge";
 import { fitText } from "@/lib/print/fit";
-import { DEFAULT_MIN_PT } from "@/lib/print/render-constants";
+import { minPt } from "@/lib/print/render-constants";
 import type { Layer } from "@/lib/print/types";
+import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CodeImage, useCode } from "./code-image";
-import { fontStack } from "@/lib/print/font-families";
+import { fontStack, lineHeightOf } from "@/lib/print/font-families";
 
 export type FitInfo = { pt: number; overflow: boolean };
-type Box = { x: number; y: number; w: number; h: number };
+export type Box = { x: number; y: number; w: number; h: number };
 type Handle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 const HANDLES: Handle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 const MM_PER_PT = 25.4 / 72;
@@ -25,10 +26,11 @@ const safeColor = (c: string, fallback: string) =>
   /^#[0-9a-f]{3,8}$|^[a-z]+$/i.test(c.trim()) ? c.trim() : fallback;
 
 /**
- * The tag at real proportions: click a part to select it, drag to move, pull the handles
- * to resize, arrow keys to nudge (Shift: 5 mm), Delete to remove. Parts snap to a 0.5 mm
- * grid and to the tag's centre lines and edges. Text is shown for the chosen camper,
- * shrunk exactly as it will print.
+ * The tag at real proportions: click a part to select it, Shift-click (or drag a box around
+ * parts) to select several, drag to move, pull the handles to resize, arrow keys to nudge
+ * (Shift: 5 mm), Delete to remove. Parts snap to a 0.5 mm grid and to the tag's centre lines
+ * and edges. Locked parts don't move (dragging over one draws a selection box instead);
+ * hidden parts aren't shown. Text is shown for the chosen camper, shrunk exactly as it will print.
  */
 export function TagCanvas({
   width,
@@ -50,24 +52,24 @@ export function TagCanvas({
   background: string | null;
   /** Pictures for picture parts, by stored path (data URLs). */
   images?: Record<string, string>;
-  selected: string | null;
-  onSelect: (id: string | null) => void;
-  onChange: (id: string, box: Partial<Box>) => void;
-  onDelete: (id: string) => void;
+  selected: string[];
+  onSelect: (ids: string[]) => void;
+  /** Moves or resizes, by part (several at once when a group is dragged). */
+  onChange: (changes: Record<string, Partial<Box>>) => void;
+  onDelete: (ids: string[]) => void;
   onFit: (id: string, info: FitInfo) => void;
 }) {
   const wrap = React.useRef<HTMLDivElement>(null);
+  const tag = React.useRef<HTMLDivElement>(null);
   const [scale, setScale] = React.useState(4); // px per mm
   const [guides, setGuides] = React.useState<{ v: number[]; h: number[] }>({
     v: [],
     h: [],
   });
-  const drag = React.useRef<{
-    id: string;
-    mode: "move" | Handle;
-    start: { px: number; py: number };
-    box: Box;
-  } | null>(null);
+  const [band, setBand] = React.useState<Box | null>(null);
+  const drag = React.useRef<Drag | null>(null);
+  const movable = (ids: string[]) =>
+    layers.filter((l) => ids.includes(l.id) && !l.locked && !l.hidden);
 
   // as large as the space allows, never taller than most of the screen
   React.useLayoutEffect(() => {
@@ -144,61 +146,160 @@ export function TagCanvas({
     };
   };
 
+  /** Where the pointer is on the tag, in mm. */
+  const at = (e: React.PointerEvent) => {
+    const r = tag.current!.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale };
+  };
+
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current;
     if (!d) return;
     const dx = (e.clientX - d.start.px) / scale;
     const dy = (e.clientY - d.start.py) / scale;
-    const b = { ...d.box };
-    if (d.mode === "move") {
-      b.x += dx;
-      b.y += dy;
-    } else {
-      if (d.mode.includes("e")) b.w = d.box.w + dx;
-      if (d.mode.includes("s")) b.h = d.box.h + dy;
-      if (d.mode.includes("w")) {
-        b.x = d.box.x + dx;
-        b.w = d.box.w - dx;
-      }
-      if (d.mode.includes("n")) {
-        b.y = d.box.y + dy;
-        b.h = d.box.h - dy;
-      }
-      // never smaller than 2 mm; dragging past the opposite side stops there
-      if (b.w < 2) {
-        if (d.mode.includes("w")) b.x = d.box.x + d.box.w - 2;
-        b.w = 2;
-      }
-      if (b.h < 2) {
-        if (d.mode.includes("n")) b.y = d.box.y + d.box.h - 2;
-        b.h = 2;
-      }
+    if (Math.abs(e.clientX - d.start.px) + Math.abs(e.clientY - d.start.py) > 3)
+      d.moved = true;
+    if (d.kind === "band") {
+      if (!d.moved) return;
+      const p = at(e);
+      d.rect = {
+        x: Math.min(p.x, d.origin.x),
+        y: Math.min(p.y, d.origin.y),
+        w: Math.abs(p.x - d.origin.x),
+        h: Math.abs(p.y - d.origin.y),
+      };
+      setBand(d.rect);
+      return;
     }
-    const s = snapBox(b, d.mode === "move");
+    if (d.kind === "move") {
+      if (!d.moved) return;
+      // the group moves as one box: it snaps and stays on the tag together
+      const s = snapBox(
+        { ...d.bounds, x: d.bounds.x + dx, y: d.bounds.y + dy },
+        true,
+      );
+      const ox = s.box.x - d.bounds.x;
+      const oy = s.box.y - d.bounds.y;
+      setGuides({ v: s.v, h: s.h });
+      onChange(
+        Object.fromEntries(
+          Object.entries(d.boxes).map(([id, b]) => [
+            id,
+            tidy({ x: b.x + ox, y: b.y + oy }),
+          ]),
+        ),
+      );
+      return;
+    }
+    const b = { ...d.box };
+    if (d.mode.includes("e")) b.w = d.box.w + dx;
+    if (d.mode.includes("s")) b.h = d.box.h + dy;
+    if (d.mode.includes("w")) {
+      b.x = d.box.x + dx;
+      b.w = d.box.w - dx;
+    }
+    if (d.mode.includes("n")) {
+      b.y = d.box.y + dy;
+      b.h = d.box.h - dy;
+    }
+    // never smaller than 2 mm; dragging past the opposite side stops there
+    if (b.w < 2) {
+      if (d.mode.includes("w")) b.x = d.box.x + d.box.w - 2;
+      b.w = 2;
+    }
+    if (b.h < 2) {
+      if (d.mode.includes("n")) b.y = d.box.y + d.box.h - 2;
+      b.h = 2;
+    }
+    const s = snapBox(b, false);
     setGuides({ v: s.v, h: s.h });
-    onChange(d.id, tidy(s.box));
+    onChange({ [d.id]: tidy(s.box) });
   };
   const endDrag = () => {
+    const d = drag.current;
     drag.current = null;
     setGuides({ v: [], h: [] });
+    setBand(null);
+    if (!d) return;
+    if (d.kind === "band") {
+      if (!d.moved) {
+        // a click: on a locked part selects it (to unlock it), on the tag clears the selection
+        onSelect(d.hit ? [d.hit] : d.add ? selected : []);
+        return;
+      }
+      const r = d.rect ?? { x: 0, y: 0, w: 0, h: 0 };
+      const inside = layers
+        .filter(
+          (l) =>
+            !l.hidden &&
+            !l.locked &&
+            l.x < r.x + r.w &&
+            l.x + l.w > r.x &&
+            l.y < r.y + r.h &&
+            l.y + l.h > r.y,
+        )
+        .map((l) => l.id);
+      onSelect(d.add ? [...new Set([...selected, ...inside])] : inside);
+    } else if (d.kind === "move" && !d.moved && d.only) onSelect([d.only]);
   };
-  const start = (e: React.PointerEvent, l: Layer, mode: "move" | Handle) => {
+  const startBand = (e: React.PointerEvent, hit: string | null) => {
     e.stopPropagation();
     e.preventDefault();
-    onSelect(l.id);
     wrap.current?.focus();
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    tag.current?.setPointerCapture?.(e.pointerId);
     drag.current = {
-      id: l.id,
-      mode,
+      kind: "band",
       start: { px: e.clientX, py: e.clientY },
-      box: { x: l.x, y: l.y, w: l.w, h: l.h },
+      origin: at(e),
+      add: e.shiftKey || e.metaKey || e.ctrlKey,
+      hit,
+      moved: false,
+    };
+  };
+  const start = (e: React.PointerEvent, l: Layer, mode: "move" | Handle) => {
+    if (mode === "move" && l.locked) return startBand(e, l.id);
+    e.stopPropagation();
+    e.preventDefault();
+    wrap.current?.focus();
+    // Shift / Ctrl / ⌘-click adds a part to the selection, or takes it out
+    if (mode === "move" && (e.shiftKey || e.metaKey || e.ctrlKey)) {
+      onSelect(
+        selected.includes(l.id)
+          ? selected.filter((id) => id !== l.id)
+          : [...selected, l.id],
+      );
+      return;
+    }
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    if (mode !== "move") {
+      drag.current = {
+        kind: "resize",
+        id: l.id,
+        mode,
+        start: { px: e.clientX, py: e.clientY },
+        box: { x: l.x, y: l.y, w: l.w, h: l.h },
+        moved: false,
+      };
+      return;
+    }
+    // dragging a selected part takes the whole selection along
+    const group = selected.includes(l.id) ? selected : [l.id];
+    if (!selected.includes(l.id)) onSelect([l.id]);
+    const parts = movable(group);
+    drag.current = {
+      kind: "move",
+      start: { px: e.clientX, py: e.clientY },
+      boxes: Object.fromEntries(
+        parts.map((p) => [p.id, { x: p.x, y: p.y, w: p.w, h: p.h }]),
+      ),
+      bounds: boundsOf(parts),
+      moved: false,
+      // a plain click on one part of a group selects just that part
+      only: group.length > 1 ? l.id : null,
     };
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
-    const l = layers.find((x) => x.id === selected);
-    if (!l) return;
     const t = e.target as HTMLElement | null;
     if (
       t &&
@@ -206,6 +307,12 @@ export function TagCanvas({
     )
       return;
     if (document.querySelector("[role=dialog]")) return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+      e.preventDefault();
+      onSelect(layers.filter((l) => !l.hidden && !l.locked).map((l) => l.id));
+      return;
+    }
+    if (!selected.length) return;
     const step = e.shiftKey ? 5 : SNAP;
     const move: Record<string, [number, number]> = {
       ArrowLeft: [-step, 0],
@@ -215,17 +322,30 @@ export function TagCanvas({
     };
     if (move[e.key]) {
       e.preventDefault();
+      const parts = movable(selected);
+      if (!parts.length) return;
+      // the group stays on the tag: it stops at the edge
+      const b = boundsOf(parts);
+      const dx = Math.min(Math.max(move[e.key][0], -b.x), Math.max(0, width - b.x - b.w));
+      const dy = Math.min(Math.max(move[e.key][1], -b.y), Math.max(0, height - b.y - b.h));
+      const one = parts.length === 1;
       onChange(
-        l.id,
-        tidy({
-          x: Math.min(Math.max(0, round(l.x + move[e.key][0])), width - l.w),
-          y: Math.min(Math.max(0, round(l.y + move[e.key][1])), height - l.h),
-        }),
+        Object.fromEntries(
+          parts.map((p) => [
+            p.id,
+            tidy({
+              x: one ? round(p.x + dx) : p.x + dx,
+              y: one ? round(p.y + dy) : p.y + dy,
+            }),
+          ]),
+        ),
       );
     } else if (e.key === "Delete" || e.key === "Backspace") {
       e.preventDefault();
-      onDelete(l.id);
-    } else if (e.key === "Escape") onSelect(null);
+      // locked parts stay (remove them from the side panel)
+      const ids = layers.filter((l) => selected.includes(l.id) && !l.locked).map((l) => l.id);
+      if (ids.length) onDelete(ids);
+    } else if (e.key === "Escape") onSelect([]);
   };
 
   const keys = React.useRef(onKeyDown);
@@ -236,17 +356,19 @@ export function TagCanvas({
     return () => window.removeEventListener("keydown", h);
   }, []);
 
+  const chosen = layers.filter((l) => selected.includes(l.id));
   return (
     <div
       ref={wrap}
       tabIndex={-1}
       className="w-full outline-none"
-      aria-label="Tag canvas: click a part to select it, drag to move, arrow keys to nudge"
+      aria-label="Tag canvas: click a part to select it, Shift-click to select more, drag to move, arrow keys to nudge"
     >
       <div
+        ref={tag}
         className="relative mx-auto touch-none select-none bg-white shadow-[0_1px_6px_rgba(0,0,0,.18)] [font-family:'Kinus_Sans','Noto_Sans','Noto_Sans_Hebrew',Arial,sans-serif]"
         style={{ width: width * scale, height: height * scale }}
-        onPointerDown={() => onSelect(null)}
+        onPointerDown={(e) => startBand(e, null)}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
@@ -259,24 +381,40 @@ export function TagCanvas({
             className="pointer-events-none absolute inset-0 size-full object-cover"
           />
         )}
-        {layers.map((l) => (
-          <Part
+        {layers.map((l) =>
+          l.hidden ? null : (
+            <Part
+              key={l.id}
+              l={l}
+              scale={scale}
+              values={values}
+              images={images}
+              selected={selected.includes(l.id)}
+              onStart={start}
+              onFit={onFit}
+            />
+          ),
+        )}
+        {chosen.map((l) => (
+          <Selection
             key={l.id}
             l={l}
             scale={scale}
-            values={values}
-            images={images}
-            selected={l.id === selected}
+            handles={chosen.length === 1 && !l.locked && !l.hidden}
             onStart={start}
-            onFit={onFit}
           />
         ))}
-        {(() => {
-          const sel = layers.find((l) => l.id === selected);
-          return sel ? (
-            <Selection l={sel} scale={scale} onStart={start} />
-          ) : null;
-        })()}
+        {band && (
+          <div
+            className="pointer-events-none absolute z-40 border border-primary bg-primary/10"
+            style={{
+              left: band.x * scale,
+              top: band.y * scale,
+              width: band.w * scale,
+              height: band.h * scale,
+            }}
+          />
+        )}
         {guides.v.map((x) => (
           <div
             key={`v${x}`}
@@ -294,6 +432,25 @@ export function TagCanvas({
       </div>
     </div>
   );
+}
+
+type Drag = { start: { px: number; py: number }; moved: boolean } & (
+  | { kind: "move"; boxes: Record<string, Box>; bounds: Box; only: string | null }
+  | { kind: "resize"; id: string; mode: Handle; box: Box }
+  | { kind: "band"; origin: { x: number; y: number }; add: boolean; hit: string | null; rect?: Box }
+);
+
+/** The box around several parts. */
+export function boundsOf(parts: Box[]): Box {
+  if (!parts.length) return { x: 0, y: 0, w: 0, h: 0 };
+  const x = Math.min(...parts.map((p) => p.x));
+  const y = Math.min(...parts.map((p) => p.y));
+  return {
+    x,
+    y,
+    w: Math.max(...parts.map((p) => p.x + p.w)) - x,
+    h: Math.max(...parts.map((p) => p.y + p.h)) - y,
+  };
 }
 
 function Part({
@@ -333,7 +490,8 @@ function Part({
     <div
       // a selected part keeps its place in the stack (a full-tag colour block doesn't cover the text); its outline and handles are drawn on top
       className={cn(
-        "absolute cursor-move",
+        "absolute",
+        l.locked ? "cursor-default" : "cursor-move",
         selected
           ? ""
           : "outline outline-1 outline-dashed outline-slate-300 hover:outline-primary/60",
@@ -393,19 +551,25 @@ function Part({
   );
 }
 
-/** The selected part's outline and resize handles, above everything (only the handles take clicks). */
+/** A selected part's outline (and, when it's the only one, its resize handles), above everything; only the handles take clicks. */
 function Selection({
   l,
   scale,
+  handles,
   onStart,
 }: {
   l: Layer;
   scale: number;
+  handles: boolean;
   onStart: (e: React.PointerEvent, l: Layer, mode: "move" | Handle) => void;
 }) {
   return (
     <div
-      className="pointer-events-none absolute z-30 outline outline-2 outline-primary"
+      className={cn(
+        "pointer-events-none absolute z-30 outline outline-2",
+        l.locked ? "outline-amber-500" : "outline-primary",
+        l.hidden && "outline-dashed",
+      )}
       style={{
         left: l.x * scale,
         top: l.y * scale,
@@ -413,26 +577,33 @@ function Selection({
         height: l.h * scale,
       }}
     >
-      {HANDLES.map((h) => (
-        <span
-          key={h}
-          onPointerDown={(e) => onStart(e, l, h)}
-          className="pointer-events-auto absolute size-3 rounded-sm border-2 border-primary bg-white"
-          style={{
-            left: h.includes("w")
-              ? -6
-              : h.includes("e")
-                ? "calc(100% - 6px)"
-                : "calc(50% - 6px)",
-            top: h.includes("n")
-              ? -6
-              : h.includes("s")
-                ? "calc(100% - 6px)"
-                : "calc(50% - 6px)",
-            cursor: `${h}-resize`,
-          }}
-        />
-      ))}
+      {(l.locked || l.hidden) && (
+        <span className="absolute -top-5 left-0 flex items-center gap-0.5 whitespace-nowrap rounded bg-amber-500 px-1 text-[10px] font-semibold leading-4 text-white">
+          {l.locked && <Lock className="size-2.5" />}
+          {[l.locked && "Locked", l.hidden && "Hidden"].filter(Boolean).join(" · ")}
+        </span>
+      )}
+      {handles &&
+        HANDLES.map((h) => (
+          <span
+            key={h}
+            onPointerDown={(e) => onStart(e, l, h)}
+            className="pointer-events-auto absolute size-3 rounded-sm border-2 border-primary bg-white"
+            style={{
+              left: h.includes("w")
+                ? -6
+                : h.includes("e")
+                  ? "calc(100% - 6px)"
+                  : "calc(50% - 6px)",
+              top: h.includes("n")
+                ? -6
+                : h.includes("s")
+                  ? "calc(100% - 6px)"
+                  : "calc(50% - 6px)",
+              cursor: `${h}-resize`,
+            }}
+          />
+        ))}
     </div>
   );
 }
@@ -516,7 +687,7 @@ function TextPart({
   const empty = text.trim() === "" || skipped;
   // 1 pt = 0.3528 mm; on the canvas, mm are `scale` px
   const target = l.size * MM_PER_PT * scale;
-  const min = (l.minSize ?? DEFAULT_MIN_PT) * MM_PER_PT * scale;
+  const min = minPt(l) * MM_PER_PT * scale;
   React.useLayoutEffect(() => {
     if (!box.current || !span.current) return;
     const run = () => {
@@ -571,7 +742,7 @@ function TextPart({
       <div
         ref={box}
         className={cn(
-          "flex size-full items-center overflow-hidden leading-[1.15]",
+          "flex size-full items-center overflow-hidden",
           l.wrap ? "items-start whitespace-normal" : "whitespace-nowrap",
         )}
         style={{
@@ -586,6 +757,7 @@ function TextPart({
                 : "flex-start",
           fontStyle: empty || l.italic ? "italic" : undefined,
           fontFamily: fontStack(l.font),
+          lineHeight: lineHeightOf(l.font),
           opacity: skipped ? 0.45 : undefined,
         }}
         title={
@@ -597,7 +769,8 @@ function TextPart({
         <span
           ref={span}
           dir="auto"
-          className="max-w-full [unicode-bidi:plaintext]"
+          // clipped to its line like the printed page, so the size measured here is the printed size
+          className="max-w-full overflow-hidden [unicode-bidi:plaintext]"
           style={{ textDecoration: l.underline ? "underline" : undefined }}
         >
           {empty ? l.text : text}

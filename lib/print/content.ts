@@ -6,6 +6,7 @@ import type { TemplateSpec } from "./types";
 export function templateKeys(spec: Pick<TemplateSpec, "layers">): string[] {
   const keys = new Set<string>();
   for (const l of spec.layers) {
+    if (l.hidden) continue; // doesn't print
     const text = "text" in l ? l.text : l.type === "box" ? (l.fill ?? "") : "";
     for (const m of text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)) for (const k of m[1].split("|")) keys.add(k.trim());
   }
