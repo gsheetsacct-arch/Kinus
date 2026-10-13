@@ -26,7 +26,7 @@ export async function batchCamperIds(db: DB, sessionId: string, where: BatchWher
   let ids = rows.map((r) => r.id);
   if (which === "not_printed" && ids.length) {
     const printed = await fetchAll((from, to) =>
-      db.from("print_job_items").select("camper_id, print_jobs!inner(template_id, status)").eq("print_jobs.template_id", templateId).neq("print_jobs.status", "cancelled").neq("print_jobs.status", "failed").order("camper_id").range(from, to),
+      db.from("print_job_items").select("camper_id, print_jobs!inner(template_id, status)").eq("print_jobs.template_id", templateId).neq("print_jobs.status", "cancelled").neq("print_jobs.status", "failed").order("camper_id").order("job_id").range(from, to),
     );
     const done = new Set(printed.map((p) => p.camper_id));
     ids = ids.filter((id) => !done.has(id));
@@ -41,6 +41,7 @@ export async function batchCamperIds(db: DB, sessionId: string, where: BatchWher
         .neq("print_jobs.status", "cancelled")
         .neq("print_jobs.status", "failed")
         .order("camper_id")
+        .order("job_id")
         .range(from, to),
     );
     const last = new Map<string, { at: string; hash: string | null }>();
@@ -52,19 +53,15 @@ export async function batchCamperIds(db: DB, sessionId: string, where: BatchWher
     // labels printed before Kinus kept fingerprints count as unchanged
     const check = ids.filter((id) => last.get(id)?.hash);
     // read the same way the labels were made (every field, whatever this person may see)
-    const [{ createAdminClient }, { labelHashes }, { toSpec }] = await Promise.all([import("@/lib/supabase/admin"), import("./jobs"), import("./data")]);
+    const [{ createAdminClient }, { changedSince }, { toSpec }] = await Promise.all([import("@/lib/supabase/admin"), import("./jobs"), import("./data")]);
     const admin = createAdminClient();
     const { data: template } = await admin.from("print_templates").select("*").eq("id", templateId).single();
-    const now = template && check.length ? await labelHashes(admin, toSpec(template), check) : new Map<string, string>();
-    ids = ids.filter((id) => {
-      const was = last.get(id);
-      if (!was) return true;
-      return Boolean(was.hash && now.has(id) && now.get(id) !== was.hash);
-    });
+    const changed = template ? await changedSince(admin, toSpec(template), new Map(check.map((id) => [id, last.get(id)!.hash!]))) : new Set<string>();
+    ids = ids.filter((id) => !last.has(id) || changed.has(id));
   }
   if (which === "arrived_today" && ids.length) {
     const arrivals = await fetchAll((from, to) =>
-      db.from("attendance_events").select("camper_id").eq("event_type", "arrival").gte("occurred_at", startOfCampDay()).order("camper_id").range(from, to),
+      db.from("attendance_events").select("camper_id").eq("event_type", "arrival").gte("occurred_at", startOfCampDay()).order("camper_id").order("id").range(from, to),
     );
     const today = new Set(arrivals.map((a) => a.camper_id));
     // an arrival that was undone (back to "not here yet") doesn't count

@@ -569,7 +569,7 @@ export function TemplateEditor({ initial, fields, background, backgroundUrl }: {
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm">
                   <span className="font-medium">Print by itself at first check-in</span>
-                  <span className="block text-xs text-muted-foreground">The first time each camper is checked in, this tag goes to the office print queue on its own, without anyone tapping. Only once per camper.</span>
+                  <span className="block text-xs text-muted-foreground">The first time each camper is checked in, this tag goes to the office print queue on its own, without anyone tapping. Only once per camper. These aren&apos;t emailed one by one: the office prints them together from the queue.</span>
                 </span>
                 <Switch checked={t.auto_on_first_checkin} onCheckedChange={(v) => update({ auto_on_first_checkin: v })} />
               </label>

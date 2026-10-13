@@ -38,7 +38,7 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
       <h2 className="font-semibold">Background image</h2>
       <p className="text-sm text-muted-foreground">
         Have a design from Publisher? Remove the merge fields from it, export it as a picture (File → Export → Change file type → PNG) and upload it here. The names and barcodes above are
-        printed on top.
+        printed on top. Up to 4 MB: a bigger picture can be saved again as JPG, or smaller.
       </p>
       <ActionForm action={uploadBackground} className="flex flex-wrap items-center gap-2" resetOnSuccess>
         <input type="hidden" name="id" value={initial.id} />

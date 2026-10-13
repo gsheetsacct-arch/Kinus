@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { printSetHtml } from "@/lib/print/jobs";
-import { visibleJob } from "@/lib/print/access";
+import { visibleJobs } from "@/lib/print/access";
 
 export const maxDuration = 60;
 
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
   const ids = (sp.get("jobs") ?? "").split(",").filter(Boolean).slice(0, 300);
   if (!ids.length) return new NextResponse("Nothing to print.", { status: 400 });
-  for (const id of ids) if (!(await visibleJob(id))) return new NextResponse("Not found", { status: 404 });
+  if (!(await visibleJobs(ids))) return new NextResponse("Not found", { status: 404 });
   const division = sp.get("division");
   try {
     const html = await printSetHtml(ids, { start: Number(sp.get("start")) || undefined, divisionId: division === null ? undefined : division === "none" ? null : division });

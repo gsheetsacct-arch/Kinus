@@ -15,6 +15,9 @@ import { everyoneLabel, getCampContext } from "@/lib/data/camp";
 import { campStarted, loadFollowups, loadRules } from "@/lib/data/missing";
 import { defaultScope } from "@/lib/attendance/board";
 
+// tag requests (and the test email) make a PDF in the background
+export const maxDuration = 60;
+
 export const metadata = { title: "Not here yet" };
 export const dynamic = "force-dynamic";
 

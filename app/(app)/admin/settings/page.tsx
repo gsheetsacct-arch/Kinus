@@ -16,6 +16,9 @@ import { emailSetup } from "@/lib/print/email";
 import { parseExtraFields } from "@/lib/import/extra-fields";
 import { DEFAULT_RULES, type MissingRules } from "@/lib/attendance/missing";
 
+// tag requests (and the test email) make a PDF in the background
+export const maxDuration = 60;
+
 export const metadata = { title: "Settings" };
 
 

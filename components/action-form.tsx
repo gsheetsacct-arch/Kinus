@@ -35,7 +35,14 @@ export function ActionForm({ action, onSuccess, resetOnSuccess, confirm, confirm
   const router = useRouter();
   const run = (form: HTMLFormElement, fd: FormData) =>
     startTransition(async () => {
-      const r = await action(fd);
+      let r: ActionResult;
+      try {
+        r = await action(fd);
+      } catch {
+        // no connection, the server cut off, or the upload was too big: say so, never crash the page
+        toast.error("That didn't go through. Check the connection (or the file size) and try again.");
+        return;
+      }
       if (!r.ok) {
         toast.error(r.error);
         return;

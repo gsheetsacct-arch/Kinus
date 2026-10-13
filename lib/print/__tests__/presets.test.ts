@@ -36,7 +36,8 @@ describe("label presets", () => {
   });
 });
 
-import { contentHash, templateKeys } from "../content";
+import { createHash } from "node:crypto";
+import { contentHash, sameContent, templateKeys } from "../content";
 
 describe("label fingerprints", () => {
   const spec = {
@@ -54,5 +55,22 @@ describe("label fingerprints", () => {
     const a = contentHash(keys, { FIRST: "Moshe", LAST: "Cohen", BUNK: "Yud", TSHIRT: "M" });
     expect(contentHash(keys, { FIRST: "Moshe", LAST: "Cohen", BUNK: "Yud", TSHIRT: "L" })).toBe(a);
     expect(contentHash(keys, { FIRST: "Moshe", LAST: "Cohen", BUNK: "Yud Alef" })).not.toBe(a);
+  });
+  it("compares only the fields that were on the printed label", () => {
+    const keys = templateKeys(spec);
+    const v = { FIRST: "Moshe", LAST: "Cohen", BUNK: "Yud", BUNK_HE: "יוד", DIVISION_COLOR: "#00f" };
+    const printed = contentHash(keys, v);
+    expect(sameContent(printed, keys, v)).toBe(true);
+    expect(sameContent(printed, keys, { ...v, BUNK: "Yud Alef" })).toBe(false);
+    // the template gains a field: not a change to the camper
+    expect(sameContent(printed, [...keys, "TSHIRT"], { ...v, TSHIRT: "M" })).toBe(true);
+    // or loses one
+    expect(sameContent(printed, keys.filter((k) => k !== "LAST"), { ...v, LAST: "Katz" })).toBe(true);
+    // a whole new design shares nothing: not a change either
+    expect(sameContent(printed, ["NICKNAME"], { NICKNAME: "Moishy" })).toBe(true);
+    // labels printed with the old one-piece fingerprint still compare
+    const legacy = createHash("sha1").update(keys.map((k) => `${k}=${(v as Record<string, string>)[k] ?? ""}`).join("\n")).digest("hex").slice(0, 20);
+    expect(sameContent(legacy, keys, v)).toBe(true);
+    expect(sameContent(legacy, keys, { ...v, FIRST: "Mendy" })).toBe(false);
   });
 });

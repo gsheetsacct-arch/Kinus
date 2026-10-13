@@ -4,8 +4,9 @@ import { PageHeader } from "@/components/page-header";
 import { Callout } from "@/components/callout";
 import { PrintPanel } from "@/components/print/print-panel";
 import { requireUser } from "@/lib/auth/current-user";
-import { visibleJob } from "@/lib/print/access";
-import { printSetSummary, sheetPositions } from "@/lib/print/jobs";
+import { visibleJobs } from "@/lib/print/access";
+import { campStock, printSetSummary, sheetPositions } from "@/lib/print/jobs";
+import { getCampContext } from "@/lib/data/camp";
 import { plural } from "@/lib/utils";
 
 export const metadata = { title: "Print together" };
@@ -16,7 +17,7 @@ export default async function PrintTogetherPage({ searchParams }: { searchParams
   const [, sp] = await Promise.all([requireUser(), searchParams]);
   const ids = [...new Set((sp.jobs ?? "").split(",").filter((x) => /^[0-9a-f-]{36}$/i.test(x)))].slice(0, 300);
   if (!ids.length) notFound();
-  for (const id of ids) if (!(await visibleJob(id))) notFound();
+  if (!(await visibleJobs(ids))) notFound();
   let summary: Awaited<ReturnType<typeof printSetSummary>>;
   try {
     summary = await printSetSummary(ids);
@@ -28,7 +29,8 @@ export default async function PrintTogetherPage({ searchParams }: { searchParams
       </div>
     );
   }
-  const positions = await sheetPositions();
+  const [positions, camp] = await Promise.all([sheetPositions(), getCampContext()]);
+  const sheet = campStock(summary.stock, camp.current?.id, positions);
   const open = summary.statuses.some((s) => s !== "printed" && s !== "cancelled");
   const doubled = summary.askedMoreThanOnce;
   return (
@@ -40,8 +42,8 @@ export default async function PrintTogetherPage({ searchParams }: { searchParams
       />
       <PrintPanel
         jobIds={ids}
-        stock={summary.stock}
-        remembered={summary.stock ? (positions[summary.stock.key] ?? 1) : 1}
+        stock={sheet.stock}
+        remembered={sheet.next}
         parts={summary.parts}
         tags={summary.tags}
         open={open}

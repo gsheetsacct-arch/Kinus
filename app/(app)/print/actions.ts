@@ -11,12 +11,17 @@ import { appUrl } from "@/lib/auth/app-url";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { getCampContext } from "@/lib/data/camp";
 import { createPrintJob, processPrintJob, rememberSheetPosition } from "@/lib/print/jobs";
+import { STARTED_MARK } from "@/lib/print/labels";
+import { visibleJobs } from "@/lib/print/access";
 import { batchCamperIds, BATCH_WHICH, type BatchWhich } from "@/lib/print/batch";
+import { dismissLabelUpdates, labelUpdates, refreshPrintedHashes, type LabelUpdate } from "@/lib/print/updates";
 import { renderDocument } from "@/lib/print/render";
 import { loadMergeSetup, loadPrintCampers } from "@/lib/print/data";
 import { mergeValues, SAMPLE_CAMPER } from "@/lib/print/merge";
 import type { Layer, SheetLayout, TemplateSpec, Transform } from "@/lib/print/types";
 import { parseScan } from "@/lib/attendance/scan";
+
+const NOT_YOURS = "That's a request for campers outside your part of camp.";
 
 async function requirePrinter() {
   const user = await requireUser();
@@ -32,15 +37,18 @@ async function requirePrinter() {
  * Mark jobs printed (or not printed again). With `sheet`, also remembers where the part-used
  * label sheet now continues (the first free label after this print).
  */
-export async function markPrinted(ids: string[], printed = true, sheet?: { stock: string; next: number }): Promise<ActionResult> {
+export async function markPrinted(ids: string[], printed = true, sheet?: { stock: string; next: number }, printedNow = false): Promise<ActionResult> {
   try {
     const user = await requirePrinter();
-    if (sheet) await rememberSheetPosition(z.string().min(1).max(80).parse(sheet.stock), z.number().int().min(1).max(500).parse(sheet.next), user.id);
+    if (!(await visibleJobs(ids))) return fail(NOT_YOURS);
+    if (sheet) await rememberSheetPosition(z.string().min(1).max(120).parse(sheet.stock), z.number().int().min(1).max(500).parse(sheet.next), user.id);
     const { error } = await createAdminClient()
       .from("print_jobs")
       .update(printed ? { status: "printed", printed_at: new Date().toISOString(), printed_by: user.id } : { status: "ready", printed_at: null, printed_by: null })
       .in("id", ids);
     if (error) throw error;
+    // printed from Kinus just now: the labels show today's details, so "changed since printed" starts from these
+    if (printed && printedNow) await refreshPrintedHashes(ids).catch((e) => console.error("Updating label fingerprints failed", e));
     revalidatePath("/print");
     return ok(printed ? `Marked ${ids.length === 1 ? "as" : `${ids.length} jobs`} printed.` : "Back in the queue.");
   } catch (e) {
@@ -51,6 +59,7 @@ export async function markPrinted(ids: string[], printed = true, sheet?: { stock
 export async function cancelJobs(ids: string[]): Promise<ActionResult> {
   try {
     await requirePrinter();
+    if (!(await visibleJobs(ids))) return fail(NOT_YOURS);
     const { data, error } = await createAdminClient().from("print_jobs").update({ status: "cancelled" }).in("id", ids).neq("status", "printed").select("id");
     if (error) throw error;
     revalidatePath("/print");
@@ -66,13 +75,22 @@ export async function cancelJobs(ids: string[]): Promise<ActionResult> {
 export async function resendJob(id: string, deliverTo?: string): Promise<ActionResult> {
   try {
     await requirePrinter();
+    if (!(await visibleJobs([id]))) return fail(NOT_YOURS);
     const admin = createAdminClient();
     if (deliverTo !== undefined) {
       const to = deliverTo.trim();
-      if (to && !z.email().safeParse(to.split(/[,;\s]+/)[0]).success) return fail("That email address doesn't look right.");
+      const bad = to.split(/[,;\s]+/).filter(Boolean).find((a) => !z.email().safeParse(a).success);
+      if (bad) return fail(`“${bad}” isn't an email address.`);
       await admin.from("print_jobs").update({ deliver_to: to }).eq("id", id);
     }
-    await admin.from("print_jobs").update({ status: "queued", error: null }).eq("id", id);
+    // queued with the time it starts, so the stuck-request check leaves it be while it works
+    const { data: queued } = await admin
+      .from("print_jobs")
+      .update({ status: "queued", error: `${STARTED_MARK}${new Date().toISOString()}` })
+      .eq("id", id)
+      .not("status", "in", "(printed,cancelled)")
+      .select("id");
+    if (!queued?.length) return fail("It's already printed or cancelled. To print it again, use Print.");
     const base = await appUrl();
     after(() => processPrintJob(id, base));
     revalidatePath("/print");
@@ -86,8 +104,60 @@ export async function resendJob(id: string, deliverTo?: string): Promise<ActionR
 export async function saveSheetPosition(stock: string, next: number): Promise<ActionResult> {
   try {
     const user = await requirePrinter();
-    await rememberSheetPosition(z.string().min(1).max(80).parse(stock), z.number().int().min(1).max(500).parse(next), user.id);
+    await rememberSheetPosition(z.string().min(1).max(120).parse(stock), z.number().int().min(1).max(500).parse(next), user.id);
     return ok(next === 1 ? "Next print starts on a fresh sheet." : `Next print starts at label ${next}.`);
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// New and changed labels since a print
+// ---------------------------------------------------------------------------
+async function updatesFor(templateId?: string) {
+  const session = await getActiveSession();
+  if (!session) return [];
+  const camp = await getCampContext();
+  return labelUpdates(session.id, camp.divisionIds, templateId);
+}
+
+/** Templates with labels to print again: new campers, and campers whose details on it changed. */
+export async function checkLabelUpdates(): Promise<{ ok: true; updates: LabelUpdate[] } | { ok: false; error: string }> {
+  try {
+    await requirePrinter();
+    return { ok: true, updates: await updatesFor() };
+  } catch (e) {
+    return { ok: false, error: errorMessage(e) };
+  }
+}
+
+/** Prints just the new and changed labels of one template (worked out again here, as they are now). */
+export async function printLabelUpdates(templateId: string): Promise<ActionResult> {
+  try {
+    const user = await requirePrinter();
+    const session = await getActiveSession();
+    if (!session) return fail("No active session.");
+    const [u] = await updatesFor(z.guid().parse(templateId));
+    const ids = u ? [...u.fresh, ...u.changed].map((c) => c.id) : [];
+    if (!ids.length) return fail("Nothing new or changed any more: it's all printed.");
+    const parts = [u.fresh.length ? plural(u.fresh.length, "new camper") : null, u.changed.length ? `${u.changed.length} changed` : null].filter(Boolean).join(", ");
+    const job = await createPrintJob(user, { sessionId: session.id, templateId, camperIds: ids, deliverTo: user.email, note: `Since the last print: ${parts}` });
+    await createAdminClient().from("print_jobs").update({ status: "ready" }).eq("id", job.id);
+    revalidatePath("/print");
+    return ok(`${plural(ids.length, "tag")} ready to print.`, `/print/jobs/${job.id}?print=1`);
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+/** "Not needed": these labels don't come up again unless they change again. */
+export async function dismissUpdates(templateId: string): Promise<ActionResult> {
+  try {
+    const user = await requirePrinter();
+    const [u] = await updatesFor(z.guid().parse(templateId));
+    if (u) await dismissLabelUpdates(u, user.id);
+    revalidatePath("/print");
+    return ok("Okay. They'll come up again only if their details change.");
   } catch (e) {
     return fail(errorMessage(e));
   }
@@ -279,7 +349,8 @@ export async function uploadBackground(fd: FormData): Promise<ActionResult> {
     }
     if (!(file instanceof File) || !file.size) return fail("Choose an image.");
     if (!/^image\/(png|jpeg|webp)$/.test(file.type)) return fail("Use a PNG, JPG or WebP image. In Publisher: File → Export → Change file type → PNG.");
-    if (file.size > 8 * 1024 * 1024) return fail("Images up to 8 MB, please.");
+    // Vercel turns away uploads over 4.5 MB before they get here
+    if (file.size > 4 * 1024 * 1024) return fail("Images up to 4 MB, please. Save it again as JPG, or at a smaller size.");
     const path = `${id}/bg-${Date.now()}.${file.type.split("/")[1]}`;
     const { error } = await admin.storage.from("templates").upload(path, Buffer.from(await file.arrayBuffer()), { contentType: file.type, upsert: true });
     if (error) throw error;

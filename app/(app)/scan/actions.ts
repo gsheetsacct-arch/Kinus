@@ -9,7 +9,8 @@ import { appUrl } from "@/lib/auth/app-url";
 import { decide, type OutKind } from "@/lib/attendance/scan";
 import { STATUS_LABEL, type AttendanceEventType, type CamperStatus } from "@/lib/attendance/machine";
 import { visibleFieldGroups } from "@/lib/auth/permissions";
-import { createPrintJob, processPrintJob } from "@/lib/print/jobs";
+import { createPrintJob, officeEmail, processPrintJob } from "@/lib/print/jobs";
+import { canUsePrintArea } from "@/lib/auth/permissions";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { formatWhen } from "@/lib/utils";
 
@@ -25,26 +26,32 @@ const friendly = (e: unknown) => {
   return m;
 };
 
-/** Templates marked "print on first check-in", requested once per camper. */
+/**
+ * Templates marked "print on first check-in", requested once per camper. The requests are
+ * made after the phone has its answer (check-in never waits on printing), and go straight
+ * to the print queue without a PDF or email each: at a busy gate that would be hundreds of
+ * emails. The office prints them together from the queue.
+ */
 async function autoPrintOnFirstArrival(camperId: string, sessionId: string): Promise<string[]> {
   const admin = createAdminClient();
-  const { count } = await admin.from("attendance_events").select("id", { count: "exact", head: true }).eq("camper_id", camperId).eq("event_type", "arrival");
-  if (count !== 1) return [];
-  const { data: templates } = await admin.from("print_templates").select("id, name").eq("auto_on_first_checkin", true);
-  if (!templates?.length) return [];
+  const [{ count }, { data: templates }] = await Promise.all([
+    admin.from("attendance_events").select("id", { count: "exact", head: true }).eq("camper_id", camperId).eq("event_type", "arrival"),
+    admin.from("print_templates").select("id, name").eq("auto_on_first_checkin", true).not("name", "like", "(retired)%"),
+  ]);
+  if (count !== 1 || !templates?.length) return [];
   const user = await requireUser();
-  const base = await appUrl();
-  const names: string[] = [];
-  for (const t of templates) {
-    try {
-      const job = await createPrintJob(user, { sessionId, templateId: t.id, camperIds: [camperId], note: "Automatic on first check-in" });
-      after(() => processPrintJob(job.id, base));
-      names.push(t.name);
-    } catch {
-      // a failed automatic print never blocks a check-in
+  after(async () => {
+    for (const t of templates) {
+      try {
+        const job = await createPrintJob(user, { sessionId, templateId: t.id, camperIds: [camperId], note: "Automatic on first check-in" });
+        await admin.from("print_jobs").update({ status: "ready" }).eq("id", job.id).eq("status", "queued");
+      } catch (e) {
+        // never blocks a check-in, but is never silent either
+        console.error(`Automatic ${t.name} for camper ${camperId} failed`, e);
+      }
     }
-  }
-  return names;
+  });
+  return templates.map((t) => t.name);
 }
 
 /** One scan or tap in Check in / Check out mode. */
@@ -184,8 +191,13 @@ export async function requestTag(camperId: string, templateId: string, opts: { c
   const user = await requireUser();
   const session = await getActiveSession();
   if (!session) return { ok: false, error: "No active session." };
-  const deliverTo = opts.deliverTo?.trim() || undefined;
+  const deliverTo = opts.deliverTo?.trim().toLowerCase() || undefined;
   if (deliverTo && !z.email().safeParse(deliverTo).success) return { ok: false, error: `“${deliverTo}” isn't an email address.` };
+  // tags carry campers' details: they go to the office, to yourself, or to someone on staff
+  if (deliverTo && !canUsePrintArea(user) && deliverTo !== user.email.toLowerCase()) {
+    const [{ data: staff }, office] = await Promise.all([createAdminClient().from("profiles").select("id").eq("email", deliverTo).eq("is_active", true).maybeSingle(), officeEmail()]);
+    if (!staff && ![office.to, ...office.cc].some((a) => a.toLowerCase() === deliverTo)) return { ok: false, error: "Tags can go to the office, to you, or to someone on staff. That address isn't any of those." };
+  }
   const copies = Math.min(10, Math.max(1, Math.round(Number(opts.copies ?? 1)) || 1));
   try {
     const job = await createPrintJob(user, { sessionId: session.id, templateId, camperIds: [camperId], copies, deliverTo });

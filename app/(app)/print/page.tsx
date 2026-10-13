@@ -3,13 +3,19 @@ import { Printer } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { PrintQueue, type QueueJob } from "@/components/print/print-queue";
+import { LabelUpdates } from "@/components/print/label-updates";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { officeEmail } from "@/lib/print/jobs";
+import { officeEmail, retryStuckJobs } from "@/lib/print/jobs";
+import { shownJobError } from "@/lib/print/labels";
+import { after } from "next/server";
+import { appUrl } from "@/lib/auth/app-url";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Print queue" };
 export const dynamic = "force-dynamic";
+// resending and retrying requests make PDFs in the background of this page
+export const maxDuration = 60;
 
 const SHOW = {
   todo: { label: "To print", statuses: ["queued", "rendering", "ready", "sent"] },
@@ -22,6 +28,9 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
   const [, session, sp] = await Promise.all([requireUser(), getActiveSession(), searchParams]);
   if (!session) return <EmptyState icon={Printer} title="No active session" description="Camp hasn't been set up yet." />;
   const show = (sp.show && sp.show in SHOW ? sp.show : "todo") as keyof typeof SHOW;
+  // requests cut off while making their PDF get one more try (after the page is sent)
+  const base = await appUrl();
+  await retryStuckJobs(session.id, base, (fn) => after(fn)).catch((e) => console.error("Retrying stuck print jobs failed", e));
   const supabase = await createClient();
   let q = supabase
     .from("print_jobs")
@@ -57,7 +66,7 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
     count: j.item_count,
     at: j.requested_at,
     to: j.deliver_to,
-    error: j.error,
+    error: shownJobError(j.error),
     pdf: Boolean(j.pdf_path),
     printedAt: j.printed_at,
     note: j.note,
@@ -85,6 +94,11 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
           </Link>
         ))}
       </div>
+      {show === "todo" && (
+        <div className="mb-4">
+          <LabelUpdates />
+        </div>
+      )}
       <PrintQueue jobs={jobs} show={show} />
     </div>
   );

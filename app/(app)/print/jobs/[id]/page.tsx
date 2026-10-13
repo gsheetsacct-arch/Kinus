@@ -4,9 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { Callout } from "@/components/callout";
 import { Section } from "@/components/section";
 import { JobActions } from "@/components/print/job-actions";
+import { visibleJobs } from "@/lib/print/access";
 import { PrintPanel } from "@/components/print/print-panel";
-import { printSetSummary, sheetPositions } from "@/lib/print/jobs";
-import { JOB_STATUS } from "@/lib/print/labels";
+import { campStock, printSetSummary, sheetPositions } from "@/lib/print/jobs";
+import { getCampContext } from "@/lib/data/camp";
+import { JOB_STATUS, shownJobError } from "@/lib/print/labels";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/current-user";
@@ -18,7 +20,7 @@ export const maxDuration = 60;
 
 export default async function JobPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ print?: string }> }) {
   const [, { id }, sp] = await Promise.all([requireUser(), params, searchParams]);
-  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  if (!(await visibleJobs([id]))) notFound();
   const supabase = await createClient();
   const { data: job } = await supabase
     .from("print_jobs")
@@ -41,7 +43,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
         description={`Asked for by ${requester} · ${formatDateTime(job.requested_at)}${job.note ? ` · ${job.note}` : ""}`}
         actions={<Badge variant={st.variant}>{st.label}</Badge>}
       />
-      {job.error && <Callout tone="warning">{job.error}</Callout>}
+      {shownJobError(job.error) && <Callout tone="warning">{shownJobError(job.error)}</Callout>}
       {job.printed_at && (
         <Callout tone="success">
           Printed {formatDateTime(job.printed_at)}
@@ -86,13 +88,14 @@ export default async function JobPage({ params, searchParams }: { params: Promis
 }
 
 async function JobPrint({ id, open, autoPrint }: { id: string; open: boolean; autoPrint: boolean }) {
-  const [summary, positions] = await Promise.all([printSetSummary([id]).catch((e: unknown) => (e instanceof Error ? e : new Error(String(e)))), sheetPositions()]);
+  const [summary, positions, camp] = await Promise.all([printSetSummary([id]).catch((e: unknown) => (e instanceof Error ? e : new Error(String(e)))), sheetPositions(), getCampContext()]);
   if (summary instanceof Error) return <Callout tone="warning">{summary.message}</Callout>;
+  const sheet = campStock(summary.stock, camp.current?.id, positions);
   return (
     <PrintPanel
       jobIds={[id]}
-      stock={summary.stock}
-      remembered={summary.stock ? (positions[summary.stock.key] ?? 1) : 1}
+      stock={sheet.stock}
+      remembered={sheet.next}
       parts={summary.parts}
       tags={summary.tags}
       open={open}

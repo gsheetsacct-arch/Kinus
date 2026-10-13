@@ -149,3 +149,14 @@ describe("part-used label sheets", async () => {
     expect(renderDocument(spec, [{ values: { NAME: "A" }, copies: 1 }], { skip: 99 }).match(/class="sheet"/g)).toHaveLength(1);
   });
 });
+
+describe("background images", async () => {
+  const { renderDocument } = await import("../render");
+  it("are in the page once, however many tags", () => {
+    const bg = "data:image/png;base64," + "A".repeat(5000);
+    const spec = { name: "Tag", kind: "name_tag", page_width_mm: 80, page_height_mm: 50, layers: [], sheet_layout: null };
+    const html = renderDocument(spec, [{ values: {}, copies: 25 }], { background: bg });
+    expect(html.split(bg).length - 1).toBe(1);
+    expect(html.match(/class="bg"/g)).toHaveLength(25);
+  });
+});
