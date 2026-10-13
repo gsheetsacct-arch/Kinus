@@ -162,14 +162,17 @@ export async function jobHtml(jobId: string, opts: { start?: number } = {}): Pro
  * Renders a job to PDF, stores it, and emails the office. Never throws: the outcome is
  * written to the job (ready / sent / failed) so the print queue always shows it.
  */
-export async function processPrintJob(jobId: string, appUrl: string): Promise<void> {
+export async function processPrintJob(jobId: string, appUrl: string, opts: { retry?: string } = {}): Promise<void> {
   const admin = createAdminClient();
-  await admin.from("print_jobs").update({ status: "rendering", error: null }).eq("id", jobId);
+  // a retry keeps its mark until it finishes, so a second hang is caught (retryStuckJobs)
+  await admin.from("print_jobs").update({ status: "rendering", error: opts.retry ?? null }).eq("id", jobId);
   try {
     const { html, job } = await jobHtml(jobId);
     let pdf: Buffer | null = null;
     let pdfError: string | null = null;
     try {
+      // a very big batch could run out of time making the PDF: the email links to the queue instead
+      if (job.count > PDF_MAX_TAGS) throw new Error(`more than ${PDF_MAX_TAGS} tags; print it from Kinus`);
       pdf = await htmlToPdf(html);
       const { error } = await admin.storage.from("print-output").upload(`${jobId}.pdf`, pdf, { contentType: "application/pdf", upsert: true });
       if (error) throw error;
@@ -239,4 +242,43 @@ export async function rememberSheetPosition(stock: string, next: number, userId:
   const value = { ...((data?.value ?? {}) as Record<string, Json>), [stock]: { next, at: new Date().toISOString() } };
   const { error } = await admin.from("settings").upsert({ key: "label_sheets", value, updated_by: userId, updated_at: new Date().toISOString() });
   if (error) throw error;
+}
+
+/** Above this many tags, requests are emailed with a link only (no PDF), so they can't time out. */
+const PDF_MAX_TAGS = 250;
+const RETRY_MARK = "Kinus tried again at ";
+const STUCK_MS = 3 * 60_000;
+
+/**
+ * Requests still "making the PDF" minutes later were cut off (the server stopped mid-way).
+ * Each is tried again once; one that hangs again is marked failed, so the office sees it and
+ * can print it from Kinus. Safe to call from several pages at once: a job is claimed with a
+ * conditional update, so only one caller retries it.
+ */
+export async function retryStuckJobs(sessionId: string, appUrl: string, schedule: (fn: () => Promise<void>) => void): Promise<number> {
+  const admin = createAdminClient();
+  const cutoff = new Date(Date.now() - STUCK_MS).toISOString();
+  const { data: stuck } = await admin.from("print_jobs").select("id, status, error").eq("session_id", sessionId).in("status", ["queued", "rendering"]).lt("requested_at", cutoff).limit(20);
+  let n = 0;
+  for (const j of stuck ?? []) {
+    const retriedAt = j.error?.startsWith(RETRY_MARK) ? Date.parse(j.error.slice(RETRY_MARK.length)) : null;
+    if (retriedAt !== null && Date.now() - retriedAt < STUCK_MS) continue; // the retry is still running
+    if (retriedAt !== null) {
+      await admin
+        .from("print_jobs")
+        .update({ status: "failed", error: "Making the tags took too long twice. Print it from Kinus (Try again, or Print)." })
+        .eq("id", j.id)
+        .eq("status", j.status)
+        .eq("error", j.error!);
+      continue;
+    }
+    const mark = `${RETRY_MARK}${new Date().toISOString()}`;
+    let claim = admin.from("print_jobs").update({ status: "queued", error: mark }).eq("id", j.id).eq("status", j.status);
+    claim = j.error === null ? claim.is("error", null) : claim.eq("error", j.error);
+    const { data: claimed } = await claim.select("id");
+    if (!claimed?.length) continue;
+    n++;
+    schedule(() => processPrintJob(j.id, appUrl, { retry: mark }));
+  }
+  return n;
 }
