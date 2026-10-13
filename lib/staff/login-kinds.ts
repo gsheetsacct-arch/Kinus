@@ -22,3 +22,18 @@ export const checkinName = (divisionName: string) =>
 export const isCheckinEmail = (email: string) => /^checkin\.[a-z0-9-]+@/.test(email);
 /** "checkin.division-1@…" → "division-1". */
 export const checkinNameOf = (email: string) => (isCheckinEmail(email) ? email.slice("checkin.".length, email.indexOf("@")) : null);
+
+/** Three short words and a number: easy to read out and type on a phone. Works in the browser too. */
+export function generatePassword() {
+  const words = ["camp", "bunk", "sun", "lake", "tent", "fire", "pine", "trail", "star", "canoe", "hike", "song"];
+  const r = globalThis.crypto.getRandomValues(new Uint16Array(3));
+  return `${words[r[0] % words.length]}-${words[r[1] % words.length]}-${1000 + (r[2] % 9000)}`;
+}
+
+/** What a check-in login's name and password must look like; null when fine. */
+export function checkinLoginProblem(name: string, password: string): string | null {
+  if (checkinName(name).length < 2 || !/[a-z0-9]/i.test(name)) return "Give the login a name, e.g. division-1 or gate-2.";
+  if (checkinName(name).length > 40) return "Keep the name under 40 characters.";
+  if (password.length < 8) return "Use a password of at least 8 characters.";
+  return null;
+}

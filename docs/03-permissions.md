@@ -61,9 +61,12 @@ every division in it, including divisions added to the group later.
   column (yes/no).
 - **Check-in login** (`shared`): as many per division as it needs (one per gate or per
   phone), created on the Staff page (*Check-in logins*) by directors, division heads and
-  head counselors for their divisions. Each has its own short name (`division-1`,
-  `division-1-2`…) and a generated password; *New password* replaces it, the bin removes
-  it (its check-ins stay). Head staff and directors check in with their own accounts.
+  head counselors for their divisions. Whoever creates one picks its sign-in name
+  (suggested: `division-1`, `division-1-2`…) and password (a made-up one is suggested);
+  *New password* replaces it the same way, the bin removes it (its check-ins stay). A
+  check-in login only gets Check in, Who's here, Not here yet, Campers and Phone book:
+  no Home, Lists, Print or account settings (`CurrentUser.checkinLogin`, `buildNav`).
+  Head staff and directors check in with their own accounts.
 
 Anyone who can check in more than one division picks **which line they're at** on Check in
 (remembered for the shift). A camper from another division then asks "Not your line"

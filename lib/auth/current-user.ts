@@ -47,6 +47,7 @@ const loadAccount = cache(async (): Promise<Account> => {
       allAreas: profile.all_areas,
       areas: rows,
       coverage,
+      checkinLogin: profile.login === "shared",
     },
   };
 });

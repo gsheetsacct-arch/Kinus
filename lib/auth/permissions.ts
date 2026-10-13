@@ -18,6 +18,8 @@ export type CurrentUser = {
   areas: Area[];
   /** Areas expanded to divisions (groups resolved), for quick checks. */
   coverage: { division_id: string; bunk_id: string | null }[];
+  /** A division's shared check-in login (the phones at its check-in line): check-in pages only. */
+  checkinLogin?: boolean;
 };
 
 export const LEVEL_RANK: Record<AccessLevel, number> = { view: 1, scan: 2, edit: 3 };
@@ -124,4 +126,4 @@ export const canUsePhoneBook = (u: CurrentUser) => Boolean(u.role);
 export const phoneBookHeadsOnly = (u: CurrentUser) => u.role === "counselor" || u.role === "scanner";
 
 /** Following up on campers who haven't arrived: heads, directors and the office (not bunk counselors or check-in helpers). */
-export const canFollowUp = (u: CurrentUser) => !["counselor", "scanner"].includes(u.role);
+export const canFollowUp = (u: CurrentUser) => u.checkinLogin === true || !["counselor", "scanner"].includes(u.role);

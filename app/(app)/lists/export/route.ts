@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
   const session = await getActiveSession();
   if (!user || !session) return new NextResponse("Unauthorized", { status: 401 });
+  if (user.checkinLogin) return new NextResponse("Not available on check-in logins.", { status: 403 });
   const sp = request.nextUrl.searchParams;
   const supabase = await createClient();
   const presets = await getPresetsFor(supabase, user);

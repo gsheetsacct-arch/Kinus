@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -15,6 +16,7 @@ export const metadata = { title: "Lists" };
 
 export default async function ListsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await requireUser();
+  if (user.checkinLogin) redirect("/scan");
   const session = await getActiveSession();
   const sp = await searchParams;
   if (!session) return <p className="text-muted-foreground">No active session.</p>;

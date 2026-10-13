@@ -13,7 +13,7 @@ import { decodeText } from "@/lib/import/decode";
 import { normalizeName } from "@/lib/import/normalize";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { checkinEmail, emailWayIn, generatePassword, placeholderEmail, setLoginKind } from "@/lib/staff/accounts";
-import { checkinName, isPlaceholderEmail, type LoginKind } from "@/lib/staff/login-kinds";
+import { checkinLoginProblem, checkinName, isPlaceholderEmail, type LoginKind } from "@/lib/staff/login-kinds";
 
 const ROLES = ["owner", "director", "division_head", "head_counselor", "counselor", "scanner", "office", "logistics"] as const;
 const signInRedirect = async () => `${await appUrl()}/login?next=/set-password`;
@@ -459,8 +459,11 @@ async function assertCheckinDivision(me: CurrentUser, divisionId: string) {
   if (!canGrantAreas(me, [{ group_id: null, division_id: divisionId, bunk_id: null }], false, await divisionGroupLookup())) throw new Error("That division isn't yours.");
 }
 
-/** Adds a check-in login to a division: a short name ("division-1", then "division-1-2"…) and a password. */
-export async function createCheckinLogin(divisionId: string): Promise<CheckinResult> {
+/**
+ * Adds a check-in login to a division, with the name and password the person creating it
+ * chose (or, left empty, "division-1", "division-1-2"… and a generated password).
+ */
+export async function createCheckinLogin(divisionId: string, chosen?: { name?: string; password?: string }): Promise<CheckinResult> {
   const me = await requireStaffManager();
   try {
     await assertCheckinDivision(me, divisionId);
@@ -468,12 +471,21 @@ export async function createCheckinLogin(divisionId: string): Promise<CheckinRes
     const admin = createAdminClient();
     const { data: division } = await admin.from("divisions").select("id, name").eq("id", divisionId).single();
     if (!division) return fail("Division not found.");
-    // a short, unique name to type on the phone
-    let name = checkinName(division.name);
-    let n = 1;
-    while ((await admin.from("profiles").select("id").ilike("email", `checkin.${name}@%`).maybeSingle()).data) name = `${checkinName(division.name)}-${++n}`;
-    const fullName = n === 1 ? `${division.name} check-in` : `${division.name} check-in ${n}`;
-    const password = generatePassword();
+    const taken = async (n: string) => Boolean((await admin.from("profiles").select("id").ilike("email", `checkin.${n}@%`).maybeSingle()).data);
+    const password = chosen?.password?.trim() || generatePassword();
+    let name: string;
+    if (chosen?.name?.trim()) {
+      const problem = checkinLoginProblem(chosen.name, password);
+      if (problem) return fail(problem);
+      name = checkinName(chosen.name);
+      if (await taken(name)) return fail(`There's already a check-in login called ${name}. Choose another name.`);
+    } else {
+      if (password.length < 8) return fail("Use a password of at least 8 characters.");
+      // a short, unique name to type on the phone
+      name = checkinName(division.name);
+      for (let n = 2; await taken(name); n++) name = `${checkinName(division.name)}-${n}`;
+    }
+    const fullName = `${division.name} check-in (${name})`;
     const id = await createAccount(await checkinEmail(name), fullName, "scanner", { password });
     await writeAccess(id, { role: "scanner", allAreas: false, areas: [{ group_id: null, division_id: divisionId, bunk_id: null }], full_name: fullName, title: "Check-in phones" });
     await setLoginKind(id, "shared");
@@ -485,14 +497,15 @@ export async function createCheckinLogin(divisionId: string): Promise<CheckinRes
 }
 
 /** A new password for a check-in login (the old one stops working). */
-export async function resetCheckinPassword(id: string): Promise<CheckinResult> {
+export async function resetCheckinPassword(id: string, chosen?: string): Promise<CheckinResult> {
   const me = await requireStaffManager();
   try {
     const admin = createAdminClient();
     const { data: p } = await admin.from("profiles").select("id, email, login").eq("id", id).single();
     if (!p || p.login !== "shared") return fail("That isn't a check-in login.");
     await assertCanManage(me, [id]);
-    const password = generatePassword();
+    const password = chosen?.trim() || generatePassword();
+    if (password.length < 8) return fail("Use a password of at least 8 characters.");
     const { error } = await admin.auth.admin.updateUserById(id, { password });
     if (error) throw error;
     return { ok: true, message: "New password set. Phones signed in with the old one stay signed in until they sign out.", username: p.email.slice("checkin.".length, p.email.indexOf("@")), password };
