@@ -239,7 +239,11 @@ Publisher data-source export (6.3 B) from the same screen.
   plain words, what didn't (test mode, unverified domain, bad API key, rate limit).
   The same explanations show on a request that couldn't be emailed, in the print
   queue (`explainEmailError` in `lib/print/email.ts`).
-- The request email names the campers (up to 12), who asked, and links to the job.
+- The request email ("To print: Name tag · … · from …") names the campers (up to 12)
+  and who asked, leads with **Open the print queue in Kinus**, and says why printing
+  from Kinus beats the attached PDF: everything waiting in one place, same-tag
+  requests printed together, part-used label sheets continued, and "printed" showing
+  on the camper's card. The PDF stays attached as a fallback.
 - Testing against a stand-in: `RESEND_API_URL` replaces `https://api.resend.com`.
 - Attachment limit 40 MB covers hundreds of tags; above that the email carries a
   signed Storage link (7 days) and says so.

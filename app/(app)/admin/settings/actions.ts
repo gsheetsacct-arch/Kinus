@@ -135,7 +135,7 @@ export async function sendTestEmail(): Promise<ActionResult> {
       to: office.to.split(/[,;\s]+/).filter(Boolean),
       cc: office.cc,
       subject: "Kinus test email: tag requests reach you",
-      html: `<p>This is a test from Kinus Settings. Name tag and luggage tag requests will arrive at this address like this.</p><p>${pdfNote}</p>`,
+      html: `<p>This is a test from Kinus Settings. Name tag and luggage tag requests will arrive at this address like this.</p><p>${pdfNote}</p><p>Each request email links to the print queue in Kinus. Printing from there is best: it shows everything waiting, prints requests for the same tag together, and continues a part-used label sheet.</p>`,
       attachments: pdf ? [{ filename: "kinus-test-tag.pdf", content: pdf }] : undefined,
     });
     if (!sent.sent) return fail(`Not sent: ${sent.reason}`);

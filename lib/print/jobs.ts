@@ -179,7 +179,7 @@ export async function processPrintJob(jobId: string, appUrl: string): Promise<vo
       pdf = null;
     }
     const link = `${appUrl}/print/jobs/${jobId}`;
-    const subject = job.count === 1 ? `${job.template_name} · ${job.first_camper} · from ${job.requested_by_name}` : `${job.template_name} × ${job.count} · from ${job.requested_by_name}`;
+    const subject = `To print: ${job.count === 1 ? `${job.template_name} · ${job.first_camper}` : `${job.template_name} × ${job.count}`} · from ${job.requested_by_name}`;
     const office = await officeEmail();
     const to = (job.deliver_to || office.to).split(/[,;\s]+/).filter(Boolean);
     if (!to.length) {
@@ -190,7 +190,7 @@ export async function processPrintJob(jobId: string, appUrl: string): Promise<vo
       to,
       cc: job.deliver_to && job.deliver_to !== office.to ? [] : office.cc,
       subject,
-      html: requestEmailHtml({ ...job, link, attached: Boolean(pdf) }),
+      html: requestEmailHtml({ ...job, link, queueLink: `${appUrl}/print`, attached: Boolean(pdf) }),
       attachments: pdf ? [{ filename: `${job.template_name.replace(/[^\w-]+/g, "-")}-${jobId.slice(0, 8)}.pdf`, content: pdf }] : undefined,
     });
     if (sent.sent) await admin.from("print_jobs").update({ status: "sent", email_message_id: sent.id, error: pdfError }).eq("id", jobId);
@@ -202,16 +202,27 @@ export async function processPrintJob(jobId: string, appUrl: string): Promise<vo
 
 const escHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/** The office's email for a request: who asked, for whom, and a link to print it. */
-export function requestEmailHtml(j: { requested_by_name: string; count: number; template_name: string; campers: string[]; note: string | null; link: string; attached: boolean }): string {
+/**
+ * The office's email for a request: who asked and for whom, and why printing from Kinus
+ * (the print queue) beats printing this PDF.
+ */
+export function requestEmailHtml(j: { requested_by_name: string; count: number; template_name: string; campers: string[]; note: string | null; link: string; queueLink: string; attached: boolean }): string {
   const list = j.campers.map((c) => `<li dir="auto">${escHtml(c)}</li>`).join("");
   const more = j.count > j.campers.length ? `<li>and ${j.count - j.campers.length} more</li>` : "";
-  return `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111">
+  const button = "display:inline-block;background:#0f5f8a;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px;font-weight:bold";
+  return `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:560px">
 <p><strong>${escHtml(j.requested_by_name)}</strong> asked for <strong>${j.count} × ${escHtml(j.template_name)}</strong>${j.note ? ` (${escHtml(j.note)})` : ""}.</p>
-${list ? `<ul style="padding-left:20px;margin:0 0 12px">${list}${more}</ul>` : ""}
-<p>${j.attached ? "The PDF is attached, ready to print." : "There's no PDF this time: open the link to print it."}</p>
-<p><a href="${escHtml(j.link)}" style="display:inline-block;background:#0f5f8a;color:#fff;text-decoration:none;padding:8px 14px;border-radius:6px">Open in Kinus</a></p>
-<p style="color:#666;font-size:13px">Printing on label sheets? Print from Kinus instead of this PDF: it continues a part-used sheet where the last print stopped, and can print this with other requests for the same tag.</p>
+${list ? `<ul style="padding-left:20px;margin:0 0 16px">${list}${more}</ul>` : ""}
+<p style="margin:0 0 8px"><a href="${escHtml(j.queueLink)}" style="${button}">Open the print queue in Kinus</a></p>
+<p style="margin:0 0 16px;font-size:13px"><a href="${escHtml(j.link)}" style="color:#0f5f8a">or just this request</a></p>
+<p style="margin:0 0 6px"><strong>Please print from Kinus rather than from this email:</strong></p>
+<ul style="padding-left:20px;margin:0 0 16px">
+<li><strong>Everything waiting, in one place.</strong> Other requests may have come in since this one: the queue shows them all.</li>
+<li><strong>Fewer prints.</strong> Requests for the same tag print together in one go, sorted by division and bunk, or one division at a time.</li>
+<li><strong>No wasted label sheets.</strong> Kinus remembers how much of the label sheet is used and starts on the next free label. This PDF always starts at the top of a fresh sheet.</li>
+<li><strong>Staff can see it's done.</strong> Marking it printed shows on the camper's card, so nobody asks twice.</li>
+</ul>
+<p style="color:#666;font-size:13px">${j.attached ? "The PDF is attached in case you can't open Kinus right now." : "There's no PDF this time: print it from Kinus."}</p>
 </div>`;
 }
 
