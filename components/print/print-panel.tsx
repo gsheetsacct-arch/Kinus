@@ -77,7 +77,7 @@ export function PrintPanel({
       setAsking(false);
       const sheet = stock ? { stock: stock.key, next } : undefined;
       const finished = !multi || (current && parts.every((p) => done.has(partKey(p)) || partKey(p) === partKey(current)));
-      const r = finished ? await markPrinted(jobIds, true, sheet) : sheet ? await saveSheetPosition(sheet.stock, sheet.next) : { ok: true as const, message: undefined };
+      const r = finished ? await markPrinted(jobIds, true, sheet, true) : sheet ? await saveSheetPosition(sheet.stock, sheet.next) : { ok: true as const, message: undefined };
       if (!r.ok) return void toast.error(r.error);
       toast.success(finished ? (jobIds.length > 1 ? `Marked ${jobIds.length} requests printed.` : "Marked printed.") : `${current?.name} printed.`);
       if (stock) setStart(next);

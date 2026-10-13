@@ -3,6 +3,7 @@ import { Printer } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { PrintQueue, type QueueJob } from "@/components/print/print-queue";
+import { LabelUpdates } from "@/components/print/label-updates";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { officeEmail } from "@/lib/print/jobs";
@@ -85,6 +86,11 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
           </Link>
         ))}
       </div>
+      {show === "todo" && (
+        <div className="mb-4">
+          <LabelUpdates />
+        </div>
+      )}
       <PrintQueue jobs={jobs} show={show} />
     </div>
   );
