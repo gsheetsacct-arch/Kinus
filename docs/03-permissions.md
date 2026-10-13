@@ -66,6 +66,7 @@ every division in it, including divisions added to the group later.
   my own*; *New password* asks the same, the bin removes it (its check-ins stay). A
   check-in login only gets Check in, Who's here, Not here yet, Campers and Phone book:
   no Home, Lists, Print or account settings (`CurrentUser.checkinLogin`, `buildNav`).
+  Check-in helpers who sign in with their own email also get Not here yet.
   Head staff and directors check in with their own accounts.
 
 Anyone who can check in more than one division picks **which line they're at** on Check in

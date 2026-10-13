@@ -125,5 +125,5 @@ export const canUsePhoneBook = (u: CurrentUser) => Boolean(u.role);
 /** A short phone book: just the head counselors and division heads of their division. */
 export const phoneBookHeadsOnly = (u: CurrentUser) => u.role === "counselor" || u.role === "scanner";
 
-/** Following up on campers who haven't arrived: heads, directors and the office (not bunk counselors or check-in helpers). */
-export const canFollowUp = (u: CurrentUser) => u.checkinLogin === true || !["counselor", "scanner"].includes(u.role);
+/** Not here yet (who hasn't arrived, and following up): everyone but bunk counselors, check-in helpers and check-in logins included. */
+export const canFollowUp = (u: CurrentUser) => u.role !== "counselor";
