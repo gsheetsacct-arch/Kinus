@@ -34,6 +34,7 @@ export async function sendEmail(opts: { to: string[]; cc?: string[]; subject: st
   try {
     res = await fetch(`${base}/emails`, {
       method: "POST",
+      signal: AbortSignal.timeout(15_000),
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         from: emailSetup().from,

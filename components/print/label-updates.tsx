@@ -19,8 +19,8 @@ export function LabelUpdates() {
   const [open, setOpen] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
   const load = React.useCallback(async () => {
-    const r = await checkLabelUpdates();
-    if (r.ok) setUpdates(r.updates);
+    const r = await checkLabelUpdates().catch(() => null);
+    if (r?.ok) setUpdates(r.updates);
   }, []);
   React.useEffect(() => {
     load();
@@ -31,7 +31,7 @@ export function LabelUpdates() {
   const run = async (key: string, call: () => Promise<{ ok: boolean; message?: string; error?: string; redirect?: string }>) => {
     setBusy(key);
     try {
-      const r = await call();
+      const r = await call().catch(() => ({ ok: false, error: "That didn't go through. Check the connection and try again." }) as { ok: boolean; error?: string; message?: string; redirect?: string });
       if (!r.ok) return void toast.error(r.error);
       if (r.message) toast.success(r.message);
       if (r.redirect) router.push(r.redirect);

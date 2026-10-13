@@ -48,7 +48,7 @@ export function PrintQueue({ jobs, show }: { jobs: QueueJob[]; show: string }) {
 
   const run = (fn: () => Promise<{ ok: boolean; message?: string; error?: string }>) =>
     start(async () => {
-      const r = await fn();
+      const r: { ok: boolean; message?: string; error?: string } = await fn().catch(() => ({ ok: false, error: "That didn't go through. Check the connection and try again." }));
       if (!r.ok) return void toast.error(r.error);
       if (r.message) toast.success(r.message);
       setSelected(new Set());

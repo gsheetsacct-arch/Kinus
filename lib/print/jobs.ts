@@ -6,9 +6,10 @@ import { mergeValues } from "./merge";
 import { htmlToPdf } from "./pdf";
 import { sendEmail } from "./email";
 import { backgroundDataUrl, byBunkThenName, loadMergeSetup, loadPrintCampers, toSpec } from "./data";
-import { contentHash, templateKeys } from "./content";
+import { contentHash, sameContent, templateKeys } from "./content";
 import type { TemplateSpec } from "./types";
-import type { Json } from "@/lib/supabase/database.types";
+import type { Database } from "@/lib/supabase/database.types";
+import { isProgressMark, RETRY_MARK, STARTED_MARK } from "./labels";
 import { clampPosition, sheetStock } from "./sheet-position";
 
 /** Office, directors and admins print for anyone; others need check-in access to the camper. */
@@ -17,6 +18,14 @@ export function canPrintFor(user: CurrentUser, camper: { division_id: string | n
   if (user.role === "office" || user.role === "logistics" || user.role === "owner") return seesAllCamp(user) || (camper.division_id ? canAccessBunk(user, camper.division_id, camper.bunk_id, "view") : false);
   if (user.role === "director") return camper.division_id ? canAccessBunk(user, camper.division_id, camper.bunk_id, "view") : seesAllCamp(user);
   return camper.division_id ? canAccessBunk(user, camper.division_id, camper.bunk_id, "scan") : false;
+}
+
+/** Of these printed labels (camper → fingerprint when printed), the ones whose details changed since. */
+export async function changedSince(db: Parameters<typeof loadPrintCampers>[0], spec: TemplateSpec, printed: Map<string, string>): Promise<Set<string>> {
+  if (!printed.size) return new Set();
+  const keys = templateKeys(spec);
+  const [campers, setup] = await Promise.all([loadPrintCampers(db, [...printed.keys()]), loadMergeSetup(db)]);
+  return new Set(campers.filter((c) => !sameContent(printed.get(c.id)!, keys, mergeValues(c, setup.fields, setup.maps))).map((c) => c.id));
 }
 
 /** What each camper's label says right now, as fingerprints (see contentHash). */
@@ -47,7 +56,8 @@ export async function createPrintJob(
     const { data } = await admin.from("campers").select("id, division_id, bunk_id").in("id", ids.slice(i, i + 150));
     for (const c of data ?? []) if (!canPrintFor(user, c)) throw new Error("You can only request tags for campers in your own division or bunk.");
   }
-  const deliver = opts.deliverTo?.trim() || (await officeEmail()).to || "";
+  // empty: the office (whatever its address is when the email goes out)
+  const deliver = opts.deliverTo?.trim() || "";
   const { data: job, error } = await admin
     .from("print_jobs")
     .insert({ session_id: opts.sessionId, kind: template.kind, template_id: template.id, deliver_to: deliver, requested_by: user.id, status: "queued", item_count: ids.length, note: opts.note ?? null })
@@ -136,7 +146,7 @@ export async function printSetSummary(jobIds: string[]) {
 }
 
 /** Builds the printable HTML for a job (used by the PDF, the browser print page and previews). */
-export async function jobHtml(jobId: string, opts: { start?: number } = {}): Promise<{ html: string; job: { id: string; deliver_to: string; template_name: string; count: number; requested_by_name: string; first_camper: string; campers: string[]; note: string | null } }> {
+export async function jobHtml(jobId: string, opts: { start?: number } = {}): Promise<{ html: string; job: { id: string; deliver_to: string; template_name: string; count: number; tags: number; requested_by_name: string; first_camper: string; campers: string[]; note: string | null } }> {
   const set = await loadPrintSet([jobId]);
   const job = set.jobs[0];
   const { html, campers } = setHtml(set, { start: opts.start });
@@ -149,6 +159,7 @@ export async function jobHtml(jobId: string, opts: { start?: number } = {}): Pro
       deliver_to: job.deliver_to,
       template_name: set.spec.name,
       count: campers.length,
+      tags: campers.reduce((n, c) => n + (copiesOf.get(c.id) ?? 1), 0),
       requested_by_name: (job.profiles as { full_name: string } | null)?.full_name ?? "someone",
       first_camper: first ? `${first.first_name} ${first.last_name}${first.bunk_name ? ` · ${first.bunk_name}` : ""}` : "",
       // who the tags are for (the first few), for the email
@@ -162,17 +173,22 @@ export async function jobHtml(jobId: string, opts: { start?: number } = {}): Pro
  * Renders a job to PDF, stores it, and emails the office. Never throws: the outcome is
  * written to the job (ready / sent / failed) so the print queue always shows it.
  */
-export async function processPrintJob(jobId: string, appUrl: string, opts: { retry?: string } = {}): Promise<void> {
+export async function processPrintJob(jobId: string, appUrl: string, opts: { retry?: boolean } = {}): Promise<void> {
   const admin = createAdminClient();
-  // a retry keeps its mark until it finishes, so a second hang is caught (retryStuckJobs)
-  await admin.from("print_jobs").update({ status: "rendering", error: opts.retry ?? null }).eq("id", jobId);
+  // claim this attempt: it says when it started (so a cut-off one can be found) and never
+  // touches a request that was printed or cancelled in the meantime
+  const mark = `${opts.retry ? RETRY_MARK : STARTED_MARK}${new Date().toISOString()}`;
+  const { data: claimed } = await admin.from("print_jobs").update({ status: "rendering", error: mark }).eq("id", jobId).in("status", ["queued", "rendering"]).select("id");
+  if (!claimed?.length) return;
+  // the outcome is written only if this attempt still owns the request
+  const finish = (patch: Database["public"]["Tables"]["print_jobs"]["Update"]) => admin.from("print_jobs").update(patch).eq("id", jobId).eq("status", "rendering").eq("error", mark);
   try {
     const { html, job } = await jobHtml(jobId);
     let pdf: Buffer | null = null;
     let pdfError: string | null = null;
     try {
       // a very big batch could run out of time making the PDF: the email links to the queue instead
-      if (job.count > PDF_MAX_TAGS) throw new Error(`more than ${PDF_MAX_TAGS} tags; print it from Kinus`);
+      if (job.tags > PDF_MAX_TAGS) throw new Error(`more than ${PDF_MAX_TAGS} tags; print it from Kinus`);
       pdf = await htmlToPdf(html);
       const { error } = await admin.storage.from("print-output").upload(`${jobId}.pdf`, pdf, { contentType: "application/pdf", upsert: true });
       if (error) throw error;
@@ -186,7 +202,7 @@ export async function processPrintJob(jobId: string, appUrl: string, opts: { ret
     const office = await officeEmail();
     const to = (job.deliver_to || office.to).split(/[,;\s]+/).filter(Boolean);
     if (!to.length) {
-      await admin.from("print_jobs").update({ status: "ready", error: pdfError ?? "No office email set, so it waits in the print queue." }).eq("id", jobId);
+      await finish({ status: "ready", error: pdfError ?? "No office email set, so it waits in the print queue." });
       return;
     }
     const sent = await sendEmail({
@@ -196,10 +212,10 @@ export async function processPrintJob(jobId: string, appUrl: string, opts: { ret
       html: requestEmailHtml({ ...job, link, queueLink: `${appUrl}/print`, attached: Boolean(pdf) }),
       attachments: pdf ? [{ filename: `${job.template_name.replace(/[^\w-]+/g, "-")}-${jobId.slice(0, 8)}.pdf`, content: pdf }] : undefined,
     });
-    if (sent.sent) await admin.from("print_jobs").update({ status: "sent", email_message_id: sent.id, error: pdfError }).eq("id", jobId);
-    else await admin.from("print_jobs").update({ status: "ready", error: [pdfError, sent.reason].filter(Boolean).join(" ") }).eq("id", jobId);
+    if (sent.sent) await finish({ status: "sent", email_message_id: sent.id, error: pdfError });
+    else await finish({ status: "ready", error: [pdfError, sent.reason].filter(Boolean).join(" ") });
   } catch (e) {
-    await admin.from("print_jobs").update({ status: "failed", error: e instanceof Error ? e.message : String(e) }).eq("id", jobId);
+    await finish({ status: "failed", error: e instanceof Error ? e.message : String(e) });
   }
 }
 
@@ -229,56 +245,70 @@ ${list ? `<ul style="padding-left:20px;margin:0 0 16px">${list}${more}</ul>` : "
 </div>`;
 }
 
-/** The first free label on each part-used sheet (settings "label_sheets": stock → label number). */
+/**
+ * The first free label on each part-used sheet: one settings row per camp and label stock
+ * ("label_sheet:<camp>/<stock>"), so each camp's office and printer keeps its own and two
+ * writers never overwrite each other's. Older positions (one "label_sheets" row) still count.
+ */
 export async function sheetPositions(): Promise<Record<string, number>> {
-  const { data } = await createAdminClient().from("settings").select("value").eq("key", "label_sheets").maybeSingle();
-  const v = (data?.value ?? {}) as Record<string, { next?: number } | number>;
-  return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, typeof x === "number" ? x : (x?.next ?? 1)]));
+  const { data } = await createAdminClient().from("settings").select("key, value").or("key.like.label_sheet:%,key.eq.label_sheets");
+  const out: Record<string, number> = {};
+  for (const r of data ?? []) {
+    if (r.key === "label_sheets") {
+      for (const [k, x] of Object.entries((r.value ?? {}) as Record<string, { next?: number } | number>)) out[k] ??= typeof x === "number" ? x : (x?.next ?? 1);
+    } else out[r.key.slice("label_sheet:".length)] = Number((r.value as { next?: number } | null)?.next) || 1;
+  }
+  return out;
+}
+
+/** The label stock as remembered for this camp ("<camp>/<stock>"), and where its sheet continues. */
+export function campStock<T extends { key: string }>(stock: T | null, campId: string | null | undefined, positions: Record<string, number>): { stock: T | null; next: number } {
+  if (!stock) return { stock: null, next: 1 };
+  const key = `${campId ?? "camp"}/${stock.key}`;
+  return { stock: { ...stock, key }, next: positions[key] ?? positions[stock.key] ?? 1 };
 }
 
 export async function rememberSheetPosition(stock: string, next: number, userId: string): Promise<void> {
-  const admin = createAdminClient();
-  const { data } = await admin.from("settings").select("value").eq("key", "label_sheets").maybeSingle();
-  const value = { ...((data?.value ?? {}) as Record<string, Json>), [stock]: { next, at: new Date().toISOString() } };
-  const { error } = await admin.from("settings").upsert({ key: "label_sheets", value, updated_by: userId, updated_at: new Date().toISOString() });
+  const { error } = await createAdminClient()
+    .from("settings")
+    .upsert({ key: `label_sheet:${stock}`, value: { next, at: new Date().toISOString() }, updated_by: userId, updated_at: new Date().toISOString() });
   if (error) throw error;
 }
 
 /** Above this many tags, requests are emailed with a link only (no PDF), so they can't time out. */
 const PDF_MAX_TAGS = 250;
-const RETRY_MARK = "Kinus tried again at ";
 const STUCK_MS = 3 * 60_000;
 
 /**
- * Requests still "making the PDF" minutes later were cut off (the server stopped mid-way).
- * Each is tried again once; one that hangs again is marked failed, so the office sees it and
- * can print it from Kinus. Safe to call from several pages at once: a job is claimed with a
- * conditional update, so only one caller retries it.
+ * Requests still "making the PDF" minutes after their attempt started were cut off (the
+ * server stopped mid-way). Each is tried again once; one whose retry hangs too is marked
+ * failed, so the office sees it and can print it from Kinus. Safe to call from several pages
+ * at once: a job is claimed with a conditional update, so only one caller retries it.
  */
 export async function retryStuckJobs(sessionId: string, appUrl: string, schedule: (fn: () => Promise<void>) => void): Promise<number> {
   const admin = createAdminClient();
   const cutoff = new Date(Date.now() - STUCK_MS).toISOString();
-  const { data: stuck } = await admin.from("print_jobs").select("id, status, error").eq("session_id", sessionId).in("status", ["queued", "rendering"]).lt("requested_at", cutoff).limit(20);
+  const { data: stuck } = await admin.from("print_jobs").select("id, status, error, requested_at").eq("session_id", sessionId).in("status", ["queued", "rendering"]).lt("requested_at", cutoff).limit(20);
   let n = 0;
   for (const j of stuck ?? []) {
-    const retriedAt = j.error?.startsWith(RETRY_MARK) ? Date.parse(j.error.slice(RETRY_MARK.length)) : null;
-    if (retriedAt !== null && Date.now() - retriedAt < STUCK_MS) continue; // the retry is still running
-    if (retriedAt !== null) {
+    // when this attempt started: its mark, else when it was asked for
+    const markAt = isProgressMark(j.error) ? Date.parse(j.error!.slice(j.error!.startsWith(RETRY_MARK) ? RETRY_MARK.length : STARTED_MARK.length)) : Date.parse(j.requested_at);
+    if (Date.now() - markAt < STUCK_MS) continue; // still working
+    if (j.error?.startsWith(RETRY_MARK)) {
       await admin
         .from("print_jobs")
         .update({ status: "failed", error: "Making the tags took too long twice. Print it from Kinus (Try again, or Print)." })
         .eq("id", j.id)
         .eq("status", j.status)
-        .eq("error", j.error!);
+        .eq("error", j.error);
       continue;
     }
-    const mark = `${RETRY_MARK}${new Date().toISOString()}`;
-    let claim = admin.from("print_jobs").update({ status: "queued", error: mark }).eq("id", j.id).eq("status", j.status);
+    let claim = admin.from("print_jobs").update({ status: "queued", error: `${RETRY_MARK}${new Date().toISOString()}` }).eq("id", j.id).eq("status", j.status);
     claim = j.error === null ? claim.is("error", null) : claim.eq("error", j.error);
     const { data: claimed } = await claim.select("id");
     if (!claimed?.length) continue;
     n++;
-    schedule(() => processPrintJob(j.id, appUrl, { retry: mark }));
+    schedule(() => processPrintJob(j.id, appUrl, { retry: true }));
   }
   return n;
 }

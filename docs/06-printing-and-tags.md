@@ -217,6 +217,54 @@ label 2 of the next). Templates on the same stock share it (it's one physical sh
 The emailed PDF always starts at label 1; the email says to print from Kinus to use a
 part-used sheet.
 
+### New and changed since the print
+
+The print queue checks (when opened, then every 2 minutes) for labels to print again,
+per template (`lib/print/updates.ts`):
+- **changed**: printed labels (marked printed) whose camper's values for the template's
+  fields differ now (a bunk move, a corrected name). Each label keeps a per-field
+  fingerprint (`contentHash` "v2;FIELD=…"), and only fields that were on the printed label
+  are compared, so editing the template (adding a field, moving things) never makes the
+  whole camp "changed". Older one-piece fingerprints are upgraded the first time they're
+  found unchanged.
+- **new**: campers without the label in divisions where at least half have it (so one
+  name tag asked for from a card doesn't make the camp "new").
+- Campers with the label still waiting (queued, ready, emailed, under 2 days old) are left
+  out: that print shows today's details anyway.
+
+**Print these N** makes one job of just those (it opens on the part-used sheet); **Who?**
+lists them; **Not needed** remembers what those labels say now
+(`settings.label_updates_dismissed:<template>`) and they come back only if they change
+again. Printing from Kinus refreshes the printed labels' fingerprints, since the page is
+made at print time with the details as they are then.
+
+### Keeping it working on the day
+
+- Each attempt at making a request's PDF writes when it started into the job
+  (`error` = "Kinus started at …", never shown). The print queue retries a request still
+  "Preparing" 3 minutes after its attempt started, once (claimed with a conditional
+  update, so only one page retries it); one whose retry also hangs is marked failed so the
+  office sees it and prints it from Kinus. Outcomes are written only if that attempt still
+  owns the request, so a request marked printed or cancelled meanwhile stays that way, and
+  printed or cancelled requests can't be resent.
+- The PDF has a time budget inside the 60 s a page may run (launch 15 s, page 15 s,
+  sizing names 8 s, PDF 15 s; email 15 s). A PDF whose names didn't finish shrinking to
+  fit isn't sent: the email links to the queue instead. Requests over 250 tags (copies
+  counted) are always emailed with a link, no PDF.
+- Background images are in the page once (CSS) however many tags; uploads are up to 4 MB
+  (Vercel refuses bigger request bodies).
+- Automatic print at first check-in creates the request after the phone has its answer,
+  and puts it in the queue as ready, without a PDF or email each; failures are logged.
+- Who may open a request (print, mark, cancel, resend, print together): the database
+  lets them see it, and every camper on it is in their part of camp, or they asked for it
+  (`visibleJobs`, one query for any number of requests).
+- Staff without the print area send tags to the office, themselves, or another staff
+  member's email only.
+- Requests store a "send to" only when someone chose one; otherwise the office address at
+  the time it's sent is used (a changed office email applies to waiting requests too).
+- Part-used sheet positions are per camp and label stock
+  (`settings.label_sheet:<camp>/<stock>`), one row each.
+
 ## 6.7 Batch printing (before the program)
 
 `/print/batch`: template, scope (division / bunk / all / only campers without a

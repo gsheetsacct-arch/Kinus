@@ -7,6 +7,7 @@ import { LabelUpdates } from "@/components/print/label-updates";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { officeEmail, retryStuckJobs } from "@/lib/print/jobs";
+import { shownJobError } from "@/lib/print/labels";
 import { after } from "next/server";
 import { appUrl } from "@/lib/auth/app-url";
 import { cn } from "@/lib/utils";
@@ -65,7 +66,7 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
     count: j.item_count,
     at: j.requested_at,
     to: j.deliver_to,
-    error: j.error,
+    error: shownJobError(j.error),
     pdf: Boolean(j.pdf_path),
     printedAt: j.printed_at,
     note: j.note,

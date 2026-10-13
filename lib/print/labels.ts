@@ -8,3 +8,13 @@ export const JOB_STATUS: Record<string, { label: string; variant: "outline" | "w
   failed: { label: "Failed", variant: "destructive" },
   cancelled: { label: "Cancelled", variant: "secondary" },
 };
+
+/**
+ * While a request's PDF is being made, its `error` holds when that attempt started ("Kinus
+ * started at …"), so a request cut off mid-way can be told from one still working. It's
+ * bookkeeping, never shown as an error.
+ */
+export const STARTED_MARK = "Kinus started at ";
+export const RETRY_MARK = "Kinus tried again at ";
+export const isProgressMark = (e: string | null | undefined) => Boolean(e && (e.startsWith(STARTED_MARK) || e.startsWith(RETRY_MARK)));
+export const shownJobError = (e: string | null | undefined) => (e && !isProgressMark(e) ? e : null);
