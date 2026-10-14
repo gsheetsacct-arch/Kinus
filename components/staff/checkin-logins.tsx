@@ -19,7 +19,7 @@ export type CheckinLoginRow = {
   accounts: CheckinAccount[];
   /** The camp the division is in (American, Hebrew…), for final check-out. */
   campName?: string | null;
-  /** Whether this person may turn final check-out on (division heads and directors). */
+  /** Whether this person may turn final check-out on (head staff and directors). */
   canGiveFinal?: boolean;
 };
 
@@ -140,7 +140,7 @@ export function CheckinLogins({ logins }: { logins: CheckinLoginRow[] }) {
                             ? a.finalCheckout
                               ? `Final check-out is on: this login checks out every division of ${l.campName ?? "the camp"} on the Final check-out page. Tap to turn it off.`
                               : `Give this login final check-out: going home for every division of ${l.campName ?? "the camp"}, on its own page.`
-                            : "A division head or director changes this."
+                            : "Head staff or a director of this division changes this."
                         }
                       >
                         <DoorOpen /> Final check-out{a.finalCheckout ? ": on" : ""}

@@ -516,8 +516,8 @@ export async function resetCheckinPassword(id: string, chosen?: string): Promise
 
 /**
  * Final check-out for a check-in login: "gone home" for every division of its camp, on the
- * Final check-out page. Division heads give it to their own division's logins; directors to
- * any in their area. (Head counselors make logins but don't give this.)
+ * Final check-out page. Division heads and head counselors give it to their own division's
+ * logins; directors to any in their area.
  */
 export async function setFinalCheckout(id: string, on: boolean): Promise<ActionResult> {
   const me = await requireStaffManager();
@@ -532,7 +532,7 @@ export async function setFinalCheckout(id: string, on: boolean): Promise<ActionR
     const divisions = (scopes ?? []).map((s) => s.division_id).filter((d): d is string => Boolean(d));
     if (!divisions.length) return fail("This login isn't in a division.");
     if (!canGiveFinalCheckout(me) || !canGrantAreas(me, divisions.map((d) => ({ group_id: null, division_id: d, bunk_id: null })), false, await divisionGroupLookup()))
-      return fail("A division head or director of this login's division turns final check-out on.");
+      return fail("Only the head staff or a director of this login's division can turn final check-out on.");
     const { error } = await admin.from("profiles").update({ final_checkout: on }).eq("id", id);
     if (error) return fail(/final_checkout/.test(error.message) ? "The database needs updating first (migration 0029)." : error.message);
     revalidatePath("/admin/users");

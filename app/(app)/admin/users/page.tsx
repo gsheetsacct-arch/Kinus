@@ -72,7 +72,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     divisionId: d.id,
     divisionName: d.name,
     color: d.color,
-    // division heads give their own division's logins final check-out; directors any in their area
+    // head staff give their own division's logins final check-out; directors any in their area
     campName: tree.groups?.find((g) => g.id === d.group_id)?.name ?? null,
     canGiveFinal: canGiveFinalCheckout(me),
     accounts: shared
