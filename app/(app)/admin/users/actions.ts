@@ -5,7 +5,7 @@ import * as XLSX from "xlsx";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { appUrl } from "@/lib/auth/app-url";
 import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
-import { canGrantAreas, canManageRole, isAdmin, type AccessLevel, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
+import { canGiveFinalCheckout, canGrantAreas, canManageRole, isAdmin, type AccessLevel, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
 import { STAFF_ROLES } from "@/lib/labels";
 import { decodeArea, grantableTree, loadAreaTree, type AreaValue } from "@/lib/data/areas";
 import { planRows, readRows, type BulkPlanRow } from "@/lib/staff/bulk";
@@ -516,8 +516,8 @@ export async function resetCheckinPassword(id: string, chosen?: string): Promise
 
 /**
  * Final check-out for a check-in login: "gone home" for every division of its camp, on the
- * Final check-out page. It reaches the whole camp, so only someone over all of that camp may
- * turn it on or off.
+ * Final check-out page. Division heads and head counselors give it to their own division's
+ * logins; directors to any in their area.
  */
 export async function setFinalCheckout(id: string, on: boolean): Promise<ActionResult> {
   const me = await requireStaffManager();
@@ -529,11 +529,10 @@ export async function setFinalCheckout(id: string, on: boolean): Promise<ActionR
     ]);
     if (!p || p.login !== "shared") return fail("Final check-out is for check-in logins.");
     await assertCanManage(me, [id]);
-    const groupOf = await divisionGroupLookup();
-    const camps = [...new Set((scopes ?? []).map((s) => (s.division_id ? groupOf(s.division_id) : null)).filter((g): g is string => Boolean(g)))];
-    if (!camps.length) return fail("This login isn't in a division.");
-    if (!canGrantAreas(me, camps.map((g) => ({ group_id: g, division_id: null, bunk_id: null })), false, groupOf))
-      return fail("Final check-out reaches every division of the camp: a director over the whole camp turns it on.");
+    const divisions = (scopes ?? []).map((s) => s.division_id).filter((d): d is string => Boolean(d));
+    if (!divisions.length) return fail("This login isn't in a division.");
+    if (!canGiveFinalCheckout(me) || !canGrantAreas(me, divisions.map((d) => ({ group_id: null, division_id: d, bunk_id: null })), false, await divisionGroupLookup()))
+      return fail("Only the head staff or a director of this login's division can turn final check-out on.");
     const { error } = await admin.from("profiles").update({ final_checkout: on }).eq("id", id);
     if (error) return fail(/final_checkout/.test(error.message) ? "The database needs updating first (migration 0029)." : error.message);
     revalidatePath("/admin/users");
