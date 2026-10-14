@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadAreaTree } from "@/lib/data/areas";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { canFollowUp, isAdmin, seesAllCamp, type CurrentUser } from "@/lib/auth/permissions";
-import { campStarted, flagRows, loadFollowups, loadRules } from "@/lib/data/missing";
+import { campStarted, divisionCounts, flagRows, loadFollowups, loadRules } from "@/lib/data/missing";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
 import { cn, formatTime } from "@/lib/utils";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -70,7 +70,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   let toCheck = 0;
   if (session && canFollowUp(user) && campers.some((c) => c.status === "expected")) {
     const [rules, followups, started] = await Promise.all([loadRules(supabase), loadFollowups(supabase, session.id), campStarted(session.id)]);
-    const flags = flagRows(campers.map((c) => ({ id: c.id, divisionId: c.division_id, bunkId: c.bunk_id, status: c.status })), rules, followups, started);
+    const counts = await divisionCounts(session.id, campers.map((c) => c.division_id));
+    const flags = flagRows(campers.map((c) => ({ id: c.id, divisionId: c.division_id, bunkId: c.bunk_id, status: c.status })), rules, followups, started, counts);
     toCheck = Object.values(flags).filter((f) => f.kind === "check").length;
   }
   // a division card where they see the whole division, else a card per bunk they have

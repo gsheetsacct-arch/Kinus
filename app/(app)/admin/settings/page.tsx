@@ -1,3 +1,4 @@
+import { campZoneLabel } from "@/lib/time";
 import { Send } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Callout } from "@/components/callout";
@@ -50,13 +51,13 @@ export default async function SettingsPage() {
         description="On “Not here yet”, campers still missing are flagged “check up on” so someone calls home. Nothing is flagged before the first camper of the session arrives."
       >
         <ActionForm action={saveMissingRules} warnUnsaved className="group grid gap-4 sm:grid-cols-2">
-          <Field label="Flag once this share of their bunk is here" htmlFor="percent" hint="0 turns this off. Campers without a bunk count against their division.">
+          <Field label="Flag once this share of their division is here" htmlFor="percent" hint="Percent of the camper's whole division that has arrived. 0 turns this off.">
             <div className="flex items-center gap-2">
               <Input id="percent" name="percent" type="number" min={0} max={100} defaultValue={missing.percent} className="w-24" />
               <span className="text-sm text-muted-foreground">%</span>
             </div>
           </Field>
-          <Field label="Or flag everyone still missing after" htmlFor="after_time" hint="Camp time. Leave empty to only use the percentage.">
+          <Field label="Or flag everyone still missing after" htmlFor="after_time" hint={`${campZoneLabel()} time (camp time), whatever time zone a phone or the server is in. Leave empty to only use the percentage.`}>
             <Input id="after_time" name="after_time" type="time" defaultValue={missing.after_time ?? ""} className="w-36" />
           </Field>
           <div className="sm:col-span-2">

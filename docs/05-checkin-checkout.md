@@ -145,6 +145,30 @@ filters). Then a list, grouped by bunk (or by division for wide scopes):
   (update) for the user's scope; rows animate on change; 60 s background refetch.
 - Export: CSV / print view of the current filter (office, directors).
 
+## 5.6a Not here yet, and camp time
+
+A camper still expected is flagged **check up on** when either rule in Settings holds:
+- **this share of their division has arrived** (default 75%; 0 turns it off). It's the whole
+  division, counted on the server for the whole session (`divisionCounts`), so the flag is
+  the same on a screen showing one bunk, for a counselor who sees only their bunk, and on
+  Home; a division wholly on screen is counted live as check-ins come in;
+- **it's past a time** of day (camp time), once anyone in the session has arrived; from the
+  next camp day on, anyone still missing stays flagged.
+
+**Coming later** pauses the flag until the time given; then it's flagged again ("was coming
+later").
+
+**Camp time** (`NEXT_PUBLIC_CAMP_TIMEZONE`, default `America/New_York`) is used for every
+time shown, typed or compared, whatever time zone the server (Vercel: UTC) or a phone is in:
+- the database keeps exact moments (`timestamptz`) and does no date maths;
+- times shown: `formatTime` / `formatWhen` ("Tomorrow 9:00 AM") / `formatDateTime`;
+- times typed (Coming later, "This evening", "Tomorrow morning"): `campDateTimeToIso`, with
+  the days the clocks change handled;
+- "today" (camp started today or earlier, today's arrivals, file names): `campToday` /
+  `startOfCampDay`; the cut-off time is compared with `campClock`;
+- session dates are calendar dates, shown as typed.
+The unit tests pass with the server in UTC, New York, Los Angeles, Tokyo and UTC+14.
+
 ## 5.7 Camper detail page
 
 Tabs: **Overview** (card + contacts + bunk + flags) · **Timeline** (attendance

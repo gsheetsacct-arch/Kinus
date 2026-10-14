@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { CAMP_TIME_ZONE } from "@/lib/utils";
-import { DEFAULT_RULES, campClock, missingStates, type CampStart, type Followup, type MissingRules, type MissingState } from "@/lib/attendance/missing";
+import { DEFAULT_RULES, campClock, missingStates, type CampStart, type DivisionCount, type Followup, type MissingRules, type MissingState } from "@/lib/attendance/missing";
 import { campToday } from "@/lib/time";
 import type { BoardRow } from "./board";
 
@@ -25,6 +25,27 @@ export async function campStarted(sessionId: string): Promise<CampStart> {
   return campToday(new Date(data.occurred_at)) < campToday() ? "earlier" : true;
 }
 
+/**
+ * Each division's campers and arrivals for the whole session, so "most of their division is
+ * here" is right on a screen that shows only part of it. Only counts, only for the divisions given.
+ */
+export async function divisionCounts(sessionId: string, divisionIds: Iterable<string | null>): Promise<Record<string, DivisionCount>> {
+  const ids = [...new Set(divisionIds)].filter((d): d is string => Boolean(d));
+  if (!ids.length) return {};
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const admin = createAdminClient();
+  const rows = await fetchAll((from, to) =>
+    admin.from("campers").select("id, division_id, status").eq("session_id", sessionId).in("division_id", ids).is("archived_at", null).order("id").range(from, to),
+  );
+  const out: Record<string, DivisionCount> = {};
+  for (const r of rows) {
+    const c = (out[r.division_id!] ??= { total: 0, arrived: 0 });
+    if (r.status !== "no_show") c.total++;
+    if (r.status === "present" || r.status === "out" || r.status === "departed") c.arrived++;
+  }
+  return out;
+}
+
 export async function loadRules(db: DB): Promise<MissingRules> {
   const { data } = await db.from("settings").select("value").eq("key", "missing_rules").maybeSingle();
   return { ...DEFAULT_RULES, ...((data?.value ?? {}) as Partial<MissingRules>) };
@@ -39,6 +60,13 @@ export async function loadFollowups(db: DB, sessionId: string): Promise<Record<s
 }
 
 /** Flags for board rows, as a plain object (it crosses to the browser). */
-export function flagRows(rows: Pick<BoardRow, "id" | "divisionId" | "bunkId" | "status">[], rules: MissingRules, followups: Record<string, Followup>, started: CampStart, now = new Date()): Record<string, MissingState> {
-  return Object.fromEntries(missingStates(rows, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE), started));
+export function flagRows(
+  rows: Pick<BoardRow, "id" | "divisionId" | "bunkId" | "status">[],
+  rules: MissingRules,
+  followups: Record<string, Followup>,
+  started: CampStart,
+  counts?: Record<string, DivisionCount>,
+  now = new Date(),
+): Record<string, MissingState> {
+  return Object.fromEntries(missingStates(rows, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE), started, counts));
 }

@@ -16,7 +16,7 @@ import type { BoardRow } from "@/lib/data/board";
 import { matchScore, searchEntry } from "@/lib/search";
 import { createClient } from "@/lib/supabase/client";
 import { CAMP_TIME_ZONE, cn, formatPhone, formatWhen } from "@/lib/utils";
-import { campClock, missingStates, type CampStart, type Followup, type MissingRules } from "@/lib/attendance/missing";
+import { campClock, missingStates, type CampStart, type DivisionCount, type Followup, type MissingRules } from "@/lib/attendance/missing";
 import { boardChanges, bulkAttendance } from "@/app/(app)/status/actions";
 
 type Tree = { groups: { id: string; name: string }[]; divisions: { id: string; name: string; group_id: string | null; bunks: { id: string; name: string }[] }[] };
@@ -67,6 +67,7 @@ export function StatusBoard({
   templates,
   rules,
   campStarted: started,
+  divisionCounts,
   followups,
   linkScope,
   linkStatus,
@@ -83,6 +84,8 @@ export function StatusBoard({
   rules: MissingRules;
   /** Someone in the session has arrived (session-wide). */
   campStarted: CampStart;
+  /** Each division's arrivals for the whole session, so the share is the division's, not just what's on screen. */
+  divisionCounts?: Record<string, DivisionCount>;
   followups: Record<string, Followup>;
   /** Opened from a link (Home tiles and cards): this place and status. */
   linkScope?: BoardScope | null;
@@ -162,8 +165,12 @@ export function StatusBoard({
   const scoped = React.useMemo(() => rows.filter((r) => inScope(r, scope, tree)), [rows, scope, tree]);
   const counts = countStatuses(scoped);
   // who should be checked up on, recomputed as check-ins arrive
-  const flags = React.useMemo(() => missingStates(scoped, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE), started), [scoped, rules, followups, now, started]);
-  const toCheck = [...flags.values()].filter((f) => f.kind === "check").length;
+  // measured on every camper this person sees (whole divisions), counted for the part on screen
+  const flags = React.useMemo(
+    () => missingStates(rows, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE), started, divisionCounts),
+    [rows, rules, followups, now, started, divisionCounts],
+  );
+  const toCheck = scoped.filter((r) => flags.get(r.id)?.kind === "check").length;
   const shown = React.useMemo(() => {
     const out = scoped.filter((r) => (!status || r.status === status) && (!q.trim() || matchScore(index.get(r.id)!, q) > 0));
     return out.sort((a, b) => a.last.localeCompare(b.last) || a.name.localeCompare(b.name));

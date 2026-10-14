@@ -13,9 +13,15 @@ function offsetAt(instant: Date): string {
 /** A camp wall-clock time ("2026-07-01", "16:30") as an ISO instant, daylight saving included. */
 export function campDateTimeToIso(date: string, time: string): string {
   const guess = new Date(`${date}T${time}:00Z`);
-  // the offset on that day (checked near the time itself, so DST changes land right)
-  return new Date(`${date}T${time}:00${offsetAt(guess)}`).toISOString();
+  // the offset near that moment; checked again at the result, so a time just after the clocks
+  // change (2:30 am on a March Sunday) uses the new offset, not the night before's
+  const first = new Date(`${date}T${time}:00${offsetAt(guess)}`);
+  const second = offsetAt(first);
+  return new Date(`${date}T${time}:00${second}`).toISOString();
 }
+
+/** The camp's time zone in words ("New York"), for labels. */
+export const campZoneLabel = () => (CAMP_TIME_ZONE.split("/").pop() ?? CAMP_TIME_ZONE).replace(/_/g, " ");
 
 /** Start of today in camp time, as an ISO instant. */
 export const startOfCampDay = (now = new Date()) => campDateTimeToIso(campToday(now), "00:00");

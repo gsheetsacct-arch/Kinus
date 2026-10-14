@@ -60,7 +60,8 @@ function CopyFields({ sessions, required }: { sessions: { id: string; name: stri
   );
 }
 
-const fmt = (d: string | null) => (d ? new Date(d + "T00:00:00").toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" }) : null);
+// a calendar date ("2026-07-01"), shown as that date whatever time zone the server is in
+const fmt = (d: string | null) => (d ? new Date(d + "T12:00:00Z").toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : null);
 
 export default async function SessionsPage() {
   await requireAdmin();
