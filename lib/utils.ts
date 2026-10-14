@@ -21,12 +21,14 @@ export function formatDateTime(iso: string | null | undefined) {
   return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: CAMP_TIME_ZONE });
 }
 
-/** "9:42 AM" today, "Mon 9:42 AM" earlier this week, "Jul 3, 9:42 AM" before that. */
+/** "9:42 AM" today, "Tomorrow 9:00 AM", "Mon 9:42 AM" earlier this week, "Jul 3, 9:42 AM" before that. All in camp time. */
 export function formatWhen(iso: string | null | undefined, now = new Date()) {
   if (!iso) return "";
   const d = new Date(iso);
   const day = (x: Date) => x.toLocaleDateString("en-CA", { timeZone: CAMP_TIME_ZONE });
   if (day(d) === day(now)) return formatTime(iso);
+  // "coming later" times are often tomorrow (noon tomorrow is 24 h ahead in any season)
+  if (day(d) === day(new Date(now.getTime() + 86400000)) && d > now) return `Tomorrow ${formatTime(iso)}`;
   const days = (now.getTime() - d.getTime()) / 86400000;
   const opts: Intl.DateTimeFormatOptions = days < 6 ? { weekday: "short" } : { month: "short", day: "numeric" };
   return `${d.toLocaleDateString("en-US", { ...opts, timeZone: CAMP_TIME_ZONE })}${days < 6 ? "" : ","} ${formatTime(iso)}`;

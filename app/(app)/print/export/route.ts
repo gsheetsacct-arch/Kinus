@@ -1,3 +1,4 @@
+import { campToday } from "@/lib/time";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
     const v = mergeValues(c, setup.fields, setup.maps);
     lines.push(keys.map((k) => cell(hidden.has(k) ? "" : (v[k] ?? ""))).join(","));
   }
-  const name = `kinus-merge-${new Date().toISOString().slice(0, 10)}.csv`;
+  const name = `kinus-merge-${campToday()}.csv`;
   return new NextResponse("﻿" + lines.join("\r\n") + "\r\n", {
     headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${name}"`, "Cache-Control": "private, no-store" },
   });

@@ -2,16 +2,33 @@ import { describe, expect, it } from "vitest";
 import { campClock, missingStates, type Followup } from "../missing";
 import type { CamperStatus } from "../machine";
 
-const bunk = (id: string, statuses: CamperStatus[]) => statuses.map((status, i) => ({ id: `${id}${i}`, divisionId: "d", bunkId: id, status }));
+const bunk = (id: string, statuses: CamperStatus[], divisionId = `d-${id}`) => statuses.map((status, i) => ({ id: `${id}${i}`, divisionId, bunkId: id, status }));
 const now = new Date("2026-07-01T15:00:00Z");
 const none = new Map<string, Followup>();
 
 describe("missingStates", () => {
-  it("flags stragglers once most of the bunk is here", () => {
+  it("flags stragglers once most of the division is here", () => {
     const rows = [...bunk("a", ["present", "present", "present", "expected"]), ...bunk("b", ["present", "expected", "expected", "expected"])];
     const s = missingStates(rows, { percent: 75, after_time: null }, none, now, "11:00");
-    expect(s.get("a3")).toEqual({ kind: "check", reason: "3 of 4 in their bunk have arrived" });
+    expect(s.get("a3")).toEqual({ kind: "check", reason: "3 of 4 in their division have arrived" });
     expect(s.get("b1")).toEqual({ kind: "waiting" });
+  });
+  it("measures the whole division, not the bunk", () => {
+    // bunk a is all here but bunk b barely: 4 of 8 in the division is 50%
+    const rows = [...bunk("a", ["present", "present", "present", "expected"], "d1"), ...bunk("b", ["present", "expected", "expected", "expected"], "d1")];
+    const s = missingStates(rows, { percent: 75, after_time: null }, none, now, "11:00");
+    expect(s.get("a3")).toEqual({ kind: "waiting" });
+    expect(missingStates(rows, { percent: 50, after_time: null }, none, now, "11:00").get("b1")).toEqual({ kind: "check", reason: "4 of 8 in their division have arrived" });
+  });
+  it("uses the whole division's count when only part of it is on screen", () => {
+    // a counselor sees their own bunk (all late); the rest of the division is mostly here
+    const rows = bunk("a", ["expected", "expected"], "d1");
+    const counts = { d1: { total: 40, arrived: 36 } };
+    expect(missingStates(rows, { percent: 75, after_time: null }, none, now, "11:00").get("a0")?.kind).toBe("waiting");
+    expect(missingStates(rows, { percent: 75, after_time: null }, none, now, "11:00", true, counts).get("a0")).toEqual({ kind: "check", reason: "36 of 40 in their division have arrived" });
+    // the whole division on screen: counted live (newer than the server's count)
+    const all = bunk("a", ["present", "present", "present", "expected"], "d1");
+    expect(missingStates(all, { percent: 75, after_time: null }, none, now, "11:00", true, { d1: { total: 4, arrived: 0 } }).get("a3")?.kind).toBe("check");
   });
   it("counts campers who went out or home as arrived, and leaves no-shows out", () => {
     const rows = bunk("a", ["out", "departed", "no_show", "expected"]);

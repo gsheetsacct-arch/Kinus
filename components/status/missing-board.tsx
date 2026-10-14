@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CamperCard, type TemplateButton } from "@/components/scan/camper-card";
 import { decodeScope, inScope, scopeExists, type BoardScope } from "@/lib/attendance/board";
-import { campClock, missingStates, type CampStart, type Followup, type MissingRules } from "@/lib/attendance/missing";
+import { campClock, missingStates, type CampStart, type DivisionCount, type Followup, type MissingRules } from "@/lib/attendance/missing";
 import type { BoardRow } from "@/lib/data/board";
 import { matchScore, searchEntry } from "@/lib/search";
 import { campDateTimeToIso, campHour, campToday } from "@/lib/time";
@@ -30,6 +30,7 @@ export function MissingBoard({
   followups,
   rules,
   campStarted: started,
+  divisionCounts,
   tree,
   defaultScope,
   campLabel,
@@ -42,6 +43,8 @@ export function MissingBoard({
   rules: MissingRules;
   /** Someone in the session has arrived (session-wide). */
   campStarted: CampStart;
+  /** Each division's arrivals for the whole session, so the share is the division's, not just what's on screen. */
+  divisionCounts?: Record<string, DivisionCount>;
   tree: ScopeTree;
   defaultScope: BoardScope;
   campLabel: string;
@@ -72,8 +75,9 @@ export function MissingBoard({
 
   const scoped = React.useMemo(() => rows.filter((r) => inScope(r, scope, tree)), [rows, scope, tree]);
   const states = React.useMemo(
-    () => missingStates(scoped, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE), started),
-    [scoped, rules, followups, now, started],
+    // measured on every camper this person sees (whole divisions), not just the part on screen
+    () => missingStates(rows, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE), started, divisionCounts),
+    [rows, rules, followups, now, started, divisionCounts],
   );
   const index = React.useMemo(() => new Map(rows.map((r) => [r.id, searchEntry(r.name, r.code, r.phones.map((p) => p.tel))])), [rows]);
   const bunkName = React.useMemo(() => new Map(tree.divisions.flatMap((d) => d.bunks.map((b) => [b.id, b.name] as const))), [tree]);

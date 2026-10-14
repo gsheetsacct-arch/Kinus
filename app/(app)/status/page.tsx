@@ -9,7 +9,7 @@ import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { LEVEL_RANK, canFollowUp, effectiveLevel, isDirector, seesAllCamp, visibleFieldGroups } from "@/lib/auth/permissions";
 import { loadAreaTree } from "@/lib/data/areas";
 import { loadBoard } from "@/lib/data/board";
-import { campStarted, loadFollowups, loadRules } from "@/lib/data/missing";
+import { campStarted, divisionCounts, loadFollowups, loadRules } from "@/lib/data/missing";
 import { everyoneLabel, getCampContext } from "@/lib/data/camp";
 import { decodeScope, defaultScope } from "@/lib/attendance/board";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
@@ -34,6 +34,7 @@ export default async function StatusPage({ searchParams }: { searchParams: Promi
     loadFollowups(supabase, session.id),
     campStarted(session.id),
   ]);
+  const counts = await divisionCounts(session.id, rows.map((r) => r.divisionId));
   const inCamp = (id: string | null) => !camp.divisionIds || (id !== null && camp.divisionIds.includes(id));
   const campTree = { groups: tree.groups, divisions: tree.divisions.filter((d) => inCamp(d.id)) };
   const label = everyoneLabel(camp);
@@ -51,6 +52,7 @@ export default async function StatusPage({ searchParams }: { searchParams: Promi
         templates={templates ?? []}
         rules={rules}
         campStarted={started}
+        divisionCounts={counts}
         canFollowUp={canFollowUp(user)}
         followups={followups}
         linkScope={decodeScope(sp.where)}

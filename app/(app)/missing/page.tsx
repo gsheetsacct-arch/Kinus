@@ -12,7 +12,7 @@ import { LEVEL_RANK, effectiveLevel, isAdmin, seesAllCamp, visibleFieldGroups } 
 import { loadAreaTree } from "@/lib/data/areas";
 import { loadBoard } from "@/lib/data/board";
 import { everyoneLabel, getCampContext } from "@/lib/data/camp";
-import { campStarted, loadFollowups, loadRules } from "@/lib/data/missing";
+import { campStarted, divisionCounts, loadFollowups, loadRules } from "@/lib/data/missing";
 import { defaultScope } from "@/lib/attendance/board";
 import { loadCardTemplates } from "@/lib/print/card-templates";
 
@@ -37,8 +37,9 @@ export default async function MissingPage() {
   ]);
   const started = await campStarted(session.id);
   const rows = await loadBoard(supabase, session.id, visibleFieldGroups(user, fv ?? []).has("contacts"), camp.divisionIds);
+  const counts = await divisionCounts(session.id, rows.map((r) => r.divisionId));
   const campTree = { groups: tree.groups, divisions: tree.divisions.filter((d) => !camp.divisionIds || camp.divisionIds.includes(d.id)) };
-  const rule = [rules.percent ? `${rules.percent}% of their bunk is here` : null, rules.after_time ? `it's past ${rules.after_time}` : null].filter(Boolean).join(" or ");
+  const rule = [rules.percent ? `${rules.percent}% of their division is here` : null, rules.after_time ? `it's past ${rules.after_time}` : null].filter(Boolean).join(" or ");
   return (
     <div>
       <PageHeader
@@ -59,6 +60,7 @@ export default async function MissingPage() {
         followups={followups}
         rules={rules}
         campStarted={started}
+        divisionCounts={counts}
         tree={campTree}
         defaultScope={seesAllCamp(user) ? { kind: "all" } : defaultScope(user.coverage, campTree)}
         campLabel={everyoneLabel(camp)}

@@ -43,7 +43,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
 import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
 import { fitPreview } from "@/lib/print/fit-preview";
 import { sheetPlacement, type Layer, type SheetLayout, type TemplateSpec } from "@/lib/print/types";
@@ -825,7 +825,7 @@ export function TemplateEditor({
       {draft && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm dark:border-amber-700 dark:bg-amber-950/40">
           <span className="mr-auto">
-            You left this template with changes that weren&apos;t saved ({new Date(draft.at).toLocaleString()}).
+            You left this template with changes that weren&apos;t saved ({formatDateTime(draft.at)}).
           </span>
           <Button
             size="sm"
