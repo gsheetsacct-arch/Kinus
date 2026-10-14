@@ -27,7 +27,8 @@ division) who. A camper who never checked in says "Never checked in this session
 from another camp says which ("Not in American: Hebrew Division").
 
 Who: **check-in logins given final check-out** (Staff → Check-in logins → *Final
-check-out*, turned on by a director over that whole camp), and directors over all of camp
+check-out*, turned on by the division's division head or a director; head counselors make
+logins but don't give this), and directors over all of camp
 (for the camp chosen at the top of the menu). Such a login searches and checks out every
 camper of its camp **on this page only**; its lists, Who's here and Check in stay its own
 division. The database allows the same and no more (migration 0029:

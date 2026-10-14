@@ -132,3 +132,6 @@ export const canFollowUp = (u: CurrentUser) => u.role !== "counselor";
 
 /** The Final check-out page: check-in logins given it, and directors over all of camp (who can record going home anyway). */
 export const canFinalCheckout = (u: CurrentUser) => Boolean(u.finalCheckout) || (seesAllCamp(u) && LEVEL_RANK[effectiveLevel(u)] >= LEVEL_RANK.scan);
+
+/** Who gives a check-in login final check-out: division heads (their own division's logins) and directors. */
+export const canGiveFinalCheckout = (u: CurrentUser) => isDirector(u) || u.role === "division_head";

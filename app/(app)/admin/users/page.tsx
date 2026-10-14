@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { StaffTable, type StaffRow } from "@/components/staff/staff-table";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
-import { canGrantAreas, canManageRole, isAdmin, type StaffRole, isDirector } from "@/lib/auth/permissions";
+import { canGiveFinalCheckout, canGrantAreas, canManageRole, isAdmin, type StaffRole, isDirector } from "@/lib/auth/permissions";
 import { ROLE_ORDER, areaLabel, STAFF_ROLES } from "@/lib/labels";
 import { loadRoles, rolesInUse } from "@/lib/data/roles";
 import { areaNames, grantableTree, loadAreaTree } from "@/lib/data/areas";
@@ -72,9 +72,9 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     divisionId: d.id,
     divisionName: d.name,
     color: d.color,
-    // final check-out reaches the whole camp: only someone over all of it gives it
+    // division heads give their own division's logins final check-out; directors any in their area
     campName: tree.groups?.find((g) => g.id === d.group_id)?.name ?? null,
-    canGiveFinal: Boolean(d.group_id) && canGrantAreas(me, [{ group_id: d.group_id, division_id: null, bunk_id: null }], false, groupOf),
+    canGiveFinal: canGiveFinalCheckout(me),
     accounts: shared
       .filter((p) => (areas ?? []).some((a) => a.user_id === p.id && a.division_id === d.id))
       .map((p) => ({ id: p.id, name: checkinNameOf(p.email) ?? p.email, active: p.is_active, lastSignIn: info.get(p.id)?.lastSignInAt ?? null, finalCheckout: finalOn.has(p.id) }))
