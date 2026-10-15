@@ -246,7 +246,7 @@ async function requireAdminUser() {
 
 const num = (min: number, max: number) => z.coerce.number().min(min).max(max);
 // lock (can't be moved on the canvas) and hide (doesn't show or print) work on every kind of part
-const partFlags = { locked: z.boolean().optional(), hidden: z.boolean().optional() };
+const partFlags = { locked: z.boolean().optional(), hidden: z.boolean().optional(), side: z.literal("back").optional() };
 const layerSchema = z.discriminatedUnion("type", [
   z.object({ ...partFlags, id: z.string(), type: z.literal("text"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), size: num(3, 200), weight: z.union([z.literal(400), z.literal(700)]).optional(), align: z.enum(["left", "center", "right"]).optional(), color: z.string().max(40).optional(), fit: z.boolean().optional(), wrap: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(), minSize: num(3, 200).optional(), font: z.enum(["sans", "rounded", "serif", "display"]).optional(), italic: z.boolean().optional(), underline: z.boolean().optional() }),
   z.object({ ...partFlags, id: z.string(), type: z.literal("barcode"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), showText: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional() }),
@@ -287,8 +287,10 @@ const templateSchema = z.object({
   kind: z.enum(["name_tag", "luggage_tag", "other"]),
   page_width_mm: num(10, 600),
   page_height_mm: num(10, 600),
-  layers: z.array(layerSchema).max(60),
+  layers: z.array(layerSchema).max(120),
   sheet_layout: sheetSchema.nullable(),
+  // two-sided (migration 0035): which edge the paper turns on, and a nudge for the back
+  back: z.object({ flip: z.enum(["long", "short"]), shiftXMm: num(-20, 20).optional(), shiftYMm: num(-20, 20).optional() }).nullable().optional(),
   show_on_card: z.boolean(),
   auto_on_first_checkin: z.boolean(),
   copies: z.coerce.number().int().min(1).max(10).default(1),
@@ -327,10 +329,16 @@ export async function saveTemplate(input: TemplateInput): Promise<ActionResult &
       show_on_card: t.show_on_card,
       auto_on_first_checkin: t.auto_on_first_checkin,
       copies: t.copies,
+      back: t.back ?? null,
       updated_at: new Date().toISOString(),
     };
+    // before migration 0035 there's no "back": a one-sided template saves without it
+    if (!t.back) delete (row as Partial<typeof row>).back;
     // before migration 0028 there's no "copies": save the rest, and say so only if it matters
-    const noCopiesYet = (e: { message: string } | null) => Boolean(e && /copies/.test(e.message));
+    const noCopiesYet = (e: { message: string } | null) => {
+      if (e && /\bback\b/.test(e.message) && t.back) throw new Error("To print on both sides, run migration 0035 in Supabase first.");
+      return Boolean(e && /copies/.test(e.message));
+    };
     const withoutCopies = Object.fromEntries(Object.entries(row).filter(([k]) => k !== "copies")) as Omit<typeof row, "copies">;
     if (t.id) {
       let { error } = await supabase.from("print_templates").update(row).eq("id", t.id);

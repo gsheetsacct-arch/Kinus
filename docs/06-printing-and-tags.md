@@ -206,6 +206,15 @@ A canvas of the tag at real proportions (Print → Templates):
   the camper's division name (`__division`) and `pictureFor` picks the picture; tapping a
   division shows the tag as its campers get it. A template with per-division pictures
   counts a move to another division as a changed label.
+- **Two-sided tags** ("Print on both sides" over the tag; migration 0035): Front and Back
+  tabs over the canvas; parts added while the back shows go on the back (`side: "back"`);
+  the background image is on the front. `print_templates.back` = { flip: long | short,
+  back nudge }. Printing: on label sheets each sheet is followed by its back page, laid out
+  mirrored (long edge: left and right swap; short edge: top and bottom swap) so each back
+  lands behind its own front, plus the back nudge for a duplex printer that's a little off;
+  one tag a page prints front, back, front, back. Labels already used on a part-used sheet
+  get no back. The print screen reminds the office to turn on two-sided printing with the
+  right flip.
 - Colour blocks can be **outline only** or have a **border**; new colour blocks go to the
   back (they're backgrounds and strips). Selecting a part keeps it in its place in the
   stack: its outline and handles are drawn on top, so a full-tag block doesn't cover the

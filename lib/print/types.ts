@@ -12,8 +12,19 @@ export type ValueMap = { id: string; name: string; source_field: string; entries
 /** Quarter turns: 90 reads top to bottom, -90 bottom to top. The box (x, y, w, h) is what you see on the tag. */
 export type Rotation = 0 | 90 | -90;
 
-/** On every part: locked parts can't be moved or resized on the canvas; hidden ones don't show or print. */
-export type PartFlags = { locked?: boolean; hidden?: boolean };
+/** On every part: locked parts can't be moved or resized on the canvas; hidden ones don't show or print; "back": on the back of a two-sided tag. */
+export type PartFlags = { locked?: boolean; hidden?: boolean; side?: "back" };
+
+/**
+ * A two-sided tag: parts marked side "back" print on the back, exactly behind the front.
+ * The printer turns the paper over on its long edge (the usual two-sided setting) or its
+ * short edge; on label sheets the back page is laid out mirrored to match. A duplex printer
+ * often lands the back a little off: shift moves the back side only (+ right / down, as seen
+ * from the back).
+ */
+export type BackSide = { flip: "long" | "short"; shiftXMm?: number; shiftYMm?: number };
+
+export const onBack = (l: { side?: "back" }) => l.side === "back";
 
 /**
  * Text "size" is a target: short text prints at that size, longer text shrinks to stay
@@ -93,6 +104,8 @@ export type TemplateSpec = {
   layers: Layer[];
   sheet_layout: SheetLayout | null;
   background_path?: string | null;
+  /** Set: printed on both sides (migration 0035). */
+  back?: BackSide | null;
 };
 
 export type PrintItem = { values: Record<string, string>; copies: number };

@@ -4,7 +4,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import type { ContactLike, CamperLike } from "@/lib/fields";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { compareBunkNames, compareDivisionNames } from "@/lib/bunk-order";
-import { picturesOf, type MergeField, type Transform, type ValueMap, type TemplateSpec, type Layer, type SheetLayout } from "./types";
+import { picturesOf, type BackSide, type MergeField, type Transform, type ValueMap, type TemplateSpec, type Layer, type SheetLayout } from "./types";
 
 type DB = SupabaseClient<Database>;
 export type PrintCamper = CamperLike & { id: string; division_color: string | null; division_name: string | null; bunk_name: string | null; last_name: string; first_name: string };
@@ -31,6 +31,7 @@ export function toSpec(t: Database["public"]["Tables"]["print_templates"]["Row"]
     layers: (t.layers as Layer[]) ?? [],
     sheet_layout: (t.sheet_layout as SheetLayout | null) ?? null,
     background_path: t.background_path,
+    back: ((t as { back?: unknown }).back as BackSide | null | undefined) ?? null,
   };
 }
 

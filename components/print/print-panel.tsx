@@ -27,6 +27,7 @@ export function PrintPanel({
   open,
   autoPrint,
   canSplit,
+  twoSided,
 }: {
   jobIds: string[];
   stock: SheetStock | null;
@@ -41,6 +42,8 @@ export function PrintPanel({
   autoPrint?: boolean;
   /** Offer "one division at a time" (requests printed together). */
   canSplit?: boolean;
+  /** Printed on both sides: which edge the paper turns on. */
+  twoSided?: { flip: "long" | "short" } | null;
 }) {
   const router = useRouter();
   const per = stock?.perSheet ?? 1;
@@ -278,6 +281,14 @@ export function PrintPanel({
           <Printer /> {ready ? "Print" : "Preparing…"}
         </Button>
       </div>
+
+      {twoSided && (
+        <p className="rounded-xl border border-primary/30 bg-primary-soft/40 px-3 py-2 text-sm">
+          <strong>Both sides:</strong> in the print dialog, turn on two-sided printing (More settings → Two-sided / Print on both sides) and choose{" "}
+          <strong>{twoSided.flip === "short" ? "flip on short edge" : "flip on long edge"}</strong>. Each back prints behind its front.
+          {stock ? " Put the label sheets in the way your printer prints both sides." : ""}
+        </p>
+      )}
 
       {asking && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary-soft/40 p-3">

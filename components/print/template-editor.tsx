@@ -36,6 +36,7 @@ import {
   Type,
   Underline,
   Undo2,
+  FlipHorizontal2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -43,10 +44,10 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { cn, formatDateTime } from "@/lib/utils";
+import { cn, formatDateTime, plural } from "@/lib/utils";
 import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
 import { fitPreview } from "@/lib/print/fit-preview";
-import { DIVISION_VALUE, pictureFor, sheetPlacement, type Layer, type SheetLayout, type TemplateSpec } from "@/lib/print/types";
+import { DIVISION_VALUE, onBack, pictureFor, sheetPlacement, type Layer, type SheetLayout, type TemplateSpec } from "@/lib/print/types";
 import { presetSummary, type LabelPreset } from "@/lib/print/presets";
 import { currentPreset, LabelPicker, SheetDiagram, sizeText } from "./label-picker";
 import { fitCheckPeople, previewTemplate, previewValues, saveTemplate, uploadTemplateImage } from "@/app/(app)/print/actions";
@@ -484,6 +485,24 @@ export function TemplateEditor({
   const [t, setT] = React.useState<EditorTemplate>(() => ({ ...initial, layers: initial.layers.map((l) => ({ ...l, id: l.id || uid() })) }));
   // the selected parts (Shift-click or drag a box to select several)
   const [selected, setSelected] = React.useState<string[]>([]);
+  // two-sided templates: which side the canvas and the parts list show
+  const [side, setSide] = React.useState<"front" | "back">("front");
+  const twoSided = Boolean(t.back);
+  const sideLayers = t.layers.filter((l) => onBack(l) === (twoSided && side === "back"));
+  const setTwoSided = (on: boolean) => {
+    if (on) {
+      update({ back: { flip: "long" } });
+      setSide("back");
+      setSelected([]);
+      toast.message("Now design the back. Switch between Front and Back above the tag.");
+      return;
+    }
+    const backParts = t.layers.filter(onBack).length;
+    if (backParts && !confirm(`Print on one side only? The ${plural(backParts, "part")} on the back will be removed.`)) return;
+    update({ back: null, layers: t.layers.filter((l) => !onBack(l)) });
+    setSide("front");
+    setSelected([]);
+  };
   const selectedRef = React.useRef<string[]>([]);
   selectedRef.current = selected;
   const [fits, setFits] = React.useState<Record<string, FitInfo>>({});
@@ -575,8 +594,10 @@ export function TemplateEditor({
   const add = (l: Omit<Layer, "id">) => {
     const id = uid();
     remember(`add:${id}`);
+    // a part added while the back is showing goes on the back
+    const part = { ...l, id, side: side === "back" ? "back" : undefined } as Layer;
     // colour blocks go to the back (they're backgrounds and strips); everything else on top
-    setT((cur) => ({ ...cur, layers: l.type === "box" ? [{ ...l, id } as Layer, ...cur.layers] : [...cur.layers, { ...l, id } as Layer] }));
+    setT((cur) => ({ ...cur, layers: l.type === "box" ? [part, ...cur.layers] : [...cur.layers, part] }));
     setSelected([id]);
     markDirty();
     (document.activeElement as HTMLElement | null)?.blur();
@@ -665,7 +686,9 @@ export function TemplateEditor({
   }, [duplicate, undo, redo]);
   const move = (i: number, d: -1 | 1) => {
     const ls = [...t.layers];
-    const j = i + d;
+    // the next part on the same side (two-sided: the other side's parts don't count)
+    let j = i + d;
+    while (j >= 0 && j < ls.length && onBack(ls[j]) !== onBack(ls[i])) j += d;
     if (j < 0 || j >= ls.length) return;
     [ls[i], ls[j]] = [ls[j], ls[i]];
     update({ layers: ls });
@@ -964,14 +987,40 @@ export function TemplateEditor({
               </Button>
             </span>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {twoSided ? (
+              <div className="inline-flex gap-1 rounded-lg bg-muted p-1" role="tablist" aria-label="Side of the tag">
+                {(["front", "back"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    role="tab"
+                    aria-selected={side === v}
+                    onClick={() => {
+                      setSide(v);
+                      setSelected([]);
+                    }}
+                    className={cn("rounded-md px-4 py-1 text-sm", side === v ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}
+                  >
+                    {v === "front" ? "Front" : "Back"} <span className="text-xs text-muted-foreground">{t.layers.filter((l) => onBack(l) === (v === "back")).length}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={() => setTwoSided(true)} title="A different design on the back, printed exactly behind the front">
+                <FlipHorizontal2 /> Print on both sides
+              </Button>
+            )}
+            {twoSided && <span className="text-xs text-muted-foreground">{side === "back" ? "The back, as you'll see it when you turn the tag over." : "The front."}</span>}
+          </div>
           <div className="rounded-xl border bg-muted/60 p-4 sm:p-6">
             <TagCanvas
               width={W}
               height={H}
               round={preset?.shape === "round"}
-              layers={t.layers}
+              layers={sideLayers}
               values={showDivision === null ? sample.values : { ...sample.values, [DIVISION_VALUE]: showDivision }}
-              background={backgroundUrl}
+              background={side === "front" ? backgroundUrl : null}
               images={images}
               selected={selected}
               onSelect={setSelected}
@@ -1252,9 +1301,11 @@ export function TemplateEditor({
           </section>
 
           <section className="rounded-xl border bg-card shadow-[var(--shadow-card)]">
-            <h2 className="border-b px-4 py-2.5 text-sm font-semibold">Parts ({t.layers.length})</h2>
+            <h2 className="border-b px-4 py-2.5 text-sm font-semibold">
+              {twoSided ? (side === "back" ? "Parts on the back" : "Parts on the front") : "Parts"} ({sideLayers.length})
+            </h2>
             <ul className="max-h-72 divide-y overflow-y-auto">
-              {[...t.layers].reverse().map((l) => {
+              {[...sideLayers].reverse().map((l) => {
                 const i = t.layers.indexOf(l);
                 const Icon = ICON[l.type];
                 return (
@@ -1288,19 +1339,19 @@ export function TemplateEditor({
                     <Button size="icon" variant="ghost" className={cn("size-7", !l.hidden && "text-muted-foreground/50")} onClick={() => setLayer(l.id, { hidden: l.hidden ? undefined : true })} aria-pressed={Boolean(l.hidden)} aria-label={l.hidden ? "Show" : "Hide"} title={l.hidden ? "Hidden: doesn't print. Click to show." : "Hide (won't print)"}>
                       {l.hidden ? <EyeOff /> : <Eye />}
                     </Button>
-                    <Button size="icon" variant="ghost" className="size-7" onClick={() => move(i, 1)} disabled={i === t.layers.length - 1} aria-label="Bring forward">
+                    <Button size="icon" variant="ghost" className="size-7" onClick={() => move(i, 1)} disabled={l === sideLayers[sideLayers.length - 1]} aria-label="Bring forward">
                       <ArrowUp />
                     </Button>
-                    <Button size="icon" variant="ghost" className="size-7" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Send back">
+                    <Button size="icon" variant="ghost" className="size-7" onClick={() => move(i, -1)} disabled={l === sideLayers[0]} aria-label="Send back">
                       <ArrowDown />
                     </Button>
                   </li>
                 );
               })}
-              {!t.layers.length && (
+              {!sideLayers.length && (
                 <li className="px-4 py-6 text-center text-sm text-muted-foreground">
                   <Plus className="mx-auto mb-1 size-4" />
-                  Add a field to start.
+                  {side === "back" ? "Add what goes on the back." : "Add a field to start."}
                 </li>
               )}
             </ul>
@@ -1309,6 +1360,29 @@ export function TemplateEditor({
           <details className="rounded-xl border bg-card shadow-[var(--shadow-card)]" open={!t.id}>
             <summary className="cursor-pointer px-4 py-2.5 text-sm font-semibold">Template settings</summary>
             <div className="grid gap-4 border-t p-4">
+              {twoSided && t.back && (
+                <div className="space-y-2 rounded-lg border p-3">
+                  <p className="text-sm font-medium">Printed on both sides</p>
+                  <Field label="The paper turns over on its" htmlFor="tflip" hint="Match the printer's two-sided setting. Most printers flip on the long edge.">
+                    <Select id="tflip" value={t.back.flip} onChange={(e) => update({ back: { ...t.back!, flip: e.target.value as "long" | "short" } })}>
+                      <option value="long">Long edge (like a book, the usual)</option>
+                      <option value="short">Short edge (like a notepad)</option>
+                    </Select>
+                  </Field>
+                  {sheet && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Num label="Move the back right (mm)" min={-20} max={20} value={t.back.shiftXMm ?? 0} onChange={(n) => update({ back: { ...t.back!, shiftXMm: n || undefined } })} />
+                      <Num label="Move the back down (mm)" min={-20} max={20} value={t.back.shiftYMm ?? 0} onChange={(n) => update({ back: { ...t.back!, shiftYMm: n || undefined } })} />
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {sheet ? "Print one sheet on both sides and hold it to the light: if the backs sit a little off, move the back here (as seen from the back)." : "Each tag prints its front, then its back as the next page."}
+                  </p>
+                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setTwoSided(false)}>
+                    One side only
+                  </Button>
+                </div>
+              )}
               <Field label="Kind" htmlFor="tkind">
                 <Select id="tkind" value={t.kind} onChange={(e) => update({ kind: e.target.value })}>
                   <option value="name_tag">Name tag</option>

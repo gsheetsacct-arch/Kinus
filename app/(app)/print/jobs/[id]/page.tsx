@@ -97,6 +97,7 @@ async function JobPrint({ id, open, autoPrint }: { id: string; open: boolean; au
       jobIds={[id]}
       stock={sheet.stock}
       remembered={sheet.used}
+      twoSided={summary.spec.back ?? null}
       parts={summary.parts}
       tags={summary.tags}
       campers={summary.campers}
