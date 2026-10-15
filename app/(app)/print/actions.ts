@@ -291,6 +291,8 @@ const templateSchema = z.object({
   sheet_layout: sheetSchema.nullable(),
   // two-sided (migration 0035): which edge the paper turns on, and a nudge for the back
   back: z.object({ flip: z.enum(["long", "short"]), shiftXMm: num(-20, 20).optional(), shiftYMm: num(-20, 20).optional() }).nullable().optional(),
+  // the camps it's for, by name (migration 0036); none: every camp
+  camps: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
   show_on_card: z.boolean(),
   auto_on_first_checkin: z.boolean(),
   copies: z.coerce.number().int().min(1).max(10).default(1),
@@ -330,35 +332,32 @@ export async function saveTemplate(input: TemplateInput): Promise<ActionResult &
       auto_on_first_checkin: t.auto_on_first_checkin,
       copies: t.copies,
       back: t.back ?? null,
+      camps: t.camps ?? [],
       updated_at: new Date().toISOString(),
     };
-    // before migration 0035 there's no "back": a one-sided template saves without it
-    if (!t.back) delete (row as Partial<typeof row>).back;
-    // before migration 0028 there's no "copies": save the rest, and say so only if it matters
-    const noCopiesYet = (e: { message: string } | null) => {
-      if (e && /\bback\b/.test(e.message) && t.back) throw new Error("To print on both sides, run migration 0035 in Supabase first.");
-      return Boolean(e && /copies/.test(e.message));
+    // settings added by later migrations: if one isn't there yet, save the rest, and say so
+    // only if it matters (the setting isn't at its usual value)
+    const later: Record<"copies" | "back" | "camps", { used: boolean; need: string }> = {
+      copies: { used: t.copies !== 1, need: "To set how many per camper, run migration 0028 in Supabase first." },
+      back: { used: Boolean(t.back), need: "To print on both sides, run migration 0035 in Supabase first." },
+      camps: { used: Boolean(t.camps?.length), need: "To keep a template to some camps, run migration 0036 in Supabase first." },
     };
-    const withoutCopies = Object.fromEntries(Object.entries(row).filter(([k]) => k !== "copies")) as Omit<typeof row, "copies">;
-    if (t.id) {
-      let { error } = await supabase.from("print_templates").update(row).eq("id", t.id);
-      if (noCopiesYet(error)) {
-        if (t.copies !== 1) throw new Error("To set how many per camper, run migration 0028 in Supabase first.");
-        ({ error } = await supabase.from("print_templates").update(withoutCopies).eq("id", t.id));
+    const payload: Partial<typeof row> = { ...row };
+    const { count } = t.id ? { count: 0 } : await supabase.from("print_templates").select("id", { count: "exact", head: true });
+    for (let attempt = 0; ; attempt++) {
+      const { data, error } = t.id
+        ? await supabase.from("print_templates").update(payload).eq("id", t.id).select("id").single()
+        : await supabase.from("print_templates").insert({ ...(payload as typeof row), sort_order: (count ?? 0) + 1 }).select("id").single();
+      const missing = error && attempt < 3 ? (Object.keys(later) as (keyof typeof later)[]).find((k) => k in payload && new RegExp(`\\b${k}\\b`).test(error.message)) : undefined;
+      if (missing) {
+        if (later[missing].used) throw new Error(later[missing].need);
+        delete payload[missing];
+        continue;
       }
-      if (error) throw error;
+      if (error || !data) throw error ?? new Error("The template wasn't saved.");
       revalidatePath("/print/templates");
-      return { ...ok("Template saved."), id: t.id };
+      return t.id ? { ...ok("Template saved."), id: t.id } : { ...ok("Template created.", `/print/templates/${data.id}`), id: data.id };
     }
-    const { count } = await supabase.from("print_templates").select("id", { count: "exact", head: true });
-    let { data, error } = await supabase.from("print_templates").insert({ ...row, sort_order: (count ?? 0) + 1 }).select("id").single();
-    if (noCopiesYet(error)) {
-      if (t.copies !== 1) throw new Error("To set how many per camper, run migration 0028 in Supabase first.");
-      ({ data, error } = await supabase.from("print_templates").insert({ ...withoutCopies, sort_order: (count ?? 0) + 1 }).select("id").single());
-    }
-    if (error || !data) throw error ?? new Error("The template wasn't saved.");
-    revalidatePath("/print/templates");
-    return { ...ok("Template created.", `/print/templates/${data.id}`), id: data.id };
   } catch (e) {
     return fail(errorMessage(e));
   }
@@ -380,6 +379,8 @@ export async function duplicateTemplate(fd: FormData): Promise<ActionResult> {
       sheet_layout: t.sheet_layout,
       sort_order: t.sort_order + 1,
       ...("copies" in t ? { copies: t.copies } : {}),
+      ...("back" in t ? { back: t.back } : {}),
+      ...("camps" in t ? { camps: t.camps } : {}),
     };
     // a copy of a retired template is a fresh, working one
     const { data, error } = await supabase

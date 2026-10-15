@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { startOfCampDay } from "@/lib/time";
+import { campDivisions, templateCamps, templateDivisionIds } from "./template-camps";
 export { startOfCampDay };
 
 type DB = SupabaseClient<Database>;
@@ -14,6 +15,10 @@ export const BATCH_WHICH = BATCH_WHICH_LABELS;
 
 /** Campers (ids, in printing order) for a batch; the user's own access applies. */
 export async function batchCamperIds(db: DB, sessionId: string, where: BatchWhere, which: BatchWhich, templateId: string): Promise<string[]> {
+  // a template for some camps only: just their campers
+  const { data: tpl } = await db.from("print_templates").select("*").eq("id", templateId).maybeSingle();
+  const only = tpl && templateCamps(tpl).length ? (templateDivisionIds(tpl, await campDivisions(db, sessionId)) ?? []) : null;
+  if (only) where = { ...where, divisionIds: where.divisionIds ? where.divisionIds.filter((d) => only.includes(d)) : only };
   if (where.divisionIds && !where.divisionIds.length) return [];
   const rows = await fetchAll((from, to) => {
     let q = db.from("campers").select("id, status").eq("session_id", sessionId).is("archived_at", null);

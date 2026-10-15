@@ -6,6 +6,7 @@ import { loadAreaTree } from "@/lib/data/areas";
 import { getCampContext } from "@/lib/data/camp";
 import { officeEmail } from "@/lib/print/jobs";
 import { visibleDivisionIds } from "@/lib/auth/permissions";
+import { forCamp, templateCamps } from "@/lib/print/template-camps";
 
 export const metadata = { title: "Print a batch" };
 export const maxDuration = 60;
@@ -26,7 +27,10 @@ export default async function BatchPage() {
     <div>
       <PageHeader title="Print a batch" description="Name tags or luggage tags for a whole camp, division or bunk, sorted by bunk." />
       <BatchForm
-        templates={(templates ?? []).map((t) => ({ id: t.id, name: t.name, copies: Number((t as { copies?: number }).copies) || 1 }))}
+        templates={(templates ?? [])
+          // the current camp's templates (all of them when looking at every camp, with whose they are)
+          .filter((t) => forCamp(t, camp.current?.name))
+          .map((t) => ({ id: t.id, name: !camp.current && templateCamps(t).length ? `${t.name} (${templateCamps(t).join(", ")})` : t.name, copies: Number((t as { copies?: number }).copies) || 1 }))}
         divisions={divisions}
         campLabel={camp.camps.length > 1 ? (camp.current ? `All of ${camp.current.name}` : "All camps") : "Everyone"}
         officeTo={office.to}

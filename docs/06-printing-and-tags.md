@@ -206,6 +206,13 @@ A canvas of the tag at real proportions (Print → Templates):
   the camper's division name (`__division`) and `pictureFor` picks the picture; tapping a
   division shows the tag as its campers get it. A template with per-division pictures
   counts a move to another division as a changed label.
+- **For which camps** (Template settings; migration 0036): tick the camps a template is for
+  (`print_templates.camps`, by camp name so it carries over to next session's camps; none
+  ticked = every camp). Print a batch offers the current camp's templates (all of them when
+  looking at every camp, named with their camps) and prints only those camps' campers; the
+  camper card shows a template's button only for its camps' campers; printing at first
+  check-in and "new or changed labels" keep to them too; a request for a camper of another
+  camp is refused (`lib/print/template-camps.ts`). The templates list shows "… only".
 - **Two-sided tags** ("Print on both sides" over the tag; migration 0035): Front and Back
   tabs over the canvas; parts added while the back shows go on the back (`side: "back"`);
   the background image is on the front. `print_templates.back` = { flip: long | short,

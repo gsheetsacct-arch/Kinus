@@ -12,6 +12,7 @@ import type { TemplateSpec } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 import { isProgressMark, RETRY_MARK, STARTED_MARK } from "./labels";
 import { cleanUsed, sheetStock, usedBefore } from "./sheet-position";
+import { campDivisions, templateCamps, templateDivisionIds } from "./template-camps";
 
 /** Office, directors and admins print for anyone; others need check-in access to the camper. */
 export function canPrintFor(user: CurrentUser, camper: { division_id: string | null; bunk_id: string | null }) {
@@ -55,8 +56,15 @@ export async function createPrintJob(
   // permission check per camper (all chunks side by side)
   const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += 150) chunks.push(ids.slice(i, i + 150));
-  const checked = await Promise.all(chunks.map((chunk) => admin.from("campers").select("id, division_id, bunk_id").in("id", chunk)));
+  const checked = await Promise.all(chunks.map((chunk) => admin.from("campers").select("id, division_id, bunk_id, first_name, last_name").in("id", chunk)));
   for (const { data } of checked) for (const c of data ?? []) if (!canPrintFor(user, c)) throw new Error("You can only request tags for campers in your own division or bunk.");
+  // a template for some camps only prints for their campers
+  const camps = templateCamps(template);
+  if (camps.length) {
+    const divisions = templateDivisionIds(template, await campDivisions(admin, opts.sessionId)) ?? [];
+    const other = checked.flatMap(({ data }) => data ?? []).find((c) => !c.division_id || !divisions.includes(c.division_id));
+    if (other) throw new Error(`${template.name} is only for ${camps.join(" and ")}${checked.flatMap(({ data }) => data ?? []).length > 1 ? `, and ${other.first_name} ${other.last_name} isn't in it` : ""}.`);
+  }
   // what each label says now (for "changed since printed"), read while the request is saved
   const hashing = labelHashes(admin, toSpec(template), ids);
   hashing.catch(() => {});

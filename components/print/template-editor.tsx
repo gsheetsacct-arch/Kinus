@@ -58,7 +58,7 @@ import { useCode } from "./code-image";
 import { fill } from "@/lib/print/merge";
 import { LeaveGuard } from "@/components/leave-guard";
 
-export type EditorTemplate = TemplateSpec & { show_on_card: boolean; auto_on_first_checkin: boolean; copies: number };
+export type EditorTemplate = TemplateSpec & { show_on_card: boolean; auto_on_first_checkin: boolean; copies: number; camps?: string[] };
 export type MergeKey = { key: string; label: string; enabled: boolean };
 
 const ICON = { text: Type, barcode: Barcode, qr: QrCode, box: Square, image: ImageIcon } as const;
@@ -471,6 +471,7 @@ export function TemplateEditor({
   backgroundUrl,
   pictures = {},
   divisions = [],
+  camps = [],
 }: {
   initial: EditorTemplate;
   fields: MergeKey[];
@@ -480,6 +481,8 @@ export function TemplateEditor({
   pictures?: Record<string, string>;
   /** This session's divisions (name, colour), for a different picture per division. */
   divisions?: { name: string; color: string | null }[];
+  /** This session's camps (American, Hebrew…), for a template that's for some only. */
+  camps?: string[];
 }) {
   const router = useRouter();
   const [t, setT] = React.useState<EditorTemplate>(() => ({ ...initial, layers: initial.layers.map((l) => ({ ...l, id: l.id || uid() })) }));
@@ -1382,6 +1385,32 @@ export function TemplateEditor({
                     One side only
                   </Button>
                 </div>
+              )}
+              {(camps.length > 1 || (t.camps?.length ?? 0) > 0) && (
+                <fieldset className="space-y-1.5">
+                  <legend className="text-sm font-medium">For which camps</legend>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                    {[...new Set([...camps, ...(t.camps ?? [])])].map((name) => {
+                      const on = (t.camps ?? []).some((c) => c.toLowerCase() === name.toLowerCase());
+                      return (
+                        <label key={name} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="size-4"
+                            checked={on}
+                            onChange={() => update({ camps: on ? (t.camps ?? []).filter((c) => c.toLowerCase() !== name.toLowerCase()) : [...(t.camps ?? []), name] })}
+                          />
+                          <span dir="auto">{name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t.camps?.length
+                      ? `Offered and printed only for ${t.camps.join(" and ")}: in Print a batch, on camper cards and at first check-in.`
+                      : "None ticked: every camp."}
+                  </p>
+                </fieldset>
               )}
               <Field label="Kind" htmlFor="tkind">
                 <Select id="tkind" value={t.kind} onChange={(e) => update({ kind: e.target.value })}>

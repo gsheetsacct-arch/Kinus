@@ -1,4 +1,5 @@
 import "server-only";
+import { campDivisions, templateCamps, templateDivisionIds } from "./template-camps";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { loadMergeSetup, loadPrintCampers, toSpec, byBunkThenName } from "./data";
@@ -86,8 +87,11 @@ export async function labelUpdates(sessionId: string, divisionIds: string[] | nu
   // labels printed with the older one-piece fingerprint, found unchanged, get per-field ones
   // (so a field added to the template later isn't mistaken for every camper changing)
   const upgrades: { job_id: string; camper_id: string; was: string; content_hash: string }[] = [];
+  // templates for some camps only: just their campers
+  const campList = used.some((t) => templateCamps(t).length) ? await campDivisions(admin, sessionId) : [];
   const result = used
     .map((t) => {
+      const onlyIn = templateDivisionIds(t, campList);
       const keys = templateKeys(toSpec(t));
       const done = printed.get(t.id)!;
       const waiting = pending.get(t.id) ?? new Set<string>();
@@ -98,6 +102,7 @@ export async function labelUpdates(sessionId: string, divisionIds: string[] | nu
       const fresh: UpdateCamper[] = [];
       for (const c of full) {
         if (waiting.has(c.id)) continue;
+        if (onlyIn && !onlyIn.includes(divisionOf.get(c.id) ?? "")) continue;
         const vals = values.get(c.id)!;
         if (skip[c.id] && sameContent(skip[c.id], keys, vals)) continue;
         const was = done.get(c.id);
