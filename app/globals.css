@@ -131,3 +131,10 @@
 }
 .nav-progress { animation: nav-progress 1.1s ease-in-out infinite; transform-origin: left; }
 @media (prefers-reduced-motion: reduce) { .nav-progress { animation: none; opacity: 0.6; } }
+
+/* messages (components/ui/sonner.tsx): centred over the page, not the sidebar */
+@media (min-width: 768px) {
+  body:has([data-app-sidebar]) [data-sonner-toaster][data-x-position="center"] {
+    left: calc(50% + 8rem) !important;
+  }
+}

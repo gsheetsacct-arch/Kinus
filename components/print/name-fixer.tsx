@@ -6,6 +6,7 @@ import { Check, Delete, Save, Search, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { useLiftToasts } from "@/components/ui/sonner";
 import { saveNameFixes } from "@/app/(app)/print/names/actions";
 import { convertTyped, hasEnglish, isHebrew, lettersSpelledOut, type SuggestionSource } from "@/lib/hebrew-names";
 import { cn, plural } from "@/lib/utils";
@@ -61,6 +62,9 @@ export function NameFixer({ rows }: { rows: NameRow[] }) {
   const [count, setCount] = React.useState(0);
   const recount = React.useCallback(() => setCount([...drafts.current.values()].filter((d) => d.use && d.value.trim()).length), []);
   const [focused, setFocused] = React.useState<{ key: string; el: HTMLInputElement } | null>(null);
+  // messages show above the save bar and letter pad
+  const bar = React.useRef<HTMLDivElement>(null);
+  useLiftToasts(bar);
 
   const counts = { english: 0, empty: 0, fixed: 0 };
   for (const r of rows) counts[r.state]++;
@@ -212,7 +216,7 @@ export function NameFixer({ rows }: { rows: NameRow[] }) {
       )}
 
       {/* the save bar and the letter pad stay at the bottom of the screen */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 shadow-[0_-2px_8px_rgba(0,0,0,.06)] backdrop-blur md:left-64">
+      <div ref={bar} className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 border-t bg-background/95 shadow-[0_-2px_8px_rgba(0,0,0,.06)] backdrop-blur md:bottom-0 md:left-64">
         <div className="mx-auto flex max-w-5xl flex-col gap-2 px-4 py-2">
           {focused && (
             <div className="flex flex-wrap justify-center gap-1" dir="rtl" aria-label="Hebrew letters">
