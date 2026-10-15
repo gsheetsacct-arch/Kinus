@@ -45,8 +45,12 @@ export type Layer = PartFlags &
   | { id: string; type: "barcode"; text: string; x: number; y: number; w: number; h: number; showText?: boolean; rotate?: Rotation }
   | { id: string; type: "qr"; text: string; x: number; y: number; w: number; h: number }
   | { id: string; type: "box"; x: number; y: number; w: number; h: number; fill?: string; radius?: number; border?: string }
-  /** A picture (a camp logo…), stored with the templates; "contain" shows all of it, "cover" fills the box. */
-  | { id: string; type: "image"; path: string; x: number; y: number; w: number; h: number; fit?: "contain" | "cover" }
+  /**
+   * A picture (a camp logo…), stored with the templates; "contain" shows all of it, "cover" fills the box.
+   * `byDivision`: another picture for campers of a division (by the division's name, so it carries
+   * over to next session's divisions); "" = no picture for that division. Others get `path`.
+   */
+  | { id: string; type: "image"; path: string; x: number; y: number; w: number; h: number; fit?: "contain" | "cover"; byDivision?: Record<string, string> }
   );
 
 /**
@@ -92,3 +96,17 @@ export type TemplateSpec = {
 };
 
 export type PrintItem = { values: Record<string, string>; copies: number };
+
+/** The merge values carry the camper's division name under this key (for per-division pictures). */
+export const DIVISION_VALUE = "__division";
+
+const sameDivision = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** The picture a picture part shows for a camper of this division ("" = none). */
+export function pictureFor(l: { path: string; byDivision?: Record<string, string> }, division: string | null | undefined): string {
+  if (division && l.byDivision) for (const [name, path] of Object.entries(l.byDivision)) if (sameDivision(name, division)) return path;
+  return l.path;
+}
+
+/** Every stored picture a part can show (its own and each division's). */
+export const picturesOf = (l: { path?: string; byDivision?: Record<string, string> }): string[] => [l.path ?? "", ...Object.values(l.byDivision ?? {})].filter(Boolean);

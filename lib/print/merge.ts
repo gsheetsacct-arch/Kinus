@@ -1,5 +1,5 @@
 import { getFieldValue, type CamperLike } from "@/lib/fields";
-import type { MergeField, Transform, ValueMap } from "./types";
+import { DIVISION_VALUE, type MergeField, type Transform, type ValueMap } from "./types";
 import { convertNumber } from "@/lib/hebrew-number";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
@@ -82,6 +82,8 @@ export function mergeValues(c: CamperLike & { division_color?: string | null }, 
     const raw = f.source_field.includes("{{") ? fill(f.source_field, get) : get(f.source_field);
     out[f.key] = applyTransforms(raw, f.transforms ?? [], maps);
   }
+  // which division's picture a per-division picture part shows
+  out[DIVISION_VALUE] = c.division_name ?? "";
   return out;
 }
 

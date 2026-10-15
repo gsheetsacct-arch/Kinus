@@ -4,7 +4,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import type { ContactLike, CamperLike } from "@/lib/fields";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { compareBunkNames, compareDivisionNames } from "@/lib/bunk-order";
-import type { MergeField, Transform, ValueMap, TemplateSpec, Layer, SheetLayout } from "./types";
+import { picturesOf, type MergeField, type Transform, type ValueMap, type TemplateSpec, type Layer, type SheetLayout } from "./types";
 
 type DB = SupabaseClient<Database>;
 export type PrintCamper = CamperLike & { id: string; division_color: string | null; division_name: string | null; bunk_name: string | null; last_name: string; first_name: string };
@@ -44,8 +44,8 @@ export async function backgroundDataUrl(admin: DB, path: string | null | undefin
 }
 
 /** The pictures a template's parts show (logos…), as data URLs for the page, by stored path. */
-export async function imageDataUrls(admin: DB, layers: { type: string; path?: string }[]): Promise<Record<string, string>> {
-  const paths = [...new Set(layers.filter((l) => l.type === "image" && l.path).map((l) => l.path!))];
+export async function imageDataUrls(admin: DB, layers: { type: string; path?: string; byDivision?: Record<string, string> }[]): Promise<Record<string, string>> {
+  const paths = [...new Set(layers.filter((l) => l.type === "image").flatMap(picturesOf))];
   const urls = await Promise.all(paths.map((p) => backgroundDataUrl(admin, p).catch(() => null)));
   return Object.fromEntries(paths.flatMap((p, i) => (urls[i] ? [[p, urls[i]!]] : [])));
 }

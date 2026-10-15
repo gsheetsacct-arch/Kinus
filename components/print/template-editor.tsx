@@ -46,7 +46,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn, formatDateTime } from "@/lib/utils";
 import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
 import { fitPreview } from "@/lib/print/fit-preview";
-import { sheetPlacement, type Layer, type SheetLayout, type TemplateSpec } from "@/lib/print/types";
+import { DIVISION_VALUE, pictureFor, sheetPlacement, type Layer, type SheetLayout, type TemplateSpec } from "@/lib/print/types";
 import { presetSummary, type LabelPreset } from "@/lib/print/presets";
 import { currentPreset, LabelPicker, SheetDiagram, sizeText } from "./label-picker";
 import { fitCheckPeople, previewTemplate, previewValues, saveTemplate, uploadTemplateImage } from "@/app/(app)/print/actions";
@@ -469,6 +469,7 @@ export function TemplateEditor({
   background,
   backgroundUrl,
   pictures = {},
+  divisions = [],
 }: {
   initial: EditorTemplate;
   fields: MergeKey[];
@@ -476,6 +477,8 @@ export function TemplateEditor({
   backgroundUrl: string | null;
   /** Pictures the template's picture parts show, by stored path. */
   pictures?: Record<string, string>;
+  /** This session's divisions (name, colour), for a different picture per division. */
+  divisions?: { name: string; color: string | null }[];
 }) {
   const router = useRouter();
   const [t, setT] = React.useState<EditorTemplate>(() => ({ ...initial, layers: initial.layers.map((l) => ({ ...l, id: l.id || uid() })) }));
@@ -582,8 +585,17 @@ export function TemplateEditor({
   const [images, setImages] = React.useState<Record<string, string>>(pictures);
   const [uploading, setUploading] = React.useState(false);
   const pictureInput = React.useRef<HTMLInputElement>(null);
-  const replacing = React.useRef<string | null>(null);
-  const pickPicture = (replace: string | null) => {
+  // a picture part's main picture ({ id }), or its picture for one division ({ id, division })
+  const replacing = React.useRef<{ id: string; division?: string } | null>(null);
+  // the division the canvas shows pictures for (null: the shown camper's own)
+  const [showDivision, setShowDivision] = React.useState<string | null>(null);
+  const setDivisionPicture = (l: Extract<Layer, { type: "image" }>, division: string, path: string | null) => {
+    const byDivision = { ...(l.byDivision ?? {}) };
+    if (path === null) delete byDivision[division];
+    else byDivision[division] = path;
+    setLayer(l.id, { byDivision: Object.keys(byDivision).length ? byDivision : undefined } as Partial<Layer>);
+  };
+  const pickPicture = (replace: { id: string; division?: string } | null) => {
     replacing.current = replace;
     pictureInput.current?.click();
   };
@@ -599,7 +611,12 @@ export function TemplateEditor({
       const r = await uploadTemplateImage(fd).catch(() => ({ ok: false as const, error: "That didn't upload. Check the connection and try again." }));
       if (!r.ok) return void toast.error(r.error);
       setImages((cur) => ({ ...cur, [r.path]: r.url }));
-      if (replacing.current) setLayer(replacing.current, { path: r.path } as Partial<Layer>);
+      const target = replacing.current;
+      const part = target && t.layers.find((l) => l.id === target.id);
+      if (target?.division && part?.type === "image") {
+        setDivisionPicture(part, target.division, r.path);
+        setShowDivision(target.division);
+      } else if (target) setLayer(target.id, { path: r.path } as Partial<Layer>);
       else {
         const w = Math.min(20, W - 2);
         const h = Math.min(Math.max(2, tidy(w * ratio)), H);
@@ -951,8 +968,9 @@ export function TemplateEditor({
             <TagCanvas
               width={W}
               height={H}
+              round={preset?.shape === "round"}
               layers={t.layers}
-              values={sample.values}
+              values={showDivision === null ? sample.values : { ...sample.values, [DIVISION_VALUE]: showDivision }}
               background={backgroundUrl}
               images={images}
               selected={selected}
@@ -1110,9 +1128,10 @@ export function TemplateEditor({
                         </button>
                       ))}
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => pickPicture(sel.id)}>
+                    <Button size="sm" variant="outline" onClick={() => pickPicture({ id: sel.id })}>
                       <ImageIcon /> Another picture
                     </Button>
+                    {divisions.length > 0 && <DivisionPictures part={sel} divisions={divisions} images={images} showing={showDivision} onShow={setShowDivision} onPick={(division) => pickPicture({ id: sel.id, division })} onSet={(division, path) => setDivisionPicture(sel, division, path)} />}
                   </div>
                 )}
                 {sel.type !== "box" && sel.type !== "image" && <MergeText key={sel.id} label={sel.type === "text" ? "Says" : "Code"} value={sel.text} onChange={(v) => setLayer(sel.id, { text: v })} fields={fields} />}
@@ -1300,7 +1319,7 @@ export function TemplateEditor({
               <div className="space-y-2">
                 <span className="block text-sm font-medium">Labels</span>
                 <div className="flex items-start gap-3 rounded-lg border bg-background p-3">
-                  {sheet && <SheetDiagram sheet={sheet} w={W} h={H} className="w-14" />}
+                  {sheet && <SheetDiagram sheet={sheet} w={W} h={H} round={preset?.shape === "round"} className="w-14" />}
                   <div className="min-w-0 flex-1 text-sm">
                     <p className="font-medium">{preset ? `${preset.brand} ${preset.product}` : sheet ? "Custom sheet" : "Custom size, one per page"}</p>
                     <p className="text-xs text-muted-foreground">{preset ? preset.name : sizeText(W, H)}</p>
@@ -1431,5 +1450,69 @@ export function TemplateEditor({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/**
+ * A picture part's picture for each division: the main one, its own, or none. Tapping a
+ * division shows the tag as its campers get it.
+ */
+function DivisionPictures({
+  part,
+  divisions,
+  images,
+  showing,
+  onShow,
+  onPick,
+  onSet,
+}: {
+  part: Extract<Layer, { type: "image" }>;
+  divisions: { name: string; color: string | null }[];
+  images: Record<string, string>;
+  showing: string | null;
+  onShow: (division: string | null) => void;
+  onPick: (division: string) => void;
+  onSet: (division: string, path: string | null) => void;
+}) {
+  const own = part.byDivision ?? {};
+  // divisions named on the part but not in this session stay listed, so they can be cleared
+  const names = [...divisions.map((d) => d.name), ...Object.keys(own).filter((n) => !divisions.some((d) => d.name.trim().toLowerCase() === n.trim().toLowerCase()))];
+  const [open, setOpen] = React.useState(Object.keys(own).length > 0);
+  return (
+    <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)} className="rounded-lg border p-2 text-sm">
+      <summary className="cursor-pointer font-medium">A different picture per division{Object.keys(own).length ? ` (${Object.keys(own).length})` : ""}</summary>
+      <p className="mt-1 text-xs text-muted-foreground">Tap a division to see its tags. Divisions are matched by name, so this carries over to next session.</p>
+      <ul className="mt-2 space-y-1.5">
+        {names.map((name) => {
+          const d = divisions.find((x) => x.name === name);
+          const path = pictureFor(part, name);
+          const set = Object.keys(own).find((k) => k.trim().toLowerCase() === name.trim().toLowerCase());
+          return (
+            <li key={name} className={cn("flex items-center gap-1.5 rounded-md px-1 py-1", showing === name && "bg-primary-soft")}>
+              <button type="button" onClick={() => onShow(showing === name ? null : name)} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-pressed={showing === name}>
+                <span className="size-2 shrink-0 rounded-full" style={{ background: d?.color ?? "var(--muted-foreground)" }} />
+                <span className="min-w-0">
+                  <span dir="auto" className="block truncate">{name}</span>
+                  <span className="block text-[11px] leading-tight text-muted-foreground">{!path ? "No picture" : set === undefined ? "Main picture" : "Its own picture"}</span>
+                </span>
+              </button>
+              <span className="size-7 shrink-0 rounded border bg-white bg-contain bg-center bg-no-repeat" style={path && images[path] ? { backgroundImage: `url("${images[path]}")` } : undefined} />
+              <Button size="sm" variant="ghost" className="h-7 px-1.5" onClick={() => onPick(name)}>
+                Choose
+              </Button>
+              {set !== undefined ? (
+                <Button size="sm" variant="ghost" className="h-7 w-12 px-1.5" onClick={() => onSet(set, null)} title="Use the main picture">
+                  Main
+                </Button>
+              ) : (
+                <Button size="sm" variant="ghost" className="h-7 w-12 px-1.5" onClick={() => onSet(name, "")} title="No picture on this division's tags">
+                  None
+                </Button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </details>
   );
 }

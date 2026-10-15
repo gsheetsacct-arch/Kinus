@@ -257,6 +257,8 @@ const layerSchema = z.discriminatedUnion("type", [
     type: z.literal("image"),
     // a picture uploaded for templates (uploadTemplateImage): never a path outside that
     path: z.string().max(200).regex(/^pictures\/[\w.-]+$/, "That picture isn't one of the uploaded ones."),
+    // another picture per division (by name); "" = none for that division
+    byDivision: z.record(z.string().trim().min(1).max(100), z.union([z.literal(""), z.string().max(200).regex(/^pictures\/[\w.-]+$/, "That picture isn't one of the uploaded ones.")])).optional(),
     x: num(-50, 500),
     y: num(-50, 500),
     w: num(1, 500),

@@ -23,6 +23,8 @@ export type LabelPreset = {
   widthMm: number;
   heightMm: number;
   sheet: { paper: SheetLayout["paper"]; cols: number; rows: number; leftMm: number; topMm: number; pitchXMm: number; pitchYMm: number } | null;
+  /** Round labels: the tag is the circle inside its square (the editor and the print show it round). */
+  shape?: "round";
 };
 
 export const PRESET_GROUPS: Record<LabelPreset["group"], string> = {
@@ -101,6 +103,8 @@ export const LABEL_PRESETS: LabelPreset[] = [
   letter("6873", [], "Labels 2″ × 3¾″, 8 per sheet", "medium", 3.75, 2, 2, 4, 0.375, 1.125, 4, 2.25),
   letter("6490", ["6501", "6861", "8096"], "Labels 2″ × 2-11⁄16″, 15 per sheet", "medium", 2.6875, 2, 3, 5, 0.125, 0.5, 2.78125, 2),
   letter("3274.1", ["3111"], "Square labels 2½″ × 2½″, 9 per sheet", "medium", 2.5, 2.5, 3, 3, 0.3125, 1.25, 2.6875, 3),
+  // 1½″ circles, 4 across and 5 down: ¾″ top and bottom, ½″ sides, 2″ from one to the next
+  { ...letter("8293", ["94506"], "Round labels 1½″, 20 per sheet", "small", 1.5, 1.5, 4, 5, 0.5, 0.75, 2, 2), shape: "round" },
 
   // ---- Large labels and half sheets (US Letter)
   letter("5164", ["8164", "5264", "5514", "5524", "6464", "6499", "8254", "8464"], "Shipping labels 3⅓″ × 4″, 6 per sheet", "large", 4, 3.3333, 2, 3, 0.15625, 0.5, 4.1875, 3.3333),
@@ -162,6 +166,11 @@ export const presetById = (id: string | undefined | null) => LABEL_PRESETS.find(
 /** "3 across, 10 down on Letter" / "One label at a time, on a label printer". */
 export function presetSummary(p: LabelPreset): string {
   return p.sheet ? `${p.sheet.cols} across, ${p.sheet.rows} down on ${p.sheet.paper === "a4" ? "A4" : "Letter"} paper` : "One label at a time, on a label printer";
+}
+
+/** Whether a template is for round labels (its sheet is a round preset). */
+export function isRoundLabel(w: number, h: number, sheet: SheetLayout | null): boolean {
+  return currentPreset(w, h, sheet)?.shape === "round";
 }
 
 /** Which preset a template is set up for: the one saved with its sheet, or a label-printer size that matches. */

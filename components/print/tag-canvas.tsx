@@ -3,7 +3,7 @@ import * as React from "react";
 import { fill } from "@/lib/print/merge";
 import { fitText } from "@/lib/print/fit";
 import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
-import type { Layer } from "@/lib/print/types";
+import { DIVISION_VALUE, pictureFor, type Layer } from "@/lib/print/types";
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CodeImage, useCode } from "./code-image";
@@ -45,9 +45,12 @@ export function TagCanvas({
   onChange,
   onDelete,
   onFit,
+  round: roundLabel,
 }: {
   width: number;
   height: number;
+  /** A round label: the tag shows as its circle, with the cut line marked. */
+  round?: boolean;
   layers: Layer[];
   values: Record<string, string>;
   background: string | null;
@@ -368,7 +371,7 @@ export function TagCanvas({
       <div
         ref={tag}
         className="relative mx-auto touch-none select-none bg-white shadow-[0_1px_6px_rgba(0,0,0,.18)] [font-family:'Kinus_Sans','Noto_Sans','Noto_Sans_Hebrew',Arial,sans-serif]"
-        style={{ width: width * scale, height: height * scale }}
+        style={{ width: width * scale, height: height * scale, borderRadius: roundLabel ? "50%" : undefined }}
         onPointerDown={(e) => startBand(e, null)}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
@@ -379,9 +382,11 @@ export function TagCanvas({
           <img
             src={background}
             alt=""
-            className="pointer-events-none absolute inset-0 size-full object-cover"
+            className={cn("pointer-events-none absolute inset-0 size-full object-cover", roundLabel && "rounded-full")}
           />
         )}
+        {/* where a round label is cut: anything outside the circle doesn't print */}
+        {roundLabel && <div aria-hidden className="pointer-events-none absolute inset-0 z-20 rounded-full border border-dashed border-slate-400" />}
         {layers.map((l) =>
           l.hidden ? null : (
             <Part
@@ -534,17 +539,17 @@ function Part({
             <EmptyCode what="QR code" />
           ))}
         {l.type === "image" &&
-          (images[l.path] ? (
+          (images[pictureFor(l, values[DIVISION_VALUE])] ? (
             <div
               className="size-full bg-center bg-no-repeat"
               style={{
-                backgroundImage: `url("${images[l.path]}")`,
+                backgroundImage: `url("${images[pictureFor(l, values[DIVISION_VALUE])]}")`,
                 backgroundSize: l.fit === "cover" ? "cover" : "contain",
               }}
             />
           ) : (
             <div className="flex size-full items-center justify-center bg-slate-100 text-[10px] text-slate-500">
-              Picture
+              {pictureFor(l, values[DIVISION_VALUE]) ? "Picture" : "No picture for this division"}
             </div>
           ))}
       </div>

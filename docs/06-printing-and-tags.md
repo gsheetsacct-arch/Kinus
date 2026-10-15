@@ -181,6 +181,9 @@ A canvas of the tag at real proportions (Print → Templates):
   (`lib/print/presets.ts`): Avery US Letter sheets (5160, 5161, 5162, 5163, 5164,
   5167, 5168, 5366, 5395, 5390, 5392, 5371…), Avery A4 sheets (L7160, L7163,
   L7651…), and label-printer rolls (Zebra/Rollo 4×6 and smaller, Dymo, Brother).
+  Round labels (Avery 8293 / 94506, 1½″, 20 per sheet) are marked `shape: "round"`: the
+  editor shows the circle with its cut line dashed, the sheet drawing shows circles, and
+  the print clips each tag to its circle (`isRoundLabel`).
   Search by any number on the box (8160 finds 5160). Picking one sets the label size
   and sheet layout and scales the design to fit. "Print a test sheet" fills a sheet
   with outlines to hold against the labels; "Move right/down" corrects a printer
@@ -197,6 +200,12 @@ A canvas of the tag at real proportions (Print → Templates):
   (`uploadTemplateImage`, storage `templates/pictures/…`) and places it at its own
   shape; "Whole picture" or "Fill the box"; "Another picture" swaps it. In print each
   picture is in the page once (`renderDocument(…, { images })`, `imageDataUrls`).
+  **A different picture per division**: under a picture part, each division of this
+  session can have its own picture, the main one, or none (`byDivision`, by division
+  name so it carries over to next session's divisions; "" = none). The merge values carry
+  the camper's division name (`__division`) and `pictureFor` picks the picture; tapping a
+  division shows the tag as its campers get it. A template with per-division pictures
+  counts a move to another division as a changed label.
 - Colour blocks can be **outline only** or have a **border**; new colour blocks go to the
   back (they're backgrounds and strips). Selecting a part keeps it in its place in the
   stack: its outline and handles are drawn on top, so a full-tag block doesn't cover the

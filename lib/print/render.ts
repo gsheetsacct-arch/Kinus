@@ -2,8 +2,9 @@ import { code128Svg, qrSvg } from "./barcode";
 import { embeddedFontCss } from "./fonts";
 import { FONTS, fontStack, lineHeightOf } from "./font-families";
 import { fill } from "./merge";
-import { sheetPlacement, type Layer, type PrintItem, type SheetLayout, type TemplateSpec } from "./types";
+import { DIVISION_VALUE, pictureFor, sheetPlacement, type Layer, type PrintItem, type SheetLayout, type TemplateSpec } from "./types";
 import { FLOOR_PT, minPt, PX_PER_PT } from "./render-constants";
+import { isRoundLabel } from "./presets";
 
 /** A CSS class for a stored picture (the same path always gets the same class). */
 export function imageClass(path: string): string {
@@ -47,9 +48,12 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
       const label = l.showText !== false ? `<div class="bc-text">${esc(text)}</div>` : "";
       return `<div class="l bc" style="${pos}"><div class="bars">${svg}</div>${label}</div>`;
     }
-    case "image":
+    case "image": {
       // the picture itself is in the page once (CSS class per picture); see renderDocument
-      return `<div class="l im ${imageClass(l.path)}" style="${pos}background-size:${l.fit === "cover" ? "cover" : "contain"}"></div>`;
+      const path = pictureFor(l, values[DIVISION_VALUE]);
+      if (!path) return "";
+      return `<div class="l im ${imageClass(path)}" style="${pos}background-size:${l.fit === "cover" ? "cover" : "contain"}"></div>`;
+    }
     case "qr": {
       const svg = qrSvg(fill(l.text, get)).replace("<svg ", '<svg preserveAspectRatio="xMidYMid meet" ');
       return `<div class="l qr" style="${pos}">${svg}</div>`;
@@ -139,7 +143,7 @@ ${embeddedFontCss(t.layers.flatMap((l) => (l.type === "text" && l.font && !l.hid
 ${pageCss}
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}
 body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.tag{position:relative;overflow:hidden;background:#fff${opts.outlines ? ";outline:0.2mm dashed #cbd5e1" : ""}}
+.tag{position:relative;overflow:hidden;background:#fff${opts.outlines ? ";outline:0.2mm dashed #cbd5e1" : ""}}${isRoundLabel(t.page_width_mm, t.page_height_mm, t.sheet_layout) ? ".tag{border-radius:50%}" : ""}
 .bg{position:absolute;inset:0;background-size:cover;background-position:center}${opts.background ? `.bg{background-image:url("${opts.background.replace(/"/g, "%22")}")}` : ""}
 .im{background-repeat:no-repeat;background-position:center}${Object.entries(opts.images ?? {})
     .map(([path, url]) => `.${imageClass(path)}{background-image:url("${url.replace(/"/g, "%22")}")}`)
