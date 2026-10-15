@@ -38,10 +38,15 @@ const tokenize = (name: string) => name.normalize("NFC").split(/[\s\-_/.,:'"`״�
 function tokenValue(t: string): number | null {
   const v = NAME_VALUE.get(t.toLowerCase());
   if (v !== undefined) return v;
-  // Hebrew script: "י״א" splits into "י" and "א"; "יא" (no gershayim) is short enough to be a number
-  if (t.length <= 3 && [...t].every((c) => HEB_VALUE[c] !== undefined)) return [...t].reduce((s, c) => s + HEB_VALUE[c], 0);
+  // Hebrew script: "י״א" splits into "י" and "א"; "יא" (no gershayim) is short enough to be a
+  // number. Numerals go from the biggest letter down (יא, קטו), so a word like "בית" isn't one.
+  const vals = [...t].map((c) => HEB_VALUE[c]);
+  if (t.length <= 3 && vals.every((x) => x !== undefined) && vals.every((x, i) => i === 0 || x <= vals[i - 1])) return vals.reduce((s, x) => s + x, 0);
   return null;
 }
+
+/** One word's value as a Hebrew letter ("Yud" → 10, "יא" → 11), or null. */
+export const hebrewNumberToken = (t: string) => tokenValue(t.normalize("NFC"));
 
 /** The number a name spells in Hebrew letters ("Yud Beis" → 12), or null. */
 export function hebrewLetterNumber(name: string): number | null {

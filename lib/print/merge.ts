@@ -1,5 +1,6 @@
 import { getFieldValue, type CamperLike } from "@/lib/fields";
 import type { MergeField, Transform, ValueMap } from "./types";
+import { convertNumber } from "@/lib/hebrew-number";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
@@ -54,6 +55,8 @@ export function applyTransforms(value: string, transforms: Transform[], maps: Ma
       } catch {
         // an invalid pattern leaves the value as it is
       }
+    } else if (t.type === "hebrew_number") {
+      v = convertNumber(v, t.to, t.keep_words);
     } else if (t.type === "case") {
       v = t.mode === "upper" ? v.toUpperCase() : t.mode === "lower" ? v.toLowerCase() : v.replace(/\S+/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase());
     }

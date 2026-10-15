@@ -491,6 +491,7 @@ const transformSchema: z.ZodType<Transform> = z.discriminatedUnion("type", [
   z.object({ type: z.literal("value_map"), map_id: z.guid(), fallback: z.enum(["original", "blank"]).optional() }),
   z.object({ type: z.literal("replace"), pattern: z.string().max(200), replacement: z.string().max(200), flags: z.string().max(5).optional() }),
   z.object({ type: z.literal("case"), mode: z.enum(["upper", "lower", "title"]) }),
+  z.object({ type: z.literal("hebrew_number"), to: z.enum(["number", "hebrew", "hebrew_marks"]), keep_words: z.boolean().optional() }),
 ]);
 const fieldSchema = z.object({
   id: z.guid().optional(),

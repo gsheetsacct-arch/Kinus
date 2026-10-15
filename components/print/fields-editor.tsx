@@ -26,6 +26,7 @@ const unescapeRe = (s: string) => s.replace(/\\([.*+?^${}()|[\]\\])/g, "$1");
 function describeTransform(t: Transform, maps: ValueMap[]): string {
   if (t.type === "value_map") return `convert with “${maps.find((m) => m.id === t.map_id)?.name ?? "a deleted table"}”`;
   if (t.type === "case") return t.mode === "upper" ? "CAPITALS" : t.mode === "lower" ? "lower case" : "Title Case";
+  if (t.type === "hebrew_number") return `${t.keep_words ? "keep the words, " : ""}${t.to === "number" ? "write the number in digits: Yud Alef → 11" : t.to === "hebrew" ? "write the number in Hebrew letters: 11 → יא" : "write the number in Hebrew letters with marks: 11 → י״א"}`;
   return isPlain(t) ? `replace “${unescapeRe(t.pattern)}” with “${t.replacement}”` : "reshape it (an advanced pattern; open to see it)";
 }
 
@@ -270,6 +271,22 @@ function FieldDialog({
                 {t.type === "replace" && (
                   <ReplaceEditor t={t} onChange={(n) => setT(i, n)} />
                 )}
+                {t.type === "hebrew_number" && (
+                  <>
+                    <label className="min-w-48 flex-1 space-y-1">
+                      <span className="block text-xs text-muted-foreground">Turn the number into</span>
+                      <Select value={t.to} onChange={(e) => setT(i, { ...t, to: e.target.value as "number" })} className="h-9">
+                        <option value="number">Digits: Yud Alef → 11</option>
+                        <option value="hebrew">Hebrew letters: 11 → יא</option>
+                        <option value="hebrew_marks">Hebrew letters with marks: 11 → י״א</option>
+                      </Select>
+                    </label>
+                    <label className="flex h-9 items-center gap-2 text-sm">
+                      <input type="checkbox" className="size-4" checked={Boolean(t.keep_words)} onChange={(e) => setT(i, { ...t, keep_words: e.target.checked || undefined })} />
+                      Keep the words around it (Bunk Yud Alef → Bunk 11)
+                    </label>
+                  </>
+                )}
                 {t.type === "case" && (
                   <label className="min-w-40 flex-1 space-y-1">
                     <span className="block text-xs text-muted-foreground">Letters</span>
@@ -294,6 +311,9 @@ function FieldDialog({
               </Button>
               <Button size="sm" variant="outline" onClick={() => setF({ ...f, transforms: [...f.transforms, { type: "case", mode: "upper" }] })}>
                 Change capitals
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setF({ ...f, transforms: [...f.transforms, { type: "hebrew_number", to: "number" }] })}>
+                Hebrew letters / numbers
               </Button>
             </div>
           </div>
