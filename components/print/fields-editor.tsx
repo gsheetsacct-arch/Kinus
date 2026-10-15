@@ -17,7 +17,8 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 type FieldRow = { id: string; key: string; label: string; source_field: string; transforms: Transform[]; enabled: boolean };
-type Source = { key: string; label: string };
+/** A detail a field can start from; "export" ones are columns of the registration export. */
+type Source = { key: string; label: string; group?: "export" };
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const isPlain = (t: Extract<Transform, { type: "replace" }>) => t.flags?.includes("g") && !/[.*+?^${}()|[\]\\]/.test(t.pattern.replace(/\\[.*+?^${}()|[\]\\]/g, ""));
@@ -227,11 +228,27 @@ function FieldDialog({
                 }
               }}
             >
-              {catalog.map((c) => (
-                <option key={c.key} value={c.key}>
-                  {c.label}
-                </option>
-              ))}
+              <optgroup label="Camper details">
+                {catalog
+                  .filter((c) => c.group !== "export")
+                  .map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {c.label}
+                    </option>
+                  ))}
+              </optgroup>
+              {catalog.some((c) => c.group === "export") && (
+                <optgroup label="Columns of the registration export">
+                  {catalog
+                    .filter((c) => c.group === "export")
+                    .sort((a, b) => a.label.localeCompare(b.label))
+                    .map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.label}
+                      </option>
+                    ))}
+                </optgroup>
+              )}
               <option value="__custom">Several details combined…</option>
             </Select>
           </Field>

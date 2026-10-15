@@ -19,6 +19,12 @@ const EXTRA = "__extra";
 type J = NonNullable<Json>;
 
 const MAX_BYTES = 15 * 1024 * 1024;
+/**
+ * Part of a file's fingerprint: when Kinus reads files differently (2: repeated column names
+ * keep their first filled-in copy), a file imported before may be imported once more, to fix
+ * what the older reading got wrong.
+ */
+const READER_VERSION = "2";
 
 export async function uploadImport(fd: FormData): Promise<ActionResult> {
   const me = await requireAdmin();
@@ -34,7 +40,7 @@ export async function uploadImport(fd: FormData): Promise<ActionResult> {
     // "???" where letters were lost (the export was opened and saved again in Excel or WPS):
     // shown on the next step so the person can decide, instead of refusing the file
     const lost = findLostText(parsed.headers, parsed.rows);
-    const hash = createHash("sha256").update(bytes).digest("hex");
+    const hash = createHash("sha256").update(`kinus-reader-${READER_VERSION}:`).update(bytes).digest("hex");
     const admin = createAdminClient();
     const dup = await admin.from("imports").select("id, applied_at, status").eq("session_id", session.id).eq("file_hash", hash).eq("status", "applied").maybeSingle();
     if (dup.data) return fail(`This exact file was already imported on ${formatDateTime(dup.data.applied_at)}. Nothing has changed.`);
@@ -53,7 +59,7 @@ export async function uploadImport(fd: FormData): Promise<ActionResult> {
         file_hash: hash,
         status: "uploaded",
         uploaded_by: me.id,
-        options: { headers: parsed.headers, encoding: parsed.encoding, skippedEmptyRows: parsed.skippedEmptyRows, lostTextCells: lost.length, lostTextSample: lost.slice(0, 5) as unknown as J },
+        options: { headers: parsed.headers, repeatedColumns: parsed.repeatedColumns ?? [], encoding: parsed.encoding, skippedEmptyRows: parsed.skippedEmptyRows, lostTextCells: lost.length, lostTextSample: lost.slice(0, 5) as unknown as J },
       })
       .select("id")
       .single();
@@ -74,7 +80,7 @@ export async function uploadImport(fd: FormData): Promise<ActionResult> {
   }
 }
 
-async function loadExisting(sessionId: string): Promise<{ existing: ExistingCamper[]; known: { name: string; bunks: string[] }[] }> {
+async function loadExisting(sessionId: string): Promise<{ existing: ExistingCamper[]; known: { name: string; bunks: string[] }[]; sourceData: Map<string, Record<string, string>> }> {
   const admin = createAdminClient();
   const [campers, { data: divisions }, { data: bunks }, contacts] = await Promise.all([
     // archived campers too: their registration id is taken, so the file must match them, not add them again
@@ -122,7 +128,30 @@ async function loadExisting(sessionId: string): Promise<{ existing: ExistingCamp
     staff_edited: c.staff_edited ?? [],
   }));
   const known = (divisions ?? []).map((d) => ({ name: d.name, bunks: (bunks ?? []).filter((b) => b.division_id === d.id).map((b) => b.name) }));
-  return { existing, known };
+  const sourceData = new Map(campers.map((c) => [c.id, (c.source_data ?? {}) as Record<string, string>]));
+  return { existing, known, sourceData };
+}
+
+/**
+ * How many matched campers get new or different export columns, and which columns are new to
+ * them (a column added to the export: family.city…).
+ */
+function columnRefresh(rows: { matchedCamperId: string | null; action: string; parsed: { source_data: Record<string, string> } }[], before: Map<string, Record<string, string>>) {
+  let campers = 0;
+  const added = new Map<string, number>();
+  for (const r of rows) {
+    if (!r.matchedCamperId || (r.action !== "update" && r.action !== "unchanged")) continue;
+    const old = before.get(r.matchedCamperId) ?? {};
+    let differs = false;
+    for (const [k, v] of Object.entries(r.parsed.source_data ?? {})) {
+      if (!(k in old)) {
+        if (v !== "") added.set(k, (added.get(k) ?? 0) + 1);
+        differs = true;
+      } else if ((old[k] ?? "") !== v) differs = true;
+    }
+    if (differs) campers++;
+  }
+  return { campers, added: [...added.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30).map(([column, count]) => ({ column, count })) };
 }
 
 const previewSchema = z.object({
@@ -185,9 +214,12 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
 
     const rawRows = await fetchAll((from, to) => admin.from("import_rows").select("id, row_number, raw").eq("import_id", imp.id).order("row_number").range(from, to));
     const parsedRows = rawRows.map((r) => ({ id: r.id, rowNumber: r.row_number, parsed: applyMapping(r.raw as Record<string, string>, columnMap, mappingOptions) }));
-    const { existing, known } = await loadExisting(imp.session_id);
+    const { existing, known, sourceData } = await loadExisting(imp.session_id);
     resolveMultiValues(parsedRows, known);
     const result = matchAndDiff(parsedRows, existing, known, { takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on" });
+    // the export's other columns (labels, extra fields): applying refreshes them for every camper
+    // in the file, so the preview says so, rather than "unchanged"
+    const columns = columnRefresh(result.rows, sourceData);
 
     const rawByRow = new Map(rawRows.map((r) => [r.row_number, r]));
     for (let i = 0; i < result.rows.length; i += 200) {
@@ -219,7 +251,7 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
       .update({
         status: "previewed",
         options: { ...(imp.options as object), columnMap, mappingOptions, takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on", divisionsInFile: result.summary.divisionsInFile, partialWarning },
-        summary: { ...result.summary, missing: result.summary.missing.length, missingList: result.summary.missing } as unknown as J,
+        summary: { ...result.summary, missing: result.summary.missing.length, missingList: result.summary.missing, columns } as unknown as J,
       })
       .eq("id", imp.id);
     if (e4) throw e4;
@@ -275,7 +307,7 @@ export async function applyImportAction(fd: FormData): Promise<ActionResult> {
   const id = String(fd.get("id"));
   const supabase = await createClient();
   const active = await getActiveSession();
-  const { data: imp } = await supabase.from("imports").select("session_id").eq("id", id).maybeSingle();
+  const { data: imp } = await supabase.from("imports").select("session_id, summary").eq("id", id).maybeSingle();
   if (!imp || !active || imp.session_id !== active.id) return fail("This draft belongs to another session. Start a new import in the active session.");
   const before = await bunkOrders(supabase, imp.session_id);
   const divisionsBefore = await divisionOrder(supabase, imp.session_id);
@@ -287,7 +319,11 @@ export async function applyImportAction(fd: FormData): Promise<ActionResult> {
   await slotNewDivisions(supabase, imp.session_id, divisionsBefore).catch(() => undefined);
   const r = data as { added: number; updated: number; missing: number };
   revalidatePath("/", "layout");
-  return ok(`Done: ${r.added} added, ${r.updated} updated, ${r.missing} marked “not in the latest export”.`, `/admin/imports/${id}`);
+  const columns = ((imp.summary ?? {}) as { columns?: { campers: number } }).columns?.campers ?? 0;
+  return ok(
+    `Done: ${r.added} added, ${r.updated} updated, ${r.missing} marked “not in the latest export”${columns ? `; the export's columns refreshed for ${columns}` : ""}.`,
+    `/admin/imports/${id}`,
+  );
 }
 
 /** Undoes the latest applied import of the session: back to how things were before it. */

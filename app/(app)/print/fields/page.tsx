@@ -33,8 +33,15 @@ export default async function FieldsPage() {
   ]);
   const catalog = [...FIELDS.filter((f) => f.kind !== "bool" && f.key !== "status").map((f) => ({ key: f.key, label: f.label })), { key: "division", label: "Division" }, { key: "bunk", label: "Bunk" }, { key: "division_color", label: "Division colour" }];
   // extra fields from the registration export can feed a label field too ("Sleeping at the Kinus")
-  const extras = (await loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: `${f.label} (from the export)` }));
-  const unique = [...new Map([...catalog, ...extras].map((c) => [c.key, c])).values()];
+  const extras = (await loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: `${f.label} (from the export)`, group: "export" as const }));
+  // and every column of the latest export, so a column added to it (family.city) can be picked, not typed
+  const { data: latest } = session
+    ? await admin.from("imports").select("options").eq("session_id", session.id).eq("status", "applied").order("applied_at", { ascending: false }).limit(1).maybeSingle()
+    : { data: null };
+  const headers = (((latest?.options ?? {}) as { headers?: string[] }).headers ?? []).filter((h) => typeof h === "string" && h.trim());
+  const columns = headers.map((h) => ({ key: `source.${h}`, label: `${h} (from the export)`, group: "export" as const }));
+  // (an extra field's own name wins over the bare column name)
+  const unique = [...new Map([...catalog, ...columns, ...extras].map((c) => [c.key, c])).values()];
   let sample: Record<string, string> = {};
   let sampleName = "";
   if (sampleRow.data) {
