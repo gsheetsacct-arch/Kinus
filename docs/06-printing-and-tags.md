@@ -27,6 +27,7 @@ template built against field names like `TSHIRT` keep working.
 | **Regex** | `division.name`: `^Division (\d+)$` → `$1`, so "Division 2" → "2"; "French Division" → unchanged | passthrough |
 | **Template** | `{{first_name}} {{last_name}}` or `{{bunk.name}}` | — |
 | **Case / trim / truncate** | upper, title, first 12 chars | — |
+| **Hebrew letters / numbers** (`hebrew_number`) | `bunk`: "Bunk Yud Alef", "יא", "י״א" or "Bunk 11" → digits **11**, Hebrew letters **יא**, or with marks **י״א**; 15 → טו, 16 → טז; any spelling Alef-Beis sorting knows (Ashkenazi, Sephardi, Israeli). *Keep the words*: "Bunk Yud Alef" → "Bunk 11". Ready-made fields `{{BUNK_NUMBER}}` and `{{BUNK_LETTERS}}` (migration 0030) | text without a number is left as it is |
 | **Transliterate** (later) | Hebrew → Latin for an English-only font | — |
 
 Admin UI (`/print/merge-fields`):

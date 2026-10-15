@@ -1,7 +1,9 @@
 export type Transform =
   | { type: "value_map"; map_id: string; fallback?: "original" | "blank" }
   | { type: "replace"; pattern: string; replacement: string; flags?: string }
-  | { type: "case"; mode: "upper" | "lower" | "title" };
+  | { type: "case"; mode: "upper" | "lower" | "title" }
+  /** "Bunk Yud Alef" / "יא" / "11" → a number, Hebrew letters (יא) or Hebrew with marks (י״א); keep_words keeps "Bunk". */
+  | { type: "hebrew_number"; to: "number" | "hebrew" | "hebrew_marks"; keep_words?: boolean };
 
 /** enabled: on the merge list (offered in the editor, in the data for Publisher). Off-list fields still print where used. */
 export type MergeField = { key: string; label: string; source_field: string; transforms: Transform[]; enabled?: boolean };
