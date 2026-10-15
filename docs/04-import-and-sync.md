@@ -231,6 +231,12 @@ changes in its history tab, attributed to the import.
   migration 0032 merges columns stored under two spellings.)
   The preview names the repeated columns and says to remove the extra copies from the export's
   column list in the registration system.
+- **One name per column shown**: the column step refuses two extra fields with the same name
+  ("ppa.city and family.city would both show as “City”"); show one, or name them apart.
+  Screens also show one of each column (`oneOfEachColumn`), whatever older imports saved.
+- **Address from the family record** (migration 0033, where imports have `family.*`): label
+  fields, list layouts and extra fields read `family.city/state/country`; the form's
+  `ppa.city/state/country` are left out of the column choices (`settings.hidden_columns`).
 - A file already imported may be imported once more after Kinus reads files differently (the
   file's fingerprint includes the reader version), to fix what an older reading got wrong.
 - On labels: Print → Fields & conversions → "Starts from" lists every column of the latest

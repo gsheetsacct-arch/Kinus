@@ -49,3 +49,14 @@ describe("export columns on labels", () => {
     expect(get("family.country")).toBe("");
   });
 });
+
+describe("one of each column, for showing", async () => {
+  const { oneOfEachColumn, parseExtraFields } = await import("../extra-fields");
+  it("drops (2) copies and second spellings, keeps a lone (n) column", () => {
+    const list = ["family.city", "family.state", "family.city (2)", "Family.State", "family.state (2)", "ppa.size (3)"];
+    expect(oneOfEachColumn(list, (c) => c)).toEqual(["family.city", "family.state", "ppa.size (3)"]);
+  });
+  it("applies to the extra fields chosen", () => {
+    expect(parseExtraFields([{ column: "family.city", label: "City" }, { column: "family.city (2)", label: "City (2)" }]).map((f) => f.label)).toEqual(["City"]);
+  });
+});

@@ -30,7 +30,7 @@ begin
     (select source_data::text from campers where id = 'c0310000-0000-0000-0000-000000000001');
   assert (select options->'headers' from imports where id = 'c0310000-0000-0000-0000-000000000002')
     = '["students.id", "family.city", "family.state"]'::jsonb;
-  assert (select value from settings where key = 'extra_fields') = '[{"column": "family.city", "label": "City"}]'::jsonb;
+  -- (0031's extra fields: checked after 0033 below, which seeds them again)
 end $$;
 
 -- 0032: one key per column whatever the spelling, the filled-in copy kept.
@@ -45,4 +45,16 @@ begin
   -- 0031's camper is untouched (no two spellings)
   assert (select source_data from campers where id = 'c0310000-0000-0000-0000-000000000001')
     = '{"family.city": "Brooklyn", "family.state": "NY", "ppa.size (3)": "only copy"}'::jsonb;
+end $$;
+
+-- 0033: city, state and country from the family record only.
+do $$
+begin
+  assert (select source_field from merge_fields where key = 'FROM_TEST')
+    = '{{source.family.city}}, {{source.family.state}} {{source.family.country}} {{source.ppa.city_note}}',
+    (select source_field from merge_fields where key = 'FROM_TEST');
+  assert (select value from settings where key = 'extra_fields')
+    = '[{"column": "family.city", "label": "City"}, {"column": "family.state", "label": "State"}, {"column": "ppa.bus_route", "label": "Bus"}]'::jsonb,
+    (select value::text from settings where key = 'extra_fields');
+  assert (select value from settings where key = 'hidden_columns') @> '["ppa.city", "ppa.state", "ppa.country"]'::jsonb;
 end $$;
