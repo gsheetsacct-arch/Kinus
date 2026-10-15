@@ -1,3 +1,4 @@
+import * as React from "react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { CheckCircle2, Undo2 } from "lucide-react";
@@ -85,8 +86,16 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
     supabase.from("import_rows").select("id, row_number, action, matched_camper_id, match_method, parsed, changes, warnings").eq("import_id", id).order("row_number").range(from, to),
   )) as unknown as Row[];
   const by = (a: string) => rows.filter((r) => r.action === a);
-  const summary = (imp.summary ?? {}) as { missingList?: Candidate[]; newDivisions?: string[]; newBunks?: string[]; revertedAt?: string };
-  const options = (imp.options ?? {}) as { partialWarning?: string[]; divisionsInFile?: string[]; lostTextOverride?: boolean; lostTextCells?: number };
+  const summary = (imp.summary ?? {}) as {
+    missingList?: Candidate[];
+    newDivisions?: string[];
+    newBunks?: string[];
+    revertedAt?: string;
+    /** Export columns that change: how many campers, and the columns new to them. */
+    columns?: { campers: number; added: { column: string; count: number }[] };
+  };
+  const options = (imp.options ?? {}) as { partialWarning?: string[]; divisionsInFile?: string[]; lostTextOverride?: boolean; lostTextCells?: number; repeatedColumns?: string[] };
+  const columnsChange = summary.columns?.campers ?? 0;
   const missing = summary.missingList ?? [];
   // where the "not in file" campers are now: archiving someone who's here should be a conscious choice
   const { data: missingNow } = missing.length
@@ -159,14 +168,54 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
 
       {previewed && (
         <p className="text-base">
-          Applying this file will <strong>add {n(by("add").length, "camper", "campers")}</strong>, <strong>update {by("update").length}</strong>
-          {missing.length > 0 && (
-            <>
-              , and mark <strong>{missing.length}</strong> as no longer in the export
-            </>
-          )}
-          . {by("unchanged").length > 0 && `${n(by("unchanged").length, "camper is", "campers are")} unchanged.`}
+          Applying this file will{" "}
+          {[
+            <strong key="a">add {n(by("add").length, "camper", "campers")}</strong>,
+            <strong key="u">update {by("update").length}</strong>,
+            missing.length > 0 ? (
+              <span key="m">
+                mark <strong>{missing.length}</strong> as no longer in the export
+              </span>
+            ) : null,
+            columnsChange > 0 ? (
+              <span key="c">
+                refresh the export&apos;s other columns for <strong>{n(columnsChange, "camper", "campers")}</strong>
+              </span>
+            ) : null,
+          ]
+            .filter(Boolean)
+            .map((part, i, all) => (
+              <React.Fragment key={i}>
+                {i > 0 && (i === all.length - 1 ? ", and " : ", ")}
+                {part}
+              </React.Fragment>
+            ))}
+          . {by("unchanged").length > 0 && `${n(by("unchanged").length, "camper has", "campers have")} no changes to their details${columnsChange ? " (their columns are refreshed too)" : ""}.`}
         </p>
+      )}
+      {(summary.columns?.added.length ?? 0) > 0 && (
+        <Callout title={`New columns in this export: ${summary.columns!.added.map((a) => a.column).slice(0, 6).join(", ")}${summary.columns!.added.length > 6 ? "…" : ""}`}>
+          {summary.columns!.added.map((a) => (
+            <span key={a.column} className="mr-3 inline-block font-mono text-xs">
+              {a.column} <span className="font-sans text-muted-foreground">({n(a.count, "camper", "campers")} with a value)</span>
+            </span>
+          ))}
+          <span className="mt-1 block text-muted-foreground">
+            {previewed ? "Applying saves them for every camper in the file." : "Saved for every camper in the file."} Put one on a label from Print → Fields &amp; conversions (“Starts from”), or show it on the camper page from the import&apos;s column step.
+          </span>
+        </Callout>
+      )}
+      {(options.repeatedColumns?.length ?? 0) > 0 && (
+        <Callout title="Some column names are in the file more than once">
+          {options.repeatedColumns!.map((c) => (
+            <span key={c} className="mr-3 inline-block font-mono text-xs">
+              {c}
+            </span>
+          ))}
+          <span className="mt-1 block text-muted-foreground">
+            Like a set of columns for each family. For each camper, Kinus uses the first one that&apos;s filled in; every copy is kept too, as “{options.repeatedColumns![0]} (2)” and so on.
+          </span>
+        </Callout>
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -444,7 +493,7 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
                 Discard
               </Button>
             </ActionForm>
-            <ActionForm action={applyImportAction} confirm="Apply this import now?" confirmDetail={`${n(by("add").length, "camper", "campers")} will be added and ${by("update").length} updated. You can undo it afterwards.`} confirmLabel="Apply">
+            <ActionForm action={applyImportAction} confirm="Apply this import now?" confirmDetail={`${n(by("add").length, "camper", "campers")} will be added and ${by("update").length} updated${columnsChange ? `; ${n(columnsChange, "camper gets", "campers get")} the export's columns refreshed` : ""}. You can undo it afterwards.`} confirmLabel="Apply">
               <input type="hidden" name="id" value={id} />
               <Button type="submit" disabled={conflicts.length > 0}>
                 <CheckCircle2 /> Apply import

@@ -14,12 +14,22 @@ const columnKey = (k: string) => k.trim().toLowerCase().replace(/#/g, ".");
  */
 export function sourceValues(c: CamperLike & { division_color?: string | null; source_data?: unknown }): (key: string) => string {
   let columns: Map<string, string> | null = null;
-  return (key) => {
-    if (key.startsWith("source.")) {
-      columns ??= new Map(Object.entries((c.source_data ?? {}) as Record<string, unknown>).map(([k, v]) => [columnKey(k), v === null || v === undefined ? "" : String(v).trim()]));
-      return columns.get(columnKey(key.slice(7))) ?? "";
+  const column = (name: string) => {
+    if (!columns) {
+      columns = new Map();
+      // "family#city" and "family.city" are one column: a filled-in copy wins over an empty one
+      for (const [k, raw] of Object.entries((c.source_data ?? {}) as Record<string, unknown>)) {
+        const v = raw === null || raw === undefined ? "" : String(raw).trim();
+        if (v || !columns.has(columnKey(k))) columns.set(columnKey(k), v);
+      }
     }
+    return columns.get(columnKey(name));
+  };
+  return (key) => {
+    if (key.startsWith("source.")) return column(key.slice(7)) ?? "";
     if (key === "division_color") return c.division_color ?? "#64748b";
+    // an export column written without "source." ({{family.city}}) still finds the column
+    if (key.includes(".") && !key.startsWith("contact.")) return column(key) ?? "";
     const v = getFieldValue(c, key);
     if (v === null || v === undefined) return "";
     if (typeof v === "boolean") return v ? "Yes" : "No";

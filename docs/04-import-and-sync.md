@@ -218,6 +218,22 @@ The import page becomes a permanent record: who, when, file, summary, and the fu
 per-row change list (exportable as CSV). Each camper's detail page shows the same
 changes in its history tab, attributed to the import.
 
+### Columns of the export (labels, extra fields)
+
+- **Every column is kept** with each camper (`source_data`), and applying a file refreshes them
+  for every camper in it, changed or not. The preview says so: "…and refresh the export's
+  other columns for 865 campers", and lists **new columns** with how many campers have a value.
+- **A column name used more than once** (exports repeat a block per family: `family.city`,
+  `family.state` … `family.city`, `family.state`): every copy is kept, as `family.city`,
+  `family.city (2)`…, and the plain name holds the **first copy that's filled in** for that
+  camper. (Before, the last copy won, empty or not: campers with one family lost their city.)
+  The preview names the repeated columns.
+- A file already imported may be imported once more after Kinus reads files differently (the
+  file's fingerprint includes the reader version), to fix what an older reading got wrong.
+- On labels: Print → Fields & conversions → "Starts from" lists every column of the latest
+  export; `{{source.family.city}}` and `{{family.city}}` both work. The template editor's
+  sample camper borrows a real camper's value for columns it doesn't have.
+
 ## 4.2 Edge cases
 
 | Case | Behaviour |

@@ -595,8 +595,26 @@ export type { Layer, SheetLayout };
 
 /** Every field filled from the made-up sample camper. */
 async function sampleValues(): Promise<Record<string, string>> {
-  const setup = await loadMergeSetup(createAdminClient());
-  return mergeValues(SAMPLE_CAMPER as never, setup.fields, setup.maps);
+  const admin = createAdminClient();
+  const setup = await loadMergeSetup(admin);
+  const values = mergeValues(SAMPLE_CAMPER as never, setup.fields, setup.maps);
+  // a field from an export column the made-up camper doesn't have (one added to the export
+  // since: family.city) shows a real camper's value, rather than looking like it doesn't work
+  const blank = setup.fields.filter((f) => !values[f.key] && f.source_field.includes("."));
+  const session = blank.length ? await getActiveSession() : null;
+  if (session) {
+    const { data } = await admin.from("campers").select("source_data").eq("session_id", session.id).is("archived_at", null).not("source_data", "is", null).limit(300);
+    for (const f of blank)
+      for (const row of data ?? []) {
+        const c = { ...SAMPLE_CAMPER, source_data: { ...SAMPLE_CAMPER.source_data, ...((row.source_data ?? {}) as Record<string, string>) } };
+        const v = mergeValues(c as never, [f], setup.maps)[f.key];
+        if (v) {
+          values[f.key] = v;
+          break;
+        }
+      }
+  }
+  return values;
 }
 
 /**
