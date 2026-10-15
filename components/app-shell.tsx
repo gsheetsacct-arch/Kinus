@@ -59,7 +59,7 @@ export function AppShell({
       <Suspense>
         <NavigationProgress />
       </Suspense>
-      <aside className="no-print sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-card md:flex">
+      <aside data-app-sidebar className="no-print sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-card md:flex">
         <div className="flex items-center gap-3 px-5 py-5">
           <Logo />
           <div className="min-w-0">
