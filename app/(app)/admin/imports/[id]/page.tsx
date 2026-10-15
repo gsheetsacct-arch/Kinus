@@ -213,7 +213,8 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
             </span>
           ))}
           <span className="mt-1 block text-muted-foreground">
-            Like a set of columns for each family. For each camper, Kinus uses the first one that&apos;s filled in; every copy is kept too, as “{options.repeatedColumns![0]} (2)” and so on.
+            The export lists these more than once (twice in its settings, or once per family). Kinus keeps one of each: for each camper, the first copy that&apos;s filled in. To stop
+            the repeats, remove the extra copies from the export&apos;s column list in the registration system.
           </span>
         </Callout>
       )}

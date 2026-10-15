@@ -7,7 +7,7 @@ export type ParsedFile = {
   encoding: string;
   sheetName: string;
   skippedEmptyRows: number;
-  /** Column names the file uses more than once (each copy is kept: "family.city (2)"). */
+  /** Column names the file uses more than once (combined into one column: the first filled-in copy). */
   repeatedColumns?: string[];
 };
 
@@ -30,15 +30,9 @@ export function parseFile(input: Uint8Array, fileName: string): ParsedFile {
   const grid = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "", raw: false, blankrows: false });
   if (grid.length === 0) return { headers: [], rows: [], encoding, sheetName, skippedEmptyRows: 0 };
   const headers = grid[0].map((h) => String(h ?? "").trim());
-  // A name used for more than one column (exports repeat a block per family: family.city …
-  // family.city): every copy is kept, as "family.city", "family.city (2)"…, and the plain name
-  // holds the first copy with something in it. Before, the last copy won, empty or not, so a
-  // camper with one family lost their city.
-  const names = headers.map((h, i) => {
-    if (!h) return "";
-    const before = headers.slice(0, i).filter((x) => x === h).length;
-    return before ? `${h} (${before + 1})` : h;
-  });
+  // A name used for more than one column (the export lists family.city twice, or once per
+  // family): the copies are one column, holding the first copy with something in it for each
+  // camper. (Once the last copy won, empty or not, so a camper with one family lost their city.)
   const repeated = [...new Set(headers.filter((h, i) => h && headers.indexOf(h) !== i))];
   const rows: Record<string, string>[] = [];
   let skipped = 0;
@@ -49,15 +43,10 @@ export function parseFile(input: Uint8Array, fileName: string): ParsedFile {
       continue;
     }
     const row: Record<string, string> = {};
-    names.forEach((n, i) => {
-      if (n !== "") row[n] = cells[i];
+    headers.forEach((h, i) => {
+      if (h !== "" && !row[h]) row[h] = cells[i];
     });
-    for (const h of repeated) {
-      if (row[h] !== "") continue;
-      const first = names.find((n, i) => headers[i] === h && row[n] !== "");
-      if (first) row[h] = row[first];
-    }
     rows.push(row);
   }
-  return { headers: names.filter((h) => h !== ""), rows, encoding, sheetName, skippedEmptyRows: skipped, repeatedColumns: repeated };
+  return { headers: [...new Set(headers.filter((h) => h !== ""))], rows, encoding, sheetName, skippedEmptyRows: skipped, repeatedColumns: repeated };
 }

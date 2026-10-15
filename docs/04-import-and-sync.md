@@ -223,11 +223,12 @@ changes in its history tab, attributed to the import.
 - **Every column is kept** with each camper (`source_data`), and applying a file refreshes them
   for every camper in it, changed or not. The preview says so: "…and refresh the export's
   other columns for 865 campers", and lists **new columns** with how many campers have a value.
-- **A column name used more than once** (exports repeat a block per family: `family.city`,
-  `family.state` … `family.city`, `family.state`): every copy is kept, as `family.city`,
-  `family.city (2)`…, and the plain name holds the **first copy that's filled in** for that
-  camper. (Before, the last copy won, empty or not: campers with one family lost their city.)
-  The preview names the repeated columns.
+- **A column name used more than once** (the export lists `family.city` twice, or once per
+  family): the copies are **one column**, holding the **first copy that's filled in** for each
+  camper. (Once the last copy won, empty or not, so campers with one family lost their city;
+  for a while the extra copies were kept as `family.city (2)`, which migration 0031 removed.)
+  The preview names the repeated columns and says to remove the extra copies from the export's
+  column list in the registration system.
 - A file already imported may be imported once more after Kinus reads files differently (the
   file's fingerprint includes the reader version), to fix what an older reading got wrong.
 - On labels: Print → Fields & conversions → "Starts from" lists every column of the latest
