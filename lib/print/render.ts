@@ -2,8 +2,9 @@ import { code128Svg, qrSvg } from "./barcode";
 import { embeddedFontCss } from "./fonts";
 import { FONTS, fontStack, lineHeightOf } from "./font-families";
 import { fill } from "./merge";
-import { sheetPlacement, type Layer, type PrintItem, type SheetLayout, type TemplateSpec } from "./types";
+import { DIVISION_VALUE, onBack, pictureFor, sheetPlacement, type Layer, type PrintItem, type SheetLayout, type TemplateSpec } from "./types";
 import { FLOOR_PT, minPt, PX_PER_PT } from "./render-constants";
+import { isRoundLabel } from "./presets";
 
 /** A CSS class for a stored picture (the same path always gets the same class). */
 export function imageClass(path: string): string {
@@ -47,9 +48,12 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
       const label = l.showText !== false ? `<div class="bc-text">${esc(text)}</div>` : "";
       return `<div class="l bc" style="${pos}"><div class="bars">${svg}</div>${label}</div>`;
     }
-    case "image":
+    case "image": {
       // the picture itself is in the page once (CSS class per picture); see renderDocument
-      return `<div class="l im ${imageClass(l.path)}" style="${pos}background-size:${l.fit === "cover" ? "cover" : "contain"}"></div>`;
+      const path = pictureFor(l, values[DIVISION_VALUE]);
+      if (!path) return "";
+      return `<div class="l im ${imageClass(path)}" style="${pos}background-size:${l.fit === "cover" ? "cover" : "contain"}"></div>`;
+    }
     case "qr": {
       const svg = qrSvg(fill(l.text, get)).replace("<svg ", '<svg preserveAspectRatio="xMidYMid meet" ');
       return `<div class="l qr" style="${pos}">${svg}</div>`;
@@ -59,8 +63,28 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
 
 // the background image is in the page once (CSS); each tag only refers to it, so a big image
 // doesn't make a 500-tag page hundreds of megabytes
-function tagHtml(t: TemplateSpec, values: Record<string, string>, background: string | null): string {
-  return `<div class="tag" style="width:${t.page_width_mm}mm;height:${t.page_height_mm}mm;">${background ? `<div class="bg"></div>` : ""}${t.layers.map((l) => (l.hidden ? "" : layerHtml(l, values))).join("")}</div>`;
+// (two-sided: the front's parts, or the back's; the background image is on the front)
+function tagHtml(t: TemplateSpec, values: Record<string, string>, background: string | null, side: "front" | "back" = "front"): string {
+  const parts = t.layers.filter((l) => !l.hidden && onBack(l) === (side === "back"));
+  return `<div class="tag${side === "back" ? " back" : ""}" style="width:${t.page_width_mm}mm;height:${t.page_height_mm}mm;">${background && side === "front" ? `<div class="bg"></div>` : ""}${parts.map((l) => layerHtml(l, values)).join("")}</div>`;
+}
+
+/**
+ * The tags of one sheet (in reading order, null = a used label) moved so that consecutive
+ * tags run down a column, `stack` rows at a time: with 2 copies each, A sits over A and B
+ * over B beside it. The same labels are filled (the sheet the office keeps track of stays
+ * right); only which tag goes on which label changes. stack 1: unchanged.
+ */
+export function stackColumns<T>(slots: (T | null)[], cols: number, stack: number): (T | null)[] {
+  if (stack <= 1 || cols <= 1) return slots;
+  const filled = slots.map((t, k) => (t === null ? -1 : k)).filter((k) => k >= 0);
+  const order = [...filled].sort((a, b) => {
+    const [ra, rb] = [Math.floor(a / cols), Math.floor(b / cols)];
+    return Math.floor(ra / stack) - Math.floor(rb / stack) || (a % cols) - (b % cols) || ra - rb;
+  });
+  const out = slots.slice();
+  order.forEach((k, j) => (out[k] = slots[filled[j]]));
+  return out;
 }
 
 /**
@@ -71,7 +95,7 @@ function tagHtml(t: TemplateSpec, values: Record<string, string>, background: st
 export function renderDocument(
   t: TemplateSpec,
   items: PrintItem[],
-  opts: { background?: string | null; outlines?: boolean; skip?: number; usedSlots?: number[]; images?: Record<string, string> } = {},
+  opts: { background?: string | null; outlines?: boolean; skip?: number; usedSlots?: number[]; images?: Record<string, string>; stack?: number } = {},
 ): string {
   const sheet = t.sheet_layout;
   const per = sheet && sheet.cols > 0 && sheet.rows > 0 ? sheet.cols * sheet.rows : 0;
@@ -79,9 +103,11 @@ export function renderDocument(
   // `usedSlots` names them (1-based, anywhere on the sheet); `skip` is "the first n".
   const used = new Set(per ? (opts.usedSlots ?? Array.from({ length: Math.max(0, Math.floor(opts.skip ?? 0)) }, (_, i) => i + 1)).filter((n) => n >= 1 && n <= per) : []);
   if (used.size >= per) used.clear();
-  const printed = items.flatMap((it) => Array.from({ length: Math.max(1, it.copies) }, () => tagHtml(t, it.values, opts.background ?? null)));
+  const back = t.back ?? null;
+  const front = (values: Record<string, string>) => tagHtml(t, values, opts.background ?? null);
+  const printed = items.flatMap((it) => Array.from({ length: Math.max(1, it.copies) }, () => it.values));
   // null: a label already used (marked on screen, never printed)
-  const tags: (string | null)[] = [];
+  const tags: (Record<string, string> | null)[] = [];
   if (used.size) {
     for (let slot = 1; slot <= per && printed.length; slot++) tags.push(used.has(slot) ? null : printed.shift()!);
     // later sheets are filled from the top
@@ -94,32 +120,49 @@ export function renderDocument(
     const [pw, ph] = PAPER[sheet.paper] ?? PAPER.letter;
     const per = sheet.cols * sheet.rows;
     const at = sheetPlacement(sheet, t.page_width_mm, t.page_height_mm, pw);
-    const dx = sheet.shiftXMm ?? 0;
-    const dy = sheet.shiftYMm ?? 0;
+    const [w, h] = [t.page_width_mm, t.page_height_mm];
+    const place = (html: string, x: number, y: number) => html.replace(/^<div class="(tag[^"]*)" style="/, `<div class="$1" style="left:${x.toFixed(2)}mm;top:${y.toFixed(2)}mm;`);
     // every label at its exact place on the sheet, as the label maker publishes it
     pageCss = `@page{size:${pw}mm ${ph}mm;margin:0}.sheet{position:relative;width:${pw}mm;height:${ph}mm;overflow:hidden;break-after:page}.sheet>.tag{position:absolute}`;
     const pages: string[] = [];
+    // copies of one camper go down a column (bands of `stack` rows), not across a row
+    const stack = Math.min(sheet.rows, Math.max(1, Math.round(opts.stack ?? Math.max(1, ...items.map((it) => it.copies)))));
     for (let i = 0; i < tags.length; i += per) {
-      const slots = tags.slice(i, i + per).map((tag, k) => {
-        const x = at.left + (k % sheet.cols) * at.pitchX + dx;
-        const y = at.top + Math.floor(k / sheet.cols) * at.pitchY + dy;
+      const slots = stackColumns(tags.slice(i, i + per), sheet.cols, stack);
+      const spot = (k: number) => ({ x: at.left + (k % sheet.cols) * at.pitchX, y: at.top + Math.floor(k / sheet.cols) * at.pitchY });
+      const fronts = slots.map((v, k) => {
+        const { x, y } = spot(k);
+        const [fx, fy] = [x + (sheet.shiftXMm ?? 0), y + (sheet.shiftYMm ?? 0)];
         // a label already used on the part-used sheet: marked on screen, never printed
-        if (tag === null) return `<div class="tag used" style="left:${x.toFixed(2)}mm;top:${y.toFixed(2)}mm;width:${t.page_width_mm}mm;height:${t.page_height_mm}mm;"></div>`;
-        return tag.replace('<div class="tag" style="', `<div class="tag" style="left:${x.toFixed(2)}mm;top:${y.toFixed(2)}mm;`);
+        if (v === null) return `<div class="tag used" style="left:${fx.toFixed(2)}mm;top:${fy.toFixed(2)}mm;width:${w}mm;height:${h}mm;"></div>`;
+        return place(front(v), fx, fy);
       });
-      pages.push(`<div class="sheet">${slots.join("")}</div>`);
+      pages.push(`<div class="sheet">${fronts.join("")}</div>`);
+      if (back) {
+        // the back of the sheet: each tag's back behind its front, as the paper turns over
+        // (long edge: left and right swap; short edge: top and bottom swap)
+        const backs = slots.map((v, k) => {
+          if (v === null) return "";
+          const { x, y } = spot(k);
+          const bx = (back.flip === "short" ? x : pw - x - w) + (back.shiftXMm ?? 0);
+          const by = (back.flip === "short" ? ph - y - h : y) + (back.shiftYMm ?? 0);
+          return place(tagHtml(t, v, null, "back"), bx, by);
+        });
+        pages.push(`<div class="sheet back">${backs.join("")}</div>`);
+      }
     }
     body = pages.join("");
   } else {
     pageCss = `@page{size:${t.page_width_mm}mm ${t.page_height_mm}mm;margin:0}.tag{break-after:page}`;
-    body = tags.join("");
+    // one tag a page: front, then its back on the next page (the back of the same label)
+    body = tags.map((v) => (v ? front(v) + (back ? tagHtml(t, v, null, "back") : "") : "")).join("");
   }
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(t.name)}</title><style>
 ${embeddedFontCss(t.layers.flatMap((l) => (l.type === "text" && l.font && !l.hidden ? [FONTS[l.font]?.family ?? "Kinus Sans"] : [])))}
 ${pageCss}
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}
 body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.tag{position:relative;overflow:hidden;background:#fff${opts.outlines ? ";outline:0.2mm dashed #cbd5e1" : ""}}
+.tag{position:relative;overflow:hidden;background:#fff${opts.outlines ? ";outline:0.2mm dashed #cbd5e1" : ""}}${isRoundLabel(t.page_width_mm, t.page_height_mm, t.sheet_layout) ? ".tag{border-radius:50%}" : ""}
 .bg{position:absolute;inset:0;background-size:cover;background-position:center}${opts.background ? `.bg{background-image:url("${opts.background.replace(/"/g, "%22")}")}` : ""}
 .im{background-repeat:no-repeat;background-position:center}${Object.entries(opts.images ?? {})
     .map(([path, url]) => `.${imageClass(path)}{background-image:url("${url.replace(/"/g, "%22")}")}`)
@@ -133,6 +176,7 @@ body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-w
 .qr svg{width:100%;height:100%;display:block}
 @media screen{body{background:#e2e8f0;padding:8mm;display:flex;flex-wrap:wrap;gap:6mm;align-items:flex-start}.tag,.sheet{flex-shrink:0;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}}
 .used{background:repeating-linear-gradient(45deg,#f1f5f9 0 2mm,#fff 2mm 4mm);outline:0.3mm dashed #94a3b8}
+@media screen{.sheet.back,.tag.back:not(.sheet>.tag){outline:0.6mm dashed #94a3b8}.sheet.back::before,body>.tag.back::after{content:"Back";position:absolute;top:1mm;right:1mm;z-index:5;font:600 8pt sans-serif;color:#475569;background:#f1f5f9;padding:0.3mm 1.5mm;border-radius:1mm}}
 @media print{body{display:block}.used{display:none}}
 </style></head><body>${body}<script>
 (function(){function fit(){document.querySelectorAll("[data-fit]").forEach(function(el){var span=el.firstElementChild;var min=parseFloat(el.getAttribute("data-min"))||8;var floor=parseFloat(el.getAttribute("data-floor"))||min;var s=parseFloat(getComputedStyle(el).fontSize);var over=function(){return span.scrollWidth>el.clientWidth+0.5||el.scrollHeight>el.clientHeight+0.5};if(!over())return;var r=Math.min(el.clientWidth/Math.max(span.scrollWidth,1),el.clientHeight/Math.max(el.scrollHeight,1));s=Math.max(min,Math.floor(s*Math.min(1,r)*2)/2);el.style.fontSize=s+"px";var guard=80;while(guard-->0&&s>min&&over()){s=Math.max(min,s-0.5);el.style.fontSize=s+"px";}

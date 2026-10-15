@@ -44,7 +44,8 @@ export default async function PrintTogetherPage({ searchParams }: { searchParams
         jobIds={ids}
         stock={sheet.stock}
         remembered={sheet.used}
-        parts={summary.parts}
+        twoSided={summary.spec.back ?? null}
+      parts={summary.parts}
         tags={summary.tags}
       campers={summary.campers}
         open={open}

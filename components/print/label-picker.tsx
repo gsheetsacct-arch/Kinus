@@ -19,7 +19,7 @@ const inches = (mm: number) => {
 export const sizeText = (w: number, h: number) => `${inches(w)} × ${inches(h)} (${+w.toFixed(1)} × ${+h.toFixed(1)} mm)`;
 
 /** A small drawing of the sheet with every label in place, so the layout can be checked at a glance. */
-export function SheetDiagram({ sheet, w, h, className }: { sheet: SheetLayout; w: number; h: number; className?: string }) {
+export function SheetDiagram({ sheet, w, h, round, className }: { sheet: SheetLayout; w: number; h: number; round?: boolean; className?: string }) {
   const [pw, ph] = PAPER[sheet.paper] ?? PAPER.letter;
   const at = sheetPlacement(sheet, w, h, pw);
   const cells = [];
@@ -28,7 +28,7 @@ export function SheetDiagram({ sheet, w, h, className }: { sheet: SheetLayout; w
       const x = at.left + c * at.pitchX + (sheet.shiftXMm ?? 0);
       const y = at.top + r * at.pitchY + (sheet.shiftYMm ?? 0);
       const out = x < -0.05 || y < -0.05 || x + w > pw + 0.05 || y + h > ph + 0.05;
-      cells.push(<rect key={`${r}-${c}`} x={x} y={y} width={w} height={h} rx={Math.min(w, h) * 0.06} className={out ? "fill-red-200 stroke-red-500" : "fill-primary-soft stroke-primary/60"} strokeWidth={0.6} />);
+      cells.push(<rect key={`${r}-${c}`} x={x} y={y} width={w} height={h} rx={round ? w / 2 : Math.min(w, h) * 0.06} ry={round ? h / 2 : undefined} className={out ? "fill-red-200 stroke-red-500" : "fill-primary-soft stroke-primary/60"} strokeWidth={0.6} />);
     }
   return (
     <svg viewBox={`0 0 ${pw} ${ph}`} className={cn("h-auto w-28 shrink-0 rounded-sm bg-white shadow-sm ring-1 ring-border", className)} role="img" aria-label={`${sheet.cols} across, ${sheet.rows} down`}>
@@ -65,7 +65,7 @@ export function LabelPicker({ open, onOpenChange, current, onPick }: { open: boo
                       onClick={() => onPick(p)}
                       className={cn("flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/60", current?.id === p.id && "bg-primary-soft/60")}
                     >
-                      {p.sheet ? <SheetDiagram sheet={p.sheet} w={p.widthMm} h={p.heightMm} className="w-9" /> : <span className="flex h-12 w-9 shrink-0 items-center justify-center"><span className="block rounded-sm bg-primary-soft ring-1 ring-primary/50" style={{ width: 34, height: Math.max(8, (34 * p.heightMm) / p.widthMm) }} /></span>}
+                      {p.sheet ? <SheetDiagram sheet={p.sheet} w={p.widthMm} h={p.heightMm} round={p.shape === "round"} className="w-9" /> : <span className="flex h-12 w-9 shrink-0 items-center justify-center"><span className="block rounded-sm bg-primary-soft ring-1 ring-primary/50" style={{ width: 34, height: Math.max(8, (34 * p.heightMm) / p.widthMm) }} /></span>}
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm font-medium">
                           {p.brand} {p.product}

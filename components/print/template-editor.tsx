@@ -36,6 +36,7 @@ import {
   Type,
   Underline,
   Undo2,
+  FlipHorizontal2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -43,10 +44,10 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { cn, formatDateTime } from "@/lib/utils";
+import { cn, formatDateTime, plural } from "@/lib/utils";
 import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
 import { fitPreview } from "@/lib/print/fit-preview";
-import { sheetPlacement, type Layer, type SheetLayout, type TemplateSpec } from "@/lib/print/types";
+import { DIVISION_VALUE, onBack, pictureFor, sheetPlacement, type Layer, type SheetLayout, type TemplateSpec } from "@/lib/print/types";
 import { presetSummary, type LabelPreset } from "@/lib/print/presets";
 import { currentPreset, LabelPicker, SheetDiagram, sizeText } from "./label-picker";
 import { fitCheckPeople, previewTemplate, previewValues, saveTemplate, uploadTemplateImage } from "@/app/(app)/print/actions";
@@ -57,7 +58,7 @@ import { useCode } from "./code-image";
 import { fill } from "@/lib/print/merge";
 import { LeaveGuard } from "@/components/leave-guard";
 
-export type EditorTemplate = TemplateSpec & { show_on_card: boolean; auto_on_first_checkin: boolean; copies: number };
+export type EditorTemplate = TemplateSpec & { show_on_card: boolean; auto_on_first_checkin: boolean; copies: number; camps?: string[] };
 export type MergeKey = { key: string; label: string; enabled: boolean };
 
 const ICON = { text: Type, barcode: Barcode, qr: QrCode, box: Square, image: ImageIcon } as const;
@@ -469,6 +470,8 @@ export function TemplateEditor({
   background,
   backgroundUrl,
   pictures = {},
+  divisions = [],
+  camps = [],
 }: {
   initial: EditorTemplate;
   fields: MergeKey[];
@@ -476,11 +479,33 @@ export function TemplateEditor({
   backgroundUrl: string | null;
   /** Pictures the template's picture parts show, by stored path. */
   pictures?: Record<string, string>;
+  /** This session's divisions (name, colour), for a different picture per division. */
+  divisions?: { name: string; color: string | null }[];
+  /** This session's camps (American, Hebrew…), for a template that's for some only. */
+  camps?: string[];
 }) {
   const router = useRouter();
   const [t, setT] = React.useState<EditorTemplate>(() => ({ ...initial, layers: initial.layers.map((l) => ({ ...l, id: l.id || uid() })) }));
   // the selected parts (Shift-click or drag a box to select several)
   const [selected, setSelected] = React.useState<string[]>([]);
+  // two-sided templates: which side the canvas and the parts list show
+  const [side, setSide] = React.useState<"front" | "back">("front");
+  const twoSided = Boolean(t.back);
+  const sideLayers = t.layers.filter((l) => onBack(l) === (twoSided && side === "back"));
+  const setTwoSided = (on: boolean) => {
+    if (on) {
+      update({ back: { flip: "long" } });
+      setSide("back");
+      setSelected([]);
+      toast.message("Now design the back. Switch between Front and Back above the tag.");
+      return;
+    }
+    const backParts = t.layers.filter(onBack).length;
+    if (backParts && !confirm(`Print on one side only? The ${plural(backParts, "part")} on the back will be removed.`)) return;
+    update({ back: null, layers: t.layers.filter((l) => !onBack(l)) });
+    setSide("front");
+    setSelected([]);
+  };
   const selectedRef = React.useRef<string[]>([]);
   selectedRef.current = selected;
   const [fits, setFits] = React.useState<Record<string, FitInfo>>({});
@@ -572,8 +597,10 @@ export function TemplateEditor({
   const add = (l: Omit<Layer, "id">) => {
     const id = uid();
     remember(`add:${id}`);
+    // a part added while the back is showing goes on the back
+    const part = { ...l, id, side: side === "back" ? "back" : undefined } as Layer;
     // colour blocks go to the back (they're backgrounds and strips); everything else on top
-    setT((cur) => ({ ...cur, layers: l.type === "box" ? [{ ...l, id } as Layer, ...cur.layers] : [...cur.layers, { ...l, id } as Layer] }));
+    setT((cur) => ({ ...cur, layers: l.type === "box" ? [part, ...cur.layers] : [...cur.layers, part] }));
     setSelected([id]);
     markDirty();
     (document.activeElement as HTMLElement | null)?.blur();
@@ -582,8 +609,17 @@ export function TemplateEditor({
   const [images, setImages] = React.useState<Record<string, string>>(pictures);
   const [uploading, setUploading] = React.useState(false);
   const pictureInput = React.useRef<HTMLInputElement>(null);
-  const replacing = React.useRef<string | null>(null);
-  const pickPicture = (replace: string | null) => {
+  // a picture part's main picture ({ id }), or its picture for one division ({ id, division })
+  const replacing = React.useRef<{ id: string; division?: string } | null>(null);
+  // the division the canvas shows pictures for (null: the shown camper's own)
+  const [showDivision, setShowDivision] = React.useState<string | null>(null);
+  const setDivisionPicture = (l: Extract<Layer, { type: "image" }>, division: string, path: string | null) => {
+    const byDivision = { ...(l.byDivision ?? {}) };
+    if (path === null) delete byDivision[division];
+    else byDivision[division] = path;
+    setLayer(l.id, { byDivision: Object.keys(byDivision).length ? byDivision : undefined } as Partial<Layer>);
+  };
+  const pickPicture = (replace: { id: string; division?: string } | null) => {
     replacing.current = replace;
     pictureInput.current?.click();
   };
@@ -599,7 +635,12 @@ export function TemplateEditor({
       const r = await uploadTemplateImage(fd).catch(() => ({ ok: false as const, error: "That didn't upload. Check the connection and try again." }));
       if (!r.ok) return void toast.error(r.error);
       setImages((cur) => ({ ...cur, [r.path]: r.url }));
-      if (replacing.current) setLayer(replacing.current, { path: r.path } as Partial<Layer>);
+      const target = replacing.current;
+      const part = target && t.layers.find((l) => l.id === target.id);
+      if (target?.division && part?.type === "image") {
+        setDivisionPicture(part, target.division, r.path);
+        setShowDivision(target.division);
+      } else if (target) setLayer(target.id, { path: r.path } as Partial<Layer>);
       else {
         const w = Math.min(20, W - 2);
         const h = Math.min(Math.max(2, tidy(w * ratio)), H);
@@ -648,7 +689,9 @@ export function TemplateEditor({
   }, [duplicate, undo, redo]);
   const move = (i: number, d: -1 | 1) => {
     const ls = [...t.layers];
-    const j = i + d;
+    // the next part on the same side (two-sided: the other side's parts don't count)
+    let j = i + d;
+    while (j >= 0 && j < ls.length && onBack(ls[j]) !== onBack(ls[i])) j += d;
     if (j < 0 || j >= ls.length) return;
     [ls[i], ls[j]] = [ls[j], ls[i]];
     update({ layers: ls });
@@ -947,13 +990,40 @@ export function TemplateEditor({
               </Button>
             </span>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {twoSided ? (
+              <div className="inline-flex gap-1 rounded-lg bg-muted p-1" role="tablist" aria-label="Side of the tag">
+                {(["front", "back"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    role="tab"
+                    aria-selected={side === v}
+                    onClick={() => {
+                      setSide(v);
+                      setSelected([]);
+                    }}
+                    className={cn("rounded-md px-4 py-1 text-sm", side === v ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}
+                  >
+                    {v === "front" ? "Front" : "Back"} <span className="text-xs text-muted-foreground">{t.layers.filter((l) => onBack(l) === (v === "back")).length}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={() => setTwoSided(true)} title="A different design on the back, printed exactly behind the front">
+                <FlipHorizontal2 /> Print on both sides
+              </Button>
+            )}
+            {twoSided && <span className="text-xs text-muted-foreground">{side === "back" ? "The back, as you'll see it when you turn the tag over." : "The front."}</span>}
+          </div>
           <div className="rounded-xl border bg-muted/60 p-4 sm:p-6">
             <TagCanvas
               width={W}
               height={H}
-              layers={t.layers}
-              values={sample.values}
-              background={backgroundUrl}
+              round={preset?.shape === "round"}
+              layers={sideLayers}
+              values={showDivision === null ? sample.values : { ...sample.values, [DIVISION_VALUE]: showDivision }}
+              background={side === "front" ? backgroundUrl : null}
               images={images}
               selected={selected}
               onSelect={setSelected}
@@ -1110,9 +1180,10 @@ export function TemplateEditor({
                         </button>
                       ))}
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => pickPicture(sel.id)}>
+                    <Button size="sm" variant="outline" onClick={() => pickPicture({ id: sel.id })}>
                       <ImageIcon /> Another picture
                     </Button>
+                    {divisions.length > 0 && <DivisionPictures part={sel} divisions={divisions} images={images} showing={showDivision} onShow={setShowDivision} onPick={(division) => pickPicture({ id: sel.id, division })} onSet={(division, path) => setDivisionPicture(sel, division, path)} />}
                   </div>
                 )}
                 {sel.type !== "box" && sel.type !== "image" && <MergeText key={sel.id} label={sel.type === "text" ? "Says" : "Code"} value={sel.text} onChange={(v) => setLayer(sel.id, { text: v })} fields={fields} />}
@@ -1233,9 +1304,11 @@ export function TemplateEditor({
           </section>
 
           <section className="rounded-xl border bg-card shadow-[var(--shadow-card)]">
-            <h2 className="border-b px-4 py-2.5 text-sm font-semibold">Parts ({t.layers.length})</h2>
+            <h2 className="border-b px-4 py-2.5 text-sm font-semibold">
+              {twoSided ? (side === "back" ? "Parts on the back" : "Parts on the front") : "Parts"} ({sideLayers.length})
+            </h2>
             <ul className="max-h-72 divide-y overflow-y-auto">
-              {[...t.layers].reverse().map((l) => {
+              {[...sideLayers].reverse().map((l) => {
                 const i = t.layers.indexOf(l);
                 const Icon = ICON[l.type];
                 return (
@@ -1269,19 +1342,19 @@ export function TemplateEditor({
                     <Button size="icon" variant="ghost" className={cn("size-7", !l.hidden && "text-muted-foreground/50")} onClick={() => setLayer(l.id, { hidden: l.hidden ? undefined : true })} aria-pressed={Boolean(l.hidden)} aria-label={l.hidden ? "Show" : "Hide"} title={l.hidden ? "Hidden: doesn't print. Click to show." : "Hide (won't print)"}>
                       {l.hidden ? <EyeOff /> : <Eye />}
                     </Button>
-                    <Button size="icon" variant="ghost" className="size-7" onClick={() => move(i, 1)} disabled={i === t.layers.length - 1} aria-label="Bring forward">
+                    <Button size="icon" variant="ghost" className="size-7" onClick={() => move(i, 1)} disabled={l === sideLayers[sideLayers.length - 1]} aria-label="Bring forward">
                       <ArrowUp />
                     </Button>
-                    <Button size="icon" variant="ghost" className="size-7" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Send back">
+                    <Button size="icon" variant="ghost" className="size-7" onClick={() => move(i, -1)} disabled={l === sideLayers[0]} aria-label="Send back">
                       <ArrowDown />
                     </Button>
                   </li>
                 );
               })}
-              {!t.layers.length && (
+              {!sideLayers.length && (
                 <li className="px-4 py-6 text-center text-sm text-muted-foreground">
                   <Plus className="mx-auto mb-1 size-4" />
-                  Add a field to start.
+                  {side === "back" ? "Add what goes on the back." : "Add a field to start."}
                 </li>
               )}
             </ul>
@@ -1290,6 +1363,55 @@ export function TemplateEditor({
           <details className="rounded-xl border bg-card shadow-[var(--shadow-card)]" open={!t.id}>
             <summary className="cursor-pointer px-4 py-2.5 text-sm font-semibold">Template settings</summary>
             <div className="grid gap-4 border-t p-4">
+              {twoSided && t.back && (
+                <div className="space-y-2 rounded-lg border p-3">
+                  <p className="text-sm font-medium">Printed on both sides</p>
+                  <Field label="The paper turns over on its" htmlFor="tflip" hint="Match the printer's two-sided setting. Most printers flip on the long edge.">
+                    <Select id="tflip" value={t.back.flip} onChange={(e) => update({ back: { ...t.back!, flip: e.target.value as "long" | "short" } })}>
+                      <option value="long">Long edge (like a book, the usual)</option>
+                      <option value="short">Short edge (like a notepad)</option>
+                    </Select>
+                  </Field>
+                  {sheet && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Num label="Move the back right (mm)" min={-20} max={20} value={t.back.shiftXMm ?? 0} onChange={(n) => update({ back: { ...t.back!, shiftXMm: n || undefined } })} />
+                      <Num label="Move the back down (mm)" min={-20} max={20} value={t.back.shiftYMm ?? 0} onChange={(n) => update({ back: { ...t.back!, shiftYMm: n || undefined } })} />
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {sheet ? "Print one sheet on both sides and hold it to the light: if the backs sit a little off, move the back here (as seen from the back)." : "Each tag prints its front, then its back as the next page."}
+                  </p>
+                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setTwoSided(false)}>
+                    One side only
+                  </Button>
+                </div>
+              )}
+              {(camps.length > 1 || (t.camps?.length ?? 0) > 0) && (
+                <fieldset className="space-y-1.5">
+                  <legend className="text-sm font-medium">For which camps</legend>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                    {[...new Set([...camps, ...(t.camps ?? [])])].map((name) => {
+                      const on = (t.camps ?? []).some((c) => c.toLowerCase() === name.toLowerCase());
+                      return (
+                        <label key={name} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="size-4"
+                            checked={on}
+                            onChange={() => update({ camps: on ? (t.camps ?? []).filter((c) => c.toLowerCase() !== name.toLowerCase()) : [...(t.camps ?? []), name] })}
+                          />
+                          <span dir="auto">{name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t.camps?.length
+                      ? `Offered and printed only for ${t.camps.join(" and ")}: in Print a batch, on camper cards and at first check-in.`
+                      : "None ticked: every camp."}
+                  </p>
+                </fieldset>
+              )}
               <Field label="Kind" htmlFor="tkind">
                 <Select id="tkind" value={t.kind} onChange={(e) => update({ kind: e.target.value })}>
                   <option value="name_tag">Name tag</option>
@@ -1300,7 +1422,7 @@ export function TemplateEditor({
               <div className="space-y-2">
                 <span className="block text-sm font-medium">Labels</span>
                 <div className="flex items-start gap-3 rounded-lg border bg-background p-3">
-                  {sheet && <SheetDiagram sheet={sheet} w={W} h={H} className="w-14" />}
+                  {sheet && <SheetDiagram sheet={sheet} w={W} h={H} round={preset?.shape === "round"} className="w-14" />}
                   <div className="min-w-0 flex-1 text-sm">
                     <p className="font-medium">{preset ? `${preset.brand} ${preset.product}` : sheet ? "Custom sheet" : "Custom size, one per page"}</p>
                     <p className="text-xs text-muted-foreground">{preset ? preset.name : sizeText(W, H)}</p>
@@ -1431,5 +1553,69 @@ export function TemplateEditor({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/**
+ * A picture part's picture for each division: the main one, its own, or none. Tapping a
+ * division shows the tag as its campers get it.
+ */
+function DivisionPictures({
+  part,
+  divisions,
+  images,
+  showing,
+  onShow,
+  onPick,
+  onSet,
+}: {
+  part: Extract<Layer, { type: "image" }>;
+  divisions: { name: string; color: string | null }[];
+  images: Record<string, string>;
+  showing: string | null;
+  onShow: (division: string | null) => void;
+  onPick: (division: string) => void;
+  onSet: (division: string, path: string | null) => void;
+}) {
+  const own = part.byDivision ?? {};
+  // divisions named on the part but not in this session stay listed, so they can be cleared
+  const names = [...divisions.map((d) => d.name), ...Object.keys(own).filter((n) => !divisions.some((d) => d.name.trim().toLowerCase() === n.trim().toLowerCase()))];
+  const [open, setOpen] = React.useState(Object.keys(own).length > 0);
+  return (
+    <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)} className="rounded-lg border p-2 text-sm">
+      <summary className="cursor-pointer font-medium">A different picture per division{Object.keys(own).length ? ` (${Object.keys(own).length})` : ""}</summary>
+      <p className="mt-1 text-xs text-muted-foreground">Tap a division to see its tags. Divisions are matched by name, so this carries over to next session.</p>
+      <ul className="mt-2 space-y-1.5">
+        {names.map((name) => {
+          const d = divisions.find((x) => x.name === name);
+          const path = pictureFor(part, name);
+          const set = Object.keys(own).find((k) => k.trim().toLowerCase() === name.trim().toLowerCase());
+          return (
+            <li key={name} className={cn("flex items-center gap-1.5 rounded-md px-1 py-1", showing === name && "bg-primary-soft")}>
+              <button type="button" onClick={() => onShow(showing === name ? null : name)} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-pressed={showing === name}>
+                <span className="size-2 shrink-0 rounded-full" style={{ background: d?.color ?? "var(--muted-foreground)" }} />
+                <span className="min-w-0">
+                  <span dir="auto" className="block truncate">{name}</span>
+                  <span className="block text-[11px] leading-tight text-muted-foreground">{!path ? "No picture" : set === undefined ? "Main picture" : "Its own picture"}</span>
+                </span>
+              </button>
+              <span className="size-7 shrink-0 rounded border bg-white bg-contain bg-center bg-no-repeat" style={path && images[path] ? { backgroundImage: `url("${images[path]}")` } : undefined} />
+              <Button size="sm" variant="ghost" className="h-7 px-1.5" onClick={() => onPick(name)}>
+                Choose
+              </Button>
+              {set !== undefined ? (
+                <Button size="sm" variant="ghost" className="h-7 w-12 px-1.5" onClick={() => onSet(set, null)} title="Use the main picture">
+                  Main
+                </Button>
+              ) : (
+                <Button size="sm" variant="ghost" className="h-7 w-12 px-1.5" onClick={() => onSet(name, "")} title="No picture on this division's tags">
+                  None
+                </Button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </details>
   );
 }

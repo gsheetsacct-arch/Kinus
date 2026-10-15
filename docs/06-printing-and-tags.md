@@ -181,6 +181,9 @@ A canvas of the tag at real proportions (Print → Templates):
   (`lib/print/presets.ts`): Avery US Letter sheets (5160, 5161, 5162, 5163, 5164,
   5167, 5168, 5366, 5395, 5390, 5392, 5371…), Avery A4 sheets (L7160, L7163,
   L7651…), and label-printer rolls (Zebra/Rollo 4×6 and smaller, Dymo, Brother).
+  Round labels (Avery 8293 / 94506, 1½″, 20 per sheet) are marked `shape: "round"`: the
+  editor shows the circle with its cut line dashed, the sheet drawing shows circles, and
+  the print clips each tag to its circle (`isRoundLabel`).
   Search by any number on the box (8160 finds 5160). Picking one sets the label size
   and sheet layout and scales the design to fit. "Print a test sheet" fills a sheet
   with outlines to hold against the labels; "Move right/down" corrects a printer
@@ -197,6 +200,28 @@ A canvas of the tag at real proportions (Print → Templates):
   (`uploadTemplateImage`, storage `templates/pictures/…`) and places it at its own
   shape; "Whole picture" or "Fill the box"; "Another picture" swaps it. In print each
   picture is in the page once (`renderDocument(…, { images })`, `imageDataUrls`).
+  **A different picture per division**: under a picture part, each division of this
+  session can have its own picture, the main one, or none (`byDivision`, by division
+  name so it carries over to next session's divisions; "" = none). The merge values carry
+  the camper's division name (`__division`) and `pictureFor` picks the picture; tapping a
+  division shows the tag as its campers get it. A template with per-division pictures
+  counts a move to another division as a changed label.
+- **For which camps** (Template settings; migration 0036): tick the camps a template is for
+  (`print_templates.camps`, by camp name so it carries over to next session's camps; none
+  ticked = every camp). Print a batch offers the current camp's templates (all of them when
+  looking at every camp, named with their camps) and prints only those camps' campers; the
+  camper card shows a template's button only for its camps' campers; printing at first
+  check-in and "new or changed labels" keep to them too; a request for a camper of another
+  camp is refused (`lib/print/template-camps.ts`). The templates list shows "… only".
+- **Two-sided tags** ("Print on both sides" over the tag; migration 0035): Front and Back
+  tabs over the canvas; parts added while the back shows go on the back (`side: "back"`);
+  the background image is on the front. `print_templates.back` = { flip: long | short,
+  back nudge }. Printing: on label sheets each sheet is followed by its back page, laid out
+  mirrored (long edge: left and right swap; short edge: top and bottom swap) so each back
+  lands behind its own front, plus the back nudge for a duplex printer that's a little off;
+  one tag a page prints front, back, front, back. Labels already used on a part-used sheet
+  get no back. The print screen reminds the office to turn on two-sided printing with the
+  right flip.
 - Colour blocks can be **outline only** or have a **border**; new colour blocks go to the
   back (they're backgrounds and strips). Selecting a part keeps it in its place in the
   stack: its outline and handles are drawn on top, so a full-tag block doesn't cover the
@@ -279,7 +304,10 @@ whole; saving a number other than 1 asks for the migration).
 
 Every print is sorted by division (1, 2, 3…, then the rest), bunk (Alef-Beis order), then
 name; campers without a division or bunk come last, and copies of a label sit together
-(`byBunkThenName`). That holds for single requests, batches, requests printed together
+(`byBunkThenName`). On label sheets, copies stack down a column: with 2 each, a camper's
+two labels are one over the other and the next camper is beside them (`stackColumns`).
+The labels filled are the same ones as before (the next free ones, so the remembered
+sheet stays right); only which tag goes where changes. That holds for single requests, batches, requests printed together
 (the left-overs from check-in) and each division printed on its own.
 
 ### Printing requests together
@@ -345,8 +373,19 @@ made at print time with the details as they are then.
   printed or cancelled requests can't be resent.
 - The PDF has a time budget inside the 60 s a page may run (launch 15 s, page 15 s,
   sizing names 8 s, PDF 15 s; email 15 s). A PDF whose names didn't finish shrinking to
-  fit isn't sent: the email links to the queue instead. Requests over 250 tags (copies
-  counted) are always emailed with a link, no PDF.
+  fit isn't sent: the email links to the queue instead.
+- Big requests are made in parts of about 200 tags (whole label sheets), each in its own
+  server run: a part is stored (`print-output/<job>-part<n>.pdf`), then the next part is
+  started with a signed call to `/api/cron/print-part` (HMAC with the service key over job,
+  part, attempt mark and app URL). The last part joins them into one PDF (pdf-lib) and
+  sends the email. Each part renews the attempt mark, so a long request that's still
+  working isn't retried as stuck. Over 3,000 tags no PDF is made; a PDF over 30 MB is
+  linked (download from Kinus) instead of attached.
+- While the PDF is being made, the request's page already shows the print preview: the
+  office can print from Kinus without waiting.
+- The request's page reads only what it needs to count tags per division
+  (`loadPrintCampersBrief`); the full records (export columns, contacts, merge fields,
+  pictures) are read once, for the printable page itself.
 - Background images are in the page once (CSS) however many tags; uploads are up to 4 MB
   (Vercel refuses bigger request bodies).
 - Automatic print at first check-in creates the request after the phone has its answer,

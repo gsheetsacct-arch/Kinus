@@ -10,6 +10,7 @@ import { decide, type OutKind } from "@/lib/attendance/scan";
 import { STATUS_LABEL, type AttendanceEventType, type CamperStatus } from "@/lib/attendance/machine";
 import { visibleFieldGroups } from "@/lib/auth/permissions";
 import { createPrintJob, officeEmail, processPrintJob } from "@/lib/print/jobs";
+import { camperCampName, forCamp, templateCamps } from "@/lib/print/template-camps";
 import { canUsePrintArea } from "@/lib/auth/permissions";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { formatWhen } from "@/lib/utils";
@@ -36,12 +37,17 @@ async function autoPrintOnFirstArrival(camperId: string, sessionId: string): Pro
   const admin = createAdminClient();
   const [{ count }, { data: templates }] = await Promise.all([
     admin.from("attendance_events").select("id", { count: "exact", head: true }).eq("camper_id", camperId).eq("event_type", "arrival"),
-    admin.from("print_templates").select("id, name").eq("auto_on_first_checkin", true).not("name", "like", "(retired)%"),
+    admin.from("print_templates").select("*").eq("auto_on_first_checkin", true).not("name", "like", "(retired)%"),
   ]);
   if (count !== 1 || !templates?.length) return [];
+  // only the tags for the camper's camp (templates for some camps only)
+  const { data: camper } = await admin.from("campers").select("division_id").eq("id", camperId).maybeSingle();
+  const campName = await camperCampName(admin, camper?.division_id ?? null);
+  const mine = templates.filter((t) => forCamp(t, campName) && (campName !== null || !templateCamps(t).length));
+  if (!mine.length) return [];
   const user = await requireUser();
   after(async () => {
-    for (const t of templates) {
+    for (const t of mine) {
       try {
         const job = await createPrintJob(user, { sessionId, templateId: t.id, camperIds: [camperId], note: "Automatic on first check-in" });
         await admin.from("print_jobs").update({ status: "ready" }).eq("id", job.id).eq("status", "queued");
@@ -51,7 +57,7 @@ async function autoPrintOnFirstArrival(camperId: string, sessionId: string): Pro
       }
     }
   });
-  return templates.map((t) => t.name);
+  return mine.map((t) => t.name);
 }
 
 /** One scan or tap in Check in / Check out mode. */
@@ -146,6 +152,8 @@ export type CardData = {
   name: string;
   code: string;
   division: string | null;
+  /** For the camp's own tags (templates for some camps only). */
+  divisionId: string | null;
   bunk: string | null;
   status: CamperStatus;
   since: string | null;
@@ -179,6 +187,7 @@ export async function loadCard(camperId: string): Promise<CardData | null> {
     name: c.display_name ?? "",
     code: c.camper_code ?? "",
     division: d?.name ?? null,
+    divisionId: c.division_id ?? null,
     bunk: b?.name ?? null,
     status: c.status!,
     since: c.last_event_at,

@@ -4,7 +4,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import type { ContactLike, CamperLike } from "@/lib/fields";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { compareBunkNames, compareDivisionNames } from "@/lib/bunk-order";
-import type { MergeField, Transform, ValueMap, TemplateSpec, Layer, SheetLayout } from "./types";
+import { picturesOf, type BackSide, type MergeField, type Transform, type ValueMap, type TemplateSpec, type Layer, type SheetLayout } from "./types";
 
 type DB = SupabaseClient<Database>;
 export type PrintCamper = CamperLike & { id: string; division_color: string | null; division_name: string | null; bunk_name: string | null; last_name: string; first_name: string };
@@ -31,6 +31,7 @@ export function toSpec(t: Database["public"]["Tables"]["print_templates"]["Row"]
     layers: (t.layers as Layer[]) ?? [],
     sheet_layout: (t.sheet_layout as SheetLayout | null) ?? null,
     background_path: t.background_path,
+    back: ((t as { back?: unknown }).back as BackSide | null | undefined) ?? null,
   };
 }
 
@@ -44,8 +45,8 @@ export async function backgroundDataUrl(admin: DB, path: string | null | undefin
 }
 
 /** The pictures a template's parts show (logos…), as data URLs for the page, by stored path. */
-export async function imageDataUrls(admin: DB, layers: { type: string; path?: string }[]): Promise<Record<string, string>> {
-  const paths = [...new Set(layers.filter((l) => l.type === "image" && l.path).map((l) => l.path!))];
+export async function imageDataUrls(admin: DB, layers: { type: string; path?: string; byDivision?: Record<string, string> }[]): Promise<Record<string, string>> {
+  const paths = [...new Set(layers.filter((l) => l.type === "image").flatMap(picturesOf))];
   const urls = await Promise.all(paths.map((p) => backgroundDataUrl(admin, p).catch(() => null)));
   return Object.fromEntries(paths.flatMap((p, i) => (urls[i] ? [[p, urls[i]!]] : [])));
 }
@@ -87,6 +88,27 @@ export async function loadPrintCampers(admin: DB, ids: string[]): Promise<PrintC
   );
 }
 
+export type PrintCamperBrief = { id: string; first_name: string; last_name: string; division_id: string | null; division_name: string | null; division_color: string | null; bunk_name: string | null };
+
+/** Just enough of each camper to sort, count and split by division (no export columns or contacts). */
+export async function loadPrintCampersBrief(admin: DB, ids: string[]): Promise<PrintCamperBrief[]> {
+  const unique = [...new Set(ids)];
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += 150) chunks.push(unique.slice(i, i + 150));
+  const parts = await Promise.all(
+    chunks.map(async (chunk) => {
+      const { data, error } = await admin.from("campers").select("id, first_name, last_name, division_id, divisions(name, color), bunks(name)").in("id", chunk);
+      if (error) throw error;
+      return data ?? [];
+    }),
+  );
+  return parts.flat().map((c) => {
+    const d = c.divisions as { name: string; color: string | null } | null;
+    const b = c.bunks as { name: string } | null;
+    return { id: c.id, first_name: c.first_name, last_name: c.last_name, division_id: c.division_id, division_name: d?.name ?? null, division_color: d?.color ?? null, bunk_name: b?.name ?? null };
+  });
+}
+
 /** Campers of a session (optionally a division/bunk), in printing order. */
 export async function campersInScope(db: DB, sessionId: string, scope: { divisionId?: string; bunkId?: string }): Promise<string[]> {
   const rows = await fetchAll((from, to) => {
@@ -99,7 +121,8 @@ export async function campersInScope(db: DB, sessionId: string, scope: { divisio
 }
 
 /** Printing order: division (1, 2, 3, then the rest), bunk (Alef-Beis), name; no division or bunk yet comes last. */
-export const byBunkThenName = (a: PrintCamper, b: PrintCamper) =>
+type Sortable = { division_name: string | null; bunk_name: string | null; last_name: string; first_name: string };
+export const byBunkThenName = (a: Sortable, b: Sortable) =>
   Number(!a.division_name) - Number(!b.division_name) ||
   compareDivisionNames(a.division_name ?? "", b.division_name ?? "") ||
   Number(!a.bunk_name) - Number(!b.bunk_name) ||

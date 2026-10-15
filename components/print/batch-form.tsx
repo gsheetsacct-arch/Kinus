@@ -99,7 +99,7 @@ export function BatchForm({ templates, divisions, campLabel, officeTo }: { templ
       <div className="flex flex-wrap items-center gap-3 border-t pt-4">
         <Button type="submit" disabled={!template || count === 0}>
           {deliver === "here" ? <Printer /> : <Mail />}
-          {count === null ? "Counting…" : count < 0 ? "Couldn't count: try again" : count === 0 ? "No campers match" : `${deliver === "here" ? "Print" : "Email"} ${count} ${count === 1 ? "tag" : "tags"}`}
+          {count === null ? "Counting…" : count < 0 ? "Couldn't count: try again" : count === 0 ? "No campers match" : `${deliver === "here" ? "Print" : "Email"} ${count * copies} ${count * copies === 1 ? "tag" : "tags"}${copies > 1 ? ` (${count} × ${copies})` : ""}`}
         </Button>
         <Button asChild variant="outline">
           <a href={csv}>

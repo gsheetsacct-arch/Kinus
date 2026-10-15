@@ -1,16 +1,18 @@
 import "server-only";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { canAccessBunk, seesAllCamp, type CurrentUser } from "@/lib/auth/permissions";
 import { renderDocument } from "./render";
 import { mergeValues } from "./merge";
 import { htmlToPdf, type FitNotes } from "./pdf";
 import { sendEmail } from "./email";
-import { backgroundDataUrl, byBunkThenName, imageDataUrls, loadMergeSetup, loadPrintCampers, toSpec } from "./data";
+import { backgroundDataUrl, byBunkThenName, imageDataUrls, loadMergeSetup, loadPrintCampers, loadPrintCampersBrief, toSpec } from "./data";
 import { contentHash, sameContent, templateKeys } from "./content";
 import type { TemplateSpec } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 import { isProgressMark, RETRY_MARK, STARTED_MARK } from "./labels";
 import { cleanUsed, sheetStock, usedBefore } from "./sheet-position";
+import { campDivisions, templateCamps, templateDivisionIds } from "./template-camps";
 
 /** Office, directors and admins print for anyone; others need check-in access to the camper. */
 export function canPrintFor(user: CurrentUser, camper: { division_id: string | null; bunk_id: string | null }) {
@@ -51,11 +53,21 @@ export async function createPrintJob(
   if (!template) throw new Error("That template no longer exists.");
   const ids = [...new Set(opts.camperIds)];
   if (!ids.length) throw new Error("No campers selected.");
-  // permission check per camper
-  for (let i = 0; i < ids.length; i += 150) {
-    const { data } = await admin.from("campers").select("id, division_id, bunk_id").in("id", ids.slice(i, i + 150));
-    for (const c of data ?? []) if (!canPrintFor(user, c)) throw new Error("You can only request tags for campers in your own division or bunk.");
+  // permission check per camper (all chunks side by side)
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += 150) chunks.push(ids.slice(i, i + 150));
+  const checked = await Promise.all(chunks.map((chunk) => admin.from("campers").select("id, division_id, bunk_id, first_name, last_name").in("id", chunk)));
+  for (const { data } of checked) for (const c of data ?? []) if (!canPrintFor(user, c)) throw new Error("You can only request tags for campers in your own division or bunk.");
+  // a template for some camps only prints for their campers
+  const camps = templateCamps(template);
+  if (camps.length) {
+    const divisions = templateDivisionIds(template, await campDivisions(admin, opts.sessionId)) ?? [];
+    const other = checked.flatMap(({ data }) => data ?? []).find((c) => !c.division_id || !divisions.includes(c.division_id));
+    if (other) throw new Error(`${template.name} is only for ${camps.join(" and ")}${checked.flatMap(({ data }) => data ?? []).length > 1 ? `, and ${other.first_name} ${other.last_name} isn't in it` : ""}.`);
   }
+  // what each label says now (for "changed since printed"), read while the request is saved
+  const hashing = labelHashes(admin, toSpec(template), ids);
+  hashing.catch(() => {});
   // empty: the office (whatever its address is when the email goes out)
   const deliver = opts.deliverTo?.trim() || "";
   const { data: job, error } = await admin
@@ -66,25 +78,27 @@ export async function createPrintJob(
   if (error) throw error;
   // how many of each: as asked, else the template's usual number (migration 0028)
   const copies = Math.min(Math.max(Math.round(opts.copies ?? (Number((template as { copies?: number }).copies) || 1)), 1), 10);
-  const hashes = await labelHashes(admin, toSpec(template), ids);
-  for (let i = 0; i < ids.length; i += 500) {
-    const { error: e } = await admin.from("print_job_items").insert(ids.slice(i, i + 500).map((camper_id) => ({ job_id: job.id, camper_id, copies, content_hash: hashes.get(camper_id) ?? null })));
-    if (e) throw e;
-  }
+  const hashes = await hashing;
+  const inserts: string[][] = [];
+  for (let i = 0; i < ids.length; i += 500) inserts.push(ids.slice(i, i + 500));
+  const saved = await Promise.all(inserts.map((part) => admin.from("print_job_items").insert(part.map((camper_id) => ({ job_id: job.id, camper_id, copies, content_hash: hashes.get(camper_id) ?? null })))));
+  for (const { error: e } of saved) if (e) throw e;
   return { id: job.id, count: ids.length, copies };
 }
 
 type PrintSet = Awaited<ReturnType<typeof loadPrintSet>>;
 
-/**
- * One or more requests for the same template, as one thing to print. A camper asked for in
- * two requests (a double tap, or two people asking) prints once, with the most copies asked.
- */
-async function loadPrintSet(jobIds: string[]) {
+/** The requests, their template and who's on them (camper → most copies asked), checked to print as one. */
+async function loadRequests(jobIds: string[]) {
   const admin = createAdminClient();
   const ids = [...new Set(jobIds)];
   if (!ids.length) throw new Error("Nothing to print.");
-  const { data: jobs, error } = await admin.from("print_jobs").select("*, print_templates(*), profiles:requested_by(full_name)").in("id", ids);
+  const [{ data: jobs, error }, items] = await Promise.all([
+    admin.from("print_jobs").select("*, print_templates(*), profiles:requested_by(full_name)").in("id", ids),
+    import("@/lib/supabase/fetch-all").then(({ fetchAll }) =>
+      fetchAll((from, to) => admin.from("print_job_items").select("camper_id, copies").in("job_id", ids).order("camper_id").range(from, to)),
+    ),
+  ]);
   if (error) throw error;
   if (!jobs || jobs.length !== ids.length) throw new Error("Some of these requests are gone. Go back to the print queue.");
   const templateIds = new Set(jobs.map((j) => j.template_id));
@@ -92,11 +106,17 @@ async function loadPrintSet(jobIds: string[]) {
   const template = jobs[0].print_templates;
   if (!template) throw new Error("The template for this job was deleted.");
   const spec = toSpec(template as never);
-  const items = await import("@/lib/supabase/fetch-all").then(({ fetchAll }) =>
-    fetchAll((from, to) => admin.from("print_job_items").select("camper_id, copies").in("job_id", ids).order("camper_id").range(from, to)),
-  );
   const copiesOf = new Map<string, number>();
   for (const i of items) copiesOf.set(i.camper_id, Math.max(copiesOf.get(i.camper_id) ?? 0, i.copies));
+  return { admin, jobs, spec, copiesOf, askedMoreThanOnce: items.length > copiesOf.size };
+}
+
+/**
+ * One or more requests for the same template, as one thing to print. A camper asked for in
+ * two requests (a double tap, or two people asking) prints once, with the most copies asked.
+ */
+async function loadPrintSet(jobIds: string[]) {
+  const { admin, jobs, spec, copiesOf, askedMoreThanOnce } = await loadRequests(jobIds);
   const [campers, setup, background, images] = await Promise.all([
     loadPrintCampers(admin, [...copiesOf.keys()]),
     loadMergeSetup(admin),
@@ -104,20 +124,27 @@ async function loadPrintSet(jobIds: string[]) {
     imageDataUrls(admin, spec.layers),
   ]);
   campers.sort(byBunkThenName);
-  return { jobs, spec, campers, copiesOf, setup, background, images, askedMoreThanOnce: items.length > copiesOf.size };
+  return { jobs, spec, campers, copiesOf, setup, background, images, askedMoreThanOnce };
 }
 
 const divisionOf = (c: { division_id?: string | null }) => c.division_id ?? null;
 
-function setHtml(set: PrintSet, opts: { start?: number; used?: number[]; divisionId?: string | null; copies?: number }) {
+function setHtml(set: PrintSet, opts: { start?: number; used?: number[]; divisionId?: string | null; copies?: number; tags?: [number, number] }) {
   const campers = opts.divisionId === undefined ? set.campers : set.campers.filter((c) => divisionOf(c as never) === opts.divisionId);
   const stock = sheetStock(set.spec);
-  const html = renderDocument(
-    set.spec,
-    // copies: as asked, or the same number of each chosen when printing
-    campers.map((c) => ({ values: mergeValues(c, set.setup.fields, set.setup.maps), copies: opts.copies ? Math.min(10, Math.max(1, Math.round(opts.copies))) : (set.copiesOf.get(c.id) ?? 1) })),
-    { background: set.background, images: set.images, usedSlots: stock ? (opts.used ?? (opts.start ? usedBefore(opts.start, stock.perSheet) : [])) : [] },
-  );
+  // copies: as asked, or the same number of each chosen when printing
+  const copiesOf = (id: string) => (opts.copies ? Math.min(10, Math.max(1, Math.round(opts.copies))) : (set.copiesOf.get(id) ?? 1));
+  let items = campers.map((c) => ({ values: mergeValues(c, set.setup.fields, set.setup.maps), copies: copiesOf(c.id) }));
+  // copies of one camper stack down a column of the label sheet
+  const stack = Math.max(1, ...items.map((i) => i.copies));
+  // one part of a big PDF: tags from..to (whole sheets, so no labels are skipped between parts)
+  if (opts.tags) items = items.flatMap((i) => Array.from({ length: i.copies }, () => ({ values: i.values, copies: 1 }))).slice(...opts.tags);
+  const html = renderDocument(set.spec, items, {
+    background: set.background,
+    images: set.images,
+    stack,
+    usedSlots: stock && !opts.tags?.[0] ? (opts.used ?? (opts.start ? usedBefore(opts.start, stock.perSheet) : [])) : [],
+  });
   return { html, campers };
 }
 
@@ -128,7 +155,11 @@ export async function printSetHtml(jobIds: string[], opts: { start?: number; use
 
 /** What a set of requests holds: the template, its label stock, and the tags per division. */
 export async function printSetSummary(jobIds: string[]) {
-  const set = await loadPrintSet(jobIds);
+  // only counts and divisions: not every camper's whole record, background or merge fields
+  const req = await loadRequests(jobIds);
+  const campers = await loadPrintCampersBrief(req.admin, [...req.copiesOf.keys()]);
+  campers.sort(byBunkThenName);
+  const set = { ...req, campers };
   const tagsOf = (cs: typeof set.campers) => cs.reduce((n, c) => n + (set.copiesOf.get(c.id) ?? 1), 0);
   const parts = new Map<string, { divisionId: string | null; name: string; color: string | null; tags: number; campers: number }>();
   for (const c of set.campers) {
@@ -153,21 +184,37 @@ export async function printSetSummary(jobIds: string[]) {
   };
 }
 
-/** Builds the printable HTML for a job (used by the PDF, the browser print page and previews). */
-export async function jobHtml(jobId: string, opts: { start?: number } = {}): Promise<{ html: string; job: { id: string; deliver_to: string; template_name: string; count: number; tags: number; requested_by_name: string; first_camper: string; campers: string[]; note: string | null } }> {
+/** Tags in one part of a big PDF: each part is made in its own short server run (whole label sheets). */
+const PART_TAGS = 200;
+/** Above this many tags no PDF is made (the email links to the print queue). */
+const PDF_MAX_TAGS = 3000;
+/** Resend takes up to 40 MB an email; a bigger PDF is linked instead of attached. */
+const ATTACH_MAX_BYTES = 30 * 1024 * 1024;
+
+const tagsPerPart = (spec: TemplateSpec) => {
+  const per = sheetStock(spec)?.perSheet ?? 1;
+  return Math.max(per, Math.floor(PART_TAGS / per) * per);
+};
+
+/** Builds the printable HTML for a job (used by the PDF, the browser print page and previews), or one part of it. */
+export async function jobHtml(jobId: string, opts: { start?: number; part?: number } = {}) {
   const set = await loadPrintSet([jobId]);
   const job = set.jobs[0];
-  const { html, campers } = setHtml(set, { start: opts.start });
   const copiesOf = set.copiesOf;
+  const tags = set.campers.reduce((n, c) => n + (copiesOf.get(c.id) ?? 1), 0);
+  const per = tagsPerPart(set.spec);
+  const parts = Math.max(1, Math.ceil(tags / per));
+  const { html, campers } = setHtml(set, { start: opts.start, tags: opts.part === undefined || parts === 1 ? undefined : [opts.part * per, (opts.part + 1) * per] });
   const first = campers[0];
   return {
     html,
+    parts,
     job: {
       id: job.id,
       deliver_to: job.deliver_to,
       template_name: set.spec.name,
       count: campers.length,
-      tags: campers.reduce((n, c) => n + (copiesOf.get(c.id) ?? 1), 0),
+      tags,
       requested_by_name: (job.profiles as { full_name: string } | null)?.full_name ?? "someone",
       first_camper: first ? `${first.first_name} ${first.last_name}${first.bunk_name ? ` · ${first.bunk_name}` : ""}` : "",
       // who the tags are for (the first few), for the email
@@ -177,28 +224,86 @@ export async function jobHtml(jobId: string, opts: { start?: number } = {}): Pro
   };
 }
 
+/** Proof that a "make the next part" call comes from Kinus itself (signed with the server's own key). */
+export function partToken(jobId: string, part: number, mark: string, base: string): string {
+  return createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").update(`print-part|${jobId}|${part}|${mark}|${base}`).digest("hex");
+}
+export function validPartToken(token: string, jobId: string, part: number, mark: string, base: string): boolean {
+  const want = Buffer.from(partToken(jobId, part, mark, base));
+  const got = Buffer.from(String(token));
+  return Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY) && want.length === got.length && timingSafeEqual(want, got);
+}
+
+const partPath = (jobId: string, part: number) => `${jobId}-part${part}.pdf`;
+const fitPath = (jobId: string, part: number) => `${jobId}-part${part}.json`;
+
 /**
  * Renders a job to PDF, stores it, and emails the office. Never throws: the outcome is
  * written to the job (ready / sent / failed) so the print queue always shows it.
+ *
+ * A big job is made in parts of about 200 tags, each in its own server run (a run may only
+ * take a minute): a part is stored, then the next part is started (/api/cron/print-part),
+ * and the last one joins them into one PDF and sends the email. Each part renews the
+ * request's "started at" mark, so a part that's still working is never taken for stuck.
  */
-export async function processPrintJob(jobId: string, appUrl: string, opts: { retry?: boolean } = {}): Promise<void> {
+export async function processPrintJob(jobId: string, appUrl: string, opts: { retry?: boolean; part?: number; mark?: string } = {}): Promise<void> {
   const admin = createAdminClient();
-  // claim this attempt: it says when it started (so a cut-off one can be found) and never
-  // touches a request that was printed or cancelled in the meantime
-  const mark = `${opts.retry ? RETRY_MARK : STARTED_MARK}${new Date().toISOString()}`;
-  const { data: claimed } = await admin.from("print_jobs").update({ status: "rendering", error: mark }).eq("id", jobId).in("status", ["queued", "rendering"]).select("id");
+  const part = opts.part ?? 0;
+  // claim this attempt (or this part of it): it says when it started (so a cut-off one can be
+  // found) and never touches a request that was printed, cancelled or retried in the meantime
+  const prefix = opts.mark ? (opts.mark.startsWith(RETRY_MARK) ? RETRY_MARK : STARTED_MARK) : opts.retry ? RETRY_MARK : STARTED_MARK;
+  const mark = `${prefix}${new Date().toISOString()}`;
+  const claim = part === 0 && !opts.mark
+    ? admin.from("print_jobs").update({ status: "rendering", error: mark }).eq("id", jobId).in("status", ["queued", "rendering"])
+    : admin.from("print_jobs").update({ error: mark }).eq("id", jobId).eq("status", "rendering").eq("error", opts.mark ?? "");
+  const { data: claimed } = await claim.select("id");
   if (!claimed?.length) return;
   // the outcome is written only if this attempt still owns the request
   const finish = (patch: Database["public"]["Tables"]["print_jobs"]["Update"]) => admin.from("print_jobs").update(patch).eq("id", jobId).eq("status", "rendering").eq("error", mark);
   try {
-    const { html, job } = await jobHtml(jobId);
+    const { html, job, parts } = await jobHtml(jobId, { part });
     let pdf: Buffer | null = null;
     let pdfError: string | null = null;
     let fit: FitNotes | null = null;
     try {
-      // a very big batch could run out of time making the PDF: the email links to the queue instead
-      if (job.tags > PDF_MAX_TAGS) throw new Error(`more than ${PDF_MAX_TAGS} tags; print it from Kinus`);
-      pdf = await htmlToPdf(html, (n) => (fit = n));
+      if (job.tags > PDF_MAX_TAGS) throw new Error(`more than ${PDF_MAX_TAGS.toLocaleString("en-US")} tags; print it from Kinus`);
+      const made = await htmlToPdf(html, (n) => (fit = n));
+      if (parts > 1) {
+        const out = admin.storage.from("print-output");
+        const saved = await Promise.all([
+          out.upload(partPath(jobId, part), made, { contentType: "application/pdf", upsert: true }),
+          out.upload(fitPath(jobId, part), Buffer.from(JSON.stringify(fit ?? { smaller: [], cut: [] })), { contentType: "application/json", upsert: true }),
+        ]);
+        for (const { error } of saved) if (error) throw error;
+        if (part < parts - 1) {
+          // the next part, in a run of its own; this run ends here
+          const next = { job: jobId, part: part + 1, mark, base: appUrl };
+          const res = await fetch(`${appUrl}/api/cron/print-part`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...next, token: partToken(jobId, next.part, mark, appUrl) }),
+            signal: AbortSignal.timeout(20_000),
+          }).catch((e: unknown) => e);
+          if (res instanceof Response && res.ok) return;
+          throw new Error(`part ${part + 2} of ${parts} couldn't be started (${res instanceof Response ? `answer ${res.status}` : res instanceof Error ? res.message : String(res)})`);
+        }
+        // the last part: join them all into one PDF
+        const files = await Promise.all(Array.from({ length: parts }, (_, i) => Promise.all([out.download(partPath(jobId, i)), out.download(fitPath(jobId, i))])));
+        const { PDFDocument } = await import("pdf-lib");
+        const joined = await PDFDocument.create();
+        const notes: FitNotes = { smaller: [], cut: [] };
+        for (const [{ data: p, error }, { data: f }] of files) {
+          if (!p) throw error ?? new Error("a part of the PDF went missing");
+          const doc = await PDFDocument.load(await p.arrayBuffer());
+          for (const page of await joined.copyPages(doc, doc.getPageIndices())) joined.addPage(page);
+          const n = f ? (JSON.parse(await f.text()) as FitNotes) : null;
+          notes.smaller.push(...(n?.smaller ?? []));
+          notes.cut.push(...(n?.cut ?? []));
+        }
+        pdf = Buffer.from(await joined.save());
+        fit = notes;
+        await out.remove(Array.from({ length: parts }, (_, i) => [partPath(jobId, i), fitPath(jobId, i)]).flat());
+      } else pdf = made;
       const { error } = await admin.storage.from("print-output").upload(`${jobId}.pdf`, pdf, { contentType: "application/pdf", upsert: true });
       if (error) throw error;
       await admin.from("print_jobs").update({ pdf_path: `${jobId}.pdf` }).eq("id", jobId);
@@ -206,6 +311,8 @@ export async function processPrintJob(jobId: string, appUrl: string, opts: { ret
       pdfError = `PDF could not be made (${e instanceof Error ? e.message : String(e)}). Print it from the queue instead.`;
       pdf = null;
     }
+    // a PDF too big to attach is downloaded from Kinus instead
+    const attach = pdf && pdf.length <= ATTACH_MAX_BYTES ? pdf : null;
     const link = `${appUrl}/print/jobs/${jobId}`;
     const subject = `To print: ${job.count === 1 ? `${job.template_name} · ${job.first_camper}` : `${job.template_name} × ${job.count}`} · from ${job.requested_by_name}`;
     const office = await officeEmail();
@@ -218,8 +325,8 @@ export async function processPrintJob(jobId: string, appUrl: string, opts: { ret
       to,
       cc: job.deliver_to && job.deliver_to !== office.to ? [] : office.cc,
       subject,
-      html: requestEmailHtml({ ...job, link, queueLink: `${appUrl}/print`, attached: Boolean(pdf), fit }),
-      attachments: pdf ? [{ filename: `${job.template_name.replace(/[^\w-]+/g, "-")}-${jobId.slice(0, 8)}.pdf`, content: pdf }] : undefined,
+      html: requestEmailHtml({ ...job, link, queueLink: `${appUrl}/print`, attached: Boolean(attach), pdfLink: pdf && !attach ? `${link}/pdf` : null, fit }),
+      attachments: attach ? [{ filename: `${job.template_name.replace(/[^\w-]+/g, "-")}-${jobId.slice(0, 8)}.pdf`, content: attach }] : undefined,
     });
     if (sent.sent) await finish({ status: "sent", email_message_id: sent.id, error: pdfError });
     else await finish({ status: "ready", error: [pdfError, sent.reason].filter(Boolean).join(" ") });
@@ -234,7 +341,7 @@ const escHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").re
  * The office's email for a request: who asked and for whom, and why printing from Kinus
  * (the print queue) beats printing this PDF.
  */
-export function requestEmailHtml(j: { requested_by_name: string; count: number; template_name: string; campers: string[]; note: string | null; link: string; queueLink: string; attached: boolean; fit?: FitNotes | null }): string {
+export function requestEmailHtml(j: { requested_by_name: string; count: number; template_name: string; campers: string[]; note: string | null; link: string; queueLink: string; attached: boolean; pdfLink?: string | null; fit?: FitNotes | null }): string {
   const list = j.campers.map((c) => `<li dir="auto">${escHtml(c)}</li>`).join("");
   // a long name that went under the template's smallest size, so it prints whole: worth a look
   const uniq = <T,>(xs: T[], key: (x: T) => string) => [...new Map(xs.map((x) => [key(x), x])).values()];
@@ -266,7 +373,7 @@ ${fitNote}
 <li><strong>No wasted label sheets.</strong> Kinus remembers how much of the label sheet is used and starts on the next free label. This PDF always starts at the top of a fresh sheet.</li>
 <li><strong>Staff can see it's done.</strong> Marking it printed shows on the camper's card, so nobody asks twice.</li>
 </ul>
-<p style="color:#666;font-size:13px">${j.attached ? "The PDF is attached in case you can't open Kinus right now." : "There's no PDF this time: print it from Kinus."}</p>
+<p style="color:#666;font-size:13px">${j.attached ? "The PDF is attached in case you can't open Kinus right now." : j.pdfLink ? `The PDF is too big to attach: <a href="${escHtml(j.pdfLink)}" style="color:#0f5f8a">download it from Kinus</a>.` : "There's no PDF this time: print it from Kinus."}</p>
 </div>`;
 }
 
@@ -307,8 +414,6 @@ export async function rememberSheetPosition(stock: string, used: number[], userI
   if (error) throw error;
 }
 
-/** Above this many tags, requests are emailed with a link only (no PDF), so they can't time out. */
-const PDF_MAX_TAGS = 250;
 const STUCK_MS = 3 * 60_000;
 
 /**

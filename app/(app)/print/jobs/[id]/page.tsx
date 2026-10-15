@@ -51,14 +51,15 @@ export default async function JobPage({ params, searchParams }: { params: Promis
         </Callout>
       )}
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        {job.status === "queued" || job.status === "rendering" ? (
-          <p className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">
-            <AutoRefresh />
-            Making the PDF… this page updates when it&apos;s done.
-          </p>
-        ) : (
+        <div className="space-y-4">
+          {(job.status === "queued" || job.status === "rendering") && (
+            <p className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
+              <AutoRefresh every={10000} />
+              Making the PDF to email{job.item_count > 200 ? " (a big one is made in parts, so give it a few minutes)" : ""}. No need to wait: you can print from here now.
+            </p>
+          )}
           <JobPrint id={job.id} open={job.status !== "printed" && job.status !== "cancelled"} autoPrint={sp.print === "1"} />
-        )}
+        </div>
         <div className="space-y-6">
           <Section title="Actions">
             <JobActions id={job.id} status={job.status} pdf={Boolean(job.pdf_path)} deliverTo={job.deliver_to} />
@@ -96,6 +97,7 @@ async function JobPrint({ id, open, autoPrint }: { id: string; open: boolean; au
       jobIds={[id]}
       stock={sheet.stock}
       remembered={sheet.used}
+      twoSided={summary.spec.back ?? null}
       parts={summary.parts}
       tags={summary.tags}
       campers={summary.campers}

@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { groupOfKey, UNGATED_GROUPS } from "@/lib/fields";
 import { extraValue, parseExtraFields, shortAnswer, type ExtraField } from "@/lib/import/extra-fields";
+import { withFixes } from "@/lib/source-fixes";
 
 /** The export columns chosen to show (Import → column step → "Show on the camper page"). */
 export async function loadExtraFields(): Promise<ExtraField[]> {
@@ -33,10 +34,14 @@ export async function extraValuesFor(camperIds: string[], fields: (Pick<ExtraFie
   const ids = [...new Set(camperIds)];
   const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += 150) chunks.push(ids.slice(i, i + 150));
-  const parts = await Promise.all(chunks.map((chunk) => admin.from("campers").select("id, source_data").in("id", chunk)));
+  // "*": the staff fixes too (source_fixes, migration 0034), and still works before it
+  const parts = await Promise.all(chunks.map((chunk) => admin.from("campers").select("*").in("id", chunk)));
   for (const { data, error } of parts) {
     if (error) throw error;
-    for (const c of data ?? []) out.set(c.id, Object.fromEntries(fields.map((f) => [f.column, shortAnswer(f, extraValue(c.source_data, f.column))])));
+    for (const c of data ?? []) {
+      const row = withFixes(c.source_data, (c as { source_fixes?: unknown }).source_fixes);
+      out.set(c.id, Object.fromEntries(fields.map((f) => [f.column, shortAnswer(f, extraValue(row, f.column))])));
+    }
   }
   return out;
 }

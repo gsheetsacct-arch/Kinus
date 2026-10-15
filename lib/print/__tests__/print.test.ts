@@ -25,7 +25,7 @@ const camper = {
 
 describe("merge fields", () => {
   it("fills templates, maps values and applies regex", () => {
-    expect(mergeValues(camper, fields, maps)).toEqual({ FIRST: "מנחם", FULL: "מנחם Gérard", BARCODE: "KN100016", DIV: "2", TSHIRT: "YS", MOM: "+17185550100", COLOR: "#0891b2" });
+    expect(mergeValues(camper, fields, maps)).toEqual({ FIRST: "מנחם", FULL: "מנחם Gérard", BARCODE: "KN100016", DIV: "2", TSHIRT: "YS", MOM: "+17185550100", COLOR: "#0891b2", __division: "Division 2" });
   });
   it("falls back to the original or blank when a value isn't mapped", () => {
     expect(applyTransforms("Adult XXL", [{ type: "value_map", map_id: "m1", fallback: "original" }], maps)).toBe("Adult XXL");

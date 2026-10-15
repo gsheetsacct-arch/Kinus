@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/current-user";
 import { canUsePrintArea, isAdmin } from "@/lib/auth/permissions";
 import { PrintTabs } from "@/components/print/print-tabs";
+import { canFixNames } from "@/lib/print/name-columns";
 
 export default async function PrintLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -9,7 +10,7 @@ export default async function PrintLayout({ children }: { children: React.ReactN
   if (!canUsePrintArea(user)) redirect("/?denied=print");
   return (
     <div>
-      <PrintTabs admin={isAdmin(user)} />
+      <PrintTabs admin={isAdmin(user)} names={canFixNames(user)} />
       {children}
     </div>
   );

@@ -1,6 +1,7 @@
 import { getFieldValue, type CamperLike } from "@/lib/fields";
-import type { MergeField, Transform, ValueMap } from "./types";
+import { DIVISION_VALUE, type MergeField, type Transform, type ValueMap } from "./types";
 import { convertNumber } from "@/lib/hebrew-number";
+import { withFixes } from "@/lib/source-fixes";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
@@ -12,13 +13,14 @@ const columnKey = (k: string) => k.trim().toLowerCase().replace(/#/g, ".");
  * Kinus keeps, any column of the registration export works as "source.<column header>"
  * (e.g. source.ppa.hebrew_name), read from the camper's row in the latest import.
  */
-export function sourceValues(c: CamperLike & { division_color?: string | null; source_data?: unknown }): (key: string) => string {
+export function sourceValues(c: CamperLike & { division_color?: string | null; source_data?: unknown; source_fixes?: unknown }): (key: string) => string {
   let columns: Map<string, string> | null = null;
   const column = (name: string) => {
     if (!columns) {
       columns = new Map();
       // "family#city" and "family.city" are one column: a filled-in copy wins over an empty one
-      for (const [k, raw] of Object.entries((c.source_data ?? {}) as Record<string, unknown>)) {
+      // staff fixes (a Hebrew name typed in English…) in place of what the registration says
+      for (const [k, raw] of Object.entries(withFixes(c.source_data, c.source_fixes))) {
         const v = raw === null || raw === undefined ? "" : String(raw).trim();
         if (v || !columns.has(columnKey(k))) columns.set(columnKey(k), v);
       }
@@ -82,6 +84,8 @@ export function mergeValues(c: CamperLike & { division_color?: string | null }, 
     const raw = f.source_field.includes("{{") ? fill(f.source_field, get) : get(f.source_field);
     out[f.key] = applyTransforms(raw, f.transforms ?? [], maps);
   }
+  // which division's picture a per-division picture part shows
+  out[DIVISION_VALUE] = c.division_name ?? "";
   return out;
 }
 

@@ -12,8 +12,19 @@ export type ValueMap = { id: string; name: string; source_field: string; entries
 /** Quarter turns: 90 reads top to bottom, -90 bottom to top. The box (x, y, w, h) is what you see on the tag. */
 export type Rotation = 0 | 90 | -90;
 
-/** On every part: locked parts can't be moved or resized on the canvas; hidden ones don't show or print. */
-export type PartFlags = { locked?: boolean; hidden?: boolean };
+/** On every part: locked parts can't be moved or resized on the canvas; hidden ones don't show or print; "back": on the back of a two-sided tag. */
+export type PartFlags = { locked?: boolean; hidden?: boolean; side?: "back" };
+
+/**
+ * A two-sided tag: parts marked side "back" print on the back, exactly behind the front.
+ * The printer turns the paper over on its long edge (the usual two-sided setting) or its
+ * short edge; on label sheets the back page is laid out mirrored to match. A duplex printer
+ * often lands the back a little off: shift moves the back side only (+ right / down, as seen
+ * from the back).
+ */
+export type BackSide = { flip: "long" | "short"; shiftXMm?: number; shiftYMm?: number };
+
+export const onBack = (l: { side?: "back" }) => l.side === "back";
 
 /**
  * Text "size" is a target: short text prints at that size, longer text shrinks to stay
@@ -45,8 +56,12 @@ export type Layer = PartFlags &
   | { id: string; type: "barcode"; text: string; x: number; y: number; w: number; h: number; showText?: boolean; rotate?: Rotation }
   | { id: string; type: "qr"; text: string; x: number; y: number; w: number; h: number }
   | { id: string; type: "box"; x: number; y: number; w: number; h: number; fill?: string; radius?: number; border?: string }
-  /** A picture (a camp logo…), stored with the templates; "contain" shows all of it, "cover" fills the box. */
-  | { id: string; type: "image"; path: string; x: number; y: number; w: number; h: number; fit?: "contain" | "cover" }
+  /**
+   * A picture (a camp logo…), stored with the templates; "contain" shows all of it, "cover" fills the box.
+   * `byDivision`: another picture for campers of a division (by the division's name, so it carries
+   * over to next session's divisions); "" = no picture for that division. Others get `path`.
+   */
+  | { id: string; type: "image"; path: string; x: number; y: number; w: number; h: number; fit?: "contain" | "cover"; byDivision?: Record<string, string> }
   );
 
 /**
@@ -89,6 +104,22 @@ export type TemplateSpec = {
   layers: Layer[];
   sheet_layout: SheetLayout | null;
   background_path?: string | null;
+  /** Set: printed on both sides (migration 0035). */
+  back?: BackSide | null;
 };
 
 export type PrintItem = { values: Record<string, string>; copies: number };
+
+/** The merge values carry the camper's division name under this key (for per-division pictures). */
+export const DIVISION_VALUE = "__division";
+
+const sameDivision = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** The picture a picture part shows for a camper of this division ("" = none). */
+export function pictureFor(l: { path: string; byDivision?: Record<string, string> }, division: string | null | undefined): string {
+  if (division && l.byDivision) for (const [name, path] of Object.entries(l.byDivision)) if (sameDivision(name, division)) return path;
+  return l.path;
+}
+
+/** Every stored picture a part can show (its own and each division's). */
+export const picturesOf = (l: { path?: string; byDivision?: Record<string, string> }): string[] => [l.path ?? "", ...Object.values(l.byDivision ?? {})].filter(Boolean);

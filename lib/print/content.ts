@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import type { TemplateSpec } from "./types";
+import { DIVISION_VALUE, type TemplateSpec } from "./types";
 
 /** The merge fields a template prints ({{FIRST}}, {{BUNK_HE|BUNK}} → FIRST, BUNK_HE, BUNK). */
 export function templateKeys(spec: Pick<TemplateSpec, "layers">): string[] {
@@ -9,6 +9,8 @@ export function templateKeys(spec: Pick<TemplateSpec, "layers">): string[] {
     if (l.hidden) continue; // doesn't print
     const text = "text" in l ? l.text : l.type === "box" ? (l.fill ?? "") : "";
     for (const m of text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)) for (const k of m[1].split("|")) keys.add(k.trim());
+    // a picture per division: moving to another division changes the label
+    if (l.type === "image" && Object.keys(l.byDivision ?? {}).length) keys.add(DIVISION_VALUE);
   }
   return [...keys].sort();
 }

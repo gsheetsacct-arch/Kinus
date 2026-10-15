@@ -10,6 +10,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { isAdmin } from "@/lib/auth/permissions";
 import { duplicateTemplate } from "../actions";
 import { currentPreset } from "@/lib/print/presets";
+import { templateCamps } from "@/lib/print/template-camps";
 import type { SheetLayout } from "@/lib/print/types";
 
 export const metadata = { title: "Templates" };
@@ -65,6 +66,8 @@ export default async function TemplatesPage({ searchParams }: { searchParams: Pr
                 {t.show_on_card && <Badge variant="secondary">print button at check-in</Badge>}
                 {t.auto_on_first_checkin && <Badge variant="warning">prints by itself at first check-in</Badge>}
                 {t.background_path && <Badge variant="outline">background image</Badge>}
+                {templateCamps(t).length > 0 && <Badge variant="primary">{templateCamps(t).join(" · ")} only</Badge>}
+                {Boolean((t as { back?: unknown }).back) && <Badge variant="outline">both sides</Badge>}
               </div>
             </li>
           );
