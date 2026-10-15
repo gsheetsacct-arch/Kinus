@@ -13,6 +13,9 @@ export type ParsedFile = {
 
 const TEXT_EXT = /\.(csv|tsv|txt)$/i;
 
+/** One column whatever its capitals, spaces, or "#" for "." (Publisher writes ppa#city). */
+export const sameColumn = (h: string) => h.trim().toLowerCase().replace(/#/g, ".").replace(/\s+/g, " ");
+
 /** Reads .csv/.tsv/.txt (any supported encoding) or .xlsx/.xls into header + string rows. */
 export function parseFile(input: Uint8Array, fileName: string): ParsedFile {
   let wb: XLSX.WorkBook;
@@ -29,10 +32,14 @@ export function parseFile(input: Uint8Array, fileName: string): ParsedFile {
   const ws = wb.Sheets[sheetName];
   const grid = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "", raw: false, blankrows: false });
   if (grid.length === 0) return { headers: [], rows: [], encoding, sheetName, skippedEmptyRows: 0 };
-  const headers = grid[0].map((h) => String(h ?? "").trim());
+  const raw = grid[0].map((h) => String(h ?? "").replace(/\s+/g, " ").trim());
   // A name used for more than one column (the export lists family.city twice, or once per
-  // family): the copies are one column, holding the first copy with something in it for each
-  // camper. (Once the last copy won, empty or not, so a camper with one family lost their city.)
+  // family, or as "Family.City" / "family#city"): the copies are one column, under the first
+  // spelling, holding the first copy with something in it for each camper. (Once the last copy
+  // won, empty or not, so a camper with one family lost their city.)
+  const firstSpelling = new Map<string, string>();
+  for (const h of raw) if (h && !firstSpelling.has(sameColumn(h))) firstSpelling.set(sameColumn(h), h);
+  const headers = raw.map((h) => (h ? firstSpelling.get(sameColumn(h))! : ""));
   const repeated = [...new Set(headers.filter((h, i) => h && headers.indexOf(h) !== i))];
   const rows: Record<string, string>[] = [];
   let skipped = 0;

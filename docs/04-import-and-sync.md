@@ -224,9 +224,11 @@ changes in its history tab, attributed to the import.
   for every camper in it, changed or not. The preview says so: "…and refresh the export's
   other columns for 865 campers", and lists **new columns** with how many campers have a value.
 - **A column name used more than once** (the export lists `family.city` twice, or once per
-  family): the copies are **one column**, holding the **first copy that's filled in** for each
+  family, or spelled differently: `Family.City`, `family#city`, extra spaces; `sameColumn` in
+  `lib/import/parse.ts`): the copies are **one column**, under the first spelling, holding the **first copy that's filled in** for each
   camper. (Once the last copy won, empty or not, so campers with one family lost their city;
-  for a while the extra copies were kept as `family.city (2)`, which migration 0031 removed.)
+  for a while the extra copies were kept as `family.city (2)`, which migration 0031 removed;
+  migration 0032 merges columns stored under two spellings.)
   The preview names the repeated columns and says to remove the extra copies from the export's
   column list in the registration system.
 - A file already imported may be imported once more after Kinus reads files differently (the
