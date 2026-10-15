@@ -206,6 +206,12 @@ A canvas of the tag at real proportions (Print → Templates):
   the camper's division name (`__division`) and `pictureFor` picks the picture; tapping a
   division shows the tag as its campers get it. A template with per-division pictures
   counts a move to another division as a changed label.
+- **What it's for**: Print a batch and the camper card's "How many?" take a short note
+  (what it is and what it's for); it's saved on the request (`print_jobs.note`, before the
+  batch's place and which campers) and shows in the queue, on the request and in the email.
+- Tag PDFs on Vercel: Chromium (`@sparticuz/chromium`) stays out of the bundle and its
+  compressed files (`bin/`) are traced into every function by `outputFileTracingIncludes`;
+  without them the PDF fails with "input directory … does not exist".
 - **For which camps** (Template settings; migration 0036): tick the camps a template is for
   (`print_templates.camps`, by camp name so it carries over to next session's camps; none
   ticked = every camp). Print a batch offers the current camp's templates (all of them when

@@ -250,13 +250,18 @@ shin beis tes"). **Print → Hebrew names** (the print area at edit level, for c
 part of camp) lists every Hebrew-name column value that has English letters, or is empty,
 with a suggestion filled in:
 
-1. letters spelled out → Hebrew letters, final letters at word ends (`lettersSpelledOut`;
+1. **Letters spelled out** → Hebrew letters, final letters at word ends (`lettersSpelledOut`;
    kuf/qof = ק, kof/chof = כ; a comma, slash or "space" between words),
-2. as campers already in Hebrew have it: same English first name, same last name (siblings),
-   whole or word by word (`NameBook`),
-3. a list of common names (`lib/hebrew-names.ts`).
+2. **Exact match**: campers with exactly this English name (the same words) already have it in
+   Hebrew; a name is learned only next to a Hebrew name with as many words, so "Menachem" next
+   to מנחם מענדל teaches nothing (`NameBook`),
+3. **Word by word**: each word as other campers have it,
+4. **Common names**: that name's English spellings on the list (`lib/hebrew-names.ts`); Zev
+   and Zevi, or Menachem and Menachem Mendel, are different names,
+5. **Nicknames** (Mendy → מנחם מענדל): last, and never ticked by themselves.
 
-The office checks them, unticks any it isn't sure of, and saves them together; typing letter
+The page filters by each kind, so one kind can be checked and saved at a time. The office
+checks them, unticks any it isn't sure of, and saves them together; typing letter
 names converts them, and a letter pad types Hebrew without a Hebrew keyboard. The columns are
 the ones the Hebrew-name label fields read (`hebrewNameColumns`).
 

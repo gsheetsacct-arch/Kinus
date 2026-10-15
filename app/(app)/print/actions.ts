@@ -176,6 +176,8 @@ const batchSchema = z.object({
   copies: z.coerce.number().int().min(1).max(10).default(1),
   deliver: z.enum(["here", "email"]),
   deliver_to: z.string().trim().optional(),
+  // what it is and what it's for, in the person's words
+  purpose: z.string().trim().max(200).optional(),
 });
 
 const WHICH_SHORT: Record<BatchWhich, string | null> = { all: null, not_printed: "not printed before", changed: "new or changed", present: "here now", arrived_today: "arrived today" };
@@ -220,7 +222,7 @@ export async function createBatch(fd: FormData): Promise<ActionResult> {
       camperIds: ids,
       copies: d.copies,
       deliverTo: d.deliver === "email" ? d.deliver_to || null : user.email,
-      note: [await placeName(supabase, d.where), WHICH_SHORT[d.which]].filter(Boolean).join(" · "),
+      note: [d.purpose, await placeName(supabase, d.where), WHICH_SHORT[d.which]].filter(Boolean).join(" · "),
     });
     if (d.deliver === "email") {
       const base = await appUrl();

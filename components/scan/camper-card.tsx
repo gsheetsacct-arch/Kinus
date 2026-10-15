@@ -113,7 +113,7 @@ export function CamperCard({
       setDone(null);
       reload();
     });
-  const print = async (t: TemplateButton, opts: { copies?: number; deliverTo?: string } = {}) => {
+  const print = async (t: TemplateButton, opts: { copies?: number; deliverTo?: string; note?: string } = {}) => {
     const r = await requestTag(card.id, t.id, opts);
     if (!r.ok) {
       toast.error(r.error);
@@ -256,14 +256,16 @@ export function CamperCard({
   );
 }
 
-function PrintOptions({ template, onClose, onSend }: { template: TemplateButton | null; onClose: () => void; onSend: (t: TemplateButton, o: { copies: number; deliverTo?: string }) => Promise<boolean> }) {
+function PrintOptions({ template, onClose, onSend }: { template: TemplateButton | null; onClose: () => void; onSend: (t: TemplateButton, o: { copies: number; deliverTo?: string; note?: string }) => Promise<boolean> }) {
   const [sending, setSending] = React.useState(false);
   const [copies, setCopies] = React.useState(1);
   const [to, setTo] = React.useState("");
+  const [note, setNote] = React.useState("");
   React.useEffect(() => {
     if (!template) return;
     // starts at the tag's usual number
     setCopies(template.copies);
+    setNote("");
     try {
       setTo(localStorage.getItem("kinus:print-to") ?? "");
     } catch {}
@@ -301,6 +303,9 @@ function PrintOptions({ template, onClose, onSend }: { template: TemplateButton 
               />
             </div>
           </Field>
+          <Field label="What it's for (optional)" htmlFor="print-note" hint="The office sees it in the print queue and the email.">
+            <Input id="print-note" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} placeholder="e.g. lost the first one, or for the trip" />
+          </Field>
           <Field label="Send to (leave empty for the office)" htmlFor="send-to" hint="For example if the office printer is down today. Remembered on this device.">
             <Input id="send-to" type="email" value={to} onChange={(e) => setTo(e.target.value)} placeholder="office email" />
           </Field>
@@ -315,7 +320,7 @@ function PrintOptions({ template, onClose, onSend }: { template: TemplateButton 
               if (!template) return;
               setSending(true);
               // stays open with what was typed if the address is wrong
-              const sent = await onSend(template, { copies: Math.min(10, Math.max(1, Math.round(copies))), deliverTo: to.trim() || undefined }).finally(() => setSending(false));
+              const sent = await onSend(template, { copies: Math.min(10, Math.max(1, Math.round(copies))), deliverTo: to.trim() || undefined, note: note.trim() || undefined }).finally(() => setSending(false));
               if (!sent) return;
               try {
                 if (to) localStorage.setItem("kinus:print-to", to);

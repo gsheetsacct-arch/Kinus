@@ -147,6 +147,12 @@ export function PrintQueue({ jobs, show }: { jobs: QueueJob[]; show: string }) {
                   </span>
                   <Badge variant={st.variant}>{st.label}</Badge>
                 </span>
+                {/* a single camper's request: what it's for, as the person wrote it */}
+                {j.who && j.note && (
+                  <span dir="auto" className="block truncate text-sm">
+                    {j.note}
+                  </span>
+                )}
                 <span className="block truncate text-xs text-muted-foreground">
                   {now ? formatWhen(j.at, now) : " "} · asked by {j.by}
                   {j.to && ` · to ${j.to}`}
