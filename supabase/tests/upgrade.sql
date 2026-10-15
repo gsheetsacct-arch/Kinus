@@ -32,3 +32,17 @@ begin
     = '["students.id", "family.city", "family.state"]'::jsonb;
   assert (select value from settings where key = 'extra_fields') = '[{"column": "family.city", "label": "City"}]'::jsonb;
 end $$;
+
+-- 0032: one key per column whatever the spelling, the filled-in copy kept.
+do $$
+begin
+  assert (select source_data from campers where id = 'c0320000-0000-0000-0000-000000000001')
+    = '{"Family.City": "Brooklyn", "family#state": "NY", "ppa.size": "M"}'::jsonb,
+    (select source_data::text from campers where id = 'c0320000-0000-0000-0000-000000000001');
+  assert (select options->'headers' from imports where id = 'c0320000-0000-0000-0000-000000000002')
+    = '["students.id", "family.city", "family#state"]'::jsonb,
+    (select (options->'headers')::text from imports where id = 'c0320000-0000-0000-0000-000000000002');
+  -- 0031's camper is untouched (no two spellings)
+  assert (select source_data from campers where id = 'c0310000-0000-0000-0000-000000000001')
+    = '{"family.city": "Brooklyn", "family.state": "NY", "ppa.size (3)": "only copy"}'::jsonb;
+end $$;
