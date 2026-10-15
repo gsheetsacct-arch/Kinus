@@ -17,9 +17,9 @@ describe("a column name used more than once (a block per family)", () => {
     expect(file.rows.map((r) => r["family.city"])).toEqual(["Brooklyn", "Toronto", "Montreal"]);
     expect(file.rows.map((r) => r["family.state"])).toEqual(["NY", "ON", "QC"]);
   });
-  it("keeps every copy, numbered, and says which names repeat", () => {
-    expect(file.headers).toEqual(["students.id", "students.first_name", "family.city", "family.state", "family.city (2)", "family.state (2)"]);
-    expect(file.rows[2]["family.city (2)"]).toBe("Paris");
+  it("makes one column of the copies, and says which names repeat", () => {
+    expect(file.headers).toEqual(["students.id", "students.first_name", "family.city", "family.state"]);
+    expect(Object.keys(file.rows[2])).toEqual(["students.id", "students.first_name", "family.city", "family.state"]);
     expect(file.repeatedColumns).toEqual(["family.city", "family.state"]);
   });
   it("leaves files without repeats as they were", () => {
