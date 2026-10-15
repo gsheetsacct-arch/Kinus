@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { saveNameFixes } from "@/app/(app)/print/names/actions";
-import { convertTyped, hasEnglish, isHebrew, lettersSpelledOut } from "@/lib/hebrew-names";
+import { convertTyped, hasEnglish, isHebrew, lettersSpelledOut, type SuggestionSource } from "@/lib/hebrew-names";
 import { cn, plural } from "@/lib/utils";
 
 export type NameRow = {
@@ -23,13 +23,23 @@ export type NameRow = {
   registration: string;
   fix: { value: string; was: string } | null;
   state: "english" | "empty" | "fixed";
-  suggestion: { value: string; how: string } | null;
+  suggestion: { value: string; how: string; source: SuggestionSource } | null;
   canFix: boolean;
 };
 
 type Draft = { value: string; use: boolean };
 const keyOf = (r: NameRow) => `${r.camperId}|${r.column}`;
 const LETTERS = "אבגדהוזחטיכלמנסעפצקרשת".split("");
+type Source = SuggestionSource | "none";
+const SOURCES: { key: Source; label: string; hint: string; tone: string }[] = [
+  { key: "exact", label: "Exact match", hint: "Other campers with exactly this name (the same words) have it in Hebrew like this: written the way this camp writes it.", tone: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200" },
+  { key: "letters", label: "Letters spelled out", hint: "The family spelled out the letters (nun shin beis tes): turned into Hebrew letters.", tone: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200" },
+  { key: "words", label: "Word by word", hint: "No one has exactly this name, but each word is written like this by other campers.", tone: "bg-teal-100 text-teal-900 dark:bg-teal-950 dark:text-teal-200" },
+  { key: "common", label: "Common names", hint: "From Kinus's list of common names: a good guess, but check the spelling the family uses.", tone: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
+  { key: "nickname", label: "Nicknames", hint: "A nickname's usual name (Mendy → \u2068מנחם מענדל\u2069). Often right, not always: these aren't ticked until you check them.", tone: "bg-orange-100 text-orange-900 dark:bg-orange-950 dark:text-orange-200" },
+  { key: "none", label: "No suggestion", hint: "Kinus has nothing to go on: type it, or type the letter names.", tone: "bg-muted text-muted-foreground" },
+];
+const sourceOf = (r: NameRow): Source => r.suggestion?.source ?? "none";
 const FINALS = ["ך", "ם", "ן", "ף", "ץ"];
 
 /**
@@ -43,7 +53,7 @@ export function NameFixer({ rows }: { rows: NameRow[] }) {
   const [tab, setTab] = React.useState<NameRow["state"]>(rows.some((r) => r.state === "english") ? "english" : rows.some((r) => r.state === "empty") ? "empty" : "fixed");
   const [division, setDivision] = React.useState("");
   const [q, setQ] = React.useState("");
-  const [onlySuggested, setOnlySuggested] = React.useState(false);
+  const [source, setSource] = React.useState<Source | null>(null);
   const [pending, startTransition] = React.useTransition();
   // what's typed in each row (rows keep their own state; this is read on save)
   const drafts = React.useRef(new Map<string, Draft>());
@@ -61,8 +71,11 @@ export function NameFixer({ rows }: { rows: NameRow[] }) {
       r.state === tab &&
       (!division || (r.divisionName ?? "No division") === division) &&
       (!needle || `${r.name} ${r.registration} ${r.fix?.value ?? ""}`.toLowerCase().includes(needle)) &&
-      (!onlySuggested || r.suggestion),
+      (tab === "fixed" || !source || sourceOf(r) === source),
   );
+  // how many of each kind of suggestion, in this tab and division
+  const bySource = new Map<Source, number>();
+  for (const r of rows) if (r.state === tab && (!division || (r.divisionName ?? "No division") === division)) bySource.set(sourceOf(r), (bySource.get(sourceOf(r)) ?? 0) + 1);
   const limit = 300;
 
   const save = (items: { camperId: string; column: string; value: string }[]) =>
@@ -143,13 +156,31 @@ export function NameFixer({ rows }: { rows: NameRow[] }) {
             ))}
           </Select>
         )}
-        {tab !== "fixed" && (
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={onlySuggested} onChange={(e) => setOnlySuggested(e.target.checked)} className="size-4" />
-            Only ones with a suggestion
-          </label>
-        )}
       </div>
+
+      {tab !== "fixed" && (
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Where the suggestion comes from">
+            <button type="button" onClick={() => setSource(null)} aria-pressed={!source} className={cn("rounded-full border px-3 py-1 text-sm", !source ? "border-primary bg-primary-soft font-medium text-primary" : "bg-card hover:bg-muted")}>
+              All
+            </button>
+            {SOURCES.filter((x) => bySource.get(x.key)).map((x) => (
+              <button
+                key={x.key}
+                type="button"
+                onClick={() => setSource(source === x.key ? null : x.key)}
+                aria-pressed={source === x.key}
+                title={x.hint}
+                className={cn("inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm", source === x.key ? "border-primary bg-primary-soft font-medium text-primary" : "bg-card hover:bg-muted")}
+              >
+                <span className={cn("size-2 rounded-full", x.tone)} />
+                {x.label} <span className="text-xs text-muted-foreground">{bySource.get(x.key)}</span>
+              </button>
+            ))}
+          </div>
+          {source && <p className="text-xs text-muted-foreground">{SOURCES.find((x) => x.key === source)?.hint} Saving saves just these.</p>}
+        </div>
+      )}
 
       {tab !== "fixed" && (
         <p className="text-sm text-muted-foreground">
@@ -228,7 +259,7 @@ const Row = React.memo(function Row({
   busy: boolean;
 }) {
   const key = keyOf(r);
-  const start = drafts.get(key) ?? { value: r.fix?.value ?? r.suggestion?.value ?? "", use: r.state === "fixed" ? false : Boolean(r.suggestion) };
+  const start = drafts.get(key) ?? { value: r.fix?.value ?? r.suggestion?.value ?? "", use: r.state === "fixed" ? false : Boolean(r.suggestion) && r.suggestion!.source !== "nickname" };
   const [value, setValue] = React.useState(start.value);
   const [use, setUse] = React.useState(start.use);
   const update = React.useCallback(
@@ -318,7 +349,12 @@ const Row = React.memo(function Row({
               <Check className="inline size-3" /> becomes <span dir="rtl">{spelled}</span>
             </>
           ) : r.state !== "fixed" && r.suggestion && value === r.suggestion.value ? (
-            `Suggested: ${r.suggestion.how}`
+            <>
+              <span className={cn("mr-1 rounded px-1 py-px text-[10px] font-semibold uppercase tracking-wide", SOURCES.find((x) => x.key === r.suggestion!.source)?.tone)}>
+                {SOURCES.find((x) => x.key === r.suggestion!.source)?.label}
+              </span>
+              {r.suggestion.how}
+            </>
           ) : r.state !== "fixed" && !r.suggestion && !value ? (
             "No suggestion: type it, or letter names"
           ) : (

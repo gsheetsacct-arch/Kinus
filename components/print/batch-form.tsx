@@ -78,6 +78,9 @@ export function BatchForm({ templates, divisions, campLabel, officeTo }: { templ
           ))}
         </Select>
       </Field>
+      <Field label="What it is and what it's for (optional)" htmlFor="purpose" hint="Shows in the print queue and the office's email, so they know what this batch is.">
+        <Input id="purpose" name="purpose" maxLength={200} placeholder="e.g. Luggage tags for the Shabbaton trip, Sunday" />
+      </Field>
       <Field label="Copies of each" htmlFor="copies">
         <Input id="copies" name="copies" type="number" min={1} max={10} value={copies} onChange={(e) => setCopies(Math.min(10, Math.max(1, Math.round(Number(e.target.value) || 1))))} className="w-24" />
       </Field>

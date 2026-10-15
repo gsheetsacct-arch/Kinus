@@ -202,7 +202,7 @@ export async function loadCard(camperId: string): Promise<CardData | null> {
 }
 
 /** One-tap print request from a camper card (name tag, luggage tag, …). */
-export async function requestTag(camperId: string, templateId: string, opts: { copies?: number; deliverTo?: string } = {}): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+export async function requestTag(camperId: string, templateId: string, opts: { copies?: number; deliverTo?: string; note?: string } = {}): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
   const user = await requireUser();
   const session = await getActiveSession();
   if (!session) return { ok: false, error: "No active session." };
@@ -216,7 +216,9 @@ export async function requestTag(camperId: string, templateId: string, opts: { c
   // how many: as asked, else the tag's usual number
   const copies = opts.copies === undefined ? undefined : Math.min(10, Math.max(1, Math.round(Number(opts.copies)) || 1));
   try {
-    const job = await createPrintJob(user, { sessionId: session.id, templateId, camperIds: [camperId], copies, deliverTo });
+    // what it's for, in the person's words (shows in the queue and the office's email)
+    const note = opts.note?.trim().slice(0, 200) || null;
+    const job = await createPrintJob(user, { sessionId: session.id, templateId, camperIds: [camperId], copies, deliverTo, note });
     const base = await appUrl();
     after(() => processPrintJob(job.id, base));
     return { ok: true, message: `${job.copies > 1 ? `${job.copies} sent` : "Sent"} to ${deliverTo ?? "the office"}.` };

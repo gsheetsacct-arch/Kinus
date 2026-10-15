@@ -7,8 +7,10 @@ const nextConfig: NextConfig = {
   },
   // Chromium for tag PDFs ships as its own package and must not be bundled.
   serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
-  // Fonts embedded into printed tags are read from disk at runtime.
-  outputFileTracingIncludes: { "/**/*": ["./lib/print/fonts/**"] },
+  // Read from disk at runtime, so the build can't see they're needed: the fonts embedded
+  // into printed tags, and the compressed Chromium the tag PDFs are made with (without it:
+  // "The input directory …/@sparticuz/chromium/bin does not exist").
+  outputFileTracingIncludes: { "/**/*": ["./lib/print/fonts/**", "./node_modules/@sparticuz/chromium/bin/**"] },
 };
 
 export default nextConfig;

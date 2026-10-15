@@ -86,161 +86,167 @@ export function lettersSpelledOut(input: string): string | null {
   return count >= 2 ? out.join(" ") : null;
 }
 
-// Common names as written in English → Hebrew (Yiddish names in their usual Yiddish spelling)
-const NAMES: [string, string[]][] = [
+// Common names: how each is spelled in English (the same name), and its nicknames (Mendy,
+// Yossi: often, but not always, that name; suggested only as a nickname). Yiddish names in
+// their usual Yiddish spelling. Zev and Zevi are different names; so are Menachem and
+// Menachem Mendel.
+const NAMES: [he: string, spellings: string[], nicknames?: string[]][] = [
   // boys
   ["מנחם", ["menachem", "menacham", "menahem"]],
-  ["מנחם מענדל", ["menachem mendel", "mendy", "mendel", "mendi", "mendie"]],
-  ["יוסף", ["yosef", "yossi", "yosi", "yoseph", "joseph", "yossie", "yossy", "yoissy", "yosef"]],
-  ["יוסף יצחק", ["yosef yitzchak", "yossi yitzchak", "yosef yitzchok"]],
-  ["יצחק", ["yitzchak", "yitzchok", "yitzhak", "itzik", "yitzi", "isaac", "yitzy", "itchy", "yitzchock"]],
-  ["שניאור זלמן", ["shneur zalman", "shneor zalman", "shneur zalmen", "zalmy", "zalmen", "zalmy", "zalman"]],
-  ["שניאור", ["shneur", "shneor", "shneuer", "shneiur", "shneur"]],
-  ["לוי", ["levi", "levy", "lev"]],
+  ["מנחם מענדל", ["menachem mendel", "menachem mendl"], ["mendy", "mendi", "mendie"]],
+  ["מענדל", ["mendel", "mendl"]],
+  ["יוסף", ["yosef", "yoseph", "joseph", "yosaif"], ["yossi", "yosi", "yossie", "yossy", "yoissy"]],
+  ["יוסף יצחק", ["yosef yitzchak", "yosef yitzchok"], ["yossi yitzchak"]],
+  ["יצחק", ["yitzchak", "yitzchok", "yitzhak", "isaac", "yitzchock"], ["itzik", "yitzi", "yitzy", "itchy"]],
+  ["שניאור זלמן", ["shneur zalman", "shneor zalman", "shneur zalmen"], ["zalmy"]],
+  ["זלמן", ["zalman", "zalmen"]],
+  ["שניאור", ["shneur", "shneor", "shneuer", "shneiur"]],
+  ["לוי", ["levi", "levy"]],
   ["לוי יצחק", ["levi yitzchak", "levi yitzchok"]],
-  ["משה", ["moshe", "moishe", "moishy", "moishie", "moses", "moishi", "moshy"]],
-  ["אברהם", ["avraham", "avrohom", "avrom", "abraham", "avi", "avrumi", "avremi", "avrahom", "avrohom"]],
-  ["יעקב", ["yaakov", "yakov", "yankel", "yanky", "yankie", "jacob", "yaacov", "yankele"]],
-  ["שמואל", ["shmuel", "shmuli", "shmulik", "samuel", "shmueli", "shmully"]],
-  ["דוד", ["dovid", "david", "dovi", "dudi", "duvid", "duvi"]],
-  ["שלמה", ["shlomo", "shloime", "shloimy", "solomon", "shlomie", "shloimie"]],
-  ["חיים", ["chaim", "chayim", "haim", "chaimy", "chaimie", "hayim"]],
-  ["מרדכי", ["mordechai", "motti", "mordche", "motty", "mordy", "mordchai", "mottel"]],
-  ["אליהו", ["eliyahu", "eliyohu", "eli", "elie", "elijah"]],
-  ["שלום", ["sholom", "shalom", "sholem", "shuli"]],
-  ["שלום דובער", ["sholom dovber", "sholom ber", "shalom dovber"]],
-  ["דובער", ["dovber", "dov ber", "berel", "berl", "berry"]],
+  ["משה", ["moshe", "moishe", "moses"], ["moishy", "moishie", "moishi", "moshy"]],
+  ["אברהם", ["avraham", "avrohom", "avrom", "abraham", "avrahom"], ["avi", "avrumi", "avremi"]],
+  ["יעקב", ["yaakov", "yakov", "jacob", "yaacov"], ["yankel", "yanky", "yankie", "yankele"]],
+  ["שמואל", ["shmuel", "samuel"], ["shmuli", "shmulik", "shmueli", "shmully"]],
+  ["דוד", ["dovid", "david", "duvid"], ["dovi", "dudi", "duvi"]],
+  ["שלמה", ["shlomo", "shloime", "solomon"], ["shloimy", "shlomie", "shloimie"]],
+  ["חיים", ["chaim", "chayim", "haim", "hayim"], ["chaimy", "chaimie"]],
+  ["מרדכי", ["mordechai", "mordchai", "mordche"], ["motti", "motty", "mordy", "mottel"]],
+  ["אליהו", ["eliyahu", "eliyohu", "elijah"], ["eli", "elie"]],
+  ["שלום", ["sholom", "shalom", "sholem"]],
+  ["שלום דובער", ["sholom dovber", "shalom dovber", "sholom ber"]],
+  ["דובער", ["dovber", "dov ber"], ["berel", "berl", "berry"]],
   ["דוב", ["dov"]],
   ["בער", ["ber"]],
-  ["אריה", ["aryeh", "arye", "ari", "arie"]],
-  ["אריה לייב", ["aryeh leib", "arye leib", "ari leib"]],
-  ["לייב", ["leib", "leibel", "leibele", "leibl"]],
-  ["יהודה", ["yehuda", "yehudah", "yudi", "yehudi", "judah"]],
+  ["אריה", ["aryeh", "arye", "arie"]],
+  ["ארי", ["ari"]],
+  ["אריה לייב", ["aryeh leib", "arye leib"], ["ari leib"]],
+  ["לייב", ["leib", "leibl"], ["leibel", "leibele"]],
+  ["יהודה", ["yehuda", "yehudah", "judah"], ["yudi"]],
   ["יהודה לייב", ["yehuda leib", "yehudah leib"]],
-  ["בנימין", ["binyomin", "binyamin", "benjamin", "benny", "beni", "binyomin", "binyamin"]],
-  ["ישראל", ["yisroel", "yisrael", "srulik", "israel", "sruly", "srully", "yisrael"]],
-  ["נתן", ["nosson", "natan", "nathan", "nussi", "nosi", "nussy"]],
-  ["נחום", ["nochum", "nachum", "nachumi", "nochumi"]],
-  ["צבי", ["tzvi", "zvi", "tsvi", "tzvy", "tzviki"]],
-  ["צבי הירש", ["tzvi hirsh", "zvi hirsh", "tzvi hirsch", "hirshy", "hershy"]],
+  ["בנימין", ["binyomin", "binyamin", "benjamin"], ["benny", "beni"]],
+  ["ישראל", ["yisroel", "yisrael", "israel"], ["srulik", "sruly", "srully"]],
+  ["נתן", ["nosson", "natan", "nathan"], ["nussi", "nosi", "nussy"]],
+  ["נחום", ["nochum", "nachum"], ["nachumi", "nochumi"]],
+  ["צבי", ["tzvi", "zvi", "tsvi", "tzvy", "zevi"], ["tzviki"]],
+  ["צבי הירש", ["tzvi hirsh", "zvi hirsh", "tzvi hirsch"], ["hirshy", "hershy"]],
   ["הירש", ["hirsh", "hirsch", "hersh"]],
   ["הערשל", ["hershel", "hershl", "herschel"]],
-  ["גרשון", ["gershon", "gershy"]],
+  ["גרשון", ["gershon"], ["gershy"]],
   ["פרץ", ["peretz", "perets"]],
-  ["פנחס", ["pinchas", "pinny", "pini", "pinchus", "pinchos", "pinnie"]],
-  ["ראובן", ["reuven", "reuvain", "ruby", "reuvein", "ruvi"]],
-  ["שמעון", ["shimon", "shimmy", "shimi", "simon", "shimen"]],
-  ["אוריאל", ["uriel", "uri"]],
-  ["מיכאל", ["michoel", "michael", "michel", "michoel", "mikey"]],
-  ["גבריאל", ["gavriel", "gabriel", "gavi", "gavriel"]],
-  ["רפאל", ["refael", "rafael", "raphael", "rafi", "raphi", "refoel", "rafoel"]],
-  ["אליעזר", ["eliezer", "leizer", "laizer", "elazar"]],
-  ["אלחנן", ["elchonon", "elchanan", "elchonen", "chonon", "chononi"]],
-  ["יחיאל", ["yechiel", "yechiel", "chiel"]],
-  ["יונה", ["yonah", "yona", "jonah", "yoni"]],
-  ["יואל", ["yoel", "joel", "yoely"]],
-  ["יהושע", ["yehoshua", "shia", "joshua", "shuki", "yeshua"]],
-  ["אפרים", ["ephraim", "efraim", "effy", "efrayim"]],
-  ["מנשה", ["menashe", "menashe", "menashi"]],
-  ["נפתלי", ["naftali", "tuli", "naftoli", "tully"]],
-  ["אשר", ["asher", "ushi"]],
-  ["זאב", ["zev", "zeev", "ze'ev", "zevi", "zevy"]],
-  ["ברוך", ["boruch", "baruch", "boruchy", "baruchy", "burech"]],
-  ["בן ציון", ["bentzion", "ben zion", "bentzi", "bentzy", "benzion", "ben tzion"]],
+  ["פנחס", ["pinchas", "pinchus", "pinchos"], ["pinny", "pini", "pinnie"]],
+  ["ראובן", ["reuven", "reuvain", "reuvein"], ["ruby", "ruvi"]],
+  ["שמעון", ["shimon", "simon", "shimen"], ["shimmy", "shimi"]],
+  ["אוריאל", ["uriel"]],
+  ["אורי", ["uri"]],
+  ["מיכאל", ["michoel", "michael"], ["mikey"]],
+  ["גבריאל", ["gavriel", "gabriel"], ["gavi"]],
+  ["רפאל", ["refael", "rafael", "raphael", "refoel", "rafoel"], ["rafi", "raphi"]],
+  ["אליעזר", ["eliezer"], ["leizer", "laizer"]],
+  ["אלעזר", ["elazar", "elozor"]],
+  ["אלחנן", ["elchonon", "elchanan", "elchonen"], ["chonon", "chononi"]],
+  ["יחיאל", ["yechiel"], ["chiel"]],
+  ["יונה", ["yonah", "yona", "jonah"]],
+  ["יואל", ["yoel", "joel"], ["yoely"]],
+  ["יהושע", ["yehoshua", "joshua"], ["shia", "shuki"]],
+  ["אפרים", ["ephraim", "efraim", "efrayim"], ["effy"]],
+  ["מנשה", ["menashe"]],
+  ["נפתלי", ["naftali", "naftoli"], ["tuli", "tully"]],
+  ["אשר", ["asher"]],
+  ["זאב", ["zev", "zeev", "ze'ev"]],
+  ["ברוך", ["boruch", "baruch", "burech"], ["boruchy", "baruchy"]],
+  ["בן ציון", ["bentzion", "ben zion", "benzion", "ben tzion"], ["bentzi", "bentzy"]],
   ["נחמיה", ["nechemia", "nechemya", "nechemiah", "nechemye"]],
   ["עזרא", ["ezra"]],
-  ["עקיבא", ["akiva", "kivi"]],
-  ["מאיר", ["meir", "meyer", "meiri"]],
+  ["עקיבא", ["akiva"], ["kivi"]],
+  ["מאיר", ["meir", "meyer"]],
   ["חנוך", ["chanoch", "henoch", "chonoch", "enoch"]],
-  ["שמריהו", ["shmaryahu", "shmarya", "shmaryohu"]],
-  ["שמחה", ["simcha", "simchy"]],
-  ["מתתיהו", ["matisyahu", "matityahu", "mattis", "matis", "matisyohu"]],
-  ["יששכר", ["yisachar", "yissachar", "yissocher", "berish"]],
-  ["זבולון", ["zevulun", "zevulun", "zevulon"]],
+  ["שמריהו", ["shmaryahu", "shmaryohu"]],
+  ["שמחה", ["simcha"], ["simchy"]],
+  ["מתתיהו", ["matisyahu", "matityahu", "matisyohu"], ["mattis", "matis"]],
+  ["יששכר", ["yisachar", "yissachar", "yissocher"]],
+  ["זבולון", ["zevulun", "zevulon"]],
   ["הלל", ["hillel", "hilel"]],
-  ["יחזקאל", ["yechezkel", "chezky", "chezki", "ezekiel"]],
-  ["דניאל", ["doniel", "daniel", "dani", "danny"]],
+  ["יחזקאל", ["yechezkel", "ezekiel"], ["chezky", "chezki"]],
+  ["דניאל", ["doniel", "daniel"], ["dani", "danny"]],
   ["נח", ["noach", "noah"]],
-  ["אהרן", ["aharon", "aaron", "ahron", "ahrele", "ari"]],
-  ["אלימלך", ["elimelech", "meilech", "melech"]],
+  ["אהרן", ["aharon", "aaron", "ahron"], ["ahrele"]],
+  ["אלימלך", ["elimelech"], ["meilech", "melech"]],
   ["קלמן", ["kalman", "kalmen"]],
-  ["טוביה", ["tuvia", "tuvya", "tuviah", "tevye"]],
+  ["טוביה", ["tuvia", "tuvya", "tuviah"], ["tevye"]],
   ["זכריה", ["zecharia", "zechariah", "zecharya"]],
-  ["שאול", ["shaul", "saul", "shauli"]],
+  ["שאול", ["shaul", "saul"], ["shauli"]],
   ["עמרם", ["amram"]],
   ["אבנר", ["avner"]],
   ["עובדיה", ["ovadia", "ovadya", "ovadiah"]],
-  ["זושא", ["zushe", "zusha", "zushie"]],
-  ["פייוול", ["feivel", "feivish", "faivel"]],
+  ["זושא", ["zushe", "zusha"], ["zushie"]],
+  ["פייוול", ["feivel", "faivel"]],
   ["פישל", ["fishel", "fishl"]],
-  ["וועלוועל", ["velvel", "wolf", "volf"]],
-  ["ישעיה", ["yeshaya", "yeshayahu", "shaya", "shaye"]],
-  ["ירמיהו", ["yirmiyahu", "yirmiya", "yirmi"]],
-  ["אליהו", ["eliyahu"]],
+  ["וועלוועל", ["velvel"]],
+  ["ישעיה", ["yeshaya", "yeshayahu"], ["shaya", "shaye"]],
+  ["ירמיהו", ["yirmiyahu", "yirmiya"], ["yirmi"]],
   ["גד", ["gad"]],
   ["דן", ["dan"]],
-  ["יוסף חיים", ["yosef chaim", "yossi chaim"]],
+  ["יוסף חיים", ["yosef chaim"], ["yossi chaim"]],
   ["משה חיים", ["moshe chaim"]],
   // girls
-  ["חיה", ["chaya", "chaia", "haya", "chayale"]],
-  ["חיה מושקא", ["chaya mushka", "chaya mushkie", "chaya mussia"]],
-  ["מושקא", ["mushka", "mushky", "mushkie", "mussie", "mussi", "mushki", "mussy"]],
-  ["חנה", ["chana", "chanie", "chany", "hannah", "chani", "chanah", "hana", "channah"]],
-  ["רבקה", ["rivka", "rivky", "rivkah", "rebecca", "rivki", "rivkie", "rivkee"]],
-  ["רחל", ["rochel", "rachel", "ruchie", "rochi", "ruchy", "rochie", "ruchi"]],
-  ["לאה", ["leah", "lea", "leahle", "leeba"]],
-  ["שרה", ["sarah", "sara", "sori", "suri", "sorah", "surie", "sury"]],
-  ["דבורה", ["devorah", "devora", "devoiry", "dvora", "deborah", "dvorah", "devory", "devoiri"]],
-  ["דבורה לאה", ["devorah leah", "devora leah", "devoiry leah"]],
-  ["אסתר", ["esther", "estie", "esti", "esty", "ester"]],
-  ["מרים", ["miriam", "miri", "miriem", "mimi"]],
+  ["חיה", ["chaya", "chaia", "haya"], ["chayale"]],
+  ["חיה מושקא", ["chaya mushka", "chaya mushke"], ["chaya mushkie", "chaya mussie"]],
+  ["מושקא", ["mushka", "mushke"], ["mushky", "mushkie", "mussie", "mussi", "mushki", "mussy"]],
+  ["חנה", ["chana", "hannah", "chanah", "hana", "channah"], ["chanie", "chany", "chani"]],
+  ["רבקה", ["rivka", "rivkah", "rebecca"], ["rivky", "rivki", "rivkie", "rivkee"]],
+  ["רחל", ["rochel", "rachel"], ["ruchie", "rochi", "ruchy", "rochie", "ruchi"]],
+  ["לאה", ["leah", "lea"], ["leahle"]],
+  ["שרה", ["sarah", "sara", "sorah"], ["sori", "suri", "surie", "sury"]],
+  ["דבורה", ["devorah", "devora", "dvora", "deborah", "dvorah"], ["devoiry", "devory", "devoiri"]],
+  ["דבורה לאה", ["devorah leah", "devora leah"]],
+  ["אסתר", ["esther", "ester"], ["estie", "esti", "esty"]],
+  ["מרים", ["miriam"], ["miri", "mimi"]],
   ["שיינא", ["shayna", "shaina", "sheina", "shaine", "shayne", "sheine"]],
-  ["פריידא", ["frieda", "frida", "fraida", "fraidy", "fraydie", "fraidie", "freida"]],
-  ["גאלדא", ["golda", "goldie", "goldy"]],
-  ["בתיה", ["basya", "batya", "basha", "bashie", "basy", "bashy", "basia"]],
-  ["ברכה", ["bracha", "brocha", "brachie", "brochie", "brochy"]],
-  ["דינה", ["dina", "dinah", "dena", "dini", "dinie"]],
-  ["פייגא", ["faiga", "feiga", "faigy", "feigy", "faigie", "feige", "faige"]],
-  ["פערל", ["perel", "perl", "pearl", "perela", "peri"]],
-  ["רייזל", ["raizel", "raizy", "reizel", "raisy", "raizie", "reizy"]],
-  ["מלכה", ["malka", "malky", "malkie", "malki", "malke"]],
-  ["מנוחה", ["menucha", "menuchi", "menuchie", "nuchie"]],
-  ["נחמה", ["nechama", "nechamie", "nechamy", "nechami"]],
+  ["פריידא", ["frieda", "frida", "fraida", "freida"], ["fraidy", "fraydie", "fraidie"]],
+  ["גאלדא", ["golda"], ["goldie", "goldy"]],
+  ["בתיה", ["basya", "batya", "basia"], ["basha", "bashie", "basy", "bashy"]],
+  ["ברכה", ["bracha", "brocha"], ["brachie", "brochie", "brochy"]],
+  ["דינה", ["dina", "dinah", "dena"], ["dini", "dinie"]],
+  ["פייגא", ["faiga", "feiga", "feige", "faige"], ["faigy", "feigy", "faigie"]],
+  ["פערל", ["perel", "perl", "pearl"], ["perela", "peri"]],
+  ["רייזל", ["raizel", "reizel"], ["raizy", "raisy", "raizie", "reizy"]],
+  ["מלכה", ["malka", "malke"], ["malky", "malkie", "malki"]],
+  ["מנוחה", ["menucha"], ["menuchi", "menuchie", "nuchie"]],
+  ["נחמה", ["nechama"], ["nechamie", "nechamy", "nechami"]],
   ["נחמה דינה", ["nechama dina", "nechama dinah"]],
-  ["רות", ["rus", "ruth", "rut", "ruti", "rusi"]],
-  ["שטערנא", ["shterna", "shterny", "shternie", "sterna", "sterny"]],
-  ["שולמית", ["shulamis", "shulamit", "shuli", "shulamith"]],
-  ["צביה", ["tzivia", "tzivy", "tziviah", "tzivya", "tzivi", "tzivie"]],
-  ["יהודית", ["yehudis", "yehudit", "judith", "yudis", "yehudi"]],
-  ["זעלדא", ["zelda", "zeldy"]],
-  ["הינדא", ["hinda", "hindy", "hindi", "hindie"]],
-  ["העניא", ["henya", "henia", "henny", "henie", "hennie"]],
-  ["בלומא", ["bluma", "blumie", "blumy", "bluma"]],
-  ["גיטל", ["gittel", "gitty", "gitel", "gitti", "gittie"]],
-  ["איטא", ["itta", "ita", "itty", "itti", "ittie"]],
-  ["חוה", ["chava", "eva", "chavi", "chavie", "chavy"]],
-  ["אלישבע", ["elisheva", "elisheva", "elisheva", "sheva"]],
-  ["יוכבד", ["yocheved", "yochi", "yochie", "yochy"]],
-  ["זיסל", ["zissel", "zisi", "zissy", "zisel", "zisa"]],
-  ["שושנה", ["shoshana", "shoshie", "shoshy", "shoshi"]],
-  ["שפרה", ["shifra", "shifry", "shifrie"]],
-  ["אביגיל", ["avigail", "abigail", "avigayil", "avigail"]],
-  ["הדסה", ["hadassah", "hadasa", "hadassa", "hadas"]],
-  ["מיכל", ["michal", "michali"]],
-  ["נעמי", ["naomi", "nomi", "naomie"]],
-  ["תמר", ["tamar", "tamari", "tami"]],
-  ["יפה", ["yaffa", "yafa", "yaffi"]],
-  ["צירל", ["tzirel", "tzirl", "tziri", "tzirel", "tzirie"]],
+  ["רות", ["rus", "ruth", "rut"], ["ruti", "rusi"]],
+  ["שטערנא", ["shterna", "sterna"], ["shterny", "shternie", "sterny"]],
+  ["שולמית", ["shulamis", "shulamit", "shulamith"], ["shuli"]],
+  ["צביה", ["tzivia", "tziviah", "tzivya"], ["tzivy", "tzivi", "tzivie"]],
+  ["יהודית", ["yehudis", "yehudit", "judith"], ["yudis"]],
+  ["זעלדא", ["zelda"], ["zeldy"]],
+  ["הינדא", ["hinda"], ["hindy", "hindi", "hindie"]],
+  ["העניא", ["henya", "henia"], ["henny", "henie", "hennie"]],
+  ["בלומא", ["bluma"], ["blumie", "blumy"]],
+  ["גיטל", ["gittel", "gitel"], ["gitty", "gitti", "gittie"]],
+  ["איטא", ["itta", "ita"], ["itty", "itti", "ittie"]],
+  ["חוה", ["chava", "eva"], ["chavi", "chavie", "chavy"]],
+  ["אלישבע", ["elisheva"]],
+  ["יוכבד", ["yocheved"], ["yochi", "yochie", "yochy"]],
+  ["זיסל", ["zissel", "zisel"], ["zisi", "zissy"]],
+  ["שושנה", ["shoshana"], ["shoshie", "shoshy", "shoshi"]],
+  ["שפרה", ["shifra"], ["shifry", "shifrie"]],
+  ["אביגיל", ["avigail", "abigail", "avigayil"]],
+  ["הדסה", ["hadassah", "hadasa", "hadassa"]],
+  ["מיכל", ["michal"]],
+  ["נעמי", ["naomi", "naomie"], ["nomi"]],
+  ["תמר", ["tamar"]],
+  ["יפה", ["yaffa", "yafa"], ["yaffi"]],
+  ["צירל", ["tzirel", "tzirl"], ["tziri", "tzirie"]],
   ["בת שבע", ["batsheva", "bas sheva", "bassheva", "bat sheva", "basheva"]],
-  ["טובה", ["tova", "toby", "tovah", "tovi", "tovie"]],
+  ["טובה", ["tova", "tovah"], ["toby", "tovi", "tovie"]],
   ["רחל לאה", ["rochel leah", "rachel leah"]],
   ["שרה רבקה", ["sarah rivka", "sara rivka"]],
   ["אסתר מלכה", ["esther malka"]],
   // family names
-  ["כהן", ["cohen", "kohen", "cohn", "kahn", "kohn", "kagan", "cohan"]],
-  ["לוי", ["levine", "levin", "lewin"]],
+  ["כהן", ["cohen", "kohen", "cohn", "kahn", "kohn", "cohan"]],
   ["כץ", ["katz", "kats"]],
-  ["שפירא", ["shapiro", "shapira", "schapiro", "spiro"]],
+  ["שפירא", ["shapiro", "shapira", "schapiro"]],
   ["פרידמאן", ["friedman", "fridman", "freedman"]],
   ["גולדברג", ["goldberg"]],
   ["גרינברג", ["greenberg", "grinberg"]],
@@ -255,27 +261,47 @@ const NAMES: [string, string[]][] = [
   ["וויס", ["weiss", "weis", "wais"]],
 ];
 const norm = (s: string) => s.toLowerCase().replace(/[’']/g, "'").replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ").trim();
-const DICTIONARY = new Map<string, string>();
-for (const [he, ens] of NAMES) for (const en of ens) if (!DICTIONARY.has(norm(en))) DICTIONARY.set(norm(en), he);
+const SPELLED = new Map<string, string>();
+const NICKNAME = new Map<string, string>();
+for (const [he, spellings, nicknames = []] of NAMES) {
+  for (const en of spellings) if (!SPELLED.has(norm(en))) SPELLED.set(norm(en), he);
+  for (const en of nicknames) if (!NICKNAME.has(norm(en))) NICKNAME.set(norm(en), he);
+}
+const words = (s: string) => s.split(" ").filter(Boolean);
+
+/**
+ * Where a suggestion comes from, surest first:
+ *   letters  — the letters spelled out (nun shin beis tes),
+ *   exact    — campers with exactly this name (same words) have it in Hebrew like this,
+ *   words    — each word as other campers have it,
+ *   common   — the list of common names (that name's English spelling),
+ *   nickname — a nickname's usual name (Mendy → מנחם מענדל): a guess, never ticked by itself.
+ */
+export type SuggestionSource = "letters" | "exact" | "words" | "common" | "nickname";
+export type NameSuggestion = { value: string; how: string; source: SuggestionSource };
 
 /** What we know from names already written in Hebrew: English → Hebrew, with how often. */
 export class NameBook {
   private whole = new Map<string, Map<string, number>>();
-  private words = new Map<string, Map<string, number>>();
+  private single = new Map<string, Map<string, number>>();
   private add(map: Map<string, Map<string, number>>, en: string, he: string) {
     const m = map.get(en) ?? new Map<string, number>();
     m.set(he, (m.get(he) ?? 0) + 1);
     map.set(en, m);
   }
-  /** A camper's English name next to the same name already in Hebrew ("Menachem Mendel" ↔ "מנחם מענדל"). */
+  /**
+   * A camper's English name next to the same name in Hebrew. Only when they have the same
+   * number of words: "Menachem" next to "מנחם מענדל" isn't the same name, so it teaches nothing.
+   */
   learn(english: string, hebrew: string) {
     const en = norm(english);
     const he = hebrew.trim().replace(/\s+/g, " ");
     if (!en || !isHebrew(he)) return;
+    const ew = words(en);
+    const hw = words(he);
+    if (ew.length !== hw.length) return;
     this.add(this.whole, en, he);
-    const ew = en.split(" ");
-    const hw = he.split(" ");
-    if (ew.length === hw.length) ew.forEach((w, i) => this.add(this.words, w, hw[i]));
+    ew.forEach((w, i) => this.add(this.single, w, hw[i]));
   }
   private best(map: Map<string, Map<string, number>>, en: string) {
     const m = map.get(en);
@@ -283,22 +309,32 @@ export class NameBook {
     const [he, n] = [...m.entries()].sort((a, b) => b[1] - a[1])[0];
     return { he, n };
   }
-  /** Hebrew for an English name: as others wrote it, else word by word, else the list of common names. */
-  lookup(english: string): { value: string; how: string } | null {
+  /** Hebrew for an English name, surest first (see SuggestionSource). */
+  lookup(english: string): NameSuggestion | null {
     const en = norm(english);
     if (!en) return null;
+    const name = english.trim();
     const seen = this.best(this.whole, en);
-    if (seen) return { value: seen.he, how: seen.n > 1 ? `as ${seen.n} others named ${english.trim()} have it` : `as another ${english.trim()} has it` };
-    const known = DICTIONARY.get(en);
-    if (known) return { value: known, how: "common name" };
-    // word by word ("Menachem Mendel": each word known)
-    const parts = en.split(" ").map((w) => this.best(this.words, w)?.he ?? DICTIONARY.get(w) ?? null);
-    if (parts.length > 1 && parts.every(Boolean)) return { value: parts.join(" "), how: "word by word" };
+    if (seen) return { value: seen.he, how: seen.n > 1 ? `${seen.n} others named exactly ${name} have it like this` : `another camper named exactly ${name} has it like this`, source: "exact" };
+    const ew = words(en);
+    if (ew.length > 1) {
+      const learned = ew.map((w) => this.best(this.single, w)?.he ?? null);
+      if (learned.every(Boolean)) return { value: learned.join(" "), how: "each word as other campers have it", source: "words" };
+    }
+    const listed = SPELLED.get(en);
+    if (listed) return { value: listed, how: `${name} on the list of common names`, source: "common" };
+    if (ew.length > 1) {
+      const parts = ew.map((w) => this.best(this.single, w)?.he ?? SPELLED.get(w) ?? null);
+      if (parts.every(Boolean)) return { value: parts.join(" "), how: "word by word, partly from the list of common names", source: "common" };
+    }
+    const nick = NICKNAME.get(en);
+    if (nick) return { value: nick, how: `${name} is usually a nickname for this: check it`, source: "nickname" };
     return null;
   }
 }
 
-export type NameSuggestion = { value: string; how: string };
+/** Surest first: a better kind of suggestion wins over a worse one. */
+export const SOURCE_RANK: Record<SuggestionSource, number> = { letters: 0, exact: 1, words: 2, common: 3, nickname: 4 };
 
 /**
  * The Hebrew for a Hebrew-name field: its letters spelled out, else the field's English
@@ -308,12 +344,12 @@ export function suggestHebrew(current: string, englishName: string, book: NameBo
   const v = current.trim();
   if (v && isHebrew(v)) return null;
   const spelled = v ? lettersSpelledOut(v) : null;
-  if (spelled) return { value: spelled, how: "letters spelled out" };
+  if (spelled) return { value: spelled, how: "letters spelled out", source: "letters" };
   const fromField = v ? book.lookup(v) : null;
-  if (fromField) return fromField;
-  const fromName = englishName.trim() ? book.lookup(englishName) : null;
-  if (fromName) return { ...fromName, how: `from the English name (${fromName.how})` };
-  return null;
+  const fromNameRaw = englishName.trim() && norm(englishName) !== norm(v) ? book.lookup(englishName) : null;
+  const fromName = fromNameRaw ? { ...fromNameRaw, how: `from the English name: ${fromNameRaw.how}` } : null;
+  // what the family wrote comes first; the camper's English name only when that finds nothing
+  return fromField ?? fromName;
 }
 
 /** Converts letter names typed into a Hebrew field as soon as they're whole ("nun shin" → "נש"). */
