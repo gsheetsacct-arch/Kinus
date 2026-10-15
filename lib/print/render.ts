@@ -64,6 +64,24 @@ function tagHtml(t: TemplateSpec, values: Record<string, string>, background: st
 }
 
 /**
+ * The tags of one sheet (in reading order, null = a used label) moved so that consecutive
+ * tags run down a column, `stack` rows at a time: with 2 copies each, A sits over A and B
+ * over B beside it. The same labels are filled (the sheet the office keeps track of stays
+ * right); only which tag goes on which label changes. stack 1: unchanged.
+ */
+export function stackColumns<T>(slots: (T | null)[], cols: number, stack: number): (T | null)[] {
+  if (stack <= 1 || cols <= 1) return slots;
+  const filled = slots.map((t, k) => (t === null ? -1 : k)).filter((k) => k >= 0);
+  const order = [...filled].sort((a, b) => {
+    const [ra, rb] = [Math.floor(a / cols), Math.floor(b / cols)];
+    return Math.floor(ra / stack) - Math.floor(rb / stack) || (a % cols) - (b % cols) || ra - rb;
+  });
+  const out = slots.slice();
+  order.forEach((k, j) => (out[k] = slots[filled[j]]));
+  return out;
+}
+
+/**
  * One HTML document for a print job: one tag per page (label printers), or tags laid
  * out N-up on letter/A4 sheets. The same HTML is printed by the browser and turned
  * into a PDF by Chromium.
@@ -71,7 +89,7 @@ function tagHtml(t: TemplateSpec, values: Record<string, string>, background: st
 export function renderDocument(
   t: TemplateSpec,
   items: PrintItem[],
-  opts: { background?: string | null; outlines?: boolean; skip?: number; usedSlots?: number[]; images?: Record<string, string> } = {},
+  opts: { background?: string | null; outlines?: boolean; skip?: number; usedSlots?: number[]; images?: Record<string, string>; stack?: number } = {},
 ): string {
   const sheet = t.sheet_layout;
   const per = sheet && sheet.cols > 0 && sheet.rows > 0 ? sheet.cols * sheet.rows : 0;
@@ -99,8 +117,10 @@ export function renderDocument(
     // every label at its exact place on the sheet, as the label maker publishes it
     pageCss = `@page{size:${pw}mm ${ph}mm;margin:0}.sheet{position:relative;width:${pw}mm;height:${ph}mm;overflow:hidden;break-after:page}.sheet>.tag{position:absolute}`;
     const pages: string[] = [];
+    // copies of one camper go down a column (bands of `stack` rows), not across a row
+    const stack = Math.min(sheet.rows, Math.max(1, Math.round(opts.stack ?? Math.max(1, ...items.map((it) => it.copies)))));
     for (let i = 0; i < tags.length; i += per) {
-      const slots = tags.slice(i, i + per).map((tag, k) => {
+      const slots = stackColumns(tags.slice(i, i + per), sheet.cols, stack).map((tag, k) => {
         const x = at.left + (k % sheet.cols) * at.pitchX + dx;
         const y = at.top + Math.floor(k / sheet.cols) * at.pitchY + dy;
         // a label already used on the part-used sheet: marked on screen, never printed
