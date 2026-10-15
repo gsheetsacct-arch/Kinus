@@ -243,6 +243,31 @@ changes in its history tab, attributed to the import.
   export; `{{source.family.city}}` and `{{family.city}}` both work. The template editor's
   sample camper borrows a real camper's value for columns it doesn't have.
 
+### Fixes to export columns (Hebrew names)
+
+Many families type the Hebrew name in English ("Menachem") or spell out the letters ("nun
+shin beis tes"). **Print → Hebrew names** (the print area at edit level, for campers in their
+part of camp) lists every Hebrew-name column value that has English letters, or is empty,
+with a suggestion filled in:
+
+1. letters spelled out → Hebrew letters, final letters at word ends (`lettersSpelledOut`;
+   kuf/qof = ק, kof/chof = כ; a comma, slash or "space" between words),
+2. as campers already in Hebrew have it: same English first name, same last name (siblings),
+   whole or word by word (`NameBook`),
+3. a list of common names (`lib/hebrew-names.ts`).
+
+The office checks them, unticks any it isn't sure of, and saves them together; typing letter
+names converts them, and a letter pad types Hebrew without a Hebrew keyboard. The columns are
+the ones the Hebrew-name label fields read (`hebrewNameColumns`).
+
+Fixes live in `campers.source_fixes` (migration 0034): by column, the value and what the
+registration said (`was`). Imports refresh `source_data` and never touch them; everything that
+reads an export column reads through `withFixes` (labels, extra fields on cards and lists).
+The Fixed tab shows each fix, notes when the registration changed since, and can take one
+back. Next session's import carries a camper's fixes over (same registration id) only while
+the registration still says what was fixed (trigger `campers_carry_fixes`). A fixed name
+counts as a changed label, so "new or changed" batches pick it up.
+
 ## 4.2 Edge cases
 
 | Case | Behaviour |
