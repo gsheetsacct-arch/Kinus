@@ -1,5 +1,6 @@
 import * as React from "react";
 import Link from "next/link";
+import { oneOfEachColumn } from "@/lib/import/extra-fields";
 import { notFound, redirect } from "next/navigation";
 import { CheckCircle2, Undo2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -96,6 +97,9 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
   };
   const options = (imp.options ?? {}) as { partialWarning?: string[]; divisionsInFile?: string[]; lostTextOverride?: boolean; lostTextCells?: number; repeatedColumns?: string[] };
   const columnsChange = summary.columns?.campers ?? 0;
+  // one of each (an import from before repeated columns were combined lists "family.city (2)")
+  const addedColumns = oneOfEachColumn(summary.columns?.added ?? [], (a) => a.column);
+  const repeatedColumns = oneOfEachColumn(options.repeatedColumns ?? [], (c) => c);
   const missing = summary.missingList ?? [];
   // where the "not in file" campers are now: archiving someone who's here should be a conscious choice
   const { data: missingNow } = missing.length
@@ -193,9 +197,9 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
           . {by("unchanged").length > 0 && `${n(by("unchanged").length, "camper has", "campers have")} no changes to their details${columnsChange ? " (their columns are refreshed too)" : ""}.`}
         </p>
       )}
-      {(summary.columns?.added.length ?? 0) > 0 && (
-        <Callout title={`New columns in this export: ${summary.columns!.added.map((a) => a.column).slice(0, 6).join(", ")}${summary.columns!.added.length > 6 ? "…" : ""}`}>
-          {summary.columns!.added.map((a) => (
+      {addedColumns.length > 0 && (
+        <Callout title={`New columns in this export: ${addedColumns.map((a) => a.column).slice(0, 6).join(", ")}${addedColumns.length > 6 ? "…" : ""}`}>
+          {addedColumns.map((a) => (
             <span key={a.column} className="mr-3 inline-block font-mono text-xs">
               {a.column} <span className="font-sans text-muted-foreground">({n(a.count, "camper", "campers")} with a value)</span>
             </span>
@@ -205,9 +209,9 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
           </span>
         </Callout>
       )}
-      {(options.repeatedColumns?.length ?? 0) > 0 && (
+      {repeatedColumns.length > 0 && (
         <Callout title="Some column names are in the file more than once">
-          {options.repeatedColumns!.map((c) => (
+          {repeatedColumns.map((c) => (
             <span key={c} className="mr-3 inline-block font-mono text-xs">
               {c}
             </span>

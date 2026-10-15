@@ -9,6 +9,12 @@ export async function loadExtraFields(): Promise<ExtraField[]> {
   return parseExtraFields(data?.value);
 }
 
+/** Export columns left out of the column choices (settings.hidden_columns), e.g. the form's address when the family record's is used. */
+export async function loadHiddenColumns(): Promise<string[]> {
+  const { data } = await createAdminClient().from("settings").select("value").eq("key", "hidden_columns").maybeSingle();
+  return Array.isArray(data?.value) ? (data.value as unknown[]).filter((x): x is string => typeof x === "string") : [];
+}
+
 /** Only the extra fields this person may see: a column that looks medical needs medical access, and so on. */
 export const visibleExtraFields = (fields: ExtraField[], groups: Set<string>) =>
   fields.filter((f) => {

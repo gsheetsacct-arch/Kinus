@@ -23,9 +23,10 @@ export function humanLabel(column: string): string {
 
 export function parseExtraFields(value: unknown): ExtraField[] {
   if (!Array.isArray(value)) return [];
-  return value
+  const fields = value
     .filter((x): x is ExtraField => Boolean(x && typeof x.column === "string" && typeof x.label === "string"))
     .map((f) => ({ column: f.column, label: f.label, ...(f.answers && typeof f.answers === "object" && !Array.isArray(f.answers) ? { answers: f.answers } : {}) }));
+  return oneOfEachColumn(fields, (f) => f.column);
 }
 
 const same = (a: string) => a.replace(/\s+/g, " ").trim().toLowerCase();
@@ -44,4 +45,23 @@ export function extraValue(sourceData: unknown, column: string): string {
   const want = columnKey(column);
   for (const [k, v] of Object.entries(data)) if (columnKey(k) === want) return v === null || v === undefined ? "" : String(v).trim();
   return "";
+}
+
+/**
+ * One of each column, for showing: drops a "family.city (2)" copy when "family.city" is there
+ * (kept that way for a while from exports that repeat a column) and the same column spelled
+ * twice ("Family.City", "family#city"). The first one listed stays.
+ */
+export function oneOfEachColumn<T>(items: T[], column: (item: T) => string): T[] {
+  const key = (c: string) => columnKey(c).replace(/\s+/g, " ");
+  const all = new Set(items.map((i) => key(column(i))));
+  const seen = new Set<string>();
+  return items.filter((i) => {
+    const k = key(column(i));
+    const base = k.replace(/ \(\d+\)$/, "");
+    if (base !== k && all.has(base)) return false;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }

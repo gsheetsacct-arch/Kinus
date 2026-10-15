@@ -210,6 +210,16 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
       // short answers set in Settings stay
       return { column: h, label: String(fd.get(`name:${h}`) ?? "").trim().slice(0, 80) || had?.label || humanLabel(h), ...(had?.answers ? { answers: had.answers } : {}) };
     });
+    // two columns shown under one name ("City" from the form and from the family record) look
+    // like the same thing twice: show one, or give them different names
+    const byName = new Map<string, string[]>();
+    for (const f of [...keepOthers, ...chosen]) byName.set(f.label.trim().toLowerCase(), [...(byName.get(f.label.trim().toLowerCase()) ?? []), f.column]);
+    const clash = [...byName.entries()].find(([, cols]) => cols.length > 1);
+    if (clash) {
+      const [name, cols] = clash;
+      const shown = [...keepOthers, ...chosen].find((f) => f.label.trim().toLowerCase() === name)!.label;
+      return fail(`${cols.join(" and ")} would both show as “${shown}”. Show only one of them on the camper page, or give them different names (e.g. “${shown} (family)”).`);
+    }
     await admin.from("settings").upsert({ key: "extra_fields", value: [...keepOthers, ...chosen] as unknown as J, updated_by: me.id, updated_at: new Date().toISOString() });
 
     const rawRows = await fetchAll((from, to) => admin.from("import_rows").select("id, row_number, raw").eq("import_id", imp.id).order("row_number").range(from, to));

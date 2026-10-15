@@ -9,7 +9,8 @@ import { FIELDS } from "@/lib/fields";
 import { loadMergeSetup, loadPrintCampers } from "@/lib/print/data";
 import { sourceValues } from "@/lib/print/merge";
 import { getCampContext } from "@/lib/data/camp";
-import { loadExtraFields } from "@/lib/data/extra-fields";
+import { loadExtraFields, loadHiddenColumns } from "@/lib/data/extra-fields";
+import { columnKey, oneOfEachColumn } from "@/lib/import/extra-fields";
 
 export const metadata = { title: "Fields & conversions" };
 
@@ -38,10 +39,11 @@ export default async function FieldsPage() {
   const { data: latest } = session
     ? await admin.from("imports").select("options").eq("session_id", session.id).eq("status", "applied").order("applied_at", { ascending: false }).limit(1).maybeSingle()
     : { data: null };
-  const headers = (((latest?.options ?? {}) as { headers?: string[] }).headers ?? []).filter((h) => typeof h === "string" && h.trim());
+  const hidden = new Set((await loadHiddenColumns()).map(columnKey));
+  const headers = (((latest?.options ?? {}) as { headers?: string[] }).headers ?? []).filter((h) => typeof h === "string" && h.trim() && !hidden.has(columnKey(h)));
   const columns = headers.map((h) => ({ key: `source.${h}`, label: `${h} (from the export)`, group: "export" as const }));
   // (an extra field's own name wins over the bare column name)
-  const unique = [...new Map([...catalog, ...columns, ...extras].map((c) => [c.key, c])).values()];
+  const unique = oneOfEachColumn([...new Map([...catalog, ...columns, ...extras].map((c) => [c.key, c])).values()], (c) => c.key);
   let sample: Record<string, string> = {};
   let sampleName = "";
   if (sampleRow.data) {
