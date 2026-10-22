@@ -19,3 +19,13 @@ describe("design connector and custom fonts", () => {
     expect(html).toContain('data-part="n"');
   });
 });
+
+import { widthEstimate } from "../width-estimate";
+describe("which value needs the most room", () => {
+  it("wide letters count more than narrow ones", () => {
+    expect(widthEstimate("WMWM")).toBeGreaterThan(widthEstimate("illi"));
+    expect(widthEstimate("Menachem Mendel")).toBeGreaterThan(widthEstimate("Menachem"));
+    expect(widthEstimate("Yitzchak")).toBeGreaterThan(widthEstimate("Iliiil"));
+    expect(widthEstimate("שניאור זלמן")).toBeGreaterThan(widthEstimate("לוי"));
+  });
+});

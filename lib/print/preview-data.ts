@@ -7,6 +7,7 @@ import { fill, mergeValues, SAMPLE_CAMPER } from "./merge";
 import { renderDocument } from "./render";
 import { customFontCss } from "./custom-fonts";
 import type { TemplateSpec } from "./types";
+import { widthEstimate } from "./width-estimate";
 
 /**
  * What previews are filled with, and the preview page itself: for the template editor and
@@ -119,4 +120,39 @@ export async function previewDocument(spec: TemplateSpec, items: { values: Recor
   ]);
   const sheet = opts.fullSheet ? spec.sheet_layout : null;
   return renderDocument({ ...spec, sheet_layout: sheet }, items, { background, images, outlines: opts.outlines ?? true, fontCss });
+}
+
+export type FieldExtremes = { key: string; label: string; filled: number; longest: { value: string; width: number; letters: number; camper: string }[] };
+
+/**
+ * For each field, its longest values among real campers (widest first, different values),
+ * and how many campers have it filled in. What a design has to make room for.
+ */
+export async function longestPerField(divisionIds: string[] | null, opts: { keys?: string[]; top?: number } = {}): Promise<FieldExtremes[]> {
+  const [people, setup] = await Promise.all([allCamperValues(divisionIds), loadMergeSetup(createAdminClient())]);
+  const fields = setup.fields.filter((f) => (opts.keys?.length ? opts.keys.includes(f.key) : f.enabled !== false));
+  return fields.map((f) => {
+    const seen = new Map<string, { value: string; width: number; letters: number; camper: string }>();
+    let filled = 0;
+    for (const p of people) {
+      const v = (p.values[f.key] ?? "").trim();
+      if (!v) continue;
+      filled++;
+      if (!seen.has(v)) seen.set(v, { value: v, width: widthEstimate(v), letters: [...v].length, camper: p.name });
+    }
+    const longest = [...seen.values()].sort((a, b) => b.width - a.width || b.letters - a.letters).slice(0, opts.top ?? 5);
+    return { key: f.key, label: f.label, filled, longest };
+  });
+}
+
+/**
+ * The worst case: every field at once with its widest real value (the longest first name, the
+ * longest last name, the longest bunk…). A tag that fits this fits everyone.
+ */
+export async function worstCaseValues(divisionIds: string[] | null): Promise<{ values: Record<string, string>; label: string } | { error: string }> {
+  const extremes = await longestPerField(divisionIds, { top: 1 });
+  if (!extremes.some((e) => e.longest.length)) return { error: "No campers to look at." };
+  const values = await sampleValues();
+  for (const e of extremes) if (e.longest[0]) values[e.key] = e.longest[0].value;
+  return { values, label: "the longest of every field at once (worst case)" };
 }

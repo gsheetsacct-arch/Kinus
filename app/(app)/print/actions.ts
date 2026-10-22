@@ -6,11 +6,11 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { canUsePrintArea, isAdmin } from "@/lib/auth/permissions";
+import { canUsePrintArea, isAdmin, visibleDivisionIds } from "@/lib/auth/permissions";
 import { canDesign, loadDesigners, saveDesigners } from "@/lib/print/designers";
 import { addCustomFont, removeCustomFont } from "@/lib/print/custom-fonts";
 import { storeTemplate, type TemplateInput } from "@/lib/print/template-store";
-import { previewDocument, sampleValues } from "@/lib/print/preview-data";
+import { previewDocument, sampleValues, worstCaseValues } from "@/lib/print/preview-data";
 import { createConnector, revokeConnector } from "@/lib/print/design-connectors";
 export type { TemplateInput };
 import { appUrl } from "@/lib/auth/app-url";
@@ -452,7 +452,7 @@ export async function codePreviews(items: { type: "barcode" | "qr"; text: string
   });
 }
 
-export async function previewTemplate(spec: TemplateSpec, who: { kind: "sample" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] }, opts: { fullSheet?: boolean } = {}): Promise<string> {
+export async function previewTemplate(spec: TemplateSpec, who: { kind: "sample" } | { kind: "worst" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] }, opts: { fullSheet?: boolean } = {}): Promise<string> {
   await requirePreviewer();
   const r = await previewValues(who);
   const values = "error" in r ? await sampleValues() : r.values;
@@ -575,11 +575,16 @@ export type { Layer, SheetLayout };
  * camper with the longest name (to check long names still fit).
  */
 export async function previewValues(
-  who: { kind: "sample" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] },
+  who: { kind: "sample" } | { kind: "worst" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] },
 ): Promise<{ values: Record<string, string>; label: string } | { error: string }> {
-  await requirePreviewer();
+  const user = await requirePreviewer();
   const session = await getActiveSession();
   if (who.kind === "sample" || !session) return { values: await sampleValues(), label: "a sample camper" };
+  if (who.kind === "worst") {
+    // every field's longest value at once, among the campers this person sees (the camp chosen at the top)
+    const camp = await getCampContext();
+    return worstCaseValues(camp.divisionIds ?? visibleDivisionIds(user));
+  }
   const supabase = await createClient();
   let id: string | null = null;
   if (who.kind === "code") {

@@ -49,8 +49,12 @@ Every part may also have "locked", "hidden", and "side":"back" (on a two-sided t
 letters (missing letters fall back to Kinus Sans). Colours are #rrggbb.
 
 ## Design around the text
-Names vary a lot in length (and Hebrew names are on many tags). Give names the widest box the
-design allows, set "size" for an ordinary name and "minSize" for the smallest you'd accept,
-and check with preview_template camper "longest" and check_fit: it lists names that went under
-minSize or were cut. A background picture (a full-tag design from InDesign, exported as PNG at
+Names vary a lot in length (and Hebrew names are on many tags). Before sizing parts, run
+longest_values: the widest real value of each field (first names, last names, bunks, Hebrew
+names…) and how many campers have it. Give each part room for those, set "size" for an
+ordinary value and "minSize" for the smallest you'd accept. Then check:
+- preview_template camper "worst": every field at once with its longest value. If it fits, every
+  camper fits.
+- preview_template camper "longest": the real camper whose text is longest on this tag.
+- check_fit: every camper; lists who went under minSize or didn't fit at all. A background picture (a full-tag design from InDesign, exported as PNG at
 300 dpi, without the names) goes in with upload_picture use "background".`;

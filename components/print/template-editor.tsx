@@ -514,7 +514,7 @@ export function TemplateEditor({
   selectedRef.current = selected;
   const [fits, setFits] = React.useState<Record<string, FitInfo>>({});
   const [sample, setSample] = React.useState<{ values: Record<string, string>; label: string }>({ values: {}, label: "" });
-  const [who, setWho] = React.useState<"sample" | "longest" | "code">("sample");
+  const [who, setWho] = React.useState<"sample" | "longest" | "worst" | "code">("sample");
   const [code, setCode] = React.useState("");
   const [saving, startSave] = React.useTransition();
   const [dirty, setDirty] = React.useState(false);
@@ -706,7 +706,14 @@ export function TemplateEditor({
   // box on this template's parts (checked again a moment after the parts change)
   const textsKey = JSON.stringify(t.layers.filter((l) => l.type === "text").map((l) => ({ text: (l as { text: string }).text, w: l.w })));
   const whoArg = React.useMemo(
-    () => (who === "code" ? ({ kind: "code", code } as const) : who === "longest" ? ({ kind: "longest", texts: JSON.parse(textsKey) } as const) : ({ kind: "sample" } as const)),
+    () =>
+      who === "code"
+        ? ({ kind: "code", code } as const)
+        : who === "longest"
+          ? ({ kind: "longest", texts: JSON.parse(textsKey) } as const)
+          : who === "worst"
+            ? ({ kind: "worst" } as const)
+            : ({ kind: "sample" } as const),
     [who, code, textsKey],
   );
   React.useEffect(() => {
@@ -908,6 +915,7 @@ export function TemplateEditor({
           <Select value={who} onChange={(e) => setWho(e.target.value as typeof who)} className="h-9 w-48">
             <option value="sample">A sample camper</option>
             <option value="longest">The longest text (checks every camper)</option>
+            <option value="worst">The longest of every field at once (worst case)</option>
             <option value="code">A camper by code…</option>
           </Select>
         </label>

@@ -226,7 +226,10 @@ A canvas of the tag at real proportions (Print → Templates):
   same checks as the editor, `lib/print/template-store.ts`), upload pictures (or a whole-tag
   background) and fonts, see a picture of the tag exactly as it prints (`preview_template`,
   with a sample camper, the camper with the longest text, or a code), and check every camper
-  fits (`check_fit`: who goes under a part's smallest size or doesn't fit). It works as the
+  fits (`check_fit`: who goes under a part's smallest size or doesn't fit), list each field's
+  widest real values (`longest_values`), and preview the worst case: every field at once with
+  its longest value (`preview_template` camper "worst"; the editor's "Show it with" has it too,
+  `worstCaseValues`). It works as the
   person whose link it is, only while they may edit templates, and only on templates; real
   campers in previews are from their own part of camp. Links are kept as hashes in settings
   (`design_connectors`), shown once, and can be removed (`lib/print/design-connectors.ts`,

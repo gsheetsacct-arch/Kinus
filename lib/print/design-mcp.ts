@@ -8,7 +8,7 @@ import { addCustomFont, loadCustomFonts } from "./custom-fonts";
 import { findPresets, presetById } from "./presets";
 import { loadMergeSetup, toSpec } from "./data";
 import { storeTemplate, templateSchema } from "./template-store";
-import { allCamperValues, camperValues, previewDocument, sampleValues } from "./preview-data";
+import { allCamperValues, camperValues, longestPerField, previewDocument, sampleValues, worstCaseValues } from "./preview-data";
 import { htmlToPng, type PartFit } from "./pdf";
 import { renderDocument } from "./render";
 import type { Layer, TemplateSpec } from "./types";
@@ -161,6 +161,33 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
   );
 
   server.registerTool(
+    "longest_values",
+    {
+      title: "Longest values of each field",
+      description: "For each field, the widest real values (the longest first names, last names, bunks, Hebrew names…), how wide each is in average letters, and how many campers have it filled in. Size each part for these.",
+      inputSchema: {
+        fields: z.array(z.string()).optional().describe('Field keys without braces, e.g. ["FIRST", "HEB_FIRST"]; leave out for every field on the merge list'),
+        top: z.number().int().min(1).max(20).default(5),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ fields, top }) => {
+      const list = await longestPerField(scope, { keys: fields?.map((f) => f.replace(/[{}]/g, "").trim()), top });
+      if (!list.some((f) => f.filled)) return text("No campers yet (or none in your part of camp).");
+      return text(
+        json(
+          list.map((f) => ({
+            field: `{{${f.key}}}`,
+            name: f.label,
+            filled_in_for: f.filled,
+            longest: f.longest.map((l) => ({ value: l.value, width: l.width, letters: l.letters, camper: l.camper })),
+          })),
+        ),
+      );
+    },
+  );
+
+  server.registerTool(
     "preview_template",
     {
       title: "Preview a template",
@@ -168,7 +195,10 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
       inputSchema: {
         template_id: z.guid().optional(),
         template: z.record(z.string(), z.unknown()).optional().describe("A draft template (same JSON as get_template), to preview before saving"),
-        camper: z.string().optional().describe('"sample" (default), "longest" (the camper with the longest text on this tag), or a 6-digit camper code'),
+        camper: z
+          .string()
+          .optional()
+          .describe('"sample" (default); "worst" (every field at once with its longest real value: if this fits, everyone fits); "longest" (the real camper with the longest text on this tag); or a 6-digit camper code'),
       },
       annotations: { readOnlyHint: true },
     },
@@ -179,7 +209,12 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
         let values: Record<string, string>;
         let label = "a sample camper";
         if (who === "sample") values = await sampleValues();
-        else {
+        else if (who === "worst") {
+          const r = await worstCaseValues(scope);
+          if ("error" in r) return problem(r.error);
+          values = r.values;
+          label = r.label;
+        } else {
           const r = await camperValues(who === "longest" ? { kind: "longest", texts: spec.layers.flatMap((l) => (l.type === "text" && !l.hidden ? [{ text: l.text, w: l.w }] : [])) } : { kind: "code", code: who }, scope);
           if ("error" in r) return problem(r.error);
           values = r.values;
