@@ -95,7 +95,7 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
     /** Export columns that change: how many campers, and the columns new to them. */
     columns?: { campers: number; added: { column: string; count: number }[] };
   };
-  const options = (imp.options ?? {}) as { partialWarning?: string[]; divisionsInFile?: string[]; lostTextOverride?: boolean; lostTextCells?: number; repeatedColumns?: string[] };
+  const options = (imp.options ?? {}) as { partialWarning?: string[]; divisionsInFile?: string[]; lostTextOverride?: boolean; lostTextCells?: number; repeatedColumns?: string[]; fixedDivision?: string | null };
   const columnsChange = summary.columns?.campers ?? 0;
   // one of each (an import from before repeated columns were combined lists "family.city (2)")
   const addedColumns = oneOfEachColumn(summary.columns?.added ?? [], (a) => a.column);
@@ -153,9 +153,16 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
         description={
           <span className="flex flex-wrap items-center gap-2" dir="auto">
             {imp.file_name} <Badge variant={st.variant}>{st.label}</Badge>
+            {options.fixedDivision && <Badge variant="primary">{options.fixedDivision} export</Badge>}
           </span>
         }
       />
+      {previewed && options.fixedDivision && (
+        <Callout title={`Everyone in this file goes into ${options.fixedDivision}`}>
+          It&apos;s a separate program&apos;s export: it only adds and updates {options.fixedDivision}&apos;s campers, and only they can be marked “not in the latest export”. The main
+          export leaves them alone.
+        </Callout>
+      )}
       {previewed && <Steps steps={IMPORT_STEPS} current={3} />}
 
       {imp.status === "applied" && (

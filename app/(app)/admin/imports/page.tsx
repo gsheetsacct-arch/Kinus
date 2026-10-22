@@ -28,7 +28,7 @@ export default async function ImportsPage() {
   const supabase = await createClient();
   const { data: imports } = await supabase
     .from("imports")
-    .select("id, file_name, status, uploaded_at, applied_at, summary, profiles:uploaded_by(full_name)")
+    .select("id, file_name, status, uploaded_at, applied_at, summary, options, profiles:uploaded_by(full_name)")
     .eq("session_id", session.id)
     .order("uploaded_at", { ascending: false })
     .limit(50);
@@ -88,6 +88,7 @@ export default async function ImportsPage() {
                             {i.file_name}
                           </span>
                           <Badge variant={st.variant}>{st.label}</Badge>
+                          {(i.options as { fixedDivision?: string } | null)?.fixedDivision && <Badge variant="primary">{(i.options as { fixedDivision: string }).fixedDivision} export</Badge>}
                           {latestApplied?.id === i.id && <Badge variant="outline">Latest</Badge>}
                         </span>
                         <span className="block text-xs text-muted-foreground">

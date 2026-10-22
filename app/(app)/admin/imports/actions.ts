@@ -12,6 +12,7 @@ import type { Json } from "@/lib/supabase/database.types";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { bunkOrders, divisionOrder, slotNewBunks, slotNewDivisions } from "@/lib/data/bunk-sort";
 import { columnKey, humanLabel, parseExtraFields } from "@/lib/import/extra-fields";
+import { campersForImport, intoProgram, layoutFit, LAYOUT_FIT } from "@/lib/import/programs";
 
 /** The column step's choice "show it on the camper page" (an extra field). */
 const EXTRA = "__extra";
@@ -46,9 +47,9 @@ export async function uploadImport(fd: FormData): Promise<ActionResult> {
     if (dup.data) return fail(`This exact file was already imported on ${formatDateTime(dup.data.applied_at)}. Nothing has changed.`);
 
     await discardDrafts(session.id);
-    // Kinus remembers how the columns were matched last time (one layout, updated on each import)
-    const { data: layout } = await admin.from("import_mappings").select("id").order("is_default", { ascending: false }).order("created_at", { ascending: false }).limit(1).maybeSingle();
-    const mappingId = layout?.id ?? "";
+    // Kinus remembers how the columns were matched, for each kind of export (the main one, a
+    // separate program's…): the setup that knows most of this file's columns
+    const mappingId = (await layoutFor(parsed.headers))?.id ?? "";
     const { data: imp, error } = await admin
       .from("imports")
       .insert({
@@ -78,6 +79,26 @@ export async function uploadImport(fd: FormData): Promise<ActionResult> {
   } catch (e) {
     return fail(errorMessage(e));
   }
+}
+
+/** The remembered column setup that fits these columns best (at least half of them), if any. */
+async function layoutFor(headers: string[]): Promise<{ id: string; name: string; fixedDivision: string | null } | null> {
+  const { data } = await createAdminClient().from("import_mappings").select("id, name, column_map, options, is_default, created_at");
+  let best: { id: string; name: string; fixedDivision: string | null; fit: number; rank: number } | null = null;
+  for (const m of data ?? []) {
+    const o = (m.options ?? {}) as MappingOptions;
+    const fit = layoutFit(headers, { headers: o.headers, mapped: Object.keys((m.column_map ?? {}) as ColumnMap) });
+    // ties: the main setup, then the newest
+    const rank = (m.is_default ? 1e13 : 0) + Date.parse(m.created_at);
+    if (fit >= LAYOUT_FIT && (!best || fit > best.fit || (fit === best.fit && rank > best.rank))) best = { id: m.id, name: m.name, fixedDivision: o.fixedDivision ?? null, fit, rank };
+  }
+  return best;
+}
+
+/** Divisions that hold a separate program (each its own export): the main export leaves them alone. */
+async function programDivisions(): Promise<string[]> {
+  const { data } = await createAdminClient().from("import_mappings").select("options");
+  return (data ?? []).map((m) => ((m.options ?? {}) as MappingOptions).fixedDivision).filter((d): d is string => Boolean(d));
 }
 
 async function loadExisting(sessionId: string): Promise<{ existing: ExistingCamper[]; known: { name: string; bunks: string[] }[]; sourceData: Map<string, Record<string, string>> }> {
@@ -156,6 +177,8 @@ function columnRefresh(rows: { matchedCamperId: string | null; action: string; p
 
 const previewSchema = z.object({
   id: z.guid(),
+  // a separate program's export: everyone in it goes into this division ("" = the main export)
+  fixedDivision: z.string().trim().max(100).default(""),
   takeBunksFromFile: z.enum(["on"]).optional(),
   emptyMeansUnknown: z.enum(["on"]).optional(),
   phoneDefaultRegion: z.string().trim().length(2).default("US"),
@@ -183,22 +206,50 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     if (!Object.values(columnMap).includes("first_name") || !Object.values(columnMap).includes("last_name")) {
       return fail("Map at least first name and last name.");
     }
+    // a separate program's division must be one of this session's
+    let fixedDivision: string | null = null;
+    if (d.fixedDivision) {
+      const { data: div } = await admin.from("divisions").select("name").eq("session_id", imp.session_id).ilike("name", d.fixedDivision).maybeSingle();
+      if (!div) return fail(`There's no division called “${d.fixedDivision}” in this session. Make it in Divisions & bunks first.`);
+      fixedDivision = div.name;
+    }
     let mappingOptions: MappingOptions = { phoneDefaultRegion: d.phoneDefaultRegion.toUpperCase(), emptyMeansUnknown: d.emptyMeansUnknown === "on" };
     if (imp.mapping_id) {
       const { data: m } = await admin.from("import_mappings").select("options").eq("id", imp.mapping_id).maybeSingle();
       mappingOptions = { ...((m?.options as MappingOptions) ?? {}), ...mappingOptions };
     }
+    mappingOptions.fixedDivision = fixedDivision ?? undefined;
+    mappingOptions.headers = headers;
     // prioritise bunk columns in header order unless the preset says otherwise
     mappingOptions.bunkColumnPriority = (mappingOptions.bunkColumnPriority ?? []).filter((c) => columnMap[c] === "bunk");
 
-    // remembered for next time: the one column layout, updated with what was chosen now
-    if (imp.mapping_id) {
-      const { data: m } = await admin.from("import_mappings").select("column_map").eq("id", imp.mapping_id).maybeSingle();
+    // remembered for next time: this kind of export's column setup, updated with what was chosen
+    // now. A file read with another program's setup (they share columns) gets its program's own.
+    let layoutId = imp.mapping_id;
+    const { data: layouts } = await admin.from("import_mappings").select("id, options");
+    const programOf = (o: unknown) => ((o ?? {}) as MappingOptions).fixedDivision?.toLowerCase() ?? "";
+    const current = layouts?.find((l) => l.id === layoutId);
+    if (current && programOf(current.options) !== (fixedDivision ?? "").toLowerCase()) {
+      layoutId = layouts?.find((l) => programOf(l.options) === (fixedDivision ?? "").toLowerCase())?.id ?? null;
+      await admin.from("imports").update({ mapping_id: layoutId }).eq("id", imp.id);
+    }
+    if (layoutId) {
+      const { data: m } = await admin.from("import_mappings").select("column_map").eq("id", layoutId).maybeSingle();
       const merged: ColumnMap = { ...((m?.column_map as ColumnMap) ?? {}) };
       for (const h of headers) delete merged[h];
-      await admin.from("import_mappings").update({ column_map: { ...merged, ...columnMap } as unknown as J, options: mappingOptions as unknown as J }).eq("id", imp.mapping_id);
+      await admin
+        .from("import_mappings")
+        .update({ column_map: { ...merged, ...columnMap } as unknown as J, options: mappingOptions as unknown as J, ...(fixedDivision ? { name: `${fixedDivision} export` } : {}) })
+        .eq("id", layoutId);
     } else {
-      await admin.from("import_mappings").insert({ name: "Registration export", column_map: columnMap, options: mappingOptions as unknown as J, is_default: true, created_by: me.id });
+      // a new kind of export (a separate program's): a setup of its own
+      const { data: made, error: me2 } = await admin
+        .from("import_mappings")
+        .insert({ name: fixedDivision ? `${fixedDivision} export` : "Registration export", column_map: columnMap, options: mappingOptions as unknown as J, is_default: !fixedDivision && !layouts?.some((l) => !programOf(l.options)), created_by: me.id })
+        .select("id")
+        .single();
+      if (me2) throw me2;
+      await admin.from("imports").update({ mapping_id: made.id }).eq("id", imp.id);
     }
     // extra fields: the columns chosen to show on the camper page (others in this file are taken off)
     const { data: extraRow } = await admin.from("settings").select("value").eq("key", "extra_fields").maybeSingle();
@@ -223,8 +274,16 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     await admin.from("settings").upsert({ key: "extra_fields", value: [...keepOthers, ...chosen] as unknown as J, updated_by: me.id, updated_at: new Date().toISOString() });
 
     const rawRows = await fetchAll((from, to) => admin.from("import_rows").select("id, row_number, raw").eq("import_id", imp.id).order("row_number").range(from, to));
-    const parsedRows = rawRows.map((r) => ({ id: r.id, rowNumber: r.row_number, parsed: applyMapping(r.raw as Record<string, string>, columnMap, mappingOptions) }));
-    const { existing, known, sourceData } = await loadExisting(imp.session_id);
+    const parsedRows = rawRows.map((r) => {
+      const parsed = applyMapping(r.raw as Record<string, string>, columnMap, mappingOptions);
+      // a separate program's file: everyone into its division, with registration ids of its own
+      return { id: r.id, rowNumber: r.row_number, parsed: fixedDivision ? intoProgram(parsed, fixedDivision) : parsed };
+    });
+    const loaded = await loadExisting(imp.session_id);
+    const { known, sourceData } = loaded;
+    // each file matches only its own campers: a program's file its division; the main export everyone else
+    const others = (await programDivisions()).filter((x) => !fixedDivision || x.toLowerCase() !== fixedDivision.toLowerCase());
+    const existing = campersForImport(loaded.existing, fixedDivision, fixedDivision ? [] : others);
     resolveMultiValues(parsedRows, known);
     const result = matchAndDiff(parsedRows, existing, known, { takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on" });
     // the export's other columns (labels, extra fields): applying refreshes them for every camper
@@ -260,7 +319,7 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
       .from("imports")
       .update({
         status: "previewed",
-        options: { ...(imp.options as object), columnMap, mappingOptions, takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on", divisionsInFile: result.summary.divisionsInFile, partialWarning },
+        options: { ...(imp.options as object), columnMap, mappingOptions, fixedDivision, takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on", divisionsInFile: result.summary.divisionsInFile, partialWarning },
         summary: { ...result.summary, missing: result.summary.missing.length, missingList: result.summary.missing, columns } as unknown as J,
       })
       .eq("id", imp.id);

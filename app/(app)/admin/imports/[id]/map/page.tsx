@@ -11,7 +11,7 @@ import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
-import { TARGET_OPTIONS, type ColumnMap, type MappingOptions } from "@/lib/import";
+import { guessTarget, TARGET_OPTIONS, type ColumnMap, type MappingOptions } from "@/lib/import";
 import { columnKey, humanLabel, parseExtraFields } from "@/lib/import/extra-fields";
 import { FIELD_BY_KEY } from "@/lib/fields";
 import { previewImport } from "../../actions";
@@ -65,7 +65,7 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
   const { data: imp } = await supabase.from("imports").select("id, file_name, status, mapping_id, options").eq("id", id).maybeSingle();
   if (!imp) notFound();
   if (imp.status !== "uploaded" && imp.status !== "previewed") redirect(`/admin/imports/${id}`);
-  const opts = imp.options as { headers?: string[]; columnMap?: ColumnMap; mappingOptions?: MappingOptions; takeBunksFromFile?: boolean; emptyMeansUnknown?: boolean };
+  const opts = imp.options as { headers?: string[]; columnMap?: ColumnMap; mappingOptions?: MappingOptions; takeBunksFromFile?: boolean; emptyMeansUnknown?: boolean; fixedDivision?: string | null };
   const headers = opts.headers ?? [];
   let presetMap: ColumnMap = opts.columnMap ?? {};
   let presetOptions: MappingOptions = opts.mappingOptions ?? {};
@@ -74,6 +74,25 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
     presetMap = (m?.column_map as ColumnMap) ?? {};
     presetOptions = (m?.options as MappingOptions) ?? {};
   }
+  // a kind of export Kinus hasn't seen: guess the usual columns (first name, last name, id…)
+  if (!opts.columnMap && !imp.mapping_id) {
+    const taken = new Set<string>();
+    for (const h of headers) {
+      const t = guessTarget(h);
+      if (t && !taken.has(t)) {
+        presetMap[h] = t;
+        taken.add(t);
+      }
+    }
+  }
+  // which export this is: the main one (divisions from the file), or a separate program's
+  const [{ data: divisionRows }, { data: campRows }, { data: layoutRow }] = await Promise.all([
+    supabase.from("divisions").select("name, group_id, sort_order, session_id, sessions!inner(is_active)").eq("sessions.is_active", true).order("sort_order").order("name"),
+    supabase.from("division_groups").select("id, name, sort_order, sessions!inner(is_active)").eq("sessions.is_active", true).order("sort_order"),
+    imp.mapping_id ? supabase.from("import_mappings").select("name").eq("id", imp.mapping_id).maybeSingle() : Promise.resolve({ data: null }),
+  ]);
+  const campOf = (g: string | null) => (campRows ?? []).find((c) => c.id === (g ?? campRows?.[0]?.id))?.name ?? null;
+  const program = opts.fixedDivision !== undefined ? (opts.fixedDivision ?? "") : (presetOptions.fixedDivision ?? "");
   const { data: sample } = await supabase.from("import_rows").select("raw").eq("import_id", id).order("row_number").limit(25);
   const samples = (sample ?? []).map((r) => r.raw as Record<string, string>);
   const sampleFor = (h: string) => [...new Set(samples.map((s) => s[h]).filter(Boolean))].slice(0, 2);
@@ -104,6 +123,29 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
       <Steps steps={IMPORT_STEPS} current={2} />
       <ActionForm action={previewImport} className="space-y-6">
         <input type="hidden" name="id" value={imp.id} />
+        <Section
+          title="Which export is this?"
+          description={layoutRow?.name ? `The columns are set up as for your last “${layoutRow.name}” file.` : "A kind of export Kinus hasn't seen: its column setup is remembered for next time."}
+        >
+          <div className="space-y-2 text-sm">
+            <Select name="fixedDivision" defaultValue={program} aria-label="Which export this is">
+              <option value="">The main export: each camper&apos;s division comes from the file</option>
+              {(divisionRows ?? []).map((d) => (
+                <option key={d.name} value={d.name}>
+                  A separate program: everyone goes into {d.name}
+                  {campOf(d.group_id) && campOf(d.group_id)!.toLowerCase() !== d.name.toLowerCase() ? ` (${campOf(d.group_id)})` : ""}
+                </option>
+              ))}
+            </Select>
+            <p className="text-muted-foreground">
+              For a program with its own export and no division column (the virtual program): make its camp and division in{" "}
+              <Link href="/admin/divisions" className="text-primary hover:underline">
+                Divisions &amp; bunks
+              </Link>{" "}
+              first, then choose it here. Its campers are kept apart: this file only updates them, and the main export leaves them alone.
+            </p>
+          </div>
+        </Section>
         {lost.cells > 0 && (
           <Callout tone="warning" title={`${lost.cells} ${lost.cells === 1 ? "name has" : "names have"} “???” instead of letters`}>
             <span className="block">
