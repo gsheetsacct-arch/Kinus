@@ -13,6 +13,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { isProgressMark, RETRY_MARK, STARTED_MARK } from "./labels";
 import { cleanUsed, sheetStock, usedBefore } from "./sheet-position";
 import { campDivisions, templateCamps, templateDivisionIds } from "./template-camps";
+import { customFontCss } from "./custom-fonts";
 
 /** Office, directors and admins print for anyone; others need check-in access to the camper. */
 export function canPrintFor(user: CurrentUser, camper: { division_id: string | null; bunk_id: string | null }) {
@@ -117,14 +118,15 @@ async function loadRequests(jobIds: string[]) {
  */
 async function loadPrintSet(jobIds: string[]) {
   const { admin, jobs, spec, copiesOf, askedMoreThanOnce } = await loadRequests(jobIds);
-  const [campers, setup, background, images] = await Promise.all([
+  const [campers, setup, background, images, fontCss] = await Promise.all([
     loadPrintCampers(admin, [...copiesOf.keys()]),
     loadMergeSetup(admin),
     backgroundDataUrl(admin, spec.background_path),
     imageDataUrls(admin, spec.layers),
+    customFontCss(spec),
   ]);
   campers.sort(byBunkThenName);
-  return { jobs, spec, campers, copiesOf, setup, background, images, askedMoreThanOnce };
+  return { jobs, spec, campers, copiesOf, setup, background, images, fontCss, askedMoreThanOnce };
 }
 
 const divisionOf = (c: { division_id?: string | null }) => c.division_id ?? null;
@@ -142,6 +144,7 @@ function setHtml(set: PrintSet, opts: { start?: number; used?: number[]; divisio
   const html = renderDocument(set.spec, items, {
     background: set.background,
     images: set.images,
+    fontCss: set.fontCss,
     stack,
     usedSlots: stock && !opts.tags?.[0] ? (opts.used ?? (opts.start ? usedBefore(opts.start, stock.perSheet) : [])) : [],
   });

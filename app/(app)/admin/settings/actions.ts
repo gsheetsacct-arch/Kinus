@@ -128,6 +128,7 @@ export async function sendTestEmail(): Promise<ActionResult> {
         const html = renderDocument({ ...spec, sheet_layout: null }, [{ values: mergeValues(SAMPLE_CAMPER as never, merge.fields, merge.maps), copies: 1 }], {
           background: await backgroundDataUrl(admin, spec.background_path),
           images: await imageDataUrls(admin, spec.layers),
+          fontCss: await (await import("@/lib/print/custom-fonts")).customFontCss(spec),
         });
         pdf = await htmlToPdf(html);
         pdfNote = `A sample “${spec.name}” PDF is attached (${Math.max(1, Math.round(pdf.length / 1024))} KB).`;

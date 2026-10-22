@@ -473,6 +473,7 @@ export function TemplateEditor({
   pictures = {},
   divisions = [],
   camps = [],
+  customFonts = [],
 }: {
   initial: EditorTemplate;
   fields: MergeKey[];
@@ -484,6 +485,8 @@ export function TemplateEditor({
   divisions?: { name: string; color: string | null }[];
   /** This session's camps (American, Hebrew…), for a template that's for some only. */
   camps?: string[];
+  /** Fonts the designer uploaded (Templates → Fonts). */
+  customFonts?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [t, setT] = React.useState<EditorTemplate>(() => ({ ...initial, layers: initial.layers.map((l) => ({ ...l, id: l.id || uid() })) }));
@@ -1203,12 +1206,25 @@ export function TemplateEditor({
                       }}
                     />
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <Select aria-label="Font" value={sel.font ?? "sans"} onChange={(e) => setLayer(sel.id, { font: e.target.value as FontKey })} className="h-9 w-auto flex-1">
-                        {(Object.entries(FONTS) as [FontKey, (typeof FONTS)[FontKey]][]).map(([k, f]) => (
-                          <option key={k} value={k}>
-                            {f.label} ({f.sample})
-                          </option>
-                        ))}
+                      <Select aria-label="Font" value={sel.font ?? "sans"} onChange={(e) => setLayer(sel.id, { font: e.target.value as FontKey | `custom:${string}` })} className="h-9 w-auto flex-1">
+                        <optgroup label="Kinus fonts">
+                          {(Object.entries(FONTS) as [FontKey, (typeof FONTS)[FontKey]][]).map(([k, f]) => (
+                            <option key={k} value={k}>
+                              {f.label} ({f.sample})
+                            </option>
+                          ))}
+                        </optgroup>
+                        {customFonts.length > 0 && (
+                          <optgroup label="Your fonts">
+                            {customFonts.map((f) => (
+                              <option key={f.id} value={`custom:${f.id}`}>
+                                {f.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {/* a font removed since: still named, so it's clear what happened */}
+                        {sel.font?.startsWith("custom:") && !customFonts.some((f) => `custom:${f.id}` === sel.font) && <option value={sel.font}>A removed font (prints in Clear)</option>}
                       </Select>
                       <Button size="icon" variant={sel.italic ? "default" : "outline"} className="size-9" onClick={() => setLayer(sel.id, { italic: !sel.italic })} aria-label="Italic" aria-pressed={Boolean(sel.italic)}>
                         <Italic />

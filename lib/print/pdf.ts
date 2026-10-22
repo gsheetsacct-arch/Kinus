@@ -43,3 +43,57 @@ export async function htmlToPdf(html: string, onFit?: (notes: FitNotes) => void)
     await browser.close();
   }
 }
+
+/** What happened to each text part when fitting (by part id): its smallest size, and names that shrank or were cut. */
+export type PartFit = Record<string, { smallestPt: number | null; shrunk: { text: string; pt: number }[]; cut: string[] }>;
+
+async function launchBrowser() {
+  const puppeteer = (await import("puppeteer-core")).default;
+  let executablePath = process.env.CHROMIUM_PATH;
+  let args = ["--no-sandbox", "--disable-gpu", "--font-render-hinting=none"];
+  let headless: boolean | "shell" = true;
+  if (!executablePath) {
+    const chromium = (await import("@sparticuz/chromium")).default;
+    executablePath = await chromium.executablePath();
+    args = chromium.args;
+    headless = "shell";
+  }
+  return puppeteer.launch({ executablePath, args, headless, timeout: 15000 });
+}
+
+/**
+ * Pictures of the first tags of a page (front and back), exactly as they print, and how each
+ * text part fitted: for the design connector, so Claude sees its design.
+ */
+export async function htmlToPng(html: string, opts: { tags?: number; scale?: number } = {}): Promise<{ images: Buffer[]; fit: PartFit }> {
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1400, height: 1000, deviceScaleFactor: opts.scale ?? 3 });
+    await page.setContent(html, { waitUntil: "load", timeout: 15000 });
+    await page.waitForSelector("body[data-fitted]", { timeout: 8000 }).catch(() => {
+      throw new Error("the text couldn't be sized to fit in time");
+    });
+    // the screen view has a grey page and shadows around tags: plain white for the picture
+    await page.addStyleTag({ content: "body{background:#fff!important;padding:0!important;gap:4mm!important}.tag,.sheet{box-shadow:none!important}.sheet.back::before,body>.tag.back::after{display:none!important}" });
+    const tags = await page.$$(".tag:not(.used)");
+    const images: Buffer[] = [];
+    for (const t of tags.slice(0, opts.tags ?? 2)) images.push(Buffer.from(await t.screenshot({ type: "png" })));
+    const fit = (await page.evaluate(() => {
+      const out: Record<string, { smallestPt: number | null; shrunk: { text: string; pt: number }[]; cut: string[] }> = {};
+      document.querySelectorAll<HTMLElement>("[data-part][data-fit]").forEach((el) => {
+        const id = el.getAttribute("data-part")!;
+        const r = (out[id] ??= { smallestPt: null, shrunk: [], cut: [] });
+        const pt = Math.round(parseFloat(getComputedStyle(el).fontSize) * 0.75 * 10) / 10;
+        r.smallestPt = r.smallestPt === null ? pt : Math.min(r.smallestPt, pt);
+        const text = (el.textContent ?? "").trim();
+        if (el.hasAttribute("data-cut")) r.cut.push(text);
+        else if (el.hasAttribute("data-small")) r.shrunk.push({ text, pt: Number(el.getAttribute("data-small")) });
+      });
+      return out;
+    })) as PartFit;
+    return { images, fit };
+  } finally {
+    await browser.close();
+  }
+}
