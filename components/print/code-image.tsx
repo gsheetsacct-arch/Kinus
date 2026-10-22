@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import { codePreviews } from "@/app/(app)/print/actions";
+import { tintCode } from "@/lib/print/code-color";
 
 type Code = { svg: string; modules: number };
 const cache = new Map<string, Code>();
@@ -39,7 +40,7 @@ export function useCode(type: "barcode" | "qr", text: string): Code | null {
   return code;
 }
 
-export function CodeImage({ svg, stretch }: { svg: string; stretch?: boolean }) {
-  const html = svg.replace("<svg ", `<svg preserveAspectRatio="${stretch ? "none" : "xMidYMid meet"}" style="width:100%;height:100%;display:block" `);
+export function CodeImage({ svg, stretch, color }: { svg: string; stretch?: boolean; color?: string }) {
+  const html = tintCode(svg, color).replace("<svg ", `<svg preserveAspectRatio="${stretch ? "none" : "xMidYMid meet"}" style="width:100%;height:100%;display:block" `);
   return <div className="size-full" dangerouslySetInnerHTML={{ __html: html }} />;
 }

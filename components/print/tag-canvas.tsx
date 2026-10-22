@@ -534,7 +534,7 @@ function Part({
         )}
         {l.type === "qr" &&
           (fill(l.text, (k) => values[k] ?? "").trim() ? (
-            <QrPart text={fill(l.text, (k) => values[k] ?? "")} />
+            <QrPart text={fill(l.text, (k) => values[k] ?? "")} color={l.color} />
           ) : (
             <EmptyCode what="QR code" />
           ))}
@@ -639,7 +639,7 @@ function BarcodePart({
     <div className="flex size-full flex-col bg-white">
       <div className="min-h-0 flex-1">
         {code?.svg ? (
-          <CodeImage svg={code.svg} stretch />
+          <CodeImage svg={code.svg} stretch color={l.color} />
         ) : (
           <div className="size-full bg-slate-200" />
         )}
@@ -648,6 +648,7 @@ function BarcodePart({
         <div
           className="text-center leading-[1.2]"
           style={{
+            color: l.color,
             fontSize: 7 * MM_PER_PT * scale,
             letterSpacing: 0.5 * MM_PER_PT * scale,
             paddingTop: 0.4 * scale,
@@ -660,10 +661,10 @@ function BarcodePart({
   );
 }
 
-function QrPart({ text }: { text: string }) {
+function QrPart({ text, color }: { text: string; color?: string }) {
   const code = useCode("qr", text);
   return code?.svg ? (
-    <CodeImage svg={code.svg} />
+    <CodeImage svg={code.svg} color={color} />
   ) : (
     <div className="size-full bg-slate-200" />
   );

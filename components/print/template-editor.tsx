@@ -47,6 +47,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn, formatDateTime, plural } from "@/lib/utils";
 import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
 import { fitPreview } from "@/lib/print/fit-preview";
+import { codeContrast, MIN_CODE_CONTRAST } from "@/lib/print/code-color";
 import { DIVISION_VALUE, onBack, pictureFor, sheetPlacement, type Layer, type SheetLayout, type TemplateSpec } from "@/lib/print/types";
 import { presetSummary, type LabelPreset } from "@/lib/print/presets";
 import { currentPreset, LabelPicker, SheetDiagram, sizeText } from "./label-picker";
@@ -1253,6 +1254,30 @@ export function TemplateEditor({
                     </label>
                     <BarcodeCheck l={sel} values={sample.values} />
                   </>
+                )}
+                {(sel.type === "barcode" || sel.type === "qr") && (
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm">Colour</span>
+                      <input
+                        type="color"
+                        aria-label={`${sel.type === "qr" ? "QR code" : "Barcode"} colour`}
+                        value={/^#[0-9a-f]{6}$/i.test(sel.color ?? "") ? sel.color : "#000000"}
+                        onChange={(e) => setLayer(sel.id, { color: e.target.value === "#000000" ? undefined : e.target.value })}
+                        className="h-8 w-10 cursor-pointer rounded border bg-transparent"
+                      />
+                      {sel.color && (
+                        <Button size="sm" variant="ghost" onClick={() => setLayer(sel.id, { color: undefined })}>
+                          Back to black
+                        </Button>
+                      )}
+                    </div>
+                    {codeContrast(sel.color) < MIN_CODE_CONTRAST && (
+                      <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> That colour is too light: scanners may not read it. Pick a darker one (navy, dark green, dark red…).
+                      </p>
+                    )}
+                  </div>
                 )}
                 {sel.type === "box" && (
                   <div className="space-y-2">

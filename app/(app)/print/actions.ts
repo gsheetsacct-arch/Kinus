@@ -278,8 +278,8 @@ const num = (min: number, max: number) => z.coerce.number().min(min).max(max);
 const partFlags = { locked: z.boolean().optional(), hidden: z.boolean().optional(), side: z.literal("back").optional() };
 const layerSchema = z.discriminatedUnion("type", [
   z.object({ ...partFlags, id: z.string(), type: z.literal("text"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), size: num(3, 200), weight: z.union([z.literal(400), z.literal(700)]).optional(), align: z.enum(["left", "center", "right"]).optional(), color: z.string().max(40).optional(), fit: z.boolean().optional(), wrap: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(), minSize: num(3, 200).optional(), font: z.enum(["sans", "rounded", "serif", "display"]).optional(), italic: z.boolean().optional(), underline: z.boolean().optional() }),
-  z.object({ ...partFlags, id: z.string(), type: z.literal("barcode"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), showText: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional() }),
-  z.object({ ...partFlags, id: z.string(), type: z.literal("qr"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500) }),
+  z.object({ ...partFlags, id: z.string(), type: z.literal("barcode"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), showText: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(), color: z.string().max(40).optional() }),
+  z.object({ ...partFlags, id: z.string(), type: z.literal("qr"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), color: z.string().max(40).optional() }),
   z.object({
     ...partFlags,
     id: z.string(),

@@ -1,4 +1,5 @@
 import { code128Svg, qrSvg } from "./barcode";
+import { tintCode } from "./code-color";
 import { embeddedFontCss } from "./fonts";
 import { FONTS, fontStack, lineHeightOf } from "./font-families";
 import { fill } from "./merge";
@@ -44,8 +45,8 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
     }
     case "barcode": {
       const text = fill(l.text, get);
-      const svg = code128Svg(text).replace("<svg ", '<svg preserveAspectRatio="none" ');
-      const label = l.showText !== false ? `<div class="bc-text">${esc(text)}</div>` : "";
+      const svg = tintCode(code128Svg(text), l.color).replace("<svg ", '<svg preserveAspectRatio="none" ');
+      const label = l.showText !== false ? `<div class="bc-text"${l.color ? ` style="color:${safeColor(l.color, "#000")}"` : ""}>${esc(text)}</div>` : "";
       return `<div class="l bc" style="${pos}"><div class="bars">${svg}</div>${label}</div>`;
     }
     case "image": {
@@ -55,7 +56,7 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
       return `<div class="l im ${imageClass(path)}" style="${pos}background-size:${l.fit === "cover" ? "cover" : "contain"}"></div>`;
     }
     case "qr": {
-      const svg = qrSvg(fill(l.text, get)).replace("<svg ", '<svg preserveAspectRatio="xMidYMid meet" ');
+      const svg = tintCode(qrSvg(fill(l.text, get)), l.color).replace("<svg ", '<svg preserveAspectRatio="xMidYMid meet" ');
       return `<div class="l qr" style="${pos}">${svg}</div>`;
     }
   }
