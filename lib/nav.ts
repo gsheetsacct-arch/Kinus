@@ -4,7 +4,7 @@ import { LEVEL_RANK, canFinalCheckout, canFollowUp, canUsePhoneBook, canUsePrint
 export type NavIcon = "DoorOpen" | "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser" | "ShieldCheck";
 export type NavItem = { href: string; label: string; icon: NavIcon; description: string; section: "main" | "admin"; mobile?: boolean };
 
-export function buildNav(user: CurrentUser): NavItem[] {
+export function buildNav(user: CurrentUser, opts: { designs?: boolean } = {}): NavItem[] {
   const canScan = LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan;
   // the phones at a check-in line: checking in and out, and finding campers and staff. Nothing else.
   if (user.checkinLogin)
@@ -29,6 +29,7 @@ export function buildNav(user: CurrentUser): NavItem[] {
   ];
   if (canUsePhoneBook(user)) nav.push({ href: "/phone-book", label: "Phone book", icon: "BookUser", description: "Call or text the staff you work with", section: "main" });
   if (canUsePrintArea(user)) nav.push({ href: "/print", label: "Print", icon: "Printer", description: "Name and luggage tags: queue, batches, templates", section: "main" });
+  else if (opts.designs) nav.push({ href: "/print/templates", label: "Tag designs", icon: "Printer", description: "The name tag and label templates", section: "main" });
   if (isStaffManager(user)) nav.push({ href: "/admin/users", label: "Staff", icon: "UserCog", description: "Invite people and choose what they can see", section: "main" });
   if (isAdmin(user)) {
     nav.push(

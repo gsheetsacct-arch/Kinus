@@ -4,7 +4,7 @@ import { FieldsEditor } from "@/components/print/fields-editor";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { isAdmin } from "@/lib/auth/permissions";
+import { canDesign } from "@/lib/print/designers";
 import { FIELDS } from "@/lib/fields";
 import { loadMergeSetup, loadPrintCampers } from "@/lib/print/data";
 import { sourceValues } from "@/lib/print/merge";
@@ -16,7 +16,7 @@ export const metadata = { title: "Fields & conversions" };
 
 export default async function FieldsPage() {
   const [user, session, camp] = await Promise.all([requireUser(), getActiveSession(), getCampContext()]);
-  if (!isAdmin(user)) redirect("/print");
+  if (!(await canDesign(user))) redirect("/print");
   const supabase = await createClient();
   const admin = createAdminClient();
   const [{ data: fields }, setup, sampleRow] = await Promise.all([

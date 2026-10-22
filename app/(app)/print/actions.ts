@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { canUsePrintArea, isAdmin } from "@/lib/auth/permissions";
+import { canDesign, loadDesigners, saveDesigners } from "@/lib/print/designers";
 import { appUrl } from "@/lib/auth/app-url";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { getCampContext } from "@/lib/data/camp";
@@ -238,11 +239,37 @@ export async function createBatch(fd: FormData): Promise<ActionResult> {
 }
 
 // ---------------------------------------------------------------------------
-// Templates (admins)
+// Templates, fields and conversions (directors over all of camp, and staff they allow)
 // ---------------------------------------------------------------------------
-async function requireAdminUser() {
+/** Changes are written with the server's key after this check (see lib/print/designers). */
+async function requireDesigner() {
   const user = await requireUser();
-  if (!isAdmin(user)) throw new Error("Only directors over all of camp can change templates.");
+  if (!(await canDesign(user))) throw new Error("Only directors over all of camp, and staff they allow, can change templates.");
+  return user;
+}
+
+/** Directors over all of camp allow (or stop) someone else making and changing templates. */
+export async function setDesigner(profileId: string, on: boolean): Promise<ActionResult> {
+  try {
+    const me = await requireUser();
+    if (!isAdmin(me)) return fail("Only directors over all of camp can choose who edits templates.");
+    const id = z.guid().parse(profileId);
+    const { data: who } = await createAdminClient().from("profiles").select("full_name, login, is_active").eq("id", id).maybeSingle();
+    if (!who) return fail("That person isn't on staff.");
+    if (on && (who.login !== "personal" || !who.is_active)) return fail(`${who.full_name} can't sign in with their own account, so they can't edit templates.`);
+    const now = await loadDesigners();
+    await saveDesigners(on ? [...now, id] : now.filter((x) => x !== id), me.id);
+    revalidatePath("/print/templates");
+    return ok(on ? `${who.full_name} can edit templates now.` : `${who.full_name} can't edit templates any more.`);
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+/** Previews: people who print, and people who design. */
+async function requirePreviewer() {
+  const user = await requireUser();
+  if (!canUsePrintArea(user) && !(await canDesign(user))) throw new Error("Printing is for the office, directors and division heads.");
   return user;
 }
 
@@ -318,11 +345,11 @@ function templateProblem(e: z.ZodError, input: TemplateInput): string {
 
 export async function saveTemplate(input: TemplateInput): Promise<ActionResult & { id?: string }> {
   try {
-    await requireAdminUser();
+    await requireDesigner();
     const parsed = templateSchema.safeParse(input);
     if (!parsed.success) return fail(templateProblem(parsed.error, input));
     const t = parsed.data;
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const row = {
       name: t.name,
       kind: t.kind,
@@ -367,8 +394,8 @@ export async function saveTemplate(input: TemplateInput): Promise<ActionResult &
 
 export async function duplicateTemplate(fd: FormData): Promise<ActionResult> {
   try {
-    await requireAdminUser();
-    const supabase = await createClient();
+    await requireDesigner();
+    const supabase = createAdminClient();
     const { data: t } = await supabase.from("print_templates").select("*").eq("id", String(fd.get("id"))).single();
     if (!t) return fail("Template not found.");
     const copy = {
@@ -400,8 +427,8 @@ export async function duplicateTemplate(fd: FormData): Promise<ActionResult> {
 
 export async function deleteTemplate(fd: FormData): Promise<ActionResult> {
   try {
-    await requireAdminUser();
-    const supabase = await createClient();
+    await requireDesigner();
+    const supabase = createAdminClient();
     const id = String(fd.get("id"));
     const { count } = await supabase.from("print_jobs").select("id", { count: "exact", head: true }).eq("template_id", id);
     if (count) {
@@ -424,7 +451,7 @@ export async function deleteTemplate(fd: FormData): Promise<ActionResult> {
 /** A picture for a template part (a camp logo…). Returns where it's stored and a data URL to show it right away. */
 export async function uploadTemplateImage(fd: FormData): Promise<{ ok: true; path: string; url: string } | { ok: false; error: string }> {
   try {
-    await requireAdminUser();
+    await requireDesigner();
     const file = fd.get("file");
     if (!(file instanceof File) || !file.size) return { ok: false, error: "Choose a picture." };
     if (!/^image\/(png|jpeg|webp)$/.test(file.type)) return { ok: false, error: "Use a PNG, JPG or WebP picture." };
@@ -443,7 +470,7 @@ export async function uploadTemplateImage(fd: FormData): Promise<{ ok: true; pat
 /** Upload a background (e.g. the design exported from Publisher as PNG). */
 export async function uploadBackground(fd: FormData): Promise<ActionResult> {
   try {
-    await requireAdminUser();
+    await requireDesigner();
     const id = z.guid().parse(fd.get("id"));
     const file = fd.get("file");
     const admin = createAdminClient();
@@ -470,7 +497,7 @@ export async function uploadBackground(fd: FormData): Promise<ActionResult> {
 /** The exact print rendering for the editor's "Print preview", for the same camper as the canvas. */
 /** Real barcodes and QR codes for the editor, the same ones that print. */
 export async function codePreviews(items: { type: "barcode" | "qr"; text: string }[]): Promise<{ svg: string; modules: number }[]> {
-  await requirePrinter();
+  await requirePreviewer();
   const { code128Modules, code128Svg, qrSvg } = await import("@/lib/print/barcode");
   return items.slice(0, 40).map(({ type, text }) => {
     const svg = type === "qr" ? qrSvg(text.slice(0, 500)) : code128Svg(text.slice(0, 80));
@@ -479,7 +506,7 @@ export async function codePreviews(items: { type: "barcode" | "qr"; text: string
 }
 
 export async function previewTemplate(spec: TemplateSpec, who: { kind: "sample" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] }, opts: { fullSheet?: boolean } = {}): Promise<string> {
-  await requirePrinter();
+  await requirePreviewer();
   const r = await previewValues(who);
   const values = "error" in r ? await sampleValues() : r.values;
   const admin = createAdminClient();
@@ -521,10 +548,10 @@ export type FieldInput = z.input<typeof fieldSchema>;
 
 export async function saveField(input: FieldInput): Promise<ActionResult> {
   try {
-    await requireAdminUser();
+    await requireDesigner();
     const f = fieldSchema.parse(input);
     for (const t of f.transforms) if (t.type === "replace") new RegExp(t.pattern, t.flags ?? "");
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const row = { key: f.key, label: f.label, source_field: f.source_field, transforms: f.transforms };
     const { error } = f.id
       ? await supabase.from("merge_fields").update(row).eq("id", f.id)
@@ -539,8 +566,8 @@ export async function saveField(input: FieldInput): Promise<ActionResult> {
 
 export async function deleteField(fd: FormData): Promise<ActionResult> {
   try {
-    await requireAdminUser();
-    const supabase = await createClient();
+    await requireDesigner();
+    const supabase = createAdminClient();
     const { error } = await supabase.from("merge_fields").delete().eq("id", String(fd.get("id")));
     if (error) throw error;
     revalidatePath("/print/fields");
@@ -553,8 +580,8 @@ export async function deleteField(fd: FormData): Promise<ActionResult> {
 /** A conversion table, written as lines of "from = to". */
 export async function saveValueMap(fd: FormData): Promise<ActionResult> {
   try {
-    await requireAdminUser();
-    const supabase = await createClient();
+    await requireDesigner();
+    const supabase = createAdminClient();
     const id = String(fd.get("id") ?? "");
     const name = String(fd.get("name") ?? "").trim();
     if (!name) return fail("Give the conversion a name.");
@@ -589,8 +616,8 @@ export async function saveValueMap(fd: FormData): Promise<ActionResult> {
 
 export async function deleteValueMap(fd: FormData): Promise<ActionResult> {
   try {
-    await requireAdminUser();
-    const supabase = await createClient();
+    await requireDesigner();
+    const supabase = createAdminClient();
     const id = String(fd.get("id"));
     const { data: users } = await supabase.from("merge_fields").select("key, transforms");
     const usedBy = (users ?? []).filter((f) => ((f.transforms as Transform[]) ?? []).some((t) => t.type === "value_map" && t.map_id === id)).map((f) => f.key);
@@ -637,7 +664,7 @@ async function sampleValues(): Promise<Record<string, string>> {
 export async function previewValues(
   who: { kind: "sample" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] },
 ): Promise<{ values: Record<string, string>; label: string } | { error: string }> {
-  await requirePrinter();
+  await requirePreviewer();
   const session = await getActiveSession();
   if (who.kind === "sample" || !session) return { values: await sampleValues(), label: "a sample camper" };
   const supabase = await createClient();
@@ -685,7 +712,7 @@ export async function previewValues(
  */
 export async function fitCheckPeople(keys: string[]): Promise<{ ok: true; people: { name: string; code: string; values: Record<string, string> }[] } | { ok: false; error: string }> {
   try {
-    await requirePrinter();
+    await requirePreviewer();
     const session = await getActiveSession();
     if (!session) return { ok: true, people: [] };
     const wanted = [...new Set(keys.filter((k) => /^[A-Z0-9_]{1,40}$/.test(k)))].slice(0, 40);
@@ -715,8 +742,8 @@ export async function fitCheckPeople(keys: string[]): Promise<{ ok: true; people
 /** Put a field on the merge list or take it off (it keeps printing where a template uses it). */
 export async function setFieldEnabled(id: string, enabled: boolean): Promise<ActionResult> {
   try {
-    await requireAdminUser();
-    const supabase = await createClient();
+    await requireDesigner();
+    const supabase = createAdminClient();
     const { error } = await supabase.from("merge_fields").update({ enabled }).eq("id", id);
     if (error) throw /enabled/.test(error.message) ? new Error("Run migration 0012 in Supabase first.") : error;
     revalidatePath("/print/fields");

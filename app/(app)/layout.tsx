@@ -4,13 +4,14 @@ import { buildNav } from "@/lib/nav";
 import { STAFF_ROLES } from "@/lib/labels";
 import { signOut } from "@/app/(auth)/actions";
 import { getCampContext } from "@/lib/data/camp";
+import { canDesign } from "@/lib/print/designers";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const [session, camp] = await Promise.all([getActiveSession(), getCampContext()]);
   return (
     <AppShell
-      nav={buildNav(user)}
+      nav={buildNav(user, { designs: await canDesign(user) })}
       user={{ fullName: user.fullName, roleLabel: STAFF_ROLES[user.role].label }}
       sessionName={session?.name ?? null}
       camps={camp.camps.map(({ id, name }) => ({ id, name }))}

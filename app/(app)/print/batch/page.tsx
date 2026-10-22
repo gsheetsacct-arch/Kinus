@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { BatchForm } from "@/components/print/batch-form";
 import { createClient } from "@/lib/supabase/server";
@@ -5,7 +6,7 @@ import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { loadAreaTree } from "@/lib/data/areas";
 import { getCampContext } from "@/lib/data/camp";
 import { officeEmail } from "@/lib/print/jobs";
-import { visibleDivisionIds } from "@/lib/auth/permissions";
+import { canUsePrintArea, visibleDivisionIds } from "@/lib/auth/permissions";
 import { forCamp, templateCamps } from "@/lib/print/template-camps";
 
 export const metadata = { title: "Print a batch" };
@@ -13,6 +14,7 @@ export const maxDuration = 60;
 
 export default async function BatchPage() {
   const [user, session, camp] = await Promise.all([requireUser(), getActiveSession(), getCampContext()]);
+  if (!canUsePrintArea(user)) redirect("/print/templates");
   if (!session) return <p className="text-muted-foreground">No active session.</p>;
   const supabase = await createClient();
   const [tree, { data: templates }, office] = await Promise.all([

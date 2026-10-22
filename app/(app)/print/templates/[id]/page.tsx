@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { compareDivisionNames } from "@/lib/bunk-order";
 import { templateCamps } from "@/lib/print/template-camps";
-import { isAdmin } from "@/lib/auth/permissions";
+import { canDesign } from "@/lib/print/designers";
 import { imageDataUrls, backgroundDataUrl, toSpec } from "@/lib/print/data";
 import { embeddedFontCss } from "@/lib/print/fonts";
 import { FONTS } from "@/lib/print/font-families";
@@ -24,7 +24,7 @@ const BLANK: EditorTemplate = { name: "New template", kind: "name_tag", page_wid
 
 export default async function TemplatePage({ params }: { params: Promise<{ id: string }> }) {
   const [user, { id }] = await Promise.all([requireUser(), params]);
-  if (!isAdmin(user)) redirect("/print");
+  if (!(await canDesign(user))) redirect("/print");
   const supabase = await createClient();
   const { data: fieldRows } = await supabase.from("merge_fields").select("*").order("sort_order").order("key");
   const fields = (fieldRows ?? []).map((f) => ({ key: f.key, label: f.label, enabled: (f as { enabled?: boolean }).enabled ?? true }));
