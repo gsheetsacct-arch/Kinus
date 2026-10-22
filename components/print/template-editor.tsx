@@ -473,6 +473,7 @@ export function TemplateEditor({
   pictures = {},
   divisions = [],
   camps = [],
+  customFonts = [],
 }: {
   initial: EditorTemplate;
   fields: MergeKey[];
@@ -484,6 +485,8 @@ export function TemplateEditor({
   divisions?: { name: string; color: string | null }[];
   /** This session's camps (American, Hebrew…), for a template that's for some only. */
   camps?: string[];
+  /** Fonts the designer uploaded (Templates → Fonts). */
+  customFonts?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [t, setT] = React.useState<EditorTemplate>(() => ({ ...initial, layers: initial.layers.map((l) => ({ ...l, id: l.id || uid() })) }));
@@ -511,7 +514,7 @@ export function TemplateEditor({
   selectedRef.current = selected;
   const [fits, setFits] = React.useState<Record<string, FitInfo>>({});
   const [sample, setSample] = React.useState<{ values: Record<string, string>; label: string }>({ values: {}, label: "" });
-  const [who, setWho] = React.useState<"sample" | "longest" | "code">("sample");
+  const [who, setWho] = React.useState<"sample" | "longest" | "worst" | "code">("sample");
   const [code, setCode] = React.useState("");
   const [saving, startSave] = React.useTransition();
   const [dirty, setDirty] = React.useState(false);
@@ -703,7 +706,14 @@ export function TemplateEditor({
   // box on this template's parts (checked again a moment after the parts change)
   const textsKey = JSON.stringify(t.layers.filter((l) => l.type === "text").map((l) => ({ text: (l as { text: string }).text, w: l.w })));
   const whoArg = React.useMemo(
-    () => (who === "code" ? ({ kind: "code", code } as const) : who === "longest" ? ({ kind: "longest", texts: JSON.parse(textsKey) } as const) : ({ kind: "sample" } as const)),
+    () =>
+      who === "code"
+        ? ({ kind: "code", code } as const)
+        : who === "longest"
+          ? ({ kind: "longest", texts: JSON.parse(textsKey) } as const)
+          : who === "worst"
+            ? ({ kind: "worst" } as const)
+            : ({ kind: "sample" } as const),
     [who, code, textsKey],
   );
   React.useEffect(() => {
@@ -905,6 +915,7 @@ export function TemplateEditor({
           <Select value={who} onChange={(e) => setWho(e.target.value as typeof who)} className="h-9 w-48">
             <option value="sample">A sample camper</option>
             <option value="longest">The longest text (checks every camper)</option>
+            <option value="worst">The longest of every field at once (worst case)</option>
             <option value="code">A camper by code…</option>
           </Select>
         </label>
@@ -1203,12 +1214,25 @@ export function TemplateEditor({
                       }}
                     />
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <Select aria-label="Font" value={sel.font ?? "sans"} onChange={(e) => setLayer(sel.id, { font: e.target.value as FontKey })} className="h-9 w-auto flex-1">
-                        {(Object.entries(FONTS) as [FontKey, (typeof FONTS)[FontKey]][]).map(([k, f]) => (
-                          <option key={k} value={k}>
-                            {f.label} ({f.sample})
-                          </option>
-                        ))}
+                      <Select aria-label="Font" value={sel.font ?? "sans"} onChange={(e) => setLayer(sel.id, { font: e.target.value as FontKey | `custom:${string}` })} className="h-9 w-auto flex-1">
+                        <optgroup label="Kinus fonts">
+                          {(Object.entries(FONTS) as [FontKey, (typeof FONTS)[FontKey]][]).map(([k, f]) => (
+                            <option key={k} value={k}>
+                              {f.label} ({f.sample})
+                            </option>
+                          ))}
+                        </optgroup>
+                        {customFonts.length > 0 && (
+                          <optgroup label="Your fonts">
+                            {customFonts.map((f) => (
+                              <option key={f.id} value={`custom:${f.id}`}>
+                                {f.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {/* a font removed since: still named, so it's clear what happened */}
+                        {sel.font?.startsWith("custom:") && !customFonts.some((f) => `custom:${f.id}` === sel.font) && <option value={sel.font}>A removed font (prints in Clear)</option>}
                       </Select>
                       <Button size="icon" variant={sel.italic ? "default" : "outline"} className="size-9" onClick={() => setLayer(sel.id, { italic: !sel.italic })} aria-label="Italic" aria-pressed={Boolean(sel.italic)}>
                         <Italic />

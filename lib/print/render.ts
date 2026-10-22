@@ -1,7 +1,7 @@
 import { code128Svg, qrSvg } from "./barcode";
 import { tintCode } from "./code-color";
 import { embeddedFontCss } from "./fonts";
-import { FONTS, fontStack, lineHeightOf } from "./font-families";
+import { FONTS, fontStack, isCustomFont, lineHeightOf, type FontKey } from "./font-families";
 import { fill } from "./merge";
 import { DIVISION_VALUE, onBack, pictureFor, sheetPlacement, type Layer, type PrintItem, type SheetLayout, type TemplateSpec } from "./types";
 import { FLOOR_PT, minPt, PX_PER_PT } from "./render-constants";
@@ -41,7 +41,7 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
       const text = fill(l.text, get);
       const style = `${pos}font-size:${l.size}pt;font-weight:${l.weight ?? 400};text-align:${l.align ?? "left"};color:${safeColor(l.color, "#111111")};justify-content:${l.align === "center" ? "center" : l.align === "right" ? "flex-end" : "flex-start"};${l.font && l.font !== "sans" ? `font-family:${fontStack(l.font)};` : ""}line-height:${lineHeightOf(l.font)};${l.italic ? "font-style:italic;" : ""}`;
       const fitAttr = l.fit !== false ? `data-fit data-min="${(minPt(l) * PX_PER_PT).toFixed(2)}" data-floor="${(Math.min(FLOOR_PT, minPt(l)) * PX_PER_PT).toFixed(2)}"` : "";
-      return `<div class="l t${l.wrap ? " wrap" : ""}" ${fitAttr} style="${esc(style)}"><span dir="auto"${l.underline ? ' style="text-decoration:underline"' : ""}>${esc(text)}</span></div>`;
+      return `<div class="l t${l.wrap ? " wrap" : ""}" data-part="${esc(l.id)}" ${fitAttr} style="${esc(style)}"><span dir="auto"${l.underline ? ' style="text-decoration:underline"' : ""}>${esc(text)}</span></div>`;
     }
     case "barcode": {
       const text = fill(l.text, get);
@@ -96,7 +96,7 @@ export function stackColumns<T>(slots: (T | null)[], cols: number, stack: number
 export function renderDocument(
   t: TemplateSpec,
   items: PrintItem[],
-  opts: { background?: string | null; outlines?: boolean; skip?: number; usedSlots?: number[]; images?: Record<string, string>; stack?: number } = {},
+  opts: { background?: string | null; outlines?: boolean; skip?: number; usedSlots?: number[]; images?: Record<string, string>; stack?: number; /** @font-face rules for the template's uploaded fonts (customFontCss). */ fontCss?: string } = {},
 ): string {
   const sheet = t.sheet_layout;
   const per = sheet && sheet.cols > 0 && sheet.rows > 0 ? sheet.cols * sheet.rows : 0;
@@ -159,7 +159,7 @@ export function renderDocument(
     body = tags.map((v) => (v ? front(v) + (back ? tagHtml(t, v, null, "back") : "") : "")).join("");
   }
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(t.name)}</title><style>
-${embeddedFontCss(t.layers.flatMap((l) => (l.type === "text" && l.font && !l.hidden ? [FONTS[l.font]?.family ?? "Kinus Sans"] : [])))}
+${embeddedFontCss(t.layers.flatMap((l) => (l.type === "text" && l.font && !l.hidden && !isCustomFont(l.font) ? [FONTS[l.font as FontKey]?.family ?? "Kinus Sans"] : [])))}${opts.fontCss ?? ""}
 ${pageCss}
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}
 body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}

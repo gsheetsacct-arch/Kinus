@@ -6,8 +6,13 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { canUsePrintArea, isAdmin } from "@/lib/auth/permissions";
+import { canUsePrintArea, isAdmin, visibleDivisionIds } from "@/lib/auth/permissions";
 import { canDesign, loadDesigners, saveDesigners } from "@/lib/print/designers";
+import { addCustomFont, removeCustomFont } from "@/lib/print/custom-fonts";
+import { storeTemplate, type TemplateInput } from "@/lib/print/template-store";
+import { previewDocument, sampleValues, worstCaseValues } from "@/lib/print/preview-data";
+import { createConnector, revokeConnector } from "@/lib/print/design-connectors";
+export type { TemplateInput };
 import { appUrl } from "@/lib/auth/app-url";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { getCampContext } from "@/lib/data/camp";
@@ -16,9 +21,8 @@ import { STARTED_MARK } from "@/lib/print/labels";
 import { visibleJobs } from "@/lib/print/access";
 import { batchCamperIds, BATCH_WHICH, type BatchWhich } from "@/lib/print/batch";
 import { dismissLabelUpdates, labelUpdates, refreshPrintedHashes, type LabelUpdate } from "@/lib/print/updates";
-import { renderDocument } from "@/lib/print/render";
 import { loadMergeSetup, loadPrintCampers } from "@/lib/print/data";
-import { mergeValues, SAMPLE_CAMPER } from "@/lib/print/merge";
+import { mergeValues } from "@/lib/print/merge";
 import type { Layer, SheetLayout, TemplateSpec, Transform } from "@/lib/print/types";
 import { parseScan } from "@/lib/attendance/scan";
 
@@ -266,6 +270,57 @@ export async function setDesigner(profileId: string, on: boolean): Promise<Actio
   }
 }
 
+/** A font file for templates (the designer's own typeface): a new font, or another weight of one. */
+export async function uploadFont(fd: FormData): Promise<ActionResult> {
+  try {
+    const me = await requireDesigner();
+    const file = fd.get("file");
+    if (!(file instanceof File) || !file.size) return fail("Choose a font file.");
+    const font = await addCustomFont(
+      { name: String(fd.get("name") ?? ""), fileName: file.name, bytes: new Uint8Array(await file.arrayBuffer()), weight: fd.get("weight") === "700" ? 700 : 400, italic: fd.get("italic") === "on" },
+      me.id,
+    );
+    revalidatePath("/print/templates", "layout");
+    return ok(`${font.name} is ready: pick it in the template editor's font list.`);
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+export async function removeFont(id: string): Promise<ActionResult> {
+  try {
+    const me = await requireDesigner();
+    await removeCustomFont(z.string().regex(/^[a-z0-9-]{1,48}$/).parse(id), me.id);
+    revalidatePath("/print/templates", "layout");
+    return ok("Font removed. Text that used it prints in the default font.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+/** A link that connects this person's Claude to Kinus for designing templates (shown once). */
+export async function createDesignLink(label: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  try {
+    const me = await requireDesigner();
+    const { token } = await createConnector(me.id, label);
+    revalidatePath("/print/templates");
+    return { ok: true, url: `${await appUrl()}/api/mcp/${token}` };
+  } catch (e) {
+    return { ok: false, error: errorMessage(e) };
+  }
+}
+
+export async function removeDesignLink(id: string): Promise<ActionResult> {
+  try {
+    const me = await requireDesigner();
+    await revokeConnector(String(id), me.id);
+    revalidatePath("/print/templates");
+    return ok("Link removed: that Claude can't reach Kinus any more.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
 /** Previews: people who print, and people who design. */
 async function requirePreviewer() {
   const user = await requireUser();
@@ -273,120 +328,12 @@ async function requirePreviewer() {
   return user;
 }
 
-const num = (min: number, max: number) => z.coerce.number().min(min).max(max);
-// lock (can't be moved on the canvas) and hide (doesn't show or print) work on every kind of part
-const partFlags = { locked: z.boolean().optional(), hidden: z.boolean().optional(), side: z.literal("back").optional() };
-const layerSchema = z.discriminatedUnion("type", [
-  z.object({ ...partFlags, id: z.string(), type: z.literal("text"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), size: num(3, 200), weight: z.union([z.literal(400), z.literal(700)]).optional(), align: z.enum(["left", "center", "right"]).optional(), color: z.string().max(40).optional(), fit: z.boolean().optional(), wrap: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(), minSize: num(3, 200).optional(), font: z.enum(["sans", "rounded", "serif", "display"]).optional(), italic: z.boolean().optional(), underline: z.boolean().optional() }),
-  z.object({ ...partFlags, id: z.string(), type: z.literal("barcode"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), showText: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(), color: z.string().max(40).optional() }),
-  z.object({ ...partFlags, id: z.string(), type: z.literal("qr"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), color: z.string().max(40).optional() }),
-  z.object({
-    ...partFlags,
-    id: z.string(),
-    type: z.literal("image"),
-    // a picture uploaded for templates (uploadTemplateImage): never a path outside that
-    path: z.string().max(200).regex(/^pictures\/[\w.-]+$/, "That picture isn't one of the uploaded ones."),
-    // another picture per division (by name); "" = none for that division
-    byDivision: z.record(z.string().trim().min(1).max(100), z.union([z.literal(""), z.string().max(200).regex(/^pictures\/[\w.-]+$/, "That picture isn't one of the uploaded ones.")])).optional(),
-    x: num(-50, 500),
-    y: num(-50, 500),
-    w: num(1, 500),
-    h: num(1, 500),
-    fit: z.enum(["contain", "cover"]).optional(),
-  }),
-  z.object({ ...partFlags, id: z.string(), type: z.literal("box"), x: num(-50, 500), y: num(-50, 500), w: num(0.1, 500), h: num(0.1, 500), fill: z.string().max(60).optional(), radius: num(0, 100).optional(), border: z.string().max(40).optional() }),
-]);
-const sheetSchema = z.object({
-  paper: z.enum(["letter", "a4"]),
-  cols: z.coerce.number().min(1).max(10).transform(Math.round),
-  rows: z.coerce.number().min(1).max(30).transform(Math.round),
-  leftMm: num(-50, 200).optional(),
-  topMm: num(-50, 200).optional(),
-  pitchXMm: num(1, 300).optional(),
-  pitchYMm: num(1, 300).optional(),
-  marginMm: num(0, 50).optional(),
-  gapMm: num(0, 50).optional(),
-  preset: z.string().max(40).optional(),
-  shiftXMm: num(-10, 10).optional(),
-  shiftYMm: num(-10, 10).optional(),
-});
-const templateSchema = z.object({
-  id: z.guid().optional(),
-  name: z.string().trim().min(1, "Give the template a name."),
-  kind: z.enum(["name_tag", "luggage_tag", "other"]),
-  page_width_mm: num(10, 600),
-  page_height_mm: num(10, 600),
-  layers: z.array(layerSchema).max(120),
-  sheet_layout: sheetSchema.nullable(),
-  // two-sided (migration 0035): which edge the paper turns on, and a nudge for the back
-  back: z.object({ flip: z.enum(["long", "short"]), shiftXMm: num(-20, 20).optional(), shiftYMm: num(-20, 20).optional() }).nullable().optional(),
-  // the camps it's for, by name (migration 0036); none: every camp
-  camps: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
-  show_on_card: z.boolean(),
-  auto_on_first_checkin: z.boolean(),
-  copies: z.coerce.number().int().min(1).max(10).default(1),
-});
-export type TemplateInput = z.input<typeof templateSchema>;
-
-/** A save problem in words: which part ("Part 3, the barcode") and what's wrong with it. */
-function templateProblem(e: z.ZodError, input: TemplateInput): string {
-  const issue = e.issues[0];
-  const [first, i, field] = issue.path;
-  const what: Record<string, string> = { w: "its width", h: "its height", x: "how far from the left", y: "how far from the top", size: "the text size", minSize: "the smallest text size", radius: "the rounded corners" };
-  if (first === "layers" && typeof i === "number") {
-    const l = input.layers?.[i] as { type?: string } | undefined;
-    const kind = l?.type === "text" ? "the text" : l?.type === "barcode" ? "the barcode" : l?.type === "qr" ? "the QR code" : l?.type === "image" ? "the picture" : "the colour block";
-    return `Part ${i + 1} (${kind}): ${typeof field === "string" && what[field] ? `${what[field]} is out of range` : issue.message}.`;
-  }
-  if (first === "sheet_layout") return `The label sheet settings: ${issue.message}.`;
-  if (first === "layers") return "Up to 60 parts on one template.";
-  return issue.message;
-}
-
 export async function saveTemplate(input: TemplateInput): Promise<ActionResult & { id?: string }> {
   try {
     await requireDesigner();
-    const parsed = templateSchema.safeParse(input);
-    if (!parsed.success) return fail(templateProblem(parsed.error, input));
-    const t = parsed.data;
-    const supabase = createAdminClient();
-    const row = {
-      name: t.name,
-      kind: t.kind,
-      page_width_mm: t.page_width_mm,
-      page_height_mm: t.page_height_mm,
-      layers: t.layers,
-      sheet_layout: t.sheet_layout,
-      show_on_card: t.show_on_card,
-      auto_on_first_checkin: t.auto_on_first_checkin,
-      copies: t.copies,
-      back: t.back ?? null,
-      camps: t.camps ?? [],
-      updated_at: new Date().toISOString(),
-    };
-    // settings added by later migrations: if one isn't there yet, save the rest, and say so
-    // only if it matters (the setting isn't at its usual value)
-    const later: Record<"copies" | "back" | "camps", { used: boolean; need: string }> = {
-      copies: { used: t.copies !== 1, need: "To set how many per camper, run migration 0028 in Supabase first." },
-      back: { used: Boolean(t.back), need: "To print on both sides, run migration 0035 in Supabase first." },
-      camps: { used: Boolean(t.camps?.length), need: "To keep a template to some camps, run migration 0036 in Supabase first." },
-    };
-    const payload: Partial<typeof row> = { ...row };
-    const { count } = t.id ? { count: 0 } : await supabase.from("print_templates").select("id", { count: "exact", head: true });
-    for (let attempt = 0; ; attempt++) {
-      const { data, error } = t.id
-        ? await supabase.from("print_templates").update(payload).eq("id", t.id).select("id").single()
-        : await supabase.from("print_templates").insert({ ...(payload as typeof row), sort_order: (count ?? 0) + 1 }).select("id").single();
-      const missing = error && attempt < 3 ? (Object.keys(later) as (keyof typeof later)[]).find((k) => k in payload && new RegExp(`\\b${k}\\b`).test(error.message)) : undefined;
-      if (missing) {
-        if (later[missing].used) throw new Error(later[missing].need);
-        delete payload[missing];
-        continue;
-      }
-      if (error || !data) throw error ?? new Error("The template wasn't saved.");
-      revalidatePath("/print/templates");
-      return t.id ? { ...ok("Template saved."), id: t.id } : { ...ok("Template created.", `/print/templates/${data.id}`), id: data.id };
-    }
+    const r = await storeTemplate(input);
+    revalidatePath("/print/templates");
+    return r.created ? { ...ok("Template created.", `/print/templates/${r.id}`), id: r.id } : { ...ok("Template saved."), id: r.id };
   } catch (e) {
     return fail(errorMessage(e));
   }
@@ -505,23 +452,13 @@ export async function codePreviews(items: { type: "barcode" | "qr"; text: string
   });
 }
 
-export async function previewTemplate(spec: TemplateSpec, who: { kind: "sample" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] }, opts: { fullSheet?: boolean } = {}): Promise<string> {
+export async function previewTemplate(spec: TemplateSpec, who: { kind: "sample" } | { kind: "worst" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] }, opts: { fullSheet?: boolean } = {}): Promise<string> {
   await requirePreviewer();
   const r = await previewValues(who);
   const values = "error" in r ? await sampleValues() : r.values;
-  const admin = createAdminClient();
-  const { backgroundDataUrl, imageDataUrls } = await import("@/lib/print/data");
-  // the background as saved (one uploaded this visit included), never a path the browser names
-  const bgPath = spec.id ? (await admin.from("print_templates").select("background_path").eq("id", spec.id).maybeSingle()).data?.background_path : null;
-  const background = bgPath ? await backgroundDataUrl(admin, bgPath) : null;
-  // only uploaded pictures
-  const images = await imageDataUrls(
-    admin,
-    spec.layers.filter((l) => l.type !== "image" || /^pictures\/[\w.-]+$/.test(l.path)),
-  );
   // a test sheet: the whole sheet filled, with outlines, to hold against the labels
   const sheet = opts.fullSheet ? spec.sheet_layout : null;
-  return renderDocument({ ...spec, sheet_layout: sheet }, [{ values, copies: sheet ? sheet.cols * sheet.rows : 1 }], { background, images, outlines: true });
+  return previewDocument(spec, [{ values, copies: sheet ? sheet.cols * sheet.rows : 1 }], { fullSheet: opts.fullSheet });
 }
 
 // ---------------------------------------------------------------------------
@@ -633,40 +570,21 @@ export async function deleteValueMap(fd: FormData): Promise<ActionResult> {
 
 export type { Layer, SheetLayout };
 
-/** Every field filled from the made-up sample camper. */
-async function sampleValues(): Promise<Record<string, string>> {
-  const admin = createAdminClient();
-  const setup = await loadMergeSetup(admin);
-  const values = mergeValues(SAMPLE_CAMPER as never, setup.fields, setup.maps);
-  // a field from an export column the made-up camper doesn't have (one added to the export
-  // since: family.city) shows a real camper's value, rather than looking like it doesn't work
-  const blank = setup.fields.filter((f) => !values[f.key] && f.source_field.includes("."));
-  const session = blank.length ? await getActiveSession() : null;
-  if (session) {
-    const { data } = await admin.from("campers").select("source_data").eq("session_id", session.id).is("archived_at", null).not("source_data", "is", null).limit(300);
-    for (const f of blank)
-      for (const row of data ?? []) {
-        const c = { ...SAMPLE_CAMPER, source_data: { ...SAMPLE_CAMPER.source_data, ...((row.source_data ?? {}) as Record<string, string>) } };
-        const v = mergeValues(c as never, [f], setup.maps)[f.key];
-        if (v) {
-          values[f.key] = v;
-          break;
-        }
-      }
-  }
-  return values;
-}
-
 /**
  * Merge values for the editor's canvas: the built-in sample, a camper by code, or the
  * camper with the longest name (to check long names still fit).
  */
 export async function previewValues(
-  who: { kind: "sample" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] },
+  who: { kind: "sample" } | { kind: "worst" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] },
 ): Promise<{ values: Record<string, string>; label: string } | { error: string }> {
-  await requirePreviewer();
+  const user = await requirePreviewer();
   const session = await getActiveSession();
   if (who.kind === "sample" || !session) return { values: await sampleValues(), label: "a sample camper" };
+  if (who.kind === "worst") {
+    // every field's longest value at once, among the campers this person sees (the camp chosen at the top)
+    const camp = await getCampContext();
+    return worstCaseValues(camp.divisionIds ?? visibleDivisionIds(user));
+  }
   const supabase = await createClient();
   let id: string | null = null;
   if (who.kind === "code") {

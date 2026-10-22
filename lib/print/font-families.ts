@@ -10,8 +10,17 @@ export const FONTS = {
 } as const;
 export type FontKey = keyof typeof FONTS;
 
+/** A font the designer uploaded (lib/print/custom-fonts): a part uses it as "custom:<id>". */
+export const CUSTOM_PREFIX = "custom:";
+export type CustomFont = { id: string; name: string };
+export const isCustomFont = (k?: string) => Boolean(k?.startsWith(CUSTOM_PREFIX));
+export const customFamily = (id: string) => `Kinus Custom ${id}`;
+/** Uploaded fonts: a little taller than the built-in ones, so tall letters and accents of any typeface show whole. */
+export const CUSTOM_LINE_HEIGHT = 1.4;
+
 /** The CSS font-family for a part, falling back to the default font for any letter it lacks. */
-export const fontStack = (k?: string) => `"${FONTS[(k ?? "sans") as FontKey]?.family ?? "Kinus Sans"}","Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif`;
+export const fontStack = (k?: string) =>
+  `"${isCustomFont(k) ? customFamily(k!.slice(CUSTOM_PREFIX.length)) : (FONTS[(k ?? "sans") as FontKey]?.family ?? "Kinus Sans")}","Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif`;
 
 /**
  * Line height (× the text size) for each font: tall enough that every letter shows whole, from
@@ -19,4 +28,4 @@ export const fontStack = (k?: string) => `"${FONTS[(k ?? "sans") as FontKey]?.fa
  * from the fonts themselves; text lines are clipped to it, so a smaller one would cut letters off.
  * The same value is used on the canvas, in the every-camper check and on the printed page.
  */
-export const lineHeightOf = (k?: string) => FONTS[(k ?? "sans") as FontKey]?.lineHeight ?? FONTS.sans.lineHeight;
+export const lineHeightOf = (k?: string) => (isCustomFont(k) ? CUSTOM_LINE_HEIGHT : (FONTS[(k ?? "sans") as FontKey]?.lineHeight ?? FONTS.sans.lineHeight));

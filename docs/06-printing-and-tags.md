@@ -212,6 +212,28 @@ A canvas of the tag at real proportions (Print → Templates):
 - Tag PDFs on Vercel: Chromium (`@sparticuz/chromium`) stays out of the bundle and its
   compressed files (`bin/`) are traced into every function by `outputFileTracingIncludes`;
   without them the PDF fails with "input directory … does not exist".
+- **Your own fonts** (Templates → Fonts): upload TTF, OTF, WOFF or WOFF2 files (the regular,
+  then its bold or italic under the same name). They show in the editor's font list as "Your
+  fonts" and print exactly: the printed page and PDFs embed the files a template uses
+  (`customFontCss`); the editor loads them from `/print/fonts/<file>`. Files are kept in the
+  templates bucket (`fonts/…`), the list in settings (`custom_fonts`), so no database change.
+  A part uses one as `font: "custom:<id>"` (line height 1.4, so tall letters show whole). Check
+  the font's licence allows embedding in printed documents.
+- **Design with Claude** (Templates → Design with Claude): a personal link connects someone's
+  Claude to Kinus (an MCP server at `/api/mcp/<link>`; claude.ai / the Claude app: Settings →
+  Connectors → Add custom connector; Claude Code: `claude mcp add --transport http kinus <link>`).
+  Claude can list and read templates, list fields, fonts and label stock, save templates (the
+  same checks as the editor, `lib/print/template-store.ts`), upload pictures (or a whole-tag
+  background) and fonts, see a picture of the tag exactly as it prints (`preview_template`,
+  with a sample camper, the camper with the longest text, or a code), and check every camper
+  fits (`check_fit`: who goes under a part's smallest size or doesn't fit), list each field's
+  widest real values (`longest_values`), and preview the worst case: every field at once with
+  its longest value (`preview_template` camper "worst"; the editor's "Show it with" has it too,
+  `worstCaseValues`). It works as the
+  person whose link it is, only while they may edit templates, and only on templates; real
+  campers in previews are from their own part of camp. Links are kept as hashes in settings
+  (`design_connectors`), shown once, and can be removed (`lib/print/design-connectors.ts`,
+  `lib/print/design-mcp.ts`, which also holds the design guide Claude reads).
 - **Colours of codes**: a barcode (bars and the number under them) or QR code can be any
   colour (`color`; `tintCode` paints the bwip-js drawing the same way in the editor and in
   print). Scanners need dark on light: a colour with less than 4.5:1 contrast on white gets

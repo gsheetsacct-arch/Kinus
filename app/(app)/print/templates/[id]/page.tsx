@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { compareDivisionNames } from "@/lib/bunk-order";
 import { templateCamps } from "@/lib/print/template-camps";
+import { customFontLinks, loadCustomFonts } from "@/lib/print/custom-fonts";
 import { canDesign } from "@/lib/print/designers";
 import { imageDataUrls, backgroundDataUrl, toSpec } from "@/lib/print/data";
 import { embeddedFontCss } from "@/lib/print/fonts";
@@ -43,6 +44,7 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
     // for a different picture per division (matched by name)
     session ? supabase.from("divisions").select("name, color").eq("session_id", session.id).order("sort_order").order("name") : Promise.resolve({ data: [] as { name: string; color: string | null }[] }),
   ]);
+  const customFonts = await loadCustomFonts();
   const { data: campRows } = session ? await supabase.from("division_groups").select("name").eq("session_id", session.id).order("sort_order").order("name") : { data: [] };
   const divisions = [...(divisionRows ?? [])].sort((a, b) => compareDivisionNames(a.name, b.name));
   const background = initial.id ? (
@@ -97,11 +99,11 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
           ) : undefined
         }
       />
-      <style dangerouslySetInnerHTML={{ __html: embeddedFontCss(Object.values(FONTS).map((f) => f.family)) }} />
+      <style dangerouslySetInnerHTML={{ __html: embeddedFontCss(Object.values(FONTS).map((f) => f.family)) + customFontLinks(customFonts) }} />
       {initial.name.startsWith("(retired)") && (
         <Callout tone="warning">This template is retired: it isn&apos;t offered for printing or on camper cards. To use it again, copy it (the copy is a normal template).</Callout>
       )}
-      <TemplateEditor key={initial.id ?? "new"} initial={initial} fields={fields} background={background} backgroundUrl={backgroundUrl} pictures={pictures} divisions={divisions} camps={(campRows ?? []).map((c) => c.name)} />
+      <TemplateEditor key={initial.id ?? "new"} initial={initial} fields={fields} background={background} backgroundUrl={backgroundUrl} pictures={pictures} divisions={divisions} camps={(campRows ?? []).map((c) => c.name)} customFonts={customFonts.map(({ id, name }) => ({ id, name }))} />
     </div>
   );
 }

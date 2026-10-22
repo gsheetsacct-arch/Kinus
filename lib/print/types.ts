@@ -49,7 +49,7 @@ export type Layer = PartFlags &
       rotate?: Rotation;
       minSize?: number;
       /** lib/print/font-families: sans (default), rounded, serif, display */
-      font?: "sans" | "rounded" | "serif" | "display";
+      font?: "sans" | "rounded" | "serif" | "display" | `custom:${string}`;
       italic?: boolean;
       underline?: boolean;
     }
