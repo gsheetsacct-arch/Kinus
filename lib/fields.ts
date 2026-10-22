@@ -1,3 +1,4 @@
+import { displaySourceId } from "@/lib/import/programs";
 /**
  * Field catalog: every camper field the app can show in lists, cards and exports,
  * with the sensitivity group that `field_visibility` gates.
@@ -93,6 +94,8 @@ export function getFieldValue(c: CamperLike, key: string): string | boolean | nu
   if (key === "division") return c.division_name ?? null;
   if (key === "bunk") return c.bunk_name ?? null;
   if (key === "bunk_preferences") return (c.bunk_preferences ?? []).filter(Boolean).join(", ") || null;
+  // a separate program's ids are kept apart ("virtual:1234"); people know them as "1234"
+  if (key === "source_id") return displaySourceId(c.source_id as string | null | undefined);
   const v = c[key];
   if (v === undefined || v === null) return null;
   if (typeof v === "boolean") return v;

@@ -27,6 +27,7 @@ import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
 import { FIELD_BY_KEY } from "@/lib/fields";
 import { addContact, archiveCamper, removeContact, updateCamper } from "../actions";
 import { loadCardTemplates } from "@/lib/print/card-templates";
+import { displaySourceId } from "@/lib/import/programs";
 
 export const metadata = { title: "Camper" };
 
@@ -146,7 +147,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
               <Field label="T-shirt" value={c.tshirt_size} />
               <Field label="Bunk preferences" value={(c.bunk_preferences ?? []).join(", ") || null} />
               <Field label="Kinus code (on the tag)" value={c.camper_code} />
-              <Field label="Registration ID (from the export)" value={c.source_id} />
+              <Field label="Registration ID (from the export)" value={displaySourceId(c.source_id)} />
               {extraFields.map((f) => (
                 <Field key={f.column} label={f.label} value={extra[f.column] || null} />
               ))}

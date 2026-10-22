@@ -41,3 +41,23 @@ export const DEFAULT_MAPPING_OPTIONS: MappingOptions = {
   phoneDefaultRegion: "US",
   emptyMeansUnknown: true,
 };
+
+/**
+ * A Kinus field for a column of an export Kinus hasn't seen ("First Name", "Student ID"…),
+ * so a new kind of export (a separate program's) starts mostly matched. Null: no guess.
+ */
+export function guessTarget(header: string): string | null {
+  const h = header.toLowerCase().replace(/[#._-]+/g, " ").replace(/\s+/g, " ").trim();
+  const rules: [RegExp, string][] = [
+    [/^(student |camper |child |participant )?first ?name$|^first$|^given name$/, "first_name"],
+    [/^(student |camper |child |participant )?last ?name$|^last$|^surname$|^family name$/, "last_name"],
+    [/^(student |camper |participant |registration |reg )?id$|^(student|camper|registration|participant) (id|number|no)$/, "source_id"],
+    [/^grade( level)?$/, "grade"],
+    [/^(t ?shirt|tshirt|shirt)( size)?$/, "tshirt_size"],
+    [/^division$/, "division"],
+    [/^(bunk|cabin|group)$/, "bunk"],
+    [/^allergies$/, "allergies"],
+    [/^(medical|medical notes|medical considerations)$/, "medical_notes"],
+  ];
+  return rules.find(([re]) => re.test(h))?.[1] ?? null;
+}

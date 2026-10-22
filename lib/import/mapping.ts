@@ -3,6 +3,10 @@ import { normText } from "./normalize";
 
 export type ColumnMap = Record<string, string>;
 export type MappingOptions = {
+  /** A separate program's export (no division column): everyone in it goes into this division (lib/import/programs). */
+  fixedDivision?: string;
+  /** The columns this setup was made for: picks the setup for the next file like it. */
+  headers?: string[];
   bunkColumnPriority?: string[];
   booleanYes?: string[];
   booleanNo?: string[];

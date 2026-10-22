@@ -243,6 +243,33 @@ changes in its history tab, attributed to the import.
   export; `{{source.family.city}}` and `{{family.city}}` both work. The template editor's
   sample camper borrows a real camper's value for columns it doesn't have.
 
+### More than one export: a separate program (the virtual program)
+
+The main export brings in American, French and Hebrew together, each camper's division from
+the file. A separate program with its own export and no division column (the virtual
+program) goes in as its own camp in the same session (only one session is active at a time):
+
+1. In Divisions & bunks, make its camp and division ("Virtual").
+2. Upload its export. On the column step, **Which export is this?** → "A separate program:
+   everyone goes into Virtual".
+
+Each kind of export keeps its own column setup (`import_mappings`, one per program, with the
+columns it was made for). An upload picks the setup whose columns it shares most of
+(`layoutFit`: the share of the two files' columns in common), so the next virtual file comes
+up as the virtual program by itself; a new kind of export starts with the usual columns
+guessed (First Name, Last Name, Student ID… `guessTarget`).
+
+The programs never mix (`lib/import/programs.ts`):
+- a program's registration ids are stored as `virtual:1234` (shown as 1234), so ids numbered
+  in its own system can't match a main-camp camper's;
+- a program's file matches only campers of its division; the main export everyone but the
+  programs' (by id and by name);
+- "not in the latest export" only ever touches the file's own divisions, so each export marks
+  only its own campers.
+
+The Fields page offers the columns of the latest file of each kind of export. Undo works on
+the latest import of the session, whichever export it was.
+
 ### Fixes to export columns (Hebrew names)
 
 Many families type the Hebrew name in English ("Menachem") or spell out the letters ("nun

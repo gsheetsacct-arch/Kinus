@@ -35,12 +35,14 @@ export default async function FieldsPage() {
   const catalog = [...FIELDS.filter((f) => f.kind !== "bool" && f.key !== "status").map((f) => ({ key: f.key, label: f.label })), { key: "division", label: "Division" }, { key: "bunk", label: "Bunk" }, { key: "division_color", label: "Division colour" }];
   // extra fields from the registration export can feed a label field too ("Sleeping at the Kinus")
   const extras = (await loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: `${f.label} (from the export)`, group: "export" as const }));
-  // and every column of the latest export, so a column added to it (family.city) can be picked, not typed
-  const { data: latest } = session
-    ? await admin.from("imports").select("options").eq("session_id", session.id).eq("status", "applied").order("applied_at", { ascending: false }).limit(1).maybeSingle()
+  // and every column of the latest file of each kind of export (the main one, a separate
+  // program's…), so a column added to one (family.city) can be picked, not typed
+  const { data: applied } = session
+    ? await admin.from("imports").select("mapping_id, options").eq("session_id", session.id).eq("status", "applied").order("applied_at", { ascending: false }).limit(200)
     : { data: null };
+  const latestOfEach = [...new Map((applied ?? []).reverse().map((i) => [i.mapping_id ?? "main", i])).values()];
   const hidden = new Set((await loadHiddenColumns()).map(columnKey));
-  const headers = (((latest?.options ?? {}) as { headers?: string[] }).headers ?? []).filter((h) => typeof h === "string" && h.trim() && !hidden.has(columnKey(h)));
+  const headers = [...new Set(latestOfEach.flatMap((i) => ((i.options ?? {}) as { headers?: string[] }).headers ?? []))].filter((h) => typeof h === "string" && h.trim() && !hidden.has(columnKey(h)));
   const columns = headers.map((h) => ({ key: `source.${h}`, label: `${h} (from the export)`, group: "export" as const }));
   // (an extra field's own name wins over the bare column name)
   const unique = oneOfEachColumn([...new Map([...catalog, ...columns, ...extras].map((c) => [c.key, c])).values()], (c) => c.key);
