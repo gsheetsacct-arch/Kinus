@@ -7,7 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/current-user";
+import { canDesign, loadDesigners } from "@/lib/print/designers";
 import { isAdmin } from "@/lib/auth/permissions";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { STAFF_ROLES } from "@/lib/labels";
+import { DesignersBox } from "@/components/print/designers-box";
 import { duplicateTemplate } from "../actions";
 import { currentPreset } from "@/lib/print/presets";
 import { templateCamps } from "@/lib/print/template-camps";
@@ -19,9 +23,19 @@ const KIND: Record<string, string> = { name_tag: "Name tag", luggage_tag: "Lugga
 export default async function TemplatesPage({ searchParams }: { searchParams: Promise<{ retired?: string }> }) {
   const showRetired = (await searchParams).retired === "1";
   const user = await requireUser();
-  if (!isAdmin(user)) redirect("/print");
+  if (!(await canDesign(user))) redirect("/print");
   const supabase = await createClient();
-  const { data } = await supabase.from("print_templates").select("*").order("sort_order").order("name");
+  const [{ data }, designerIds, staffRows] = await Promise.all([
+    supabase.from("print_templates").select("*").order("sort_order").order("name"),
+    loadDesigners(),
+    // who can be allowed to edit templates: people with their own sign-in (directors only see this)
+    isAdmin(user)
+      ? createAdminClient().from("profiles").select("id, full_name, role, all_areas").eq("is_active", true).eq("login", "personal").order("full_name").then((r) => r.data ?? [])
+      : Promise.resolve([]),
+  ]);
+  const roleName = (r: string) => STAFF_ROLES[r as keyof typeof STAFF_ROLES]?.label ?? r;
+  const allowable = staffRows.filter((p) => !(p.role === "owner" || (p.role === "director" && p.all_areas))).map((p) => ({ id: p.id, name: p.full_name, role: roleName(p.role) }));
+  const designers = designerIds.map((id) => allowable.find((p) => p.id === id) ?? null).filter((p): p is NonNullable<typeof p> => Boolean(p));
   // retired: used before, so kept for the print history, but no longer offered
   const isRetired = (t: { name: string }) => t.name.startsWith("(retired)");
   const retired = (data ?? []).filter(isRetired);
@@ -86,6 +100,11 @@ export default async function TemplatesPage({ searchParams }: { searchParams: Pr
             </Link>
           )}
         </p>
+      )}
+      {isAdmin(user) && !showRetired && (
+        <div className="mt-8">
+          <DesignersBox designers={designers} staff={allowable} />
+        </div>
       )}
     </div>
   );

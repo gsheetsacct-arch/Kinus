@@ -53,8 +53,9 @@ export type Layer = PartFlags &
       italic?: boolean;
       underline?: boolean;
     }
-  | { id: string; type: "barcode"; text: string; x: number; y: number; w: number; h: number; showText?: boolean; rotate?: Rotation }
-  | { id: string; type: "qr"; text: string; x: number; y: number; w: number; h: number }
+  /** color: the bars or squares (and the barcode's number), dark enough to scan; default black. */
+  | { id: string; type: "barcode"; text: string; x: number; y: number; w: number; h: number; showText?: boolean; rotate?: Rotation; color?: string }
+  | { id: string; type: "qr"; text: string; x: number; y: number; w: number; h: number; color?: string }
   | { id: string; type: "box"; x: number; y: number; w: number; h: number; fill?: string; radius?: number; border?: string }
   /**
    * A picture (a camp logo…), stored with the templates; "contain" shows all of it, "cover" fills the box.

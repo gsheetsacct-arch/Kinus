@@ -212,6 +212,10 @@ A canvas of the tag at real proportions (Print → Templates):
 - Tag PDFs on Vercel: Chromium (`@sparticuz/chromium`) stays out of the bundle and its
   compressed files (`bin/`) are traced into every function by `outputFileTracingIncludes`;
   without them the PDF fails with "input directory … does not exist".
+- **Colours of codes**: a barcode (bars and the number under them) or QR code can be any
+  colour (`color`; `tintCode` paints the bwip-js drawing the same way in the editor and in
+  print). Scanners need dark on light: a colour with less than 4.5:1 contrast on white gets
+  a warning in the editor (`codeContrast`). Text already had its own colour.
 - **For which camps** (Template settings; migration 0036): tick the camps a template is for
   (`print_templates.camps`, by camp name so it carries over to next session's camps; none
   ticked = every camp). Print a batch offers the current camp's templates (all of them when

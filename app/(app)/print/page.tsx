@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Printer } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -6,6 +7,7 @@ import { PrintQueue, type QueueJob } from "@/components/print/print-queue";
 import { LabelUpdates } from "@/components/print/label-updates";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
+import { canUsePrintArea } from "@/lib/auth/permissions";
 import { officeEmail, retryStuckJobs } from "@/lib/print/jobs";
 import { shownJobError } from "@/lib/print/labels";
 import { after } from "next/server";
@@ -25,7 +27,9 @@ const SHOW = {
 } as const;
 
 export default async function PrintQueuePage({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
-  const [, session, sp] = await Promise.all([requireUser(), getActiveSession(), searchParams]);
+  const [user, session, sp] = await Promise.all([requireUser(), getActiveSession(), searchParams]);
+  // staff who only design templates start there
+  if (!canUsePrintArea(user)) redirect("/print/templates");
   if (!session) return <EmptyState icon={Printer} title="No active session" description="Camp hasn't been set up yet." />;
   const show = (sp.show && sp.show in SHOW ? sp.show : "todo") as keyof typeof SHOW;
   // requests cut off while making their PDF get one more try (after the page is sent)

@@ -118,3 +118,14 @@ The **Staff** page (add, edit, deactivate, send sign-in links, add many at once)
 Division heads and head counselors never give "all of camp", and can't
 move someone who works in another division (a director does that). Each person also has a free-text
 **position** ("Learning head", "Waterfront") shown in the phone book; it doesn't change what they can do.
+
+### Who edits templates
+
+Directors over all of camp (and owners) make and change the print templates, label fields and
+conversions. They can also allow anyone else with their own sign-in to do so: **Print →
+Templates → Who can edit templates**. That's kept in settings (`template_designers`, a list of
+people), not a role, so it needs no database change and nothing else about the person changes.
+Allowed people get Templates and Fields & conversions (a "Tag designs" menu item if they don't
+otherwise print) and the editor's previews, which show real campers of their own area. Their
+changes are written with the server's key after that check (`lib/print/designers.ts`); the
+database itself still lets only directors over all of camp change templates.
