@@ -2,6 +2,7 @@
 import * as React from "react";
 import { fill } from "@/lib/print/merge";
 import { fitText } from "@/lib/print/fit";
+import { curvePath, DEFAULT_ARC, fitCurve } from "@/lib/print/curve";
 import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
 import { DIVISION_VALUE, pictureFor, textAlignItems, type Layer } from "@/lib/print/types";
 import { Lock } from "lucide-react";
@@ -511,9 +512,12 @@ function Part({
       onPointerDown={(e) => onStart(e, l, "move")}
     >
       <div style={inner} className="pointer-events-none overflow-hidden">
-        {l.type === "text" && (
-          <TextPart l={l} scale={scale} values={values} onFit={onFit} />
-        )}
+        {l.type === "text" &&
+          (l.curve ? (
+            <CurvedPart l={l} values={values} onFit={onFit} />
+          ) : (
+            <TextPart l={l} scale={scale} values={values} onFit={onFit} />
+          ))}
         {l.type === "box" && (
           <div
             className="size-full"
@@ -670,6 +674,99 @@ function QrPart({ text, color }: { text: string; color?: string }) {
   );
 }
 
+/** On the tag: text cut off (red), or printing under its smallest size to fit (amber). */
+function FitMark({ cut }: { cut: "cut" | "small" | null }) {
+  if (!cut) return null;
+  return (
+    <span
+      className={cn(
+        "pointer-events-none absolute inset-0 z-10",
+        cut === "cut"
+          ? "shadow-[inset_0_0_0_2px_#dc2626]"
+          : "shadow-[inset_0_0_0_2px_#f59e0b]",
+      )}
+    >
+      <span
+        className={cn(
+          "absolute right-0 top-0 rounded-bl px-1 text-[9px] font-semibold leading-tight text-white",
+          cut === "cut" ? "bg-red-600" : "bg-amber-500",
+        )}
+      >
+        {cut === "cut" ? "Cut off" : "Smaller to fit"}
+      </span>
+    </span>
+  );
+}
+
+/** Text along the top or bottom of the circle in its box, fitted like the printed page (lib/print/curve). */
+function CurvedPart({
+  l,
+  values,
+  onFit,
+}: {
+  l: Extract<Layer, { type: "text" }>;
+  values: Record<string, string>;
+  onFit: (id: string, info: FitInfo) => void;
+}) {
+  const textRef = React.useRef<SVGTextElement>(null);
+  const pathRef = React.useRef<SVGPathElement>(null);
+  const id = `kc${React.useId().replace(/[^a-zA-Z0-9]/g, "")}`;
+  const [cut, setCut] = React.useState<"cut" | "small" | null>(null);
+  const text = fill(l.text, (k) => values[k] ?? "");
+  const fields = [...l.text.matchAll(/\{\{[^{}]+\}\}/g)];
+  const skipped =
+    fields.length > 0 &&
+    fields.every((m) => fill(m[0], (k) => values[k] ?? "").trim() === "");
+  const empty = text.trim() === "" || skipped;
+  const side = l.curve ?? "top";
+  const arc = l.arc ?? DEFAULT_ARC;
+  const sizeMm = l.size * MM_PER_PT;
+  React.useLayoutEffect(() => {
+    const run = () => {
+      if (!textRef.current || !pathRef.current) return;
+      const r = fitCurve(textRef.current, pathRef.current, {
+        w: l.w,
+        h: l.h,
+        side,
+        arc,
+        sizeMm,
+        minMm: minPt(l) * MM_PER_PT,
+        floorMm: Math.min(FLOOR_PT, minPt(l)) * MM_PER_PT,
+        fit: l.fit !== false && !empty,
+      });
+      const over = r.overflow && !empty;
+      setCut(over ? "cut" : r.below ? "small" : null);
+      onFit(l.id, { pt: Math.round((r.sizeMm / MM_PER_PT) * 2) / 2, overflow: over, below: r.below });
+    };
+    run();
+    document.fonts?.ready.then(run).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the part's own values, not the object
+  }, [text, side, arc, sizeMm, l.w, l.h, l.fit, l.minSize, l.weight, l.font, l.italic, l.id, empty, onFit]);
+  return (
+    <>
+      <FitMark cut={cut} />
+      <svg viewBox={`0 0 ${l.w} ${l.h}`} width="100%" height="100%" className="block overflow-visible" style={{ opacity: skipped ? 0.45 : undefined }}>
+        <path ref={pathRef} id={id} d={curvePath(l.w, l.h, side, arc, sizeMm).d} fill="none" />
+        <text
+          ref={textRef}
+          fontSize={sizeMm}
+          fontWeight={l.weight ?? 400}
+          fontFamily={fontStack(l.font)}
+          fontStyle={empty || l.italic ? "italic" : undefined}
+          textDecoration={l.underline ? "underline" : undefined}
+          fill={empty ? "#94a3b8" : safeColor(l.color ?? "#111111", "#111111")}
+          textAnchor="middle"
+          dominantBaseline="central"
+        >
+          <textPath href={`#${id}`} startOffset="50%">
+            {empty ? l.text : text}
+          </textPath>
+        </text>
+      </svg>
+    </>
+  );
+}
+
 function TextPart({
   l,
   scale,
@@ -744,25 +841,7 @@ function TextPart({
   ]);
   return (
     <>
-      {cut && (
-        <span
-          className={cn(
-            "pointer-events-none absolute inset-0 z-10",
-            cut === "cut"
-              ? "shadow-[inset_0_0_0_2px_#dc2626]"
-              : "shadow-[inset_0_0_0_2px_#f59e0b]",
-          )}
-        >
-          <span
-            className={cn(
-              "absolute right-0 top-0 rounded-bl px-1 text-[9px] font-semibold leading-tight text-white",
-              cut === "cut" ? "bg-red-600" : "bg-amber-500",
-            )}
-          >
-            {cut === "cut" ? "Cut off" : "Smaller to fit"}
-          </span>
-        </span>
-      )}
+      <FitMark cut={cut} />
       <div
         ref={box}
         className={cn(

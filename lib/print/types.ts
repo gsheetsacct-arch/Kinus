@@ -50,6 +50,10 @@ export type Layer = PartFlags &
       valign?: "top" | "middle" | "bottom";
       /** Line spacing (× the size) for text on more than one line; default the font's own. */
       lineHeight?: number;
+      /** Along the top or bottom of the circle inside the box (round stickers): lib/print/curve. */
+      curve?: "top" | "bottom";
+      /** How much of the circle curved text may take, degrees (default 180: half of it). */
+      arc?: number;
       rotate?: Rotation;
       minSize?: number;
       /** lib/print/font-families: sans (default), rounded, serif, display */

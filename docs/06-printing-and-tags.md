@@ -165,6 +165,13 @@ A canvas of the tag at real proportions (Print → Templates):
   **Allow 2 lines**, a wider box, or "**16 pt is fine**" (makes that the smallest size).
   Only text that doesn't fit even at 4 pt is cut (red "Cut off"), or text in a part with
   shrinking turned off.
+- **Curved text** ("Shape: Curved, top / Curved, bottom"; `curve`, `arc`): the text runs
+  along the top or the bottom of the circle inside its box, centred, letters upright (the
+  bottom reads left to right too). For a round sticker make the box the sticker's size: the
+  letters sit just inside its edge. "How far around" (`arc`, default 180°) is how much of the
+  circle it may take; longer text shrinks to fit that arc, with the same smallest size and
+  "prints whole" rule as straight text. One geometry (`lib/print/curve.ts`) draws it in the
+  editor, the fit check and the printed page (its code is put into the page's script).
 - **Two lines, and where text sits in its box** ("In the box": top, middle, bottom;
   `valign`): middle by default, top for text allowed onto more lines. Wrapped lines are
   balanced (`text-wrap: balance`). For a name that wraps only when it's very long: allow 2

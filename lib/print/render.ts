@@ -6,6 +6,7 @@ import { fill } from "./merge";
 import { DIVISION_VALUE, onBack, pictureFor, sheetPlacement, textAlignItems, type Layer, type PrintItem, type SheetLayout, type TemplateSpec } from "./types";
 import { FLOOR_PT, minPt, PX_PER_PT } from "./render-constants";
 import { isRoundLabel } from "./presets";
+import { curvePath, DEFAULT_ARC } from "./curve";
 
 /** A CSS class for a stored picture (the same path always gets the same class). */
 export function imageClass(path: string): string {
@@ -24,7 +25,7 @@ const safeColor = (c: string | undefined, fallback: string) => (c && /^#[0-9a-f]
  */
 function layerHtml(l: Layer, values: Record<string, string>, at?: string): string {
   const get = (k: string) => values[k] ?? "";
-  if ((l.type === "text" || l.type === "barcode") && l.rotate) {
+  if ((l.type === "text" || l.type === "barcode") && l.rotate && !(l.type === "text" && l.curve)) {
     const inner = `left:50%;top:50%;width:${l.h}mm;height:${l.w}mm;transform:translate(-50%,-50%) rotate(${l.rotate}deg);`;
     return `<div class="l" style="left:${l.x}mm;top:${l.y}mm;width:${l.w}mm;height:${l.h}mm;overflow:visible">${layerHtml({ ...l, rotate: 0, w: l.h, h: l.w }, values, inner)}</div>`;
   }
@@ -39,6 +40,7 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
       const fields = [...l.text.matchAll(/\{\{[^{}]+\}\}/g)];
       if (fields.length && fields.every((m) => fill(m[0], get).trim() === "")) return "";
       const text = fill(l.text, get);
+      if (l.curve) return curvedHtml(l, text, pos);
       const style = `${pos}font-size:${l.size}pt;font-weight:${l.weight ?? 400};text-align:${l.align ?? "left"};color:${safeColor(l.color, "#111111")};justify-content:${l.align === "center" ? "center" : l.align === "right" ? "flex-end" : "flex-start"};align-items:${textAlignItems(l)};${l.font && l.font !== "sans" ? `font-family:${fontStack(l.font)};` : ""}line-height:${l.lineHeight ?? lineHeightOf(l.font)};${l.italic ? "font-style:italic;" : ""}`;
       const fitAttr = l.fit !== false ? `data-fit data-min="${(minPt(l) * PX_PER_PT).toFixed(2)}" data-floor="${(Math.min(FLOOR_PT, minPt(l)) * PX_PER_PT).toFixed(2)}"` : "";
       return `<div class="l t${l.wrap ? " wrap" : ""}" data-part="${esc(l.id)}" ${fitAttr} style="${esc(style)}"><span dir="auto"${l.underline ? ' style="text-decoration:underline"' : ""}>${esc(text)}</span></div>`;
@@ -60,6 +62,22 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
       return `<div class="l qr" style="${pos}">${svg}</div>`;
     }
   }
+}
+
+let curveIds = 0;
+const MM_PER_PT = 25.4 / 72;
+
+/**
+ * Text along the top or bottom of the circle in its box (lib/print/curve): an SVG drawing in
+ * mm. The page's script shrinks it to fit its arc, as straight text is shrunk to fit its box.
+ */
+function curvedHtml(l: Extract<Layer, { type: "text" }>, text: string, pos: string): string {
+  const size = l.size * MM_PER_PT;
+  const arc = l.arc ?? DEFAULT_ARC;
+  const id = `kc${++curveIds}`;
+  const fitAttr = l.fit !== false ? ` data-fit data-minmm="${(minPt(l) * MM_PER_PT).toFixed(3)}" data-floormm="${(Math.min(FLOOR_PT, minPt(l)) * MM_PER_PT).toFixed(3)}"` : "";
+  const font = l.font && l.font !== "sans" ? ` font-family="${esc(fontStack(l.font))}"` : "";
+  return `<div class="l tc" data-part="${esc(l.id)}"${fitAttr} data-curve="${l.curve}" data-arc="${arc}" data-w="${l.w}" data-h="${l.h}" data-size="${size.toFixed(3)}" style="${pos}font-size:${l.size}pt;overflow:visible"><svg viewBox="0 0 ${l.w} ${l.h}" width="100%" height="100%"><path id="${id}" d="${curvePath(l.w, l.h, l.curve!, arc, size).d}" fill="none"/><text font-size="${size.toFixed(3)}" font-weight="${l.weight ?? 400}"${font}${l.italic ? ' font-style="italic"' : ""}${l.underline ? ' text-decoration="underline"' : ""} fill="${esc(safeColor(l.color, "#111111"))}" text-anchor="middle" dominant-baseline="central"><textPath href="#${id}" startOffset="50%">${esc(text)}</textPath></text></svg></div>`;
 }
 
 // the background image is in the page once (CSS); each tag only refers to it, so a big image
@@ -171,7 +189,7 @@ body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-w
 .l{position:absolute;overflow:hidden}
 .t{display:flex;align-items:center;white-space:nowrap}
 .t span{max-width:100%;overflow:hidden;text-overflow:clip;unicode-bidi:plaintext}
-.t.wrap{white-space:normal;align-items:flex-start}.t.wrap span{text-wrap:balance}
+.tc svg{display:block;overflow:visible}.t.wrap{white-space:normal;align-items:flex-start}.t.wrap span{text-wrap:balance}
 .bc{display:flex;flex-direction:column;background:#fff}.bc .bars{flex:1;min-height:0}.bc svg{width:100%;height:100%;display:block}
 .bc-text{font-size:7pt;text-align:center;letter-spacing:0.5pt;line-height:1.2;padding-top:0.4mm}
 .qr svg{width:100%;height:100%;display:block}
@@ -180,9 +198,15 @@ body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-w
 @media screen{.sheet.back,.tag.back:not(.sheet>.tag){outline:0.6mm dashed #94a3b8}.sheet.back::before,body>.tag.back::after{content:"Back";position:absolute;top:1mm;right:1mm;z-index:5;font:600 8pt sans-serif;color:#475569;background:#f1f5f9;padding:0.3mm 1.5mm;border-radius:1mm}}
 @media print{body{display:block}.used{display:none}}
 </style></head><body>${body}<script>
-(function(){function fit(){document.querySelectorAll("[data-fit]").forEach(function(el){var span=el.firstElementChild;var min=parseFloat(el.getAttribute("data-min"))||8;var floor=parseFloat(el.getAttribute("data-floor"))||min;var s=parseFloat(getComputedStyle(el).fontSize);var over=function(){return span.scrollWidth>el.clientWidth+0.5||el.scrollHeight>el.clientHeight+0.5};if(!over())return;var r=Math.min(el.clientWidth/Math.max(span.scrollWidth,1),el.clientHeight/Math.max(el.scrollHeight,1));/* text on more lines steps down from its size: a jump would skip the sizes where it fits on fewer lines */if(getComputedStyle(el).whiteSpace!=="nowrap")r=1;s=Math.max(min,Math.floor(s*Math.min(1,r)*2)/2);el.style.fontSize=s+"px";var guard=80;while(guard-->0&&s>min&&over()){s=Math.max(min,s-0.5);el.style.fontSize=s+"px";}
+(function(){${CURVE_SCRIPT}function fit(){document.querySelectorAll("[data-fit]:not(.tc)").forEach(function(el){var span=el.firstElementChild;var min=parseFloat(el.getAttribute("data-min"))||8;var floor=parseFloat(el.getAttribute("data-floor"))||min;var s=parseFloat(getComputedStyle(el).fontSize);var over=function(){return span.scrollWidth>el.clientWidth+0.5||el.scrollHeight>el.clientHeight+0.5};if(!over())return;var r=Math.min(el.clientWidth/Math.max(span.scrollWidth,1),el.clientHeight/Math.max(el.scrollHeight,1));/* text on more lines steps down from its size: a jump would skip the sizes where it fits on fewer lines */if(getComputedStyle(el).whiteSpace!=="nowrap")r=1;s=Math.max(min,Math.floor(s*Math.min(1,r)*2)/2);el.style.fontSize=s+"px";var guard=80;while(guard-->0&&s>min&&over()){s=Math.max(min,s-0.5);el.style.fontSize=s+"px";}
 /* a name too long even at the smallest size goes smaller, so it prints whole: marked for the office */
-guard=400;while(guard-->0&&s>floor&&over()){s=Math.max(floor,s-0.5);el.style.fontSize=s+"px";}if(s<min)el.setAttribute("data-small",(Math.round(s*0.75*2)/2).toString());if(over())el.setAttribute("data-cut","1");});document.body.setAttribute("data-fitted","1");}
+guard=400;while(guard-->0&&s>floor&&over()){s=Math.max(floor,s-0.5);el.style.fontSize=s+"px";}if(s<min)el.setAttribute("data-small",(Math.round(s*0.75*2)/2).toString());if(over())el.setAttribute("data-cut","1");});fitCurves();document.body.setAttribute("data-fitted","1");}
 if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fit)}else{window.addEventListener("load",fit)}})();
 </script></body></html>`;
 }
+
+/**
+ * The page's curved-text fitting: curvePath's own code, and fitCurve's steps (lib/print/curve).
+ * Shrinks each curved text until it fits its arc; marks the ones under their smallest size.
+ */
+const CURVE_SCRIPT = `var curvePath=(${curvePath.toString()});function fitCurves(){document.querySelectorAll(".tc[data-fit]").forEach(function(el){var t=el.querySelector("text"),p=el.querySelector("path");if(!t||!p)return;var d=el.dataset,w=+d.w,h=+d.h,arc=+d.arc,s=+d.size,min=+d.minmm,floor=+d.floormm,len=0;function set(v){var g=curvePath(w,h,d.curve,arc,v);p.setAttribute("d",g.d);t.setAttribute("font-size",v.toFixed(3));len=g.length}function over(){return t.getComputedTextLength()>len+0.01}set(s);for(var i=0;i<200&&s>min&&over();i++){s=Math.max(min,s*0.97);set(s)}for(i=0;i<200&&s>floor&&over();i++){s=Math.max(floor,s*0.97);set(s)}el.style.fontSize=(s/${MM_PER_PT})+"pt";if(s<min-1e-6)el.setAttribute("data-small",(Math.round(s/${MM_PER_PT}*2)/2).toString());if(over())el.setAttribute("data-cut","1")})}`;

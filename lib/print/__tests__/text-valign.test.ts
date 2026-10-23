@@ -35,3 +35,25 @@ describe("line spacing", () => {
     expect(html).toContain('if(getComputedStyle(el).whiteSpace!=="nowrap")r=1;');
   });
 });
+
+describe("curved text", () => {
+  it("an arc inside the box, centred on top or bottom", async () => {
+    const { curvePath } = await import("../curve");
+    const top = curvePath(38.1, 38.1, "top", 180, 3);
+    // half a circle of radius 19.05 - 0.55 × 3
+    expect(top.length).toBeCloseTo(Math.PI * (19.05 - 1.65), 3);
+    expect(top.d.startsWith("M 1.650 19.050 A 17.400 17.400 0 0 1 36.450 19.050")).toBe(true);
+    // the bottom runs left to right the other way round the circle (letters upright)
+    expect(curvePath(38.1, 38.1, "bottom", 180, 3).d).toContain("0 0 0 36.450");
+  });
+  it("prints as SVG text on its arc, fitted by the page's script", () => {
+    const html = renderDocument(
+      { name: "t", kind: "name_tag", page_width_mm: 38.1, page_height_mm: 38.1, sheet_layout: null, layers: [{ id: "n", type: "text", text: "{{FIRST}}", x: 0, y: 0, w: 38.1, h: 38.1, size: 9, curve: "top" }] },
+      [{ values: { FIRST: "Levi" }, copies: 1 }],
+    );
+    expect(html).toMatch(/<div class="l tc" data-part="n" data-fit[^>]*data-curve="top"/);
+    expect(html).toContain('startOffset="50%">Levi</textPath>');
+    expect(html).toContain("var curvePath=(");
+    expect(html).toContain("fitCurves();");
+  });
+});

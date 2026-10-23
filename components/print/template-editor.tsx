@@ -1268,6 +1268,42 @@ export function TemplateEditor({
                       <label className="flex items-center gap-2">
                         <input type="checkbox" className="size-4" checked={Boolean(sel.wrap)} onChange={(e) => setLayer(sel.id, { wrap: e.target.checked })} /> Allow more than one line
                       </label>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="mr-1 text-xs text-muted-foreground">Shape</span>
+                        {(
+                          [
+                            [undefined, "Straight"],
+                            ["top", "Curved, top"],
+                            ["bottom", "Curved, bottom"],
+                          ] as const
+                        ).map(([v, label]) => (
+                          <Button
+                            key={label}
+                            size="sm"
+                            variant={sel.curve === v ? "default" : "outline"}
+                            className="h-7 px-2 text-xs"
+                            onClick={() => setLayer(sel.id, { curve: v, ...(v ? { wrap: false, rotate: 0 as const } : {}) })}
+                            title={v ? `Along the ${v} of the circle in the box: for round stickers (make the box the sticker's size)` : undefined}
+                          >
+                            {label}
+                          </Button>
+                        ))}
+                      </div>
+                      {sel.curve && (
+                        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                          How far around
+                          <input
+                            type="range"
+                            min={60}
+                            max={300}
+                            step={10}
+                            value={sel.arc ?? 180}
+                            onChange={(e) => setLayer(sel.id, { arc: Number(e.target.value) })}
+                            className="w-32"
+                          />
+                          <span className="tabular-nums">{sel.arc ?? 180}°</span>
+                        </label>
+                      )}
                       <div className="flex items-center gap-1.5">
                         <span className="mr-1 text-xs text-muted-foreground">In the box</span>
                         {(["top", "middle", "bottom"] as const).map((v) => (
