@@ -2,12 +2,13 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Check, CheckCheck, Printer, RotateCcw, Save } from "lucide-react";
+import { AlertTriangle, Check, CheckCheck, Download, Printer, RotateCcw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { markPrinted, saveSheetPosition } from "@/app/(app)/print/actions";
 import { fitPreview } from "@/lib/print/fit-preview";
 import { cleanUsed, freeLabels, sheetsUsed, usedAfter, usedBefore, type SheetStock } from "@/lib/print/sheet-position";
 import { cn, plural } from "@/lib/utils";
+import type { SheetLayout } from "@/lib/print/types";
 
 export type PrintPart = { divisionId: string | null; name: string; color: string | null; tags: number; campers: number };
 
@@ -19,7 +20,9 @@ export type PrintPart = { divisionId: string | null; name: string; color: string
  */
 export function PrintPanel({
   jobIds,
-  stock,
+  stock: sheetStock,
+  sheetLayout,
+  tagSize,
   remembered,
   parts,
   tags,
@@ -31,6 +34,10 @@ export function PrintPanel({
 }: {
   jobIds: string[];
   stock: SheetStock | null;
+  /** The template's label sheet, if it's on one: it can also print one tag a page instead. */
+  sheetLayout?: SheetLayout | null;
+  /** The tag's size, mm (the page size when printing one a page). */
+  tagSize?: { w: number; h: number };
   /** The labels already used on the sheet in the printer, from the last print. */
   remembered: number[];
   parts: PrintPart[];
@@ -46,10 +53,14 @@ export function PrintPanel({
   twoSided?: { flip: "long" | "short" } | null;
 }) {
   const router = useRouter();
-  const per = stock?.perSheet ?? 1;
-  const [used, setUsed] = React.useState<number[]>(stock ? cleanUsed(remembered, per) : []);
+  // one tag a page (pages the tag's size) instead of on the template's label sheet
+  const [single, setSingle] = React.useState(false);
+  const stock = single ? null : sheetStock;
+  const per = sheetStock?.perSheet ?? 1;
+  const [used, setUsed] = React.useState<number[]>(sheetStock ? cleanUsed(remembered, per) : []);
   // what Kinus has saved for this sheet (changes here are saved when printed, or with Save)
-  const [saved, setSaved] = React.useState<number[]>(stock ? cleanUsed(remembered, per) : []);
+  const [saved, setSaved] = React.useState<number[]>(sheetStock ? cleanUsed(remembered, per) : []);
+  const [saving, setSaving] = React.useState<string | null>(null);
   const [picking, setPicking] = React.useState(false);
   // how many of each: null = as asked (each request's own number)
   const [each, setEach] = React.useState<number | null>(null);
@@ -70,6 +81,7 @@ export function PrintPanel({
   if (stock && used.length) params.set("used", used.join(","));
   if (current) params.set("division", partKey(current));
   if (each) params.set("copies", String(each));
+  if (single) params.set("single", "1");
   const src = `/print/sheet?${params}`;
 
   // names longer than the template was made for: printed smaller (whole), or cut off even so
@@ -88,6 +100,51 @@ export function PrintPanel({
     print();
     window.history.replaceState(window.history.state, "", window.location.pathname);
   }, [ready, print]);
+
+  // the same tags as the preview, as a PDF file: made in parts on the server (a minute each
+  // at most), joined here into one file
+  const download = async () => {
+    setSaving("Making the PDF…");
+    try {
+      const get = async (part: number) => {
+        const r = await fetch(`/print/sheet/pdf?${params}&part=${part}`);
+        if (!r.ok) throw new Error((await r.text().catch(() => "")) || `answer ${r.status}`);
+        return r;
+      };
+      const first = await get(0);
+      const parts = Math.max(1, Number(first.headers.get("X-Kinus-Parts")) || 1);
+      const name = decodeURIComponent(first.headers.get("X-Kinus-File") ?? "") || "Tags.pdf";
+      let file: Blob;
+      if (parts === 1) file = await first.blob();
+      else {
+        const { PDFDocument } = await import("pdf-lib");
+        const joined = await PDFDocument.create();
+        const add = async (bytes: ArrayBuffer) => {
+          const doc = await PDFDocument.load(bytes);
+          for (const page of await joined.copyPages(doc, doc.getPageIndices())) joined.addPage(page);
+        };
+        await add(await first.arrayBuffer());
+        for (let i = 1; i < parts; i++) {
+          setSaving(`Making the PDF: part ${i + 1} of ${parts}…`);
+          await add(await (await get(i)).arrayBuffer());
+        }
+        file = new Blob([(await joined.save()) as BlobPart], { type: "application/pdf" });
+      }
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(file);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+      toast.success("PDF downloaded.");
+      setAsking(true);
+    } catch (e) {
+      toast.error(`The PDF couldn't be made${e instanceof Error && e.message ? ` (${e.message})` : ""}. Print it instead.`);
+    } finally {
+      setSaving(null);
+    }
+  };
 
   const after = stock ? usedAfter(used, count, per) : [];
   const nextFree = freeLabels(after, per)[0] ?? 1;
@@ -170,6 +227,31 @@ export function PrintPanel({
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {sheetLayout && sheetLayout.cols > 0 && sheetLayout.rows > 0 && tagSize && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium">Paper</span>
+          <div className="inline-flex flex-wrap gap-1 rounded-lg bg-muted p-1">
+            {(
+              [
+                [false, sheetLayout.cols * sheetLayout.rows > 1 ? `Label sheet (${sheetLayout.cols * sheetLayout.rows} a page)` : `${sheetLayout.paper === "a4" ? "A4" : "Letter"} paper`],
+                [true, `One per page (${sizeLabel(tagSize)})`],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={String(v)}
+                type="button"
+                onClick={() => setSingle(v)}
+                aria-pressed={single === v}
+                className={cn("rounded-md px-2.5 py-1 text-sm", single === v ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {single && <span className="text-xs text-muted-foreground">Each page is the tag&apos;s size: for a label printer, or paper cut to size.</span>}
         </div>
       )}
 
@@ -277,9 +359,14 @@ export function PrintPanel({
         <h2 className="text-sm font-semibold">
           Preview{current ? ` · ${current.name}` : ""} <span className="font-normal text-muted-foreground">· {plural(count, "tag")}</span>
         </h2>
-        <Button onClick={print} disabled={!ready || (multi && !current)}>
-          <Printer /> {ready ? "Print" : "Preparing…"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={download} disabled={Boolean(saving) || (multi && !current)} title="The same tags as a PDF file, each page the size it prints">
+            <Download /> {saving ?? "Download PDF"}
+          </Button>
+          <Button onClick={print} disabled={!ready || (multi && !current)}>
+            <Printer /> {ready ? "Print" : "Preparing…"}
+          </Button>
+        </div>
       </div>
 
       {twoSided && (
@@ -365,4 +452,11 @@ export function PrintPanel({
       />
     </div>
   );
+}
+
+/** 101.6 × 152.4 mm → "4 × 6 in"; sizes that aren't whole-ish inches in mm. */
+function sizeLabel({ w, h }: { w: number; h: number }): string {
+  const inch = (mm: number) => Math.round((mm / 25.4) * 100) / 100;
+  const nice = (mm: number) => Math.abs(inch(mm) * 8 - Math.round(inch(mm) * 8)) < 0.02;
+  return nice(w) && nice(h) ? `${inch(w)} × ${inch(h)} in` : `${Math.round(w)} × ${Math.round(h)} mm`;
 }

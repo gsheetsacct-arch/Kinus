@@ -33,7 +33,10 @@ Positions are millimetres from the tag's top-left: x, y, w (width), h (height).
   (more than one line), "valign": "top"|"middle"|"bottom" (where the text sits in its box;
   middle by default, top when it wraps), "lineHeight": number (line spacing × the size for
   wrapped text; default the font's own, 1.4 for uploaded fonts: lower it to just fit the
-  font's letters, e.g. 1.25 for Poppins), "rotate": 0|90|-90}
+  font's letters, e.g. 1.25 for Poppins), "curve": "top"|"bottom" (the text runs along the
+  top or bottom of the circle inside its box, letters upright, centred, shrinking to fit the
+  arc: for round stickers make the box the sticker's size), "arc": degrees of the circle it may
+  take (default 180), "rotate": 0|90|-90}
   A name that should wrap only when it's very long: "wrap": true, "valign": "bottom", and a box
   tall enough for two lines that ends where one line ends. A short name sits where it always
   did; a name that fits on one line by shrinking a little stays on one line, and only a long

@@ -1,6 +1,7 @@
 "use client";
 import { fill } from "@/lib/print/merge";
 import { fitText } from "@/lib/print/fit";
+import { DEFAULT_ARC, fitCurve } from "@/lib/print/curve";
 import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
 import { textAlignItems, type Layer } from "@/lib/print/types";
 import { fontStack, lineHeightOf } from "@/lib/print/font-families";
@@ -29,6 +30,7 @@ const S = 4; // px per mm while measuring
  * the number of letters.
  */
 export function checkFit(l: TextLayer, people: FitPerson[]): FitResult {
+  if (l.curve) return checkCurve(l, people);
   const turned = Boolean(l.rotate);
   const w = (turned ? l.h : l.w) * S;
   const h = (turned ? l.w : l.h) * S;
@@ -64,6 +66,66 @@ export function checkFit(l: TextLayer, people: FitPerson[]): FitResult {
       }
       const r = fitText(box, span, target, min, floor);
       const pt = Math.round((r.px / (MM_PER_PT * S)) * 2) / 2;
+      if (r.overflow) {
+        out.cut.push({ name: p.name, code: p.code });
+        continue;
+      }
+      if (r.below) out.small.push({ name: p.name, code: p.code, pt });
+      if (!out.smallest || pt < out.smallest.pt) out.smallest = { name: p.name, code: p.code, pt };
+    }
+  } finally {
+    host.remove();
+  }
+  out.small.sort((a, b) => a.pt - b.pt);
+  if (out.small.length) out.needPt = out.small[0].pt;
+  return out;
+}
+
+/** checkFit for text along a circle: the same SVG and steps as the canvas and the printed page. */
+function checkCurve(l: TextLayer, people: FitPerson[]): FitResult {
+  const NS = "http://www.w3.org/2000/svg";
+  const host = document.createElement("div");
+  host.style.cssText = `position:fixed;left:-20000px;top:0;visibility:hidden;pointer-events:none;width:${l.w * S}px;height:${l.h * S}px`;
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${l.w} ${l.h}`);
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", "100%");
+  const path = document.createElementNS(NS, "path");
+  path.id = `kcfit${Math.random().toString(36).slice(2)}`;
+  const text = document.createElementNS(NS, "text");
+  text.setAttribute("font-weight", String(l.weight ?? 400));
+  text.setAttribute("font-family", fontStack(l.font));
+  if (l.italic) text.setAttribute("font-style", "italic");
+  text.setAttribute("text-anchor", "middle");
+  text.setAttribute("dominant-baseline", "central");
+  const tp = document.createElementNS(NS, "textPath");
+  tp.setAttribute("href", `#${path.id}`);
+  tp.setAttribute("startOffset", "50%");
+  text.appendChild(tp);
+  svg.append(path, text);
+  host.appendChild(svg);
+  document.body.appendChild(host);
+  const fields = [...l.text.matchAll(/\{\{[^{}]+\}\}/g)];
+  const out: FitResult = { checked: 0, smallest: null, small: [], cut: [], needPt: null };
+  try {
+    for (const p of people) {
+      const get = (k: string) => p.values[k] ?? "";
+      if (fields.length && fields.every((m) => fill(m[0], get).trim() === "")) continue;
+      const value = fill(l.text, get);
+      if (!value.trim()) continue;
+      tp.textContent = value;
+      out.checked++;
+      const r = fitCurve(text, path, {
+        w: l.w,
+        h: l.h,
+        side: l.curve!,
+        arc: l.arc ?? DEFAULT_ARC,
+        sizeMm: l.size * MM_PER_PT,
+        minMm: minPt(l) * MM_PER_PT,
+        floorMm: Math.min(FLOOR_PT, minPt(l)) * MM_PER_PT,
+        fit: l.fit !== false,
+      });
+      const pt = Math.round((r.sizeMm / MM_PER_PT) * 2) / 2;
       if (r.overflow) {
         out.cut.push({ name: p.name, code: p.code });
         continue;

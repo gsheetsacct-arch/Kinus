@@ -43,6 +43,8 @@ export default async function PrintTogetherPage({ searchParams }: { searchParams
       <PrintPanel
         jobIds={ids}
         stock={sheet.stock}
+      sheetLayout={summary.spec.sheet_layout ?? null}
+      tagSize={{ w: summary.spec.page_width_mm, h: summary.spec.page_height_mm }}
         remembered={sheet.used}
         twoSided={summary.spec.back ?? null}
       parts={summary.parts}
