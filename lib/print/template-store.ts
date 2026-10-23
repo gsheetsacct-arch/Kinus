@@ -11,7 +11,7 @@ const num = (min: number, max: number) => z.coerce.number().min(min).max(max);
 // lock (can't be moved on the canvas) and hide (doesn't show or print) work on every kind of part
 const partFlags = { locked: z.boolean().optional(), hidden: z.boolean().optional(), side: z.literal("back").optional() };
 const layerSchema = z.discriminatedUnion("type", [
-  z.object({ ...partFlags, id: z.string(), type: z.literal("text"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), size: num(3, 200), weight: z.union([z.literal(400), z.literal(700)]).optional(), align: z.enum(["left", "center", "right"]).optional(), color: z.string().max(40).optional(), fit: z.boolean().optional(), wrap: z.boolean().optional(), valign: z.enum(["top", "middle", "bottom"]).optional(), lineHeight: num(0.8, 3).optional(), curve: z.enum(["top", "bottom"]).optional(), arc: num(20, 350).optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(), minSize: num(3, 200).optional(), font: z.union([z.enum(["sans", "rounded", "serif", "display"]), z.string().regex(/^custom:[a-z0-9-]{1,48}$/, "That font isn't one of the uploaded ones.")]).optional(), italic: z.boolean().optional(), underline: z.boolean().optional() }),
+  z.object({ ...partFlags, id: z.string(), type: z.literal("text"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), size: num(3, 200), weight: z.union([z.literal(400), z.literal(700)]).optional(), align: z.enum(["left", "center", "right"]).optional(), color: z.string().max(40).optional(), fit: z.boolean().optional(), wrap: z.boolean().optional(), valign: z.enum(["top", "middle", "bottom"]).optional(), lineHeight: num(0.8, 3).optional(), curve: z.enum(["top", "bottom"]).optional(), arc: num(20, 350).optional(), letterSpacing: num(-0.2, 1).optional(), wordSpacing: num(-0.5, 3).optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(), minSize: num(3, 200).optional(), font: z.union([z.enum(["sans", "rounded", "serif", "display"]), z.string().regex(/^custom:[a-z0-9-]{1,48}$/, "That font isn't one of the uploaded ones.")]).optional(), italic: z.boolean().optional(), underline: z.boolean().optional() }),
   z.object({ ...partFlags, id: z.string(), type: z.literal("barcode"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), showText: z.boolean().optional(), rotate: z.union([z.literal(0), z.literal(90), z.literal(-90)]).optional(), color: z.string().max(40).optional() }),
   z.object({ ...partFlags, id: z.string(), type: z.literal("qr"), text: z.string(), x: num(-50, 500), y: num(-50, 500), w: num(1, 500), h: num(1, 500), color: z.string().max(40).optional(), shape: z.enum(["square", "round"]).optional() }),
   z.object({
@@ -27,6 +27,14 @@ const layerSchema = z.discriminatedUnion("type", [
     w: num(1, 500),
     h: num(1, 500),
     fit: z.enum(["contain", "cover"]).optional(),
+    // the uploaded PDF page this picture shows (the PDFs Kinus makes use the PDF itself)
+    pdf: z
+      .object({
+        path: z.string().max(200).regex(/^pictures\/[\w.-]+\.pdf$/, "That PDF isn't one of the uploaded ones."),
+        page: z.number().int().min(1).max(50),
+        box: z.tuple([z.number(), z.number(), z.number().positive(), z.number().positive()]),
+      })
+      .optional(),
   }),
   z.object({ ...partFlags, id: z.string(), type: z.literal("box"), x: num(-50, 500), y: num(-50, 500), w: num(0.1, 500), h: num(0.1, 500), fill: z.string().max(60).optional(), radius: num(0, 100).optional(), border: z.string().max(40).optional() }),
 ]);

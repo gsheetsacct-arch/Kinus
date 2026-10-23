@@ -45,3 +45,28 @@ describe("round QR", () => {
     expect(html).toContain(qrRoundSvg("KN134841").replace("<svg ", '<svg preserveAspectRatio="xMidYMid meet" '));
   });
 });
+
+describe("PDF artwork and spacing", () => {
+  it("a picture made from a PDF is marked for the PDFs Kinus makes (not under a division's own picture)", () => {
+    const html = renderDocument(
+      { name: "t", kind: "name_tag", page_width_mm: 98, page_height_mm: 127, sheet_layout: null, layers: [
+        { id: "a", type: "image", path: "pictures/x-p1.png", x: 0, y: 0, w: 98, h: 127, fit: "cover", byDivision: { "Division 2": "pictures/other.png" }, pdf: { path: "pictures/x.pdf", page: 1, box: [12, 12, 279, 360] } },
+      ] },
+      [{ values: { __division: "Division 1" }, copies: 1 }, { values: { __division: "Division 2" }, copies: 1 }],
+    );
+    expect(html.match(/data-pdf="pictures\/x.pdf" data-pdf-page="1" data-pdf-box="12,12,279,360" data-pdf-fit="cover"/g)).toHaveLength(1);
+    // never data-fit (that's the text fitting's mark)
+    expect(html).not.toMatch(/class="l im[^"]*"[^>]* data-fit=/);
+  });
+  it("letter and word spacing print in em", () => {
+    const html = renderDocument(
+      { name: "t", kind: "name_tag", page_width_mm: 98, page_height_mm: 127, sheet_layout: null, layers: [
+        { id: "n", type: "text", text: "{{FIRST}}", x: 0, y: 0, w: 90, h: 10, size: 20, letterSpacing: 0.08, wordSpacing: 0.5 },
+        { id: "c", type: "text", text: "{{FIRST}}", x: 0, y: 0, w: 38, h: 38, size: 8, curve: "top", letterSpacing: 0.1 },
+      ] },
+      [{ values: { FIRST: "Levi" }, copies: 1 }],
+    );
+    expect(html).toContain("letter-spacing:0.08em;word-spacing:0.5em;");
+    expect(html).toContain('style="letter-spacing:0.1em;"');
+  });
+});

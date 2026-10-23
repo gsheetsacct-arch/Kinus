@@ -282,7 +282,8 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     "upload_picture",
     {
       title: "Upload a picture",
-      description: "A PNG, JPG or WebP (a logo, or a whole-tag background exported from InDesign at 300 dpi). use \"part\" returns a path for an image part; use \"background\" puts it behind the whole template_id.",
+      description:
+        "A PNG, JPG or WebP (a logo), or a PDF (artwork from InDesign: kept as a PDF, so the PDFs Kinus prints are sharp). use \"part\" returns what an image part needs; use \"background\" (pictures only) puts it behind the whole template_id. For a PDF, give template_id so the PDF's trim/bleed box matching the tag is used; each page comes back as an image part to place.",
       inputSchema: {
         file_name: z.string(),
         data_base64: z.string().describe("The file, base64 encoded (up to about 3 MB)"),
@@ -293,6 +294,16 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     async ({ file_name, data_base64, use, template_id }) => {
       try {
         const bytes = Buffer.from(data_base64, "base64");
+        if (bytes.subarray(0, 5).toString() === "%PDF-") {
+          const admin = createAdminClient();
+          const tpl = template_id ? (await admin.from("print_templates").select("page_width_mm, page_height_mm").eq("id", template_id).maybeSingle()).data : null;
+          const { storePdfArt } = await import("./pdf-art");
+          const pages = await storePdfArt(new Uint8Array(bytes), tpl ? { w: Number(tpl.page_width_mm), h: Number(tpl.page_height_mm) } : null);
+          return text(
+            `Stored ${file_name} (${pages.length} page${pages.length === 1 ? "" : "s"}). Use each page as an image part (keep "pdf" as it is; put it first in "layers" to be under the rest; "side":"back" for the back):\n` +
+              JSON.stringify(pages.map((p) => ({ type: "image", path: p.path, pdf: p.pdf, fit: "cover", page_size_mm: [p.widthMm, p.heightMm] })), null, 1),
+          );
+        }
         const type = bytes.subarray(0, 4).toString("hex") === "89504e47" ? "image/png" : bytes.subarray(0, 3).toString("hex") === "ffd8ff" ? "image/jpeg" : bytes.subarray(8, 12).toString() === "WEBP" ? "image/webp" : null;
         if (!type) return problem(`${file_name} isn't a PNG, JPG or WebP picture.`);
         if (bytes.length > 4 * 1024 * 1024) return problem("Pictures up to 4 MB, please: save it smaller (JPG, or 300 dpi at the tag's size).");

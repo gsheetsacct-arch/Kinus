@@ -741,7 +741,7 @@ function CurvedPart({
     run();
     document.fonts?.ready.then(run).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the part's own values, not the object
-  }, [text, side, arc, sizeMm, l.w, l.h, l.fit, l.minSize, l.weight, l.font, l.italic, l.id, empty, onFit]);
+  }, [text, side, arc, sizeMm, l.w, l.h, l.fit, l.minSize, l.weight, l.font, l.italic, l.letterSpacing, l.wordSpacing, l.id, empty, onFit]);
   return (
     <>
       <FitMark cut={cut} />
@@ -757,6 +757,7 @@ function CurvedPart({
           fill={empty ? "#94a3b8" : safeColor(l.color ?? "#111111", "#111111")}
           textAnchor="middle"
           dominantBaseline="central"
+          style={{ letterSpacing: l.letterSpacing ? `${l.letterSpacing}em` : undefined, wordSpacing: l.wordSpacing ? `${l.wordSpacing}em` : undefined }}
         >
           <textPath href={`#${id}`} startOffset="50%">
             {empty ? l.text : text}
@@ -827,6 +828,8 @@ function TextPart({
     l.wrap,
     l.valign,
     l.lineHeight,
+    l.letterSpacing,
+    l.wordSpacing,
     l.w,
     l.h,
     l.rotate,
@@ -859,6 +862,8 @@ function TextPart({
                 ? "flex-end"
                 : "flex-start",
           alignItems: textAlignItems(l),
+          letterSpacing: l.letterSpacing ? `${l.letterSpacing}em` : undefined,
+          wordSpacing: l.wordSpacing ? `${l.wordSpacing}em` : undefined,
           fontStyle: empty || l.italic ? "italic" : undefined,
           fontFamily: fontStack(l.font),
           lineHeight: l.lineHeight ?? lineHeightOf(l.font),

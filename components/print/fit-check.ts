@@ -3,7 +3,7 @@ import { fill } from "@/lib/print/merge";
 import { fitText } from "@/lib/print/fit";
 import { CURVE_SCALE, DEFAULT_ARC, fitCurve } from "@/lib/print/curve";
 import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
-import { textAlignItems, type Layer } from "@/lib/print/types";
+import { textAlignItems, textSpacingCss, type Layer } from "@/lib/print/types";
 import { fontStack, lineHeightOf } from "@/lib/print/font-families";
 
 export type FitPerson = { name: string; code: string; values: Record<string, string> };
@@ -37,7 +37,7 @@ export function checkFit(l: TextLayer, people: FitPerson[]): FitResult {
   const host = document.createElement("div");
   host.style.cssText = "position:fixed;left:-20000px;top:0;visibility:hidden;pointer-events:none";
   const box = document.createElement("div");
-  box.style.cssText = `display:flex;align-items:${textAlignItems(l)};overflow:hidden;line-height:${l.lineHeight ?? lineHeightOf(l.font)};width:${w}px;height:${h}px;white-space:${l.wrap ? "normal" : "nowrap"};font-weight:${l.weight ?? 400};font-style:${l.italic ? "italic" : "normal"};font-family:${fontStack(l.font)};text-align:${l.align ?? "left"}`;
+  box.style.cssText = `display:flex;align-items:${textAlignItems(l)};overflow:hidden;line-height:${l.lineHeight ?? lineHeightOf(l.font)};width:${w}px;height:${h}px;white-space:${l.wrap ? "normal" : "nowrap"};font-weight:${l.weight ?? 400};font-style:${l.italic ? "italic" : "normal"};font-family:${fontStack(l.font)};text-align:${l.align ?? "left"};${textSpacingCss(l)}`;
   const span = document.createElement("span");
   span.dir = "auto";
   span.style.cssText = `max-width:100%;overflow:hidden;unicode-bidi:plaintext;${l.wrap ? "text-wrap:balance;" : ""}text-decoration:${l.underline ? "underline" : "none"}`;
@@ -96,6 +96,7 @@ function checkCurve(l: TextLayer, people: FitPerson[]): FitResult {
   text.setAttribute("font-weight", String(l.weight ?? 400));
   text.setAttribute("font-family", fontStack(l.font));
   if (l.italic) text.setAttribute("font-style", "italic");
+  if (textSpacingCss(l)) text.setAttribute("style", textSpacingCss(l));
   text.setAttribute("text-anchor", "middle");
   text.setAttribute("dominant-baseline", "central");
   const tp = document.createElementNS(NS, "textPath");

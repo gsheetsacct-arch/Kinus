@@ -14,6 +14,7 @@ import { isProgressMark, RETRY_MARK, STARTED_MARK } from "./labels";
 import { cleanUsed, sheetStock, usedBefore } from "./sheet-position";
 import { campDivisions, templateCamps, templateDivisionIds } from "./template-camps";
 import { customFontCss } from "./custom-fonts";
+import { loadPdfArt } from "./pdf-art";
 
 /** Office, directors and admins print for anyone; others need check-in access to the camper. */
 export function canPrintFor(user: CurrentUser, camper: { division_id: string | null; bunk_id: string | null }) {
@@ -123,15 +124,17 @@ async function loadRequests(jobIds: string[]) {
  */
 async function loadPrintSet(jobIds: string[]) {
   const { admin, jobs, spec, copiesOf, askedMoreThanOnce } = await loadRequests(jobIds);
-  const [campers, setup, background, images, fontCss] = await Promise.all([
+  const [campers, setup, background, images, fontCss, art] = await Promise.all([
     loadPrintCampers(admin, [...copiesOf.keys()]),
     loadMergeSetup(admin),
     backgroundDataUrl(admin, spec.background_path),
     imageDataUrls(admin, spec.layers),
     customFontCss(spec),
+    // uploaded PDF artwork, for PDFs made with it as it is
+    loadPdfArt(spec.layers),
   ]);
   campers.sort(byBunkThenName);
-  return { jobs, spec, campers, copiesOf, setup, background, images, fontCss, askedMoreThanOnce };
+  return { jobs, spec, campers, copiesOf, setup, background, images, fontCss, art, askedMoreThanOnce };
 }
 
 const divisionOf = (c: { division_id?: string | null }) => c.division_id ?? null;
@@ -191,7 +194,7 @@ export async function printSetPdf(jobIds: string[], opts: SetOpts & { part?: num
   const parts = total <= first ? 1 : 1 + Math.ceil((total - first) / size);
   const part = Math.min(parts - 1, Math.max(0, Math.floor(opts.part ?? 0)));
   const tags: [number, number] | undefined = parts === 1 ? undefined : part === 0 ? [0, first] : [first + (part - 1) * size, first + part * size];
-  const pdf = await htmlToPdf(setHtml(set, { ...opts, tags }).html);
+  const pdf = await htmlToPdf(setHtml(set, { ...opts, tags }).html, undefined, set.art);
   // "×" (4×6) as "x": some browsers drop a download's name with it
   const fileName = `${spec.name.replace(/×/g, "x").replace(/[\\/:*?"<>|]+/g, "-").trim() || "Tags"} - ${total} ${total === 1 ? "tag" : "tags"}.pdf`;
   return { pdf, parts, fileName };
@@ -253,6 +256,7 @@ export async function jobHtml(jobId: string, opts: { start?: number; part?: numb
   return {
     html,
     parts,
+    art: set.art,
     job: {
       id: job.id,
       deliver_to: job.deliver_to,
@@ -305,13 +309,13 @@ export async function processPrintJob(jobId: string, appUrl: string, opts: { ret
   // the outcome is written only if this attempt still owns the request
   const finish = (patch: Database["public"]["Tables"]["print_jobs"]["Update"]) => admin.from("print_jobs").update(patch).eq("id", jobId).eq("status", "rendering").eq("error", mark);
   try {
-    const { html, job, parts } = await jobHtml(jobId, { part });
+    const { html, job, parts, art } = await jobHtml(jobId, { part });
     let pdf: Buffer | null = null;
     let pdfError: string | null = null;
     let fit: FitNotes | null = null;
     try {
       if (job.tags > PDF_MAX_TAGS) throw new Error(`more than ${PDF_MAX_TAGS.toLocaleString("en-US")} tags; print it from Kinus`);
-      const made = await htmlToPdf(html, (n) => (fit = n));
+      const made = await htmlToPdf(html, (n) => (fit = n), art);
       if (parts > 1) {
         const out = admin.storage.from("print-output");
         const saved = await Promise.all([

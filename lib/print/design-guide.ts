@@ -36,7 +36,9 @@ Positions are millimetres from the tag's top-left: x, y, w (width), h (height).
   font's letters, e.g. 1.25 for Poppins), "curve": "top"|"bottom" (the text runs along the
   top or bottom of the circle inside its box, letters upright, centred, shrinking to fit the
   arc: for round stickers make the box the sticker's size), "arc": degrees of the circle it may
-  take (default 180), "rotate": 0|90|-90}
+  take (default 180), "letterSpacing": em (extra space between letters, × the size; e.g. 0.05
+  for airy capitals, negative to tighten), "wordSpacing": em (extra space between words),
+  "rotate": 0|90|-90}
   A name that should wrap only when it's very long: "wrap": true, "valign": "bottom", and a box
   tall enough for two lines that ends where one line ends. A short name sits where it always
   did; a name that fits on one line by shrinking a little stays on one line, and only a long
@@ -50,9 +52,12 @@ Positions are millimetres from the tag's top-left: x, y, w (width), h (height).
   it scans the same)
 - box: {"type":"box","id","x","y","w","h","fill":"#hex"|"{{DIVISION_COLOR}}","radius": mm,"border":"#hex"}
   A colour block (strips, backgrounds); "{{DIVISION_COLOR}}" is each camper's division colour.
-- image: {"type":"image","id","path","x","y","w","h","fit":"contain"|"cover",
+- image: {"type":"image","id","path","x","y","w","h","fit":"contain"|"cover","pdf"?: {...},
   "byDivision": {"Division 2": "pictures/..", "Hebrew Division": ""}} (another picture, or
   none "", for a division). Upload the picture first: upload_picture gives the path.
+  A PDF uploaded with upload_picture comes back as image parts with "pdf": keep it. The PDFs
+  Kinus prints draw that PDF page itself (sharp), under the tag's other parts; the screen and
+  previews show a picture of it.
 Every part may also have "locked", "hidden", and "side":"back" (on a two-sided template).
 
 ## Fonts and colours
