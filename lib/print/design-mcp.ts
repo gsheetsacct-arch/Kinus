@@ -279,21 +279,45 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
   );
 
   server.registerTool(
+    "upload_link",
+    {
+      title: "Get a link to upload a big PDF",
+      description:
+        "For a PDF over about 2.5 MB (too big to send in a call): a one-time link (valid two hours) to put it straight into Kinus' storage, e.g. curl -X PUT -H 'Content-Type: application/pdf' --data-binary @artwork.pdf '<url>'. Then call upload_picture with `uploaded`.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const { pdfUploadLink } = await import("./pdf-art");
+        const { path, url } = await pdfUploadLink();
+        return text(
+          JSON.stringify({ url, uploaded: path, how: `curl -X PUT -H 'Content-Type: application/pdf' --data-binary @YOUR-FILE.pdf '${url}'`, then: "upload_picture with uploaded (and template_id)" }, null, 1),
+        );
+      } catch (e) {
+        return problem(e instanceof Error ? e.message : String(e));
+      }
+    },
+  );
+
+  server.registerTool(
     "upload_picture",
     {
       title: "Upload a picture",
       description:
-        "A PNG, JPG or WebP (a logo), or a PDF (artwork from InDesign: kept as a PDF, so the PDFs Kinus prints are sharp). use \"part\" returns what an image part needs; use \"background\" (pictures only) puts it behind the whole template_id. For a PDF, give template_id so the PDF's trim/bleed box matching the tag is used; each page comes back as an image part to place.",
+        "A PNG, JPG or WebP (a logo), or a PDF (artwork from InDesign: kept as a PDF, so the PDFs Kinus prints are sharp). use \"part\" returns what an image part needs; use \"background\" (pictures only) puts it behind the whole template_id. For a PDF, give template_id so the PDF's trim/bleed box matching the tag is used; each page comes back as an image part to place. A file over about 2.5 MB doesn't fit in a call: get upload_link, put the file there, then call this with `uploaded`.",
       inputSchema: {
         file_name: z.string(),
-        data_base64: z.string().describe("The file, base64 encoded (up to about 3 MB)"),
+        data_base64: z.string().optional().describe("The file, base64 encoded (up to about 2.5 MB; bigger: upload_link)"),
+        uploaded: z.string().optional().describe("Instead of data_base64: the `uploaded` path upload_link gave, after the PDF was put there"),
         use: z.enum(["part", "background"]).default("part"),
         template_id: z.guid().optional(),
       },
     },
-    async ({ file_name, data_base64, use, template_id }) => {
+    async ({ file_name, data_base64, uploaded, use, template_id }) => {
       try {
-        const bytes = Buffer.from(data_base64, "base64");
+        const { takeUploadedPdf } = await import("./pdf-art");
+        if (!data_base64 && !uploaded) return problem("Give data_base64, or upload the file with upload_link and give `uploaded`.");
+        const bytes = uploaded ? Buffer.from(await takeUploadedPdf(uploaded)) : Buffer.from(data_base64!, "base64");
         if (bytes.subarray(0, 5).toString() === "%PDF-") {
           const admin = createAdminClient();
           const tpl = template_id ? (await admin.from("print_templates").select("page_width_mm, page_height_mm").eq("id", template_id).maybeSingle()).data : null;

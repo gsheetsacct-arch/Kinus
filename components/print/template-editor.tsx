@@ -51,7 +51,7 @@ import { codeContrast, MIN_CODE_CONTRAST } from "@/lib/print/code-color";
 import { DIVISION_VALUE, onBack, pictureFor, sheetPlacement, type Layer, type SheetLayout, type TemplateSpec } from "@/lib/print/types";
 import { presetSummary, type LabelPreset } from "@/lib/print/presets";
 import { currentPreset, LabelPicker, SheetDiagram, sizeText } from "./label-picker";
-import { fitCheckPeople, previewTemplate, previewValues, saveTemplate, uploadTemplateImage, uploadTemplatePdf } from "@/app/(app)/print/actions";
+import { fitCheckPeople, previewTemplate, previewValues, saveTemplate, pdfUploadLinkFor, uploadTemplateImage, uploadTemplatePdf } from "@/app/(app)/print/actions";
 import { boundsOf, TagCanvas, type Box, type FitInfo } from "./tag-canvas";
 import { boxCapPt, checkFit, type FitPerson, type FitResult } from "./fit-check";
 import { FONTS, lineHeightOf, type FontKey } from "@/lib/print/font-families";
@@ -634,7 +634,15 @@ export function TemplateEditor({
     setUploading(true);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      // a request to Kinus carries 4.5 MB at most: a bigger PDF goes straight into storage first
+      if (file.size > 3.5 * 1024 * 1024) {
+        const link = await pdfUploadLinkFor().catch(() => ({ ok: false as const, error: "That didn't upload. Check the connection and try again." }));
+        if (!link.ok) return void toast.error(link.error);
+        // the file itself, as the link takes it (the same way the design connector's upload_link is used)
+        const put = await fetch(link.url, { method: "PUT", headers: { "Content-Type": "application/pdf" }, body: file }).catch(() => null);
+        if (!put?.ok) return void toast.error("That didn't upload. Check the connection and try again.");
+        fd.append("uploaded", link.path);
+      } else fd.append("file", file);
       fd.append("w", String(W));
       fd.append("h", String(H));
       const r = await uploadTemplatePdf(fd).catch(() => ({ ok: false as const, error: "That didn't upload. Check the connection and try again." }));
