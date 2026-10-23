@@ -455,12 +455,12 @@ export async function uploadTemplatePdf(
 }
 
 /** A one-time link to put a big PDF straight into storage (a request to Kinus carries 4.5 MB at most). */
-export async function pdfUploadLinkFor(): Promise<{ ok: true; path: string; token: string } | { ok: false; error: string }> {
+export async function pdfUploadLinkFor(): Promise<{ ok: true; path: string; url: string } | { ok: false; error: string }> {
   try {
     await requireDesigner();
     const { pdfUploadLink } = await import("@/lib/print/pdf-art");
-    const { path, token } = await pdfUploadLink();
-    return { ok: true, path, token };
+    const { path, url } = await pdfUploadLink();
+    return { ok: true, path, url };
   } catch (e) {
     return { ok: false, error: errorMessage(e) };
   }

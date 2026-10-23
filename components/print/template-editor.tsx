@@ -41,7 +41,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { createClient } from "@/lib/supabase/client";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -639,8 +638,9 @@ export function TemplateEditor({
       if (file.size > 3.5 * 1024 * 1024) {
         const link = await pdfUploadLinkFor().catch(() => ({ ok: false as const, error: "That didn't upload. Check the connection and try again." }));
         if (!link.ok) return void toast.error(link.error);
-        const { error } = await createClient().storage.from("templates").uploadToSignedUrl(link.path, link.token, file, { contentType: "application/pdf" });
-        if (error) return void toast.error(`That didn't upload (${error.message}). Try again.`);
+        // the file itself, as the link takes it (the same way the design connector's upload_link is used)
+        const put = await fetch(link.url, { method: "PUT", headers: { "Content-Type": "application/pdf" }, body: file }).catch(() => null);
+        if (!put?.ok) return void toast.error("That didn't upload. Check the connection and try again.");
         fd.append("uploaded", link.path);
       } else fd.append("file", file);
       fd.append("w", String(W));
