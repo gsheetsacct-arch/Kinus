@@ -127,3 +127,25 @@ export async function loadPdfArt(layers: Layer[]): Promise<Record<string, Uint8A
   const files = await Promise.all(paths.map((p) => store.download(p).then(async ({ data }) => (data ? new Uint8Array(await data.arrayBuffer()) : null))));
   return Object.fromEntries(paths.flatMap((p, i) => (files[i] ? [[p, files[i]!]] : [])));
 }
+
+/**
+ * A one-time link to put a PDF straight into storage (uploads/…): past the 4.5 MB a request
+ * to Kinus may carry on Vercel. The PDF is then made into artwork with takeUploadedPdf.
+ */
+export async function pdfUploadLink(): Promise<{ path: string; token: string; url: string }> {
+  const path = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.pdf`;
+  const { data, error } = await createAdminClient().storage.from("templates").createSignedUploadUrl(path);
+  if (error || !data) throw error ?? new Error("Couldn't make an upload link.");
+  return { path, token: data.token, url: data.signedUrl };
+}
+
+/** The PDF put in storage with a pdfUploadLink link (removed from there once read). */
+export async function takeUploadedPdf(path: string): Promise<Uint8Array> {
+  if (!/^uploads\/[\w.-]+\.pdf$/.test(path)) throw new Error("That isn't an upload from Kinus' upload link.");
+  const store = createAdminClient().storage.from("templates");
+  const { data } = await store.download(path);
+  if (!data) throw new Error("Nothing was uploaded to that link yet (or it was used already).");
+  const bytes = new Uint8Array(await data.arrayBuffer());
+  await store.remove([path]);
+  return bytes;
+}

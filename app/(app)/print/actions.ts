@@ -440,12 +440,27 @@ export async function uploadTemplatePdf(
   try {
     await requireDesigner();
     const file = fd.get("file");
-    if (!(file instanceof File) || !file.size) return { ok: false, error: "Choose a PDF." };
+    const uploaded = fd.get("uploaded");
     const w = Number(fd.get("w"));
     const h = Number(fd.get("h"));
-    const { storePdfArt } = await import("@/lib/print/pdf-art");
-    const pages = await storePdfArt(new Uint8Array(await file.arrayBuffer()), w > 0 && h > 0 ? { w, h } : null);
+    const { storePdfArt, takeUploadedPdf } = await import("@/lib/print/pdf-art");
+    // a big PDF was put straight into storage (pdfUploadLinkFor); a small one comes with the request
+    const bytes = typeof uploaded === "string" && uploaded ? await takeUploadedPdf(uploaded) : file instanceof File && file.size ? new Uint8Array(await file.arrayBuffer()) : null;
+    if (!bytes) return { ok: false, error: "Choose a PDF." };
+    const pages = await storePdfArt(bytes, w > 0 && h > 0 ? { w, h } : null);
     return { ok: true, pages: pages.map(({ png, ...p }) => ({ ...p, url: `data:image/png;base64,${png.toString("base64")}` })) };
+  } catch (e) {
+    return { ok: false, error: errorMessage(e) };
+  }
+}
+
+/** A one-time link to put a big PDF straight into storage (a request to Kinus carries 4.5 MB at most). */
+export async function pdfUploadLinkFor(): Promise<{ ok: true; path: string; token: string } | { ok: false; error: string }> {
+  try {
+    await requireDesigner();
+    const { pdfUploadLink } = await import("@/lib/print/pdf-art");
+    const { path, token } = await pdfUploadLink();
+    return { ok: true, path, token };
   } catch (e) {
     return { ok: false, error: errorMessage(e) };
   }
