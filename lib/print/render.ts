@@ -1,4 +1,4 @@
-import { code128Svg, qrSvg } from "./barcode";
+import { code128Svg, qrRoundSvg, qrSvg } from "./barcode";
 import { tintCode } from "./code-color";
 import { embeddedFontCss } from "./fonts";
 import { FONTS, fontStack, isCustomFont, lineHeightOf, type FontKey } from "./font-families";
@@ -6,7 +6,7 @@ import { fill } from "./merge";
 import { DIVISION_VALUE, onBack, pictureFor, sheetPlacement, textAlignItems, type Layer, type PrintItem, type SheetLayout, type TemplateSpec } from "./types";
 import { FLOOR_PT, minPt, PX_PER_PT } from "./render-constants";
 import { isRoundLabel } from "./presets";
-import { curvePath, DEFAULT_ARC } from "./curve";
+import { CURVE_SCALE, curvePath, DEFAULT_ARC } from "./curve";
 
 /** A CSS class for a stored picture (the same path always gets the same class). */
 export function imageClass(path: string): string {
@@ -58,7 +58,8 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
       return `<div class="l im ${imageClass(path)}" style="${pos}background-size:${l.fit === "cover" ? "cover" : "contain"}"></div>`;
     }
     case "qr": {
-      const svg = tintCode(qrSvg(fill(l.text, get)), l.color).replace("<svg ", '<svg preserveAspectRatio="xMidYMid meet" ');
+      const code = l.shape === "round" ? qrRoundSvg(fill(l.text, get)) : qrSvg(fill(l.text, get));
+      const svg = tintCode(code, l.color).replace("<svg ", '<svg preserveAspectRatio="xMidYMid meet" ');
       return `<div class="l qr" style="${pos}">${svg}</div>`;
     }
   }
@@ -77,7 +78,7 @@ function curvedHtml(l: Extract<Layer, { type: "text" }>, text: string, pos: stri
   const id = `kc${++curveIds}`;
   const fitAttr = l.fit !== false ? ` data-fit data-minmm="${(minPt(l) * MM_PER_PT).toFixed(3)}" data-floormm="${(Math.min(FLOOR_PT, minPt(l)) * MM_PER_PT).toFixed(3)}"` : "";
   const font = l.font && l.font !== "sans" ? ` font-family="${esc(fontStack(l.font))}"` : "";
-  return `<div class="l tc" data-part="${esc(l.id)}"${fitAttr} data-curve="${l.curve}" data-arc="${arc}" data-w="${l.w}" data-h="${l.h}" data-size="${size.toFixed(3)}" style="${pos}font-size:${l.size}pt;overflow:visible"><svg viewBox="0 0 ${l.w} ${l.h}" width="100%" height="100%"><path id="${id}" d="${curvePath(l.w, l.h, l.curve!, arc, size).d}" fill="none"/><text font-size="${size.toFixed(3)}" font-weight="${l.weight ?? 400}"${font}${l.italic ? ' font-style="italic"' : ""}${l.underline ? ' text-decoration="underline"' : ""} fill="${esc(safeColor(l.color, "#111111"))}" text-anchor="middle" dominant-baseline="central"><textPath href="#${id}" startOffset="50%">${esc(text)}</textPath></text></svg></div>`;
+  return `<div class="l tc" data-part="${esc(l.id)}"${fitAttr} data-curve="${l.curve}" data-arc="${arc}" data-w="${l.w}" data-h="${l.h}" data-size="${size.toFixed(3)}" style="${pos}font-size:${l.size}pt;overflow:visible"><svg viewBox="0 0 ${l.w * CURVE_SCALE} ${l.h * CURVE_SCALE}" width="100%" height="100%"><path id="${id}" d="${curvePath(l.w, l.h, l.curve!, arc, size).d}" fill="none"/><text font-size="${(size * CURVE_SCALE).toFixed(1)}" font-weight="${l.weight ?? 400}"${font}${l.italic ? ' font-style="italic"' : ""}${l.underline ? ' text-decoration="underline"' : ""} fill="${esc(safeColor(l.color, "#111111"))}" text-anchor="middle" dominant-baseline="central"><textPath href="#${id}" startOffset="50%">${esc(text)}</textPath></text></svg></div>`;
 }
 
 // the background image is in the page once (CSS); each tag only refers to it, so a big image
@@ -209,4 +210,4 @@ if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fit)}else{win
  * The page's curved-text fitting: curvePath's own code, and fitCurve's steps (lib/print/curve).
  * Shrinks each curved text until it fits its arc; marks the ones under their smallest size.
  */
-const CURVE_SCRIPT = `var curvePath=(${curvePath.toString()});function fitCurves(){document.querySelectorAll(".tc[data-fit]").forEach(function(el){var t=el.querySelector("text"),p=el.querySelector("path");if(!t||!p)return;var d=el.dataset,w=+d.w,h=+d.h,arc=+d.arc,s=+d.size,min=+d.minmm,floor=+d.floormm,len=0;function set(v){var g=curvePath(w,h,d.curve,arc,v);p.setAttribute("d",g.d);t.setAttribute("font-size",v.toFixed(3));len=g.length}function over(){return t.getComputedTextLength()>len+0.01}set(s);for(var i=0;i<200&&s>min&&over();i++){s=Math.max(min,s*0.97);set(s)}for(i=0;i<200&&s>floor&&over();i++){s=Math.max(floor,s*0.97);set(s)}el.style.fontSize=(s/${MM_PER_PT})+"pt";if(s<min-1e-6)el.setAttribute("data-small",(Math.round(s/${MM_PER_PT}*2)/2).toString());if(over())el.setAttribute("data-cut","1")})}`;
+const CURVE_SCRIPT = `var curvePath=(${curvePath.toString()});function fitCurves(){document.querySelectorAll(".tc[data-fit]").forEach(function(el){var t=el.querySelector("text"),p=el.querySelector("path");if(!t||!p)return;var d=el.dataset,w=+d.w,h=+d.h,arc=+d.arc,s=+d.size,min=+d.minmm,floor=+d.floormm,len=0;function set(v){var g=curvePath(w,h,d.curve,arc,v);p.setAttribute("d",g.d);t.setAttribute("font-size",(v*${CURVE_SCALE}).toFixed(1));len=g.length}function over(){return t.getComputedTextLength()>len+1}set(s);for(var i=0;i<200&&s>min&&over();i++){s=Math.max(min,s*0.97);set(s)}for(i=0;i<200&&s>floor&&over();i++){s=Math.max(floor,s*0.97);set(s)}el.style.fontSize=(s/${MM_PER_PT})+"pt";if(s<min-1e-6)el.setAttribute("data-small",(Math.round(s/${MM_PER_PT}*2)/2).toString());if(over())el.setAttribute("data-cut","1")})}`;

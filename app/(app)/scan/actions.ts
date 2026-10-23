@@ -8,7 +8,7 @@ import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { appUrl } from "@/lib/auth/app-url";
 import { decide, type OutKind } from "@/lib/attendance/scan";
 import { STATUS_LABEL, type AttendanceEventType, type CamperStatus } from "@/lib/attendance/machine";
-import { visibleFieldGroups } from "@/lib/auth/permissions";
+import { effectiveLevel, visibleFieldGroups } from "@/lib/auth/permissions";
 import { createPrintJob, officeEmail, processPrintJob } from "@/lib/print/jobs";
 import { camperCampName, forCamp, templateCamps } from "@/lib/print/template-camps";
 import { canUsePrintArea } from "@/lib/auth/permissions";
@@ -163,6 +163,9 @@ export type CardData = {
   prints: Record<string, { status: string; at: string; by: string | null }>;
   /** "Not coming back": not for check-in logins (going home is Final check-out). */
   canSendHome: boolean;
+  /** Their buzzer (pager) number, and whether this person may change it. */
+  buzzer: number | null;
+  canSetBuzzer: boolean;
 };
 
 const ROLE_LABEL: Record<string, string> = { mother: "Mother", father: "Father", guardian: "Guardian", emergency: "Emergency", host: "Host", authorized_pickup: "Pickup" };
@@ -198,7 +201,25 @@ export async function loadCard(camperId: string): Promise<CardData | null> {
       : null,
     prints: Object.fromEntries((prints ?? []).filter((p) => p.template_id).map((p) => [p.template_id!, { status: p.printed_at ? "printed" : p.status, at: p.printed_at ?? p.requested_at, by: p.requested_by_name }])),
     canSendHome: !user.checkinLogin,
+    buzzer: c.current_buzzer_number ?? null,
+    canSetBuzzer: !user.checkinLogin && effectiveLevel(user) === "edit",
   };
+}
+
+/** Gives a camper a buzzer number, or takes theirs off (a lost or broken buzzer). */
+export async function setCamperBuzzer(camperId: string, number: number | null): Promise<ActionResult> {
+  const user = await requireUser();
+  if (user.checkinLogin || effectiveLevel(user) !== "edit") return fail("Changing buzzer numbers needs edit access.");
+  // only a camper this person can see (their own part of camp)
+  const { data: c } = await (await createClient()).from("campers_visible").select("id").eq("id", camperId).maybeSingle();
+  if (!c) return fail("That camper isn't in your part of camp.");
+  try {
+    const { setBuzzer, formatBuzzer } = await import("@/lib/buzzers");
+    await setBuzzer(camperId, number);
+    return ok(number === null ? "Buzzer number taken off." : `Buzzer ${formatBuzzer(number)} given.`);
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
 }
 
 /** One-tap print request from a camper card (name tag, luggage tag, …). */

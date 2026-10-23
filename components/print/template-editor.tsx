@@ -1346,6 +1346,28 @@ export function TemplateEditor({
                     <BarcodeCheck l={sel} values={sample.values} />
                   </>
                 )}
+                {sel.type === "qr" && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="mr-1 text-sm">Shape</span>
+                    {(
+                      [
+                        ["square", "Square"],
+                        ["round", "Round"],
+                      ] as const
+                    ).map(([v, label]) => (
+                      <Button
+                        key={v}
+                        size="sm"
+                        variant={(sel.shape ?? "square") === v ? "default" : "outline"}
+                        className="h-7 px-2 text-xs"
+                        onClick={() => setLayer(sel.id, { shape: v === "square" ? undefined : v })}
+                        title={v === "round" ? "The code in a circle of made-up squares, like a restaurant pager: scans the same" : undefined}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                )}
                 {(sel.type === "barcode" || sel.type === "qr") && (
                   <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">

@@ -66,6 +66,11 @@ export async function createPrintJob(
     const other = checked.flatMap(({ data }) => data ?? []).find((c) => !c.division_id || !divisions.includes(c.division_id));
     if (other) throw new Error(`${template.name} is only for ${camps.join(" and ")}${checked.flatMap(({ data }) => data ?? []).length > 1 ? `, and ${other.first_name} ${other.last_name} isn't in it` : ""}.`);
   }
+  // a tag with the buzzer number: whoever has none yet gets the next ones now (kept for good)
+  if (JSON.stringify(template.layers ?? []).includes("BUZZER")) {
+    const { assignBuzzers } = await import("@/lib/buzzers");
+    await assignBuzzers(opts.sessionId, ids);
+  }
   // what each label says now (for "changed since printed"), read while the request is saved
   const hashing = labelHashes(admin, toSpec(template), ids);
   hashing.catch(() => {});

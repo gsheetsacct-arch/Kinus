@@ -7,7 +7,7 @@ type Code = { svg: string; modules: number };
 const cache = new Map<string, Code>();
 const waiting = new Map<string, Promise<Code>>();
 
-function load(type: "barcode" | "qr", text: string): Promise<Code> {
+function load(type: "barcode" | "qr" | "qr-round", text: string): Promise<Code> {
   const key = `${type}|${text}`;
   const hit = cache.get(key);
   if (hit) return Promise.resolve(hit);
@@ -25,7 +25,7 @@ function load(type: "barcode" | "qr", text: string): Promise<Code> {
 }
 
 /** The real code (made on the server by the same code that prints), for the editor. */
-export function useCode(type: "barcode" | "qr", text: string): Code | null {
+export function useCode(type: "barcode" | "qr" | "qr-round", text: string): Code | null {
   const key = `${type}|${text}`;
   const [code, setCode] = React.useState<Code | null>(() => cache.get(key) ?? null);
   React.useEffect(() => {

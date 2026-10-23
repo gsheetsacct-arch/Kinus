@@ -18,7 +18,10 @@ export async function loadMergeSetup(db: DB): Promise<{ fields: MergeField[]; ma
   ]);
   const m = new Map<string, ValueMap>();
   for (const v of maps ?? []) m.set(v.id, { ...v, entries: (entries ?? []).filter((e) => e.map_id === v.id) });
-  return { fields: (fields ?? []).map((f) => ({ key: f.key, label: f.label, source_field: f.source_field, transforms: (f.transforms as Transform[]) ?? [], enabled: (f as { enabled?: boolean }).enabled ?? true })), maps: m };
+  const list: MergeField[] = (fields ?? []).map((f) => ({ key: f.key, label: f.label, source_field: f.source_field, transforms: (f.transforms as Transform[]) ?? [], enabled: (f as { enabled?: boolean }).enabled ?? true }));
+  // the buzzer (pager) number is always there: 001 and up (lib/buzzers)
+  if (!list.some((f) => f.key === "BUZZER")) list.push({ key: "BUZZER", label: "Buzzer number", source_field: "buzzer", transforms: [], enabled: true });
+  return { fields: list, maps: m };
 }
 
 export function toSpec(t: Database["public"]["Tables"]["print_templates"]["Row"]): TemplateSpec {

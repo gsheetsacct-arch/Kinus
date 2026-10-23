@@ -105,6 +105,8 @@ export const LABEL_PRESETS: LabelPreset[] = [
   letter("3274.1", ["3111"], "Square labels 2½″ × 2½″, 9 per sheet", "medium", 2.5, 2.5, 3, 3, 0.3125, 1.25, 2.6875, 3),
   // 1½″ circles, 4 across and 5 down: ¾″ top and bottom, ½″ sides, 2″ from one to the next
   { ...letter("8293", ["94506"], "Round labels 1½″, 20 per sheet", "small", 1.5, 1.5, 4, 5, 0.5, 0.75, 2, 2), shape: "round" },
+  // OnlineLabels 1½″ circles, 5 across and 6 down: ¼″ sides, 11⁄16″ top and bottom, ⅛″ between
+  { ...letter("OL2088", ["OL2088WX", "OL2088WJ", "OL2088CK", "OL2088GY"], "Round labels 1½″, 30 per sheet", "small", 1.5, 1.5, 5, 6, 0.25, 0.6875, 1.625, 1.625), id: "onlinelabels-ol2088", brand: "OnlineLabels", shape: "round" },
 
   // ---- Large labels and half sheets (US Letter)
   letter("5164", ["8164", "5264", "5514", "5524", "6464", "6499", "8254", "8464"], "Shipping labels 3⅓″ × 4″, 6 per sheet", "large", 4, 3.3333, 2, 3, 0.15625, 0.5, 4.1875, 3.3333),

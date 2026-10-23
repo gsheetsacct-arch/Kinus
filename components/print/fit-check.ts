@@ -1,7 +1,7 @@
 "use client";
 import { fill } from "@/lib/print/merge";
 import { fitText } from "@/lib/print/fit";
-import { DEFAULT_ARC, fitCurve } from "@/lib/print/curve";
+import { CURVE_SCALE, DEFAULT_ARC, fitCurve } from "@/lib/print/curve";
 import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
 import { textAlignItems, type Layer } from "@/lib/print/types";
 import { fontStack, lineHeightOf } from "@/lib/print/font-families";
@@ -87,7 +87,7 @@ function checkCurve(l: TextLayer, people: FitPerson[]): FitResult {
   const host = document.createElement("div");
   host.style.cssText = `position:fixed;left:-20000px;top:0;visibility:hidden;pointer-events:none;width:${l.w * S}px;height:${l.h * S}px`;
   const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", `0 0 ${l.w} ${l.h}`);
+  svg.setAttribute("viewBox", `0 0 ${l.w * CURVE_SCALE} ${l.h * CURVE_SCALE}`);
   svg.setAttribute("width", "100%");
   svg.setAttribute("height", "100%");
   const path = document.createElementNS(NS, "path");
