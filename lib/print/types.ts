@@ -46,6 +46,10 @@ export type Layer = PartFlags &
       color?: string;
       fit?: boolean;
       wrap?: boolean;
+      /** Where the text sits in its box, top to bottom: middle by default, top when it wraps. */
+      valign?: "top" | "middle" | "bottom";
+      /** Line spacing (× the size) for text on more than one line; default the font's own. */
+      lineHeight?: number;
       rotate?: Rotation;
       minSize?: number;
       /** lib/print/font-families: sans (default), rounded, serif, display */
@@ -124,3 +128,12 @@ export function pictureFor(l: { path: string; byDivision?: Record<string, string
 
 /** Every stored picture a part can show (its own and each division's). */
 export const picturesOf = (l: { path?: string; byDivision?: Record<string, string> }): string[] => [l.path ?? "", ...Object.values(l.byDivision ?? {})].filter(Boolean);
+
+/**
+ * A text part's place in its box, top to bottom (CSS align-items). "safe": text too big for
+ * its box overflows downwards, where the shrink-to-fit measuring sees it.
+ */
+export function textAlignItems(l: { wrap?: boolean; valign?: "top" | "middle" | "bottom" }): string {
+  const v = l.valign ?? (l.wrap ? "top" : "middle");
+  return v === "top" ? "flex-start" : v === "bottom" ? "safe flex-end" : "center";
+}

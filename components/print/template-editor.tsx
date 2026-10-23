@@ -54,7 +54,7 @@ import { currentPreset, LabelPicker, SheetDiagram, sizeText } from "./label-pick
 import { fitCheckPeople, previewTemplate, previewValues, saveTemplate, uploadTemplateImage } from "@/app/(app)/print/actions";
 import { boundsOf, TagCanvas, type Box, type FitInfo } from "./tag-canvas";
 import { boxCapPt, checkFit, type FitPerson, type FitResult } from "./fit-check";
-import { FONTS, type FontKey } from "@/lib/print/font-families";
+import { FONTS, lineHeightOf, type FontKey } from "@/lib/print/font-families";
 import { useCode } from "./code-image";
 import { fill } from "@/lib/print/merge";
 import { LeaveGuard } from "@/components/leave-guard";
@@ -1268,6 +1268,37 @@ export function TemplateEditor({
                       <label className="flex items-center gap-2">
                         <input type="checkbox" className="size-4" checked={Boolean(sel.wrap)} onChange={(e) => setLayer(sel.id, { wrap: e.target.checked })} /> Allow more than one line
                       </label>
+                      <div className="flex items-center gap-1.5">
+                        <span className="mr-1 text-xs text-muted-foreground">In the box</span>
+                        {(["top", "middle", "bottom"] as const).map((v) => (
+                          <Button
+                            key={v}
+                            size="sm"
+                            variant={(sel.valign ?? (sel.wrap ? "top" : "middle")) === v ? "default" : "outline"}
+                            className="h-7 px-2 text-xs capitalize"
+                            onClick={() => setLayer(sel.id, { valign: v })}
+                            title={v === "bottom" ? "Long text grows upwards: good for a name with a line under it" : undefined}
+                          >
+                            {v}
+                          </Button>
+                        ))}
+                      </div>
+                      {sel.wrap && (
+                        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                          Line spacing
+                          <Input
+                            type="number"
+                            min={0.8}
+                            max={3}
+                            step={0.05}
+                            value={sel.lineHeight ?? ""}
+                            placeholder={String(lineHeightOf(sel.font))}
+                            onChange={(e) => setLayer(sel.id, { lineHeight: e.target.value === "" ? undefined : Math.min(3, Math.max(0.8, Number(e.target.value))) })}
+                            className="h-7 w-20"
+                          />
+                          <span>× the size</span>
+                        </label>
+                      )}
                     </div>
                   </>
                 )}
