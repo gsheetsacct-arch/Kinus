@@ -165,6 +165,20 @@ A canvas of the tag at real proportions (Print → Templates):
   **Allow 2 lines**, a wider box, or "**16 pt is fine**" (makes that the smallest size).
   Only text that doesn't fit even at 4 pt is cut (red "Cut off"), or text in a part with
   shrinking turned off.
+- **PDF artwork** (Picture: choose a PDF; the connector's upload_picture takes one too): the
+  PDF is kept as it is, with a picture of each page for the screen (`lib/print/pdf-art.ts`:
+  pdf.js in the same Chromium, scripts in the PDF off). The part of the page used is the box
+  matching the tag's shape best (bleed, trim, or the whole page), so a print-ready PDF lines
+  up. A page the tag's shape fills the tag, locked, under everything; a two-page PDF on a
+  two-sided tag puts page 2 on the back. The PDFs Kinus makes (Download PDF, the office
+  email) draw the PDF page itself in the picture's place, under the tag's other parts:
+  where each such picture is is measured, the page is made without them (no white behind
+  the tags), and each page is rebuilt with pdf-lib as the artwork with the rest on top
+  (`withPdfArt` in `lib/print/pdf.ts`; it falls back to the picture if pages don't match).
+  Printing from the browser (Print) uses the picture: for the sharpest print, Download PDF.
+  Export without crop marks: marks inside the bleed print at the corners.
+- **Letter and word spacing** (`letterSpacing`, `wordSpacing`, × the size): stays in step
+  when text shrinks; straight and curved text.
 - **Round QR** (a QR part's Shape: Square / Round; `shape: "round"`): the code in the
   middle, a ring of two light squares around it, and made-up squares out to a circle, on a
   white disc, as on restaurant pagers (`qrRoundSvg`). The made-up squares are the same for the

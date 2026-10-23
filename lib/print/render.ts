@@ -3,7 +3,7 @@ import { tintCode } from "./code-color";
 import { embeddedFontCss } from "./fonts";
 import { FONTS, fontStack, isCustomFont, lineHeightOf, type FontKey } from "./font-families";
 import { fill } from "./merge";
-import { DIVISION_VALUE, onBack, pictureFor, sheetPlacement, textAlignItems, type Layer, type PrintItem, type SheetLayout, type TemplateSpec } from "./types";
+import { DIVISION_VALUE, onBack, pictureFor, sheetPlacement, textAlignItems, textSpacingCss, type Layer, type PrintItem, type SheetLayout, type TemplateSpec } from "./types";
 import { FLOOR_PT, minPt, PX_PER_PT } from "./render-constants";
 import { isRoundLabel } from "./presets";
 import { CURVE_SCALE, curvePath, DEFAULT_ARC } from "./curve";
@@ -41,7 +41,7 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
       if (fields.length && fields.every((m) => fill(m[0], get).trim() === "")) return "";
       const text = fill(l.text, get);
       if (l.curve) return curvedHtml(l, text, pos);
-      const style = `${pos}font-size:${l.size}pt;font-weight:${l.weight ?? 400};text-align:${l.align ?? "left"};color:${safeColor(l.color, "#111111")};justify-content:${l.align === "center" ? "center" : l.align === "right" ? "flex-end" : "flex-start"};align-items:${textAlignItems(l)};${l.font && l.font !== "sans" ? `font-family:${fontStack(l.font)};` : ""}line-height:${l.lineHeight ?? lineHeightOf(l.font)};${l.italic ? "font-style:italic;" : ""}`;
+      const style = `${pos}font-size:${l.size}pt;font-weight:${l.weight ?? 400};text-align:${l.align ?? "left"};color:${safeColor(l.color, "#111111")};justify-content:${l.align === "center" ? "center" : l.align === "right" ? "flex-end" : "flex-start"};align-items:${textAlignItems(l)};${textSpacingCss(l)}${l.font && l.font !== "sans" ? `font-family:${fontStack(l.font)};` : ""}line-height:${l.lineHeight ?? lineHeightOf(l.font)};${l.italic ? "font-style:italic;" : ""}`;
       const fitAttr = l.fit !== false ? `data-fit data-min="${(minPt(l) * PX_PER_PT).toFixed(2)}" data-floor="${(Math.min(FLOOR_PT, minPt(l)) * PX_PER_PT).toFixed(2)}"` : "";
       return `<div class="l t${l.wrap ? " wrap" : ""}" data-part="${esc(l.id)}" ${fitAttr} style="${esc(style)}"><span dir="auto"${l.underline ? ' style="text-decoration:underline"' : ""}>${esc(text)}</span></div>`;
     }
@@ -55,7 +55,9 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
       // the picture itself is in the page once (CSS class per picture); see renderDocument
       const path = pictureFor(l, values[DIVISION_VALUE]);
       if (!path) return "";
-      return `<div class="l im ${imageClass(path)}" style="${pos}background-size:${l.fit === "cover" ? "cover" : "contain"}"></div>`;
+      // drawn from an uploaded PDF: the PDFs Kinus makes put the PDF page itself here (lib/print/pdf)
+      const pdf = l.pdf && path === l.path ? ` data-pdf="${esc(l.pdf.path)}" data-pdf-page="${l.pdf.page}" data-pdf-box="${l.pdf.box.join(",")}" data-pdf-fit="${l.fit === "cover" ? "cover" : "contain"}"` : "";
+      return `<div class="l im ${imageClass(path)}"${pdf} style="${pos}background-size:${l.fit === "cover" ? "cover" : "contain"}"></div>`;
     }
     case "qr": {
       const code = l.shape === "round" ? qrRoundSvg(fill(l.text, get)) : qrSvg(fill(l.text, get));
@@ -78,7 +80,7 @@ function curvedHtml(l: Extract<Layer, { type: "text" }>, text: string, pos: stri
   const id = `kc${++curveIds}`;
   const fitAttr = l.fit !== false ? ` data-fit data-minmm="${(minPt(l) * MM_PER_PT).toFixed(3)}" data-floormm="${(Math.min(FLOOR_PT, minPt(l)) * MM_PER_PT).toFixed(3)}"` : "";
   const font = l.font && l.font !== "sans" ? ` font-family="${esc(fontStack(l.font))}"` : "";
-  return `<div class="l tc" data-part="${esc(l.id)}"${fitAttr} data-curve="${l.curve}" data-arc="${arc}" data-w="${l.w}" data-h="${l.h}" data-size="${size.toFixed(3)}" style="${pos}font-size:${l.size}pt;overflow:visible"><svg viewBox="0 0 ${l.w * CURVE_SCALE} ${l.h * CURVE_SCALE}" width="100%" height="100%"><path id="${id}" d="${curvePath(l.w, l.h, l.curve!, arc, size).d}" fill="none"/><text font-size="${(size * CURVE_SCALE).toFixed(1)}" font-weight="${l.weight ?? 400}"${font}${l.italic ? ' font-style="italic"' : ""}${l.underline ? ' text-decoration="underline"' : ""} fill="${esc(safeColor(l.color, "#111111"))}" text-anchor="middle" dominant-baseline="central"><textPath href="#${id}" startOffset="50%">${esc(text)}</textPath></text></svg></div>`;
+  return `<div class="l tc" data-part="${esc(l.id)}"${fitAttr} data-curve="${l.curve}" data-arc="${arc}" data-w="${l.w}" data-h="${l.h}" data-size="${size.toFixed(3)}" style="${pos}font-size:${l.size}pt;overflow:visible"><svg viewBox="0 0 ${l.w * CURVE_SCALE} ${l.h * CURVE_SCALE}" width="100%" height="100%"><path id="${id}" d="${curvePath(l.w, l.h, l.curve!, arc, size).d}" fill="none"/><text font-size="${(size * CURVE_SCALE).toFixed(1)}" font-weight="${l.weight ?? 400}"${font}${l.italic ? ' font-style="italic"' : ""}${l.underline ? ' text-decoration="underline"' : ""} fill="${esc(safeColor(l.color, "#111111"))}"${textSpacingCss(l) ? ` style="${textSpacingCss(l)}"` : ""} text-anchor="middle" dominant-baseline="central"><textPath href="#${id}" startOffset="50%">${esc(text)}</textPath></text></svg></div>`;
 }
 
 // the background image is in the page once (CSS); each tag only refers to it, so a big image

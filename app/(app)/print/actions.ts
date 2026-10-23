@@ -23,7 +23,7 @@ import { batchCamperIds, BATCH_WHICH, type BatchWhich } from "@/lib/print/batch"
 import { dismissLabelUpdates, labelUpdates, refreshPrintedHashes, type LabelUpdate } from "@/lib/print/updates";
 import { loadMergeSetup, loadPrintCampers } from "@/lib/print/data";
 import { mergeValues } from "@/lib/print/merge";
-import type { Layer, SheetLayout, TemplateSpec, Transform } from "@/lib/print/types";
+import type { Layer, PdfArt, SheetLayout, TemplateSpec, Transform } from "@/lib/print/types";
 import { parseScan } from "@/lib/attendance/scan";
 
 const NOT_YOURS = "That's a request for campers outside your part of camp.";
@@ -425,6 +425,27 @@ export async function uploadTemplateImage(fd: FormData): Promise<{ ok: true; pat
     const { error } = await createAdminClient().storage.from("templates").upload(path, buf, { contentType: file.type, upsert: false });
     if (error) throw error;
     return { ok: true, path, url: `data:${file.type};base64,${buf.toString("base64")}` };
+  } catch (e) {
+    return { ok: false, error: errorMessage(e) };
+  }
+}
+
+/**
+ * A PDF for a template (artwork from InDesign…): kept as a PDF, with a picture of each page for
+ * the screen. `w`/`h`: the tag's size, to pick the PDF's trim or bleed box that fits it.
+ */
+export async function uploadTemplatePdf(
+  fd: FormData,
+): Promise<{ ok: true; pages: { path: string; url: string; pdf: PdfArt; widthMm: number; heightMm: number }[] } | { ok: false; error: string }> {
+  try {
+    await requireDesigner();
+    const file = fd.get("file");
+    if (!(file instanceof File) || !file.size) return { ok: false, error: "Choose a PDF." };
+    const w = Number(fd.get("w"));
+    const h = Number(fd.get("h"));
+    const { storePdfArt } = await import("@/lib/print/pdf-art");
+    const pages = await storePdfArt(new Uint8Array(await file.arrayBuffer()), w > 0 && h > 0 ? { w, h } : null);
+    return { ok: true, pages: pages.map(({ png, ...p }) => ({ ...p, url: `data:image/png;base64,${png.toString("base64")}` })) };
   } catch (e) {
     return { ok: false, error: errorMessage(e) };
   }

@@ -51,7 +51,7 @@ import { codeContrast, MIN_CODE_CONTRAST } from "@/lib/print/code-color";
 import { DIVISION_VALUE, onBack, pictureFor, sheetPlacement, type Layer, type SheetLayout, type TemplateSpec } from "@/lib/print/types";
 import { presetSummary, type LabelPreset } from "@/lib/print/presets";
 import { currentPreset, LabelPicker, SheetDiagram, sizeText } from "./label-picker";
-import { fitCheckPeople, previewTemplate, previewValues, saveTemplate, uploadTemplateImage } from "@/app/(app)/print/actions";
+import { fitCheckPeople, previewTemplate, previewValues, saveTemplate, uploadTemplateImage, uploadTemplatePdf } from "@/app/(app)/print/actions";
 import { boundsOf, TagCanvas, type Box, type FitInfo } from "./tag-canvas";
 import { boxCapPt, checkFit, type FitPerson, type FitResult } from "./fit-check";
 import { FONTS, lineHeightOf, type FontKey } from "@/lib/print/font-families";
@@ -627,7 +627,50 @@ export function TemplateEditor({
     replacing.current = replace;
     pictureInput.current?.click();
   };
+  // a PDF (artwork from InDesign…): kept as a PDF for printing; a page the tag's shape fills the
+  // tag, under everything (locked); a two-page PDF on a two-sided tag: page 2 on the back
+  const uploadPdf = async (file: File) => {
+    if (file.size > 15 * 1024 * 1024) return void toast.error("PDFs up to 15 MB, please.");
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("w", String(W));
+      fd.append("h", String(H));
+      const r = await uploadTemplatePdf(fd).catch(() => ({ ok: false as const, error: "That didn't upload. Check the connection and try again." }));
+      if (!r.ok) return void toast.error(r.error);
+      setImages((cur) => ({ ...cur, ...Object.fromEntries(r.pages.map((p) => [p.path, p.url])) }));
+      const target = replacing.current;
+      const part = target && t.layers.find((l) => l.id === target.id);
+      if (target?.division && part?.type === "image") {
+        setDivisionPicture(part, target.division, r.pages[0].path);
+        setShowDivision(target.division);
+        return;
+      }
+      if (target) return void setLayer(target.id, { path: r.pages[0].path, pdf: r.pages[0].pdf } as Partial<Layer>);
+      const fills = (p: { widthMm: number; heightMm: number }) => Math.abs(p.widthMm / p.heightMm / (W / H) - 1) < 0.03;
+      const both = Boolean(t.back) && r.pages.length > 1;
+      const parts = r.pages.slice(0, both ? 2 : 1).map((p, i) => {
+        const back = both ? i === 1 : side === "back";
+        const where = fills(p) ? { x: 0, y: 0, w: W, h: H, fit: "cover" as const, locked: true } : (() => {
+          const w = Math.min(40, W - 2);
+          return { ...center(w, Math.min(Math.max(2, tidy((w * p.heightMm) / p.widthMm)), H)), fit: "contain" as const };
+        })();
+        return { id: uid(), type: "image", path: p.path, pdf: p.pdf, ...where, side: back ? "back" : undefined } as Layer;
+      });
+      remember(`add:${parts[0].id}`);
+      // artwork filling the tag goes under everything; a smaller piece on top
+      setT((cur) => ({ ...cur, layers: parts.every((p) => p.locked) ? [...parts, ...cur.layers] : [...cur.layers, ...parts] }));
+      setSelected([parts[0].id]);
+      markDirty();
+      if (both) toast.success("Page 1 is on the front, page 2 on the back.");
+      else if (r.pages.length > 1) toast.message(`That PDF has ${r.pages.length} pages: page 1 is used.`);
+    } finally {
+      setUploading(false);
+    }
+  };
   const uploadPicture = async (file: File) => {
+    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) return uploadPdf(file);
     if (file.size > 2 * 1024 * 1024) return void toast.error("Pictures up to 2 MB, please (a logo rarely needs more). Save it smaller and try again.");
     setUploading(true);
     try {
@@ -985,7 +1028,7 @@ export function TemplateEditor({
             <input
               ref={pictureInput}
               type="file"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/png,image/jpeg,image/webp,application/pdf"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -1304,6 +1347,31 @@ export function TemplateEditor({
                           <span className="tabular-nums">{sel.arc ?? 180}°</span>
                         </label>
                       )}
+                      {(
+                        [
+                          ["letterSpacing", "Letter spacing", -0.05, 0.5, 0.01],
+                          ["wordSpacing", "Word spacing", -0.2, 1.5, 0.05],
+                        ] as const
+                      ).map(([k, label, min, max, step]) => (
+                        <label key={k} className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="w-24">{label}</span>
+                          <input
+                            type="range"
+                            min={min}
+                            max={max}
+                            step={step}
+                            value={sel[k] ?? 0}
+                            onChange={(e) => setLayer(sel.id, { [k]: Number(e.target.value) || undefined })}
+                            className="w-32"
+                          />
+                          <span className="w-10 tabular-nums">{(sel[k] ?? 0).toFixed(2)}</span>
+                          {sel[k] ? (
+                            <button type="button" className="text-primary hover:underline" onClick={() => setLayer(sel.id, { [k]: undefined })}>
+                              Normal
+                            </button>
+                          ) : null}
+                        </label>
+                      ))}
                       <div className="flex items-center gap-1.5">
                         <span className="mr-1 text-xs text-muted-foreground">In the box</span>
                         {(["top", "middle", "bottom"] as const).map((v) => (

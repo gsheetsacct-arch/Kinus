@@ -7,7 +7,7 @@ import "server-only";
  */
 export type FitNotes = { smaller: { text: string; pt: number }[]; cut: string[] };
 
-export async function htmlToPdf(html: string, onFit?: (notes: FitNotes) => void): Promise<Buffer> {
+export async function htmlToPdf(html: string, onFit?: (notes: FitNotes) => void, art?: Record<string, Uint8Array>): Promise<Buffer> {
   const puppeteer = (await import("puppeteer-core")).default;
   let executablePath = process.env.CHROMIUM_PATH;
   let args = ["--no-sandbox", "--disable-gpu", "--font-render-hinting=none"];
@@ -37,6 +37,11 @@ export async function htmlToPdf(html: string, onFit?: (notes: FitNotes) => void)
           cut: [...document.querySelectorAll("[data-cut]")].map((el) => (el.textContent ?? "").trim()),
         })),
       );
+    // picture parts made from an uploaded PDF: that PDF goes underneath, as it is (sharp)
+    if (art && Object.keys(art).length && (await page.$("[data-pdf]"))) {
+      const vector = await withPdfArt(page, art);
+      if (vector) return vector;
+    }
     const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true, timeout: 15000 });
     return Buffer.from(pdf);
   } finally {
@@ -47,7 +52,7 @@ export async function htmlToPdf(html: string, onFit?: (notes: FitNotes) => void)
 /** What happened to each text part when fitting (by part id): its smallest size, and names that shrank or were cut. */
 export type PartFit = Record<string, { smallestPt: number | null; shrunk: { text: string; pt: number }[]; cut: string[] }>;
 
-async function launchBrowser() {
+export async function launchBrowser() {
   const puppeteer = (await import("puppeteer-core")).default;
   let executablePath = process.env.CHROMIUM_PATH;
   let args = ["--no-sandbox", "--disable-gpu", "--font-render-hinting=none"];
@@ -96,4 +101,65 @@ export async function htmlToPng(html: string, opts: { tags?: number; scale?: num
   } finally {
     await browser.close();
   }
+}
+
+type ArtSpot = { page: number; x: number; y: number; w: number; h: number; pdf: string; n: number; box: number[]; fit: string };
+
+/**
+ * The PDF with uploaded PDF artwork as itself: where each such picture sits on each page is
+ * measured, the page is made without those pictures (and with no white behind the tags), and
+ * each page is rebuilt as the artwork's PDF page in its place with the rest of the tag on top.
+ * Null when the pages can't be matched up (the caller then makes it with the pictures).
+ */
+async function withPdfArt(page: import("puppeteer-core").Page, art: Record<string, Uint8Array>): Promise<Buffer | null> {
+  await page.emulateMediaType("print");
+  const spots = (await page.evaluate(() => {
+    const pages = [...document.querySelectorAll<HTMLElement>("body > .sheet, body > .tag")];
+    return {
+      pages: pages.length,
+      spots: pages.flatMap((pg, i) => {
+        const o = pg.getBoundingClientRect();
+        return [...pg.querySelectorAll<HTMLElement>("[data-pdf]")].map((el) => {
+          const r = el.getBoundingClientRect();
+          return { page: i, x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height, pdf: el.dataset.pdf!, n: Number(el.dataset.pdfPage) || 1, box: (el.dataset.pdfBox ?? "").split(",").map(Number), fit: el.dataset.pdfFit ?? "contain" };
+        });
+      }),
+    };
+  })) as { pages: number; spots: ArtSpot[] };
+  await page.addStyleTag({ content: "[data-pdf]{visibility:hidden!important}html,body,.tag,.sheet{background:transparent!important}" });
+  const top = await page.pdf({ preferCSSPageSize: true, printBackground: true, omitBackground: true, timeout: 15000 });
+  const { PDFDocument } = await import("pdf-lib");
+  const front = await PDFDocument.load(top);
+  if (front.getPageCount() !== spots.pages) return null;
+  const out = await PDFDocument.create();
+  const sources = new Map<string, Awaited<ReturnType<typeof PDFDocument.load>>>();
+  const placed = new Map<string, Awaited<ReturnType<typeof out.embedPage>>>();
+  const PT = 0.75; // CSS px → pt
+  const layers = await out.embedPages(front.getPages());
+  for (let i = 0; i < front.getPageCount(); i++) {
+    const { width, height } = front.getPage(i).getSize();
+    const sheet = out.addPage([width, height]);
+    for (const s of spots.spots.filter((x) => x.page === i)) {
+      const bytes = art[s.pdf];
+      if (!bytes || s.box.length !== 4 || s.box.some((v) => !Number.isFinite(v))) continue;
+      let src = sources.get(s.pdf);
+      if (!src) sources.set(s.pdf, (src = await PDFDocument.load(bytes, { ignoreEncryption: true })));
+      if (s.n > src.getPageCount()) continue;
+      const [bx, by, bw, bh] = s.box;
+      const [w, h] = [s.w * PT, s.h * PT];
+      // contain: the whole box, centred; cover: the box cropped to the part's shape
+      const scale = s.fit === "cover" ? Math.max(w / bw, h / bh) : Math.min(w / bw, h / bh);
+      const [cw, ch] = s.fit === "cover" ? [w / scale, h / scale] : [bw, bh];
+      const crop = { left: bx + (bw - cw) / 2, bottom: by + (bh - ch) / 2, right: bx + (bw + cw) / 2, top: by + (bh + ch) / 2 };
+      const key = `${s.pdf}|${s.n}|${crop.left.toFixed(2)},${crop.bottom.toFixed(2)},${crop.right.toFixed(2)},${crop.top.toFixed(2)}`;
+      let emb = placed.get(key);
+      if (!emb) placed.set(key, (emb = await out.embedPage(src.getPage(s.n - 1), crop)));
+      const [dw, dh] = [cw * scale, ch * scale];
+      const x = s.x * PT + (w - dw) / 2;
+      const yTop = s.y * PT + (h - dh) / 2;
+      sheet.drawPage(emb, { x, y: height - yTop - dh, width: dw, height: dh });
+    }
+    sheet.drawPage(layers[i], { x: 0, y: 0, width, height });
+  }
+  return Buffer.from(await out.save());
 }

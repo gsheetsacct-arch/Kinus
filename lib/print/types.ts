@@ -60,6 +60,9 @@ export type Layer = PartFlags &
       font?: "sans" | "rounded" | "serif" | "display" | `custom:${string}`;
       italic?: boolean;
       underline?: boolean;
+      /** Extra space between letters and between words, × the size (em): stays in step when text shrinks. */
+      letterSpacing?: number;
+      wordSpacing?: number;
     }
   /** color: the bars or squares (and the barcode's number), dark enough to scan; default black. */
   | { id: string; type: "barcode"; text: string; x: number; y: number; w: number; h: number; showText?: boolean; rotate?: Rotation; color?: string }
@@ -71,7 +74,8 @@ export type Layer = PartFlags &
    * `byDivision`: another picture for campers of a division (by the division's name, so it carries
    * over to next session's divisions); "" = no picture for that division. Others get `path`.
    */
-  | { id: string; type: "image"; path: string; x: number; y: number; w: number; h: number; fit?: "contain" | "cover"; byDivision?: Record<string, string> }
+  /** pdf: the PDF page `path` is a picture of (lib/print/pdf-art): the PDFs Kinus makes use the PDF itself. */
+  | { id: string; type: "image"; path: string; x: number; y: number; w: number; h: number; fit?: "contain" | "cover"; byDivision?: Record<string, string>; pdf?: PdfArt }
   );
 
 /**
@@ -142,3 +146,11 @@ export function textAlignItems(l: { wrap?: boolean; valign?: "top" | "middle" | 
   const v = l.valign ?? (l.wrap ? "top" : "middle");
   return v === "top" ? "flex-start" : v === "bottom" ? "safe flex-end" : "center";
 }
+
+/** letter-spacing / word-spacing CSS for a text part ("" when it has neither). */
+export function textSpacingCss(l: { letterSpacing?: number; wordSpacing?: number }): string {
+  return `${l.letterSpacing ? `letter-spacing:${l.letterSpacing}em;` : ""}${l.wordSpacing ? `word-spacing:${l.wordSpacing}em;` : ""}`;
+}
+
+/** A page of an uploaded PDF: the stored PDF, its page (from 1), and the box of it used, in pt [x, y, w, h]. */
+export type PdfArt = { path: string; page: number; box: [number, number, number, number] };
