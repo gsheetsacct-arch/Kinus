@@ -1235,8 +1235,13 @@ export function TemplateEditor({
                         </button>
                       ))}
                     </div>
+                    {sel.pdf && (
+                      <p className="rounded-lg bg-primary-soft/50 px-2.5 py-1.5 text-xs">
+                        From a PDF (page {sel.pdf.page}): the PDFs Kinus makes (Download PDF, the office email) print the PDF itself, sharp, under the other parts. Here and when printing from the browser it&apos;s a picture of it.
+                      </p>
+                    )}
                     <Button size="sm" variant="outline" onClick={() => pickPicture({ id: sel.id })}>
-                      <ImageIcon /> Another picture
+                      <ImageIcon /> Another picture or PDF
                     </Button>
                     {divisions.length > 0 && <DivisionPictures part={sel} divisions={divisions} images={images} showing={showDivision} onShow={setShowDivision} onPick={(division) => pickPicture({ id: sel.id, division })} onSet={(division, path) => setDivisionPicture(sel, division, path)} />}
                   </div>
