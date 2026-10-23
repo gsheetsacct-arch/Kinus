@@ -187,7 +187,8 @@ export async function printSetPdf(jobIds: string[], opts: SetOpts & { part?: num
   const part = Math.min(parts - 1, Math.max(0, Math.floor(opts.part ?? 0)));
   const tags: [number, number] | undefined = parts === 1 ? undefined : part === 0 ? [0, first] : [first + (part - 1) * size, first + part * size];
   const pdf = await htmlToPdf(setHtml(set, { ...opts, tags }).html);
-  const fileName = `${spec.name.replace(/[\\/:*?"<>|]+/g, "-").trim() || "Tags"} - ${total} ${total === 1 ? "tag" : "tags"}.pdf`;
+  // "×" (4×6) as "x": some browsers drop a download's name with it
+  const fileName = `${spec.name.replace(/×/g, "x").replace(/[\\/:*?"<>|]+/g, "-").trim() || "Tags"} - ${total} ${total === 1 ? "tag" : "tags"}.pdf`;
   return { pdf, parts, fileName };
 }
 
