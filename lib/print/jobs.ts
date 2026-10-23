@@ -131,17 +131,30 @@ async function loadPrintSet(jobIds: string[]) {
 
 const divisionOf = (c: { division_id?: string | null }) => c.division_id ?? null;
 
-function setHtml(set: PrintSet, opts: { start?: number; used?: number[]; divisionId?: string | null; copies?: number; tags?: [number, number] }) {
+type SetOpts = { start?: number; used?: number[]; divisionId?: string | null; copies?: number; /** each tag on a page of its own (not on the template's label sheet) */ single?: boolean };
+
+/** The template as printed: on its label sheet, or one tag a page (pages the tag's size). */
+const specFor = (set: PrintSet, opts: SetOpts): TemplateSpec => (opts.single ? { ...set.spec, sheet_layout: null } : set.spec);
+
+/** The campers printed (all, or one division) and how many of each. */
+function itemsOf(set: PrintSet, opts: SetOpts) {
   const campers = opts.divisionId === undefined ? set.campers : set.campers.filter((c) => divisionOf(c as never) === opts.divisionId);
-  const stock = sheetStock(set.spec);
   // copies: as asked, or the same number of each chosen when printing
   const copiesOf = (id: string) => (opts.copies ? Math.min(10, Math.max(1, Math.round(opts.copies))) : (set.copiesOf.get(id) ?? 1));
-  let items = campers.map((c) => ({ values: mergeValues(c, set.setup.fields, set.setup.maps), copies: copiesOf(c.id) }));
+  return { campers, items: campers.map((c) => ({ values: mergeValues(c, set.setup.fields, set.setup.maps), copies: copiesOf(c.id) })) };
+}
+
+function setHtml(set: PrintSet, opts: SetOpts & { tags?: [number, number] }) {
+  const spec = specFor(set, opts);
+  const stock = sheetStock(spec);
+  const made = itemsOf(set, opts);
+  const campers = made.campers;
+  let items = made.items;
   // copies of one camper stack down a column of the label sheet
   const stack = Math.max(1, ...items.map((i) => i.copies));
   // one part of a big PDF: tags from..to (whole sheets, so no labels are skipped between parts)
   if (opts.tags) items = items.flatMap((i) => Array.from({ length: i.copies }, () => ({ values: i.values, copies: 1 }))).slice(...opts.tags);
-  const html = renderDocument(set.spec, items, {
+  const html = renderDocument(spec, items, {
     background: set.background,
     images: set.images,
     fontCss: set.fontCss,
@@ -152,8 +165,30 @@ function setHtml(set: PrintSet, opts: { start?: number; used?: number[]; divisio
 }
 
 /** The printable page for requests printed together (all, or one division), starting at a label on a part-used sheet. */
-export async function printSetHtml(jobIds: string[], opts: { start?: number; used?: number[]; divisionId?: string | null; copies?: number } = {}): Promise<string> {
+export async function printSetHtml(jobIds: string[], opts: SetOpts = {}): Promise<string> {
   return setHtml(await loadPrintSet(jobIds), opts).html;
+}
+
+/**
+ * The print page as a PDF to download, one part of it at a time (a server run may only take a
+ * minute; the browser joins the parts). Parts are whole sheets: the first is shorter by the
+ * labels already used on a part-used sheet, so nothing shifts between parts.
+ */
+export async function printSetPdf(jobIds: string[], opts: SetOpts & { part?: number } = {}): Promise<{ pdf: Buffer; parts: number; fileName: string }> {
+  const set = await loadPrintSet(jobIds);
+  const spec = specFor(set, opts);
+  const stock = sheetStock(spec);
+  const total = itemsOf(set, opts).items.reduce((n, i) => n + i.copies, 0);
+  if (total > PDF_MAX_TAGS) throw new Error(`More than ${PDF_MAX_TAGS.toLocaleString("en-US")} tags in one PDF: download one division at a time.`);
+  const size = tagsPerPart(spec);
+  const usedCount = stock ? (opts.used ? cleanUsed(opts.used, stock.perSheet) : opts.start ? usedBefore(opts.start, stock.perSheet) : []).length : 0;
+  const first = size - usedCount;
+  const parts = total <= first ? 1 : 1 + Math.ceil((total - first) / size);
+  const part = Math.min(parts - 1, Math.max(0, Math.floor(opts.part ?? 0)));
+  const tags: [number, number] | undefined = parts === 1 ? undefined : part === 0 ? [0, first] : [first + (part - 1) * size, first + part * size];
+  const pdf = await htmlToPdf(setHtml(set, { ...opts, tags }).html);
+  const fileName = `${spec.name.replace(/[\\/:*?"<>|]+/g, "-").trim() || "Tags"} - ${total} ${total === 1 ? "tag" : "tags"}.pdf`;
+  return { pdf, parts, fileName };
 }
 
 /** What a set of requests holds: the template, its label stock, and the tags per division. */

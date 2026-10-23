@@ -6,7 +6,7 @@ export const maxDuration = 60;
 
 /**
  * Requests printed together (same template) as one printable page:
- * ?jobs=a,b,c[&division=<id>|none][&used=1,2,5 (labels already gone on the sheet)][&print=1]
+ * ?jobs=a,b,c[&division=<id>|none][&used=1,2,5 (labels already gone on the sheet)][&copies=n][&single=1 (one tag a page)][&print=1]
  */
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
       used: used === null ? undefined : used.split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0),
       divisionId: division === null ? undefined : division === "none" ? null : division,
       copies: Number(sp.get("copies")) || undefined,
+      single: sp.get("single") === "1",
     });
     const auto = sp.get("print") === "1";
     const script = auto ? `<script>(function w(){document.body.getAttribute("data-fitted")?setTimeout(function(){window.print()},200):setTimeout(w,100)})()</script>` : "";

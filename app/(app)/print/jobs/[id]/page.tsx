@@ -96,6 +96,8 @@ async function JobPrint({ id, open, autoPrint }: { id: string; open: boolean; au
     <PrintPanel
       jobIds={[id]}
       stock={sheet.stock}
+      sheetLayout={summary.spec.sheet_layout ?? null}
+      tagSize={{ w: summary.spec.page_width_mm, h: summary.spec.page_height_mm }}
       remembered={sheet.used}
       twoSided={summary.spec.back ?? null}
       parts={summary.parts}
