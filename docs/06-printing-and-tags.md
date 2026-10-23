@@ -165,6 +165,19 @@ A canvas of the tag at real proportions (Print → Templates):
   **Allow 2 lines**, a wider box, or "**16 pt is fine**" (makes that the smallest size).
   Only text that doesn't fit even at 4 pt is cut (red "Cut off"), or text in a part with
   shrinking turned off.
+- **Round QR** (a QR part's Shape: Square / Round; `shape: "round"`): the code in the
+  middle, a ring of two light squares around it, and made-up squares out to a circle, on a
+  white disc, as on restaurant pagers (`qrRoundSvg`). The made-up squares are the same for the
+  same code. Error correction Q. Scanners find the code by its corner squares and read it as
+  usual (tested: every sticker on a 30-up sheet reads on its own, sharp and blurred).
+- **Buzzer numbers** (`{{BUZZER}}`, always there; camper field "Buzzer"): one per camper for
+  the session, printed 001 and up, kept on the camper (`campers.current_buzzer_number`, no
+  migration). Requesting a tag that shows it gives whoever has none the next numbers, in
+  division, bunk and name order (`lib/buzzers.ts`), before the request is saved; Print a batch
+  has "Number the N without one" (directors over all of camp). Numbers never change once
+  given. The camper card shows it (edit level: Change / Take off; a number another camper has
+  is refused). Searching a number (7, 007) finds whoever has that buzzer. A final check-out
+  frees the buzzer (as before).
 - **Curved text** ("Shape: Curved, top / Curved, bottom"; `curve`, `arc`): the text runs
   along the top or the bottom of the circle inside its box, centred, letters upright (the
   bottom reads left to right too). For a round sticker make the box the sticker's size: the
