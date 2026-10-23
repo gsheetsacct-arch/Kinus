@@ -1,5 +1,6 @@
 "use server";
 import { formatDateTime } from "@/lib/utils";
+import { carryAreasTo } from "@/lib/staff/carry-areas";
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -386,6 +387,8 @@ export async function applyImportAction(fd: FormData): Promise<ActionResult> {
   // new bunks from the file go into their Alef-Beis place (not the order they appeared in)
   await slotNewBunks(supabase, imp.session_id, before).catch(() => undefined);
   await slotNewDivisions(supabase, imp.session_id, divisionsBefore).catch(() => undefined);
+  // the first import into a new session makes its divisions: staff areas follow them there
+  await carryAreasTo(imp.session_id);
   const r = data as { added: number; updated: number; missing: number };
   revalidatePath("/", "layout");
   const columns = ((imp.summary ?? {}) as { columns?: { campers: number } }).columns?.campers ?? 0;

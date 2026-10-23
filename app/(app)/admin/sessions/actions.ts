@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth/current-user";
+import { carryAreasTo } from "@/lib/staff/carry-areas";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 
 const schema = z.object({
@@ -68,6 +69,8 @@ async function makeActive(id: string) {
   if (off.error) throw off.error;
   const on = await supabase.from("sessions").update({ is_active: true }).eq("id", id);
   if (on.error) throw on.error;
+  // staff whose areas are all in an earlier session get the same places here
+  await carryAreasTo(id);
 }
 
 export async function activateSession(fd: FormData): Promise<ActionResult> {
