@@ -9,7 +9,8 @@ export function fitText(box: HTMLElement, text: HTMLElement, targetPx: number, m
   let s = targetPx;
   box.style.fontSize = `${s}px`;
   if (!over()) return { px: s, overflow: false, below: false };
-  const r = Math.min(box.clientWidth / Math.max(text.scrollWidth, 1), box.clientHeight / Math.max(box.scrollHeight, 1));
+  // text on more lines steps down from its size: a jump would skip the sizes where it fits on fewer lines
+  const r = getComputedStyle(box).whiteSpace === "nowrap" ? Math.min(box.clientWidth / Math.max(text.scrollWidth, 1), box.clientHeight / Math.max(box.scrollHeight, 1)) : 1;
   // the same steps as the printed page (half a pixel), so the editor's size is the printed size
   s = Math.max(minPx, Math.floor(s * Math.min(1, r) * 2) / 2);
   box.style.fontSize = `${s}px`;

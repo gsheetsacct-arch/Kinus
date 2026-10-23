@@ -30,7 +30,14 @@ Positions are millimetres from the tag's top-left: x, y, w (width), h (height).
   "align":"left"|"center"|"right","color":"#hex","font","italic","underline",
   "fit": true (shrink long text to fit; default), "minSize": pt (the smallest it shrinks to
   normally; very long names still go smaller, down to 4 pt, to print whole), "wrap": bool
-  (more than one line), "rotate": 0|90|-90}
+  (more than one line), "valign": "top"|"middle"|"bottom" (where the text sits in its box;
+  middle by default, top when it wraps), "lineHeight": number (line spacing × the size for
+  wrapped text; default the font's own, 1.4 for uploaded fonts: lower it to just fit the
+  font's letters, e.g. 1.25 for Poppins), "rotate": 0|90|-90}
+  A name that should wrap only when it's very long: "wrap": true, "valign": "bottom", and a box
+  tall enough for two lines that ends where one line ends. A short name sits where it always
+  did; a name that fits on one line by shrinking a little stays on one line, and only a long
+  one wraps into two balanced lines growing upwards.
   "text" mixes words and fields: "{{FIRST}} {{LAST}}", "Bunk {{BUNK}}". "{{A|B}}" is A, or B
   when A is empty. A text whose fields are all empty for a camper doesn't print.
 - barcode: {"type":"barcode","id","text":"{{BARCODE}}","x","y","w","h","showText":bool,"color":"#hex"}

@@ -165,6 +165,17 @@ A canvas of the tag at real proportions (Print → Templates):
   **Allow 2 lines**, a wider box, or "**16 pt is fine**" (makes that the smallest size).
   Only text that doesn't fit even at 4 pt is cut (red "Cut off"), or text in a part with
   shrinking turned off.
+- **Two lines, and where text sits in its box** ("In the box": top, middle, bottom;
+  `valign`): middle by default, top for text allowed onto more lines. Wrapped lines are
+  balanced (`text-wrap: balance`). For a name that wraps only when it's very long: allow 2
+  lines, set **bottom**, and make the box tall enough for two lines, ending where one line
+  ends. Short names print where they always did; one that fits on a line by shrinking a
+  little stays on one line (wrapped text steps down from its size, half a pixel at a time,
+  rather than jumping); only a long one goes onto two lines, growing upwards. Bottom is
+  "safe" alignment, so text too big for the box still overflows downwards, where
+  shrink-to-fit measures it. **Line spacing** (`lineHeight`, × the size) tightens the lines
+  of wrapped text; uploaded fonts default to 1.4, which is roomy for most (Poppins' letters
+  need 1.25).
 - **Fonts**: Clear (Noto Sans, the default), Friendly (Rubik), Classic (Frank Ruhl
   Libre), Bold display (Secular One), all with Hebrew; plus bold, italic, underline.
   Each is embedded in the printed page (`lib/print/fonts`, OFL).

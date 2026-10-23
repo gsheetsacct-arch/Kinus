@@ -3,7 +3,7 @@ import * as React from "react";
 import { fill } from "@/lib/print/merge";
 import { fitText } from "@/lib/print/fit";
 import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
-import { DIVISION_VALUE, pictureFor, type Layer } from "@/lib/print/types";
+import { DIVISION_VALUE, pictureFor, textAlignItems, type Layer } from "@/lib/print/types";
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CodeImage, useCode } from "./code-image";
@@ -728,6 +728,8 @@ function TextPart({
     floor,
     l.fit,
     l.wrap,
+    l.valign,
+    l.lineHeight,
     l.w,
     l.h,
     l.rotate,
@@ -764,8 +766,8 @@ function TextPart({
       <div
         ref={box}
         className={cn(
-          "flex size-full items-center overflow-hidden",
-          l.wrap ? "items-start whitespace-normal" : "whitespace-nowrap",
+          "flex size-full overflow-hidden",
+          l.wrap ? "whitespace-normal" : "whitespace-nowrap",
         )}
         style={{
           fontWeight: l.weight ?? 400,
@@ -777,9 +779,10 @@ function TextPart({
               : l.align === "right"
                 ? "flex-end"
                 : "flex-start",
+          alignItems: textAlignItems(l),
           fontStyle: empty || l.italic ? "italic" : undefined,
           fontFamily: fontStack(l.font),
-          lineHeight: lineHeightOf(l.font),
+          lineHeight: l.lineHeight ?? lineHeightOf(l.font),
           opacity: skipped ? 0.45 : undefined,
         }}
         title={
@@ -793,7 +796,7 @@ function TextPart({
           dir="auto"
           // clipped to its line like the printed page, so the size measured here is the printed size
           className="max-w-full overflow-hidden [unicode-bidi:plaintext]"
-          style={{ textDecoration: l.underline ? "underline" : undefined }}
+          style={{ textDecoration: l.underline ? "underline" : undefined, textWrap: l.wrap ? "balance" : undefined }}
         >
           {empty ? l.text : text}
         </span>
