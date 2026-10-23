@@ -1,3 +1,4 @@
+import { formatBuzzer } from "@/lib/buzzer-format";
 import { displaySourceId } from "@/lib/import/programs";
 /**
  * Field catalog: every camper field the app can show in lists, cards and exports,
@@ -22,6 +23,7 @@ export const FIELDS: FieldDef[] = [
   { key: "source_id", label: "Registration ID", group: "basic", kind: "text" },
   { key: "division", label: "Division", group: "basic", kind: "text" },
   { key: "bunk", label: "Bunk", group: "basic", kind: "text" },
+  { key: "buzzer", label: "Buzzer", group: "basic", kind: "text" },
   { key: "grade", label: "Grade", group: "basic", kind: "text" },
   { key: "tshirt_size", label: "T-shirt", group: "basic", kind: "text" },
   { key: "bunk_preferences", label: "Bunk preferences", group: "basic", kind: "list" },
@@ -93,6 +95,8 @@ export function getFieldValue(c: CamperLike, key: string): string | boolean | nu
   }
   if (key === "division") return c.division_name ?? null;
   if (key === "bunk") return c.bunk_name ?? null;
+  // the pager number, as printed: 7 → "007"
+  if (key === "buzzer") return formatBuzzer(c.current_buzzer_number as number | null | undefined) || null;
   if (key === "bunk_preferences") return (c.bunk_preferences ?? []).filter(Boolean).join(", ") || null;
   // a separate program's ids are kept apart ("virtual:1234"); people know them as "1234"
   if (key === "source_id") return displaySourceId(c.source_id as string | null | undefined);

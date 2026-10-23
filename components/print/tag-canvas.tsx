@@ -2,7 +2,7 @@
 import * as React from "react";
 import { fill } from "@/lib/print/merge";
 import { fitText } from "@/lib/print/fit";
-import { curvePath, DEFAULT_ARC, fitCurve } from "@/lib/print/curve";
+import { CURVE_SCALE, curvePath, DEFAULT_ARC, fitCurve } from "@/lib/print/curve";
 import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
 import { DIVISION_VALUE, pictureFor, textAlignItems, type Layer } from "@/lib/print/types";
 import { Lock } from "lucide-react";
@@ -538,7 +538,7 @@ function Part({
         )}
         {l.type === "qr" &&
           (fill(l.text, (k) => values[k] ?? "").trim() ? (
-            <QrPart text={fill(l.text, (k) => values[k] ?? "")} color={l.color} />
+            <QrPart text={fill(l.text, (k) => values[k] ?? "")} color={l.color} round={l.shape === "round"} />
           ) : (
             <EmptyCode what="QR code" />
           ))}
@@ -665,8 +665,8 @@ function BarcodePart({
   );
 }
 
-function QrPart({ text, color }: { text: string; color?: string }) {
-  const code = useCode("qr", text);
+function QrPart({ text, color, round }: { text: string; color?: string; round?: boolean }) {
+  const code = useCode(round ? "qr-round" : "qr", text);
   return code?.svg ? (
     <CodeImage svg={code.svg} color={color} />
   ) : (
@@ -745,11 +745,11 @@ function CurvedPart({
   return (
     <>
       <FitMark cut={cut} />
-      <svg viewBox={`0 0 ${l.w} ${l.h}`} width="100%" height="100%" className="block overflow-visible" style={{ opacity: skipped ? 0.45 : undefined }}>
+      <svg viewBox={`0 0 ${l.w * CURVE_SCALE} ${l.h * CURVE_SCALE}`} width="100%" height="100%" className="block overflow-visible" style={{ opacity: skipped ? 0.45 : undefined }}>
         <path ref={pathRef} id={id} d={curvePath(l.w, l.h, side, arc, sizeMm).d} fill="none" />
         <text
           ref={textRef}
-          fontSize={sizeMm}
+          fontSize={sizeMm * CURVE_SCALE}
           fontWeight={l.weight ?? 400}
           fontFamily={fontStack(l.font)}
           fontStyle={empty || l.italic ? "italic" : undefined}

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { buzzerQuery } from "@/lib/buzzer-format";
 import type { Database } from "@/lib/supabase/database.types";
 import type { ContactLike } from "@/lib/fields";
 import { fetchAll } from "@/lib/supabase/fetch-all";
@@ -21,7 +22,7 @@ export type CamperFilter = {
 };
 
 const ALWAYS = ["id", "display_name", "first_name", "last_name", "division_id", "bunk_id", "status", "archived_at"];
-const COLUMN_FOR: Record<string, string> = { division: "division_id", bunk: "bunk_id" };
+const COLUMN_FOR: Record<string, string> = { division: "division_id", bunk: "bunk_id", buzzer: "current_buzzer_number" };
 /** The view columns needed for these field keys (masked columns cost a check per row: only ask for used ones). */
 function selectFor(fields: string[]): string {
   const cols = new Set(ALWAYS);
@@ -33,8 +34,13 @@ function selectFor(fields: string[]): string {
 export async function listCampers(supabase: DB, f: CamperFilter): Promise<CamperRow[]> {
   let ids: string[] | null = null;
   if (f.q && f.q.trim()) {
-    const { data } = await supabase.rpc("search_campers", { p_session_id: f.sessionId, p_q: f.q.trim(), p_limit: 100 });
-    ids = (data ?? []).map((r) => r.id);
+    const buzzer = buzzerQuery(f.q);
+    const [{ data }, { data: byBuzzer }] = await Promise.all([
+      supabase.rpc("search_campers", { p_session_id: f.sessionId, p_q: f.q.trim(), p_limit: 100 }),
+      // a number finds whoever has that buzzer, too
+      buzzer === null ? Promise.resolve({ data: [] as { id: string | null }[] }) : supabase.from("campers_visible").select("id").eq("session_id", f.sessionId).eq("current_buzzer_number", buzzer),
+    ]);
+    ids = [...new Set([...(byBuzzer ?? []).map((r) => r.id).filter((x): x is string => Boolean(x)), ...(data ?? []).map((r) => r.id)])];
     if (ids.length === 0) return [];
   }
   if (f.divisionIds && !f.divisionIds.length) return [];

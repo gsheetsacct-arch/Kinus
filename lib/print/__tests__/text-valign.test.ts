@@ -41,10 +41,11 @@ describe("curved text", () => {
     const { curvePath } = await import("../curve");
     const top = curvePath(38.1, 38.1, "top", 180, 3);
     // half a circle of radius 19.05 - 0.55 × 3
-    expect(top.length).toBeCloseTo(Math.PI * (19.05 - 1.65), 3);
-    expect(top.d.startsWith("M 1.650 19.050 A 17.400 17.400 0 0 1 36.450 19.050")).toBe(true);
+    // in hundredths of a mm
+    expect(top.length).toBeCloseTo(Math.PI * (1905 - 165), 1);
+    expect(top.d.startsWith("M 165.0 1905.0 A 1740.0 1740.0 0 0 1 3645.0 1905.0")).toBe(true);
     // the bottom runs left to right the other way round the circle (letters upright)
-    expect(curvePath(38.1, 38.1, "bottom", 180, 3).d).toContain("0 0 0 36.450");
+    expect(curvePath(38.1, 38.1, "bottom", 180, 3).d).toContain("0 0 0 3645.0");
   });
   it("prints as SVG text on its arc, fitted by the page's script", () => {
     const html = renderDocument(

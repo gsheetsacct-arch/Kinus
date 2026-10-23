@@ -45,7 +45,9 @@ Positions are millimetres from the tag's top-left: x, y, w (width), h (height).
   when A is empty. A text whose fields are all empty for a camper doesn't print.
 - barcode: {"type":"barcode","id","text":"{{BARCODE}}","x","y","w","h","showText":bool,"color":"#hex"}
   Keep it dark and wide enough (Kinus checks scanning in the editor); quiet space is built in.
-- qr: {"type":"qr","id","text","x","y","w","h","color":"#hex"} (square: w = h)
+- qr: {"type":"qr","id","text","x","y","w","h","color":"#hex","shape":"square"|"round"} (w = h;
+  "round": the code in a circle of made-up squares, on a white disc, as on restaurant pagers;
+  it scans the same)
 - box: {"type":"box","id","x","y","w","h","fill":"#hex"|"{{DIVISION_COLOR}}","radius": mm,"border":"#hex"}
   A colour block (strips, backgrounds); "{{DIVISION_COLOR}}" is each camper's division colour.
 - image: {"type":"image","id","path","x","y","w","h","fit":"contain"|"cover",

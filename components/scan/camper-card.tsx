@@ -11,7 +11,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { cardActions } from "@/lib/attendance/scan";
 import type { AttendanceEventType, CamperStatus } from "@/lib/attendance/machine";
 import { cn, formatPhone, formatTime, formatWhen } from "@/lib/utils";
-import { loadCard, recordFromCard, requestTag, undoScan, type CardData, type ScanOutcome } from "@/app/(app)/scan/actions";
+import { loadCard, recordFromCard, requestTag, setCamperBuzzer, undoScan, type CardData, type ScanOutcome } from "@/app/(app)/scan/actions";
+import { formatBuzzer } from "@/lib/buzzer-format";
 
 export type { TemplateButton } from "@/lib/print/card-templates";
 import type { TemplateButton } from "@/lib/print/card-templates";
@@ -144,6 +145,7 @@ export function CamperCard({
         {embedded && <StatusBadge status={card.status} className="mr-2 align-middle" />}
         {card.since ? `Since ${formatWhen(card.since)}${card.by ? ` · ${card.by}` : ""}` : "Not checked in yet"}
       </p>
+      {(card.buzzer !== null || card.canSetBuzzer) && <BuzzerRow card={card} onChanged={reload} />}
       {card.medicalFlag && !embedded && (
         <p className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
           <AlertTriangle className="size-4" /> Medical flag: allergies, EpiPen or medications.
@@ -338,3 +340,66 @@ function PrintOptions({ template, onClose, onSend }: { template: TemplateButton 
 }
 
 export type { CamperStatus };
+
+/** The camper's buzzer (pager) number; people with edit access can change or take it off. */
+function BuzzerRow({ card, onChanged }: { card: CardData; onChanged: () => void }) {
+  const [editing, setEditing] = React.useState(false);
+  const [value, setValue] = React.useState("");
+  const [pending, start] = React.useTransition();
+  const save = (n: number | null) =>
+    start(async () => {
+      const r = await setCamperBuzzer(card.id, n).catch(() => ({ ok: false as const, error: "Couldn't save that: check the connection and try again." }));
+      if (!r.ok) return void toast.error(r.error);
+      toast.success(r.message ?? "Saved.");
+      setEditing(false);
+      onChanged();
+    });
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-muted-foreground">Buzzer</span>
+      {editing ? (
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const n = Number(value.trim());
+            if (!value.trim() || !Number.isInteger(n) || n < 1) return void toast.error("Type the number on the buzzer.");
+            save(n);
+          }}
+        >
+          <Input autoFocus inputMode="numeric" value={value} onChange={(e) => setValue(e.target.value)} className="h-8 w-24 font-mono" aria-label="Buzzer number" />
+          <Button size="sm" className="h-8" disabled={pending} type="submit">
+            Save
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8" type="button" onClick={() => setEditing(false)}>
+            Cancel
+          </Button>
+        </form>
+      ) : (
+        <>
+          <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-base font-semibold">{card.buzzer !== null ? formatBuzzer(card.buzzer) : "none yet"}</span>
+          {card.canSetBuzzer && (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8"
+                onClick={() => {
+                  setValue(card.buzzer !== null ? String(card.buzzer) : "");
+                  setEditing(true);
+                }}
+              >
+                {card.buzzer !== null ? "Change" : "Give one"}
+              </Button>
+              {card.buzzer !== null && (
+                <Button size="sm" variant="ghost" className="h-8 text-muted-foreground" disabled={pending} onClick={() => save(null)}>
+                  Take off
+                </Button>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

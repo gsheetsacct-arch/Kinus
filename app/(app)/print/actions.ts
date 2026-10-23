@@ -34,6 +34,22 @@ async function requirePrinter() {
   return user;
 }
 
+/** Buzzer (pager) numbers for everyone in the session who has none yet: 001 and up, in division and bunk order. */
+export async function giveBuzzerNumbers(): Promise<ActionResult> {
+  const user = await requireUser();
+  if (!isAdmin(user)) return fail("Numbering everyone's buzzers is for directors over all of camp.");
+  const session = await getActiveSession();
+  if (!session) return fail("No active session.");
+  try {
+    const { assignBuzzers, formatBuzzer } = await import("@/lib/buzzers");
+    const r = await assignBuzzers(session.id);
+    revalidatePath("/print/batch");
+    return ok(r.given ? `${plural(r.given, "camper")} got buzzer numbers ${formatBuzzer(r.first)} to ${formatBuzzer(r.last)}.` : "Everyone already has a buzzer number.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Queue
 // ---------------------------------------------------------------------------
@@ -443,11 +459,11 @@ export async function uploadBackground(fd: FormData): Promise<ActionResult> {
 
 /** The exact print rendering for the editor's "Print preview", for the same camper as the canvas. */
 /** Real barcodes and QR codes for the editor, the same ones that print. */
-export async function codePreviews(items: { type: "barcode" | "qr"; text: string }[]): Promise<{ svg: string; modules: number }[]> {
+export async function codePreviews(items: { type: "barcode" | "qr" | "qr-round"; text: string }[]): Promise<{ svg: string; modules: number }[]> {
   await requirePreviewer();
-  const { code128Modules, code128Svg, qrSvg } = await import("@/lib/print/barcode");
+  const { code128Modules, code128Svg, qrRoundSvg, qrSvg } = await import("@/lib/print/barcode");
   return items.slice(0, 40).map(({ type, text }) => {
-    const svg = type === "qr" ? qrSvg(text.slice(0, 500)) : code128Svg(text.slice(0, 80));
+    const svg = type === "qr" ? qrSvg(text.slice(0, 500)) : type === "qr-round" ? qrRoundSvg(text.slice(0, 500)) : code128Svg(text.slice(0, 80));
     return { svg, modules: type === "qr" ? 0 : code128Modules(svg) };
   });
 }
