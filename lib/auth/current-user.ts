@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin, isDirector, isStaffManager, type CurrentUser } from "./permissions";
+import { carryMyAreas } from "@/lib/staff/carry-areas";
 
 /** Why a signed-in person can't use the app (shown instead of sending them back to sign-in). */
 export type AccountProblem = "database" | "inactive" | "no_profile";
@@ -30,13 +31,24 @@ const loadAccount = cache(async (): Promise<Account> => {
   if (!profile) return { user: null, problem: "no_profile" };
   // listed-only people (most counselors) never use the app, even with a sign-in link
   if (!profile.is_active || profile.login === "none") return { user: null, problem: "inactive" };
-  const rows = areas ?? [];
-  const groupIds = rows.map((a) => a.group_id).filter((x): x is string => Boolean(x));
-  const grouped = groupIds.length ? ((await supabase.from("divisions").select("id, group_id").in("group_id", groupIds)).data ?? []) : [];
-  const coverage = [
-    ...rows.filter((a) => a.division_id).map((a) => ({ division_id: a.division_id!, bunk_id: a.bunk_id })),
-    ...grouped.map((d) => ({ division_id: d.id, bunk_id: null })),
-  ];
+  let rows = areas ?? [];
+  const coverageOf = async (list: typeof rows) => {
+    const groupIds = list.map((a) => a.group_id).filter((x): x is string => Boolean(x));
+    const grouped = groupIds.length ? ((await supabase.from("divisions").select("id, group_id").in("group_id", groupIds)).data ?? []) : [];
+    return [...list.filter((a) => a.division_id).map((a) => ({ division_id: a.division_id!, bunk_id: a.bunk_id })), ...grouped.map((d) => ({ division_id: d.id, bunk_id: null }))];
+  };
+  let coverage = await coverageOf(rows);
+  // areas all in an earlier session (a new one started without copying staff): the same
+  // places in this session, by name, or this person sees no campers at all
+  if (rows.length && profile.role !== "owner" && !profile.all_areas) {
+    const session = await getActiveSession();
+    const ids = [...new Set(coverage.map((c) => c.division_id))];
+    const here = session && ids.length ? ((await supabase.from("divisions").select("id", { count: "exact", head: true }).eq("session_id", session.id).in("id", ids)).count ?? 0) : 0;
+    if (session && here === 0 && (await carryMyAreas(session.id, profile.id))) {
+      rows = (await supabase.from("staff_scopes").select("id, group_id, division_id, bunk_id").eq("user_id", user.id)).data ?? rows;
+      coverage = await coverageOf(rows);
+    }
+  }
   // final check-out (whole camp, going home): only check-in logins get it. Read on its own, so
   // a database without migration 0029 yet still signs everyone in.
   const finalCheckout =

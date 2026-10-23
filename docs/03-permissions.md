@@ -39,6 +39,16 @@ Divisions can be grouped (for example *Main camp* = Division 1, 2, 3 and the Bar
 Mitzvah Program, with Hebrew and French separate). Giving someone a group covers
 every division in it, including divisions added to the group later.
 
+Areas belong to one session. A new session started without "copy staff" would leave
+everyone's areas in the last one, and they'd see no campers (only the owner and all-of-camp
+people would). So a person whose areas are **all** in earlier sessions gets the same
+places in the active session, by name: camp by camp name, division by division name, bunk
+by division and bunk name (`lib/staff/carry-areas.ts`). Never more than they had: a bunk
+or division that isn't in the new session isn't carried. It runs when a session is made
+active, after an import, when the Staff page opens, and when such a person signs in.
+Someone who already has any area in the active session is left alone, so areas changed or
+taken away there stay as they are.
+
 ## Who can manage whom
 - Owners manage anyone. Directors over all of camp manage anyone except owners.
 - Directors over an area add and change people below director, and only within their

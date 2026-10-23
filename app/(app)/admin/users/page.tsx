@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ShieldCheck, UserPlus, Users } from "lucide-react";
+import { carryAreasTo } from "@/lib/staff/carry-areas";
 import { PageHeader } from "@/components/page-header";
 import { Callout } from "@/components/callout";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const me = await requireStaffManager();
   const { role: roleFilter } = await searchParams;
   const session = await getActiveSession();
+  // anyone whose areas are all in an earlier session gets the same places in this one
+  if (session) await carryAreasTo(session.id);
   const admin = createAdminClient();
   const [{ data: profiles }, { data: areas }, tree, info, setup] = await Promise.all([
     admin.from("profiles").select("id, email, full_name, title, role, access_level, all_areas, is_active, login").order("full_name"),
