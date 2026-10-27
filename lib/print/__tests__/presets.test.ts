@@ -48,7 +48,7 @@ describe("label fingerprints", () => {
     ],
   };
   it("lists the fields a template prints", () => {
-    expect(templateKeys(spec)).toEqual(["BUNK", "BUNK_HE", "DIVISION_COLOR", "FIRST", "LAST"]);
+    expect(templateKeys(spec)).toEqual(["BUNK_HE|BUNK", "DIVISION_COLOR", "FIRST", "LAST"]);
   });
   it("changes only when a printed value changes", () => {
     const keys = templateKeys(spec);
@@ -61,7 +61,9 @@ describe("label fingerprints", () => {
     const v = { FIRST: "Moshe", LAST: "Cohen", BUNK: "Yud", BUNK_HE: "יוד", DIVISION_COLOR: "#00f" };
     const printed = contentHash(keys, v);
     expect(sameContent(printed, keys, v)).toBe(true);
-    expect(sameContent(printed, keys, { ...v, BUNK: "Yud Alef" })).toBe(false);
+    expect(sameContent(printed, keys, { ...v, BUNK_HE: "יוד א" })).toBe(false);
+    // the Hebrew bunk shows, not the English one
+    expect(sameContent(printed, keys, { ...v, BUNK: "Yud Alef" })).toBe(true);
     // the template gains a field: not a change to the camper
     expect(sameContent(printed, [...keys, "TSHIRT"], { ...v, TSHIRT: "M" })).toBe(true);
     // or loses one
@@ -69,7 +71,7 @@ describe("label fingerprints", () => {
     // a whole new design shares nothing: not a change either
     expect(sameContent(printed, ["NICKNAME"], { NICKNAME: "Moishy" })).toBe(true);
     // labels printed with the old one-piece fingerprint still compare
-    const legacy = createHash("sha1").update(keys.map((k) => `${k}=${(v as Record<string, string>)[k] ?? ""}`).join("\n")).digest("hex").slice(0, 20);
+    const legacy = createHash("sha1").update(["BUNK", "BUNK_HE", "DIVISION_COLOR", "FIRST", "LAST"].map((k) => `${k}=${(v as Record<string, string>)[k] ?? ""}`).join("\n")).digest("hex").slice(0, 20);
     expect(sameContent(legacy, keys, v)).toBe(true);
     expect(sameContent(legacy, keys, { ...v, FIRST: "Mendy" })).toBe(false);
   });

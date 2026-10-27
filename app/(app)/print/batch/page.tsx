@@ -9,6 +9,8 @@ import { officeEmail } from "@/lib/print/jobs";
 import { canUsePrintArea, isAdmin, visibleDivisionIds } from "@/lib/auth/permissions";
 import { BuzzerBox } from "@/components/print/buzzer-box";
 import { buzzerCounts } from "@/lib/buzzers";
+import { CodesBox } from "@/components/print/codes-box";
+import { longCodeCount } from "@/lib/camper-codes";
 import { forCamp, templateCamps } from "@/lib/print/template-camps";
 
 export const metadata = { title: "Print a batch" };
@@ -19,18 +21,20 @@ export default async function BatchPage() {
   if (!canUsePrintArea(user)) redirect("/print/templates");
   if (!session) return <p className="text-muted-foreground">No active session.</p>;
   const supabase = await createClient();
-  const [tree, { data: templates }, office, buzzers] = await Promise.all([
+  const [tree, { data: templates }, office, buzzers, longCodes] = await Promise.all([
     loadAreaTree(supabase, session.id),
     // whole rows: works before migration 0028 (copies), when every tag is one each
     supabase.from("print_templates").select("*").not("name", "like", "(retired)%").order("sort_order").order("name"),
     officeEmail(),
     isAdmin(user) ? buzzerCounts(session.id) : Promise.resolve(null),
+    isAdmin(user) ? longCodeCount(session.id) : Promise.resolve(0),
   ]);
   const allowed = visibleDivisionIds(user);
   const divisions = tree.divisions.filter((d) => (!camp.divisionIds || camp.divisionIds.includes(d.id)) && (!allowed || allowed.includes(d.id)));
   return (
     <div>
       <PageHeader title="Print a batch" description="Name tags or luggage tags for a whole camp, division or bunk, sorted by bunk." />
+      <CodesBox long={longCodes} />
       {buzzers && <BuzzerBox have={buzzers.with} without={buzzers.without} highest={buzzers.highest} />}
       <BatchForm
         templates={(templates ?? [])

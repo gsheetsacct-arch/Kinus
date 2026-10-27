@@ -172,8 +172,8 @@ export function Scanner({
   );
 
   const handleText = React.useCallback(
-    (text: string, method: "scan" | "manual") => {
-      const code = findScanCode(text);
+    (text: string, method: "scan" | "manual", camera = false) => {
+      const code = findScanCode(text, camera);
       if (!code) return false;
       setQ("");
       const r = byCode.get(code);
@@ -201,7 +201,7 @@ export function Scanner({
     },
     [byCode, act, show, final],
   );
-  const onCameraCode = React.useCallback((t: string) => void handleText(t, "scan"), [handleText]);
+  const onCameraCode = React.useCallback((t: string) => void handleText(t, "scan", true), [handleText]);
 
   // USB/Bluetooth scanners type fast and press Enter; catch them even when the box isn't focused.
   // Gaps are measured with the keys' own timestamps: a busy phone (camera decoding) delivers

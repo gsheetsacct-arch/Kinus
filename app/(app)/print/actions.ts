@@ -24,7 +24,8 @@ import { dismissLabelUpdates, labelUpdates, refreshPrintedHashes, type LabelUpda
 import { loadMergeSetup, loadPrintCampers } from "@/lib/print/data";
 import { mergeValues } from "@/lib/print/merge";
 import type { Layer, PdfArt, SheetLayout, TemplateSpec, Transform } from "@/lib/print/types";
-import { parseScan } from "@/lib/attendance/scan";
+import { anyCode } from "@/lib/attendance/scan";
+import { currentCode } from "@/lib/camper-codes";
 
 const NOT_YOURS = "That's a request for campers outside your part of camp.";
 
@@ -47,6 +48,22 @@ export async function giveBuzzerNumbers(): Promise<ActionResult> {
     return ok(r.given ? `${plural(r.given, "camper")} got buzzer numbers ${formatBuzzer(r.first)} to ${formatBuzzer(r.last)}.` : "Everyone already has a buzzer number.");
   } catch (e) {
     return fail(errorMessage(e));
+  }
+}
+
+/** Short camper numbers (0001…) for whoever still has a long one, in division, bunk, name order. */
+export async function shortenCamperCodes(): Promise<ActionResult> {
+  const user = await requireUser();
+  if (!isAdmin(user)) return fail("Renumbering campers is for directors over all of camp.");
+  const session = await getActiveSession();
+  if (!session) return fail("No active session.");
+  try {
+    const { shortenCodes } = await import("@/lib/camper-codes");
+    const r = await shortenCodes(session.id);
+    revalidatePath("/print/batch");
+    return ok(r.given ? `${plural(r.given, "camper")} got short numbers, ${r.first} to ${r.last}.` : "Everyone already has a short number.");
+  } catch (e) {
+    return fail(/renumber_camper_codes|former_code/.test(errorMessage(e)) ? "The database needs updating first (migration 0037)." : errorMessage(e));
   }
 }
 
@@ -640,8 +657,9 @@ export async function previewValues(
   const supabase = await createClient();
   let id: string | null = null;
   if (who.kind === "code") {
-    const code = parseScan(who.code);
-    if (!code) return { error: "Type a 6-digit camper code." };
+    const read = anyCode(who.code);
+    if (!read) return { error: "Type a camper code (0012)." };
+    const code = await currentCode(session.id, read);
     id = (await supabase.from("campers").select("id").eq("session_id", session.id).eq("camper_code", code).maybeSingle()).data?.id ?? null;
     if (!id) return { error: `No camper ${code} in your area.` };
   } else {

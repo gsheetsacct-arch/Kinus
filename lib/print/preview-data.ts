@@ -1,7 +1,8 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAll } from "@/lib/supabase/fetch-all";
-import { parseScan } from "@/lib/attendance/scan";
+import { anyCode } from "@/lib/attendance/scan";
+import { currentCode } from "@/lib/camper-codes";
 import { backgroundDataUrl, imageDataUrls, loadMergeSetup, loadPrintCampers } from "./data";
 import { fill, mergeValues, SAMPLE_CAMPER } from "./merge";
 import { renderDocument } from "./render";
@@ -70,8 +71,9 @@ export async function camperValues(
   if (!session) return { error: "No active session." };
   let id: string | null = null;
   if (who.kind === "code") {
-    const code = parseScan(who.code);
-    if (!code) return { error: "Type a 6-digit camper code." };
+    const read = anyCode(who.code);
+    if (!read) return { error: "Type a camper code (0012)." };
+    const code = await currentCode(session.id, read);
     let q = admin.from("campers").select("id").eq("session_id", session.id).eq("camper_code", code);
     if (divisionIds) q = q.in("division_id", divisionIds.length ? divisionIds : ["00000000-0000-0000-0000-000000000000"]);
     id = (await q.maybeSingle()).data?.id ?? null;

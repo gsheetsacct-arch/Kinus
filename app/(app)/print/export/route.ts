@@ -9,17 +9,18 @@ import { groupOfKey, UNGATED_GROUPS } from "@/lib/fields";
 import { batchCamperIds, BATCH_WHICH, type BatchWhich } from "@/lib/print/batch";
 import { byBunkThenName, loadMergeSetup, loadPrintCampers } from "@/lib/print/data";
 import { mergeValues } from "@/lib/print/merge";
+import { exportFormat, tableDownload } from "@/lib/export";
 
 export const maxDuration = 60;
 
-const cell = (v: string) => (/[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
 /** Camper fields a merge field reads ("tshirt_size", "{{first_name}} {{last_name}}", "{{a|b}}"). */
 const sourcesOf = (source: string) =>
   source.includes("{{") ? [...source.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].flatMap((m) => m[1].split("|").map((k) => k.trim())) : [source.trim()];
 
 /**
  * Mail-merge data for Publisher (or Word/Excel): one row per camper, one column per merge
- * field, values already converted (TSHIRT = "YS", DIV = "1"…). UTF-8 with BOM for Hebrew.
+ * field, values already converted (TSHIRT = "YS", DIV = "1"…). CSV (UTF-8 with BOM for Hebrew)
+ * or Excel (?format=xlsx).
  */
 export async function GET(request: NextRequest) {
   const [user, session] = await Promise.all([getCurrentUser(), getActiveSession()]);
@@ -40,13 +41,10 @@ export async function GET(request: NextRequest) {
   const hidden = new Set(setup.fields.filter((f) => sourcesOf(f.source_field).some((k) => { const g = groupOfKey(k); return !UNGATED_GROUPS.includes(g) && !allowed.has(g); })).map((f) => f.key));
   // only fields on the merge list
   const keys = setup.fields.filter((f) => f.enabled !== false).map((f) => f.key);
-  const lines = [keys.join(",")];
+  const rows = [keys];
   for (const c of campers) {
     const v = mergeValues(c, setup.fields, setup.maps);
-    lines.push(keys.map((k) => cell(hidden.has(k) ? "" : (v[k] ?? ""))).join(","));
+    rows.push(keys.map((k) => (hidden.has(k) ? "" : (v[k] ?? ""))));
   }
-  const name = `kinus-merge-${campToday()}.csv`;
-  return new NextResponse("﻿" + lines.join("\r\n") + "\r\n", {
-    headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${name}"`, "Cache-Control": "private, no-store" },
-  });
+  return tableDownload(`kinus-merge-${campToday()}`, rows, exportFormat(sp.get("format")));
 }

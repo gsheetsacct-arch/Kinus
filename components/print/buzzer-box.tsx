@@ -8,8 +8,8 @@ import { giveBuzzerNumbers } from "@/app/(app)/print/actions";
 import { formatBuzzer } from "@/lib/buzzer-format";
 
 /**
- * Buzzer (pager) numbers: how many have one, and a button to number the rest. Printing a
- * tag that shows {{BUZZER}} numbers the campers on it anyway; this does everyone at once.
+ * Buzzer (pager) numbers: how many have one, and a button to number the rest, in division,
+ * bunk and name order after the highest so far. Nobody's number changes once given.
  */
 export function BuzzerBox({ have, without, highest }: { have: number; without: number; highest: number | null }) {
   const router = useRouter();
@@ -21,7 +21,7 @@ export function BuzzerBox({ have, without, highest }: { have: number; without: n
         <p className="font-medium">Buzzer numbers</p>
         <p className="text-muted-foreground">
           {have ? `${have} have one${highest ? ` (up to ${formatBuzzer(highest)})` : ""}` : "Nobody has one yet"}
-          {without ? `, ${without} don't yet.` : "."} Printing a tag with the buzzer number gives the next numbers to whoever&apos;s on it; look anyone up to see theirs.
+          {without ? `, ${without} don't yet.` : "."} New numbers go in order of division, bunk and name, after the highest so far. Whoever has a number keeps it, also after moving bunk (their label reprints with the same number). Buzzer labels print only for campers with a number.
         </p>
       </div>
       {without > 0 && (

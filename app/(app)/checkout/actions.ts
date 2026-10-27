@@ -8,6 +8,7 @@ import { checkoutScope } from "@/lib/attendance/final-checkout";
 import { errorMessage } from "@/lib/actions/result";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import type { CodeLookup, ScanOutcome } from "@/app/(app)/scan/actions";
+import { currentCode, isCamperCode } from "@/lib/camper-codes";
 
 /**
  * Final check-out: "gone home" for a camper of any division of the camp. The camper is read
@@ -85,9 +86,10 @@ export async function checkoutStatuses(): Promise<Record<string, CamperStatus>> 
 }
 
 /** A code that isn't on the page (a camper added since it loaded). */
-export async function lookupCheckoutCode(code: string): Promise<CodeLookup> {
+export async function lookupCheckoutCode(read: string): Promise<CodeLookup> {
   const scope = await checkoutScope(await requireUser());
-  if (!scope || !/^\d{6}$/.test(code)) return { found: false, message: "No camper has this code." };
+  if (!scope || !isCamperCode(read)) return { found: false, message: "No camper has this code." };
+  const code = await currentCode(scope.sessionId, read);
   const { data: c } = await createAdminClient()
     .from("campers")
     .select("id, camper_code, first_name, last_name, status, division_id, archived_at, divisions(name), bunks(name)")

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { FileSpreadsheet } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -56,6 +57,11 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
           list ? (
             <>
               <PrintButton />
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/lists/export?${qs}&format=xlsx`} prefetch={false}>
+                  <FileSpreadsheet /> Excel
+                </Link>
+              </Button>
               <Button asChild variant="outline" size="sm">
                 <Link href={`/lists/export?${qs}`} prefetch={false}>
                   CSV

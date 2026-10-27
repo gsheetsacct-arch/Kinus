@@ -198,7 +198,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
         camper: z
           .string()
           .optional()
-          .describe('"sample" (default); "worst" (every field at once with its longest real value: if this fits, everyone fits); "longest" (the real camper with the longest text on this tag); or a 6-digit camper code'),
+          .describe('"sample" (default); "worst" (every field at once with its longest real value: if this fits, everyone fits); "longest" (the real camper with the longest text on this tag); or a camper code (0012, or a long one like 100016)'),
       },
       annotations: { readOnlyHint: true },
     },

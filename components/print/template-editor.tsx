@@ -768,7 +768,7 @@ export function TemplateEditor({
     [who, code, textsKey],
   );
   React.useEffect(() => {
-    if (who === "code" && !/^\D*\d{6}\D*$/.test(code)) return;
+    if (who === "code" && !/^\D*\d{4,6}\D*$/.test(code)) return;
     let live = true;
     const timer = setTimeout(
       () =>
@@ -973,7 +973,7 @@ export function TemplateEditor({
         {who === "code" && (
           <label className="space-y-1">
             <span className="block text-xs text-muted-foreground">Camper code</span>
-            <Input value={code} onChange={(e) => setCode(e.target.value.trim())} placeholder="100016" inputMode="numeric" className="h-9 w-28" />
+            <Input value={code} onChange={(e) => setCode(e.target.value.trim())} placeholder="0012" inputMode="numeric" className="h-9 w-28" />
           </label>
         )}
         <div className="ml-auto flex items-center gap-2">

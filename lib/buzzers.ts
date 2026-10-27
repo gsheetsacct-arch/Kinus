@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { compareBunkNames } from "@/lib/bunk-order";
+import { byPlaceThenName } from "@/lib/camper-codes";
 import { formatBuzzer } from "@/lib/buzzer-format";
 
 export { formatBuzzer };
@@ -25,21 +25,7 @@ export async function assignBuzzers(sessionId: string, camperIds?: string[]): Pr
   );
   const wanted = camperIds ? new Set(camperIds) : null;
   let next = rows.reduce((n, c) => Math.max(n, c.current_buzzer_number ?? 0), 0) + 1;
-  type D = { name: string; sort_order: number | null } | null;
-  const todo = rows
-    .filter((c) => c.current_buzzer_number === null && (!wanted || wanted.has(c.id)))
-    .sort((a, b) => {
-      const [da, db] = [a.divisions as unknown as D, b.divisions as unknown as D];
-      const [ba, bb] = [a.bunks as unknown as D, b.bunks as unknown as D];
-      return (
-        (da?.sort_order ?? 9999) - (db?.sort_order ?? 9999) ||
-        (da?.name ?? "").localeCompare(db?.name ?? "") ||
-        (ba?.sort_order ?? 9999) - (bb?.sort_order ?? 9999) ||
-        compareBunkNames(ba?.name ?? "", bb?.name ?? "") ||
-        a.last_name.localeCompare(b.last_name) ||
-        a.first_name.localeCompare(b.first_name)
-      );
-    });
+  const todo = rows.filter((c) => c.current_buzzer_number === null && (!wanted || wanted.has(c.id))).sort(byPlaceThenName);
   if (!todo.length) return { given: 0, first: null, last: null };
   const first = next;
   const plan = todo.map((c) => ({ id: c.id, n: next++ }));
