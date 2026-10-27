@@ -39,7 +39,7 @@ export default async function CheckoutPage() {
     fetchAll((from, to) =>
       admin
         .from("campers")
-        .select("id, camper_code, first_name, last_name, division_id, bunk_id, status")
+        .select("id, camper_code, first_name, last_name, division_id, bunk_id, status, current_buzzer_number")
         .eq("session_id", scope.sessionId)
         .in("division_id", ids)
         .is("archived_at", null)
@@ -59,6 +59,7 @@ export default async function CheckoutPage() {
     where: [div.get(c.division_id!) ?? "", (c.bunk_id && bunk.get(c.bunk_id)) || "no bunk"].join(" · "),
     status: c.status,
     div: c.division_id,
+    buzzer: c.current_buzzer_number,
   }));
   return <Scanner roster={roster} templates={[]} canScan final={{ campName: scope.campName, divisions: scope.divisions }} />;
 }

@@ -51,9 +51,15 @@ Browsing by bunk does the same.
 2. **Hardware scanner** (USB/Bluetooth keyboard wedge on a laptop/tablet): a global
    key listener collects a fast burst (< 50 ms between keys) ending in Enter and
    routes it to the same handler, even when no input is focused.
-3. **Search** (always visible): name in any script, camper code, or a parent's
-   phone number → scope-filtered `search_campers()` RPC, debounced 250 ms; results
-   show name · division · bunk · status chip.
+3. **Search** (always visible): name in any script, camper code, a parent's phone
+   number, or a buzzer number (7, 007), matched in the browser (`lib/search.ts`, the same
+   on the campers page, Who's here, Not here yet, final check-out and Hebrew names);
+   results show name · division · bunk · status chip. Staff spell names as they hear them,
+   so similar names come up too, after the exact ones: spellings that sound the same
+   (`soundKey`: Chaim/Haim, Menachem/Menahem, Tzvi/Zvi, Shneur/Schneur/Shneor, Moishe/Moshe,
+   Dovid/David, Rivkah/Rifka; Hebrew with or without א ה ו י ע: מענדל/מנדל) and typos of a
+   letter or two (wrong, missing, extra, swapped; also while still typing). Such a result is
+   marked "Similar name", and Enter never checks one in by itself: it has to be tapped.
 4. **Browse**: Division → Bunk → names with status chips. Two taps for a counselor
    (their bunk is pre-selected).
 

@@ -47,7 +47,7 @@ export function CampersBrowser({ rows, divisions, initial, archivedHref }: { row
   const dName = React.useMemo(() => new Map(divisions.map((d) => [d.id, d.name])), [divisions]);
   const bName = React.useMemo(() => new Map(divisions.flatMap((d) => d.bunks.map((b) => [b.id, b.name] as const))), [divisions]);
   const bOrder = React.useMemo(() => new Map(divisions.flatMap((d, di) => d.bunks.map((b, bi) => [b.id, di * 1000 + bi] as const))), [divisions]);
-  const index = React.useMemo(() => rows.map((r) => ({ r, e: searchEntry(r.n, r.c, r.p) })), [rows]);
+  const index = React.useMemo(() => rows.map((r) => ({ r, e: searchEntry(r.n, r.c, r.p, r.z ?? null) })), [rows]);
 
   const filtered = React.useMemo(() => {
     const out: { r: CamperIndexRow; score: number }[] = [];

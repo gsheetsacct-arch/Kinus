@@ -79,7 +79,7 @@ export function MissingBoard({
     () => missingStates(rows, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE), started, divisionCounts),
     [rows, rules, followups, now, started, divisionCounts],
   );
-  const index = React.useMemo(() => new Map(rows.map((r) => [r.id, searchEntry(r.name, r.code, r.phones.map((p) => p.tel))])), [rows]);
+  const index = React.useMemo(() => new Map(rows.map((r) => [r.id, searchEntry(r.name, r.code, r.phones.map((p) => p.tel), r.buzzer)])), [rows]);
   const bunkName = React.useMemo(() => new Map(tree.divisions.flatMap((d) => d.bunks.map((b) => [b.id, b.name] as const))), [tree]);
   const divName = React.useMemo(() => new Map(tree.divisions.map((d) => [d.id, d.name] as const)), [tree]);
   const bunkOrder = React.useMemo(() => new Map(tree.divisions.flatMap((d, i) => d.bunks.map((b, j) => [b.id, i * 1000 + j] as const))), [tree]);

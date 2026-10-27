@@ -161,7 +161,7 @@ export function StatusBoard({
     };
   }, [router]);
 
-  const index = React.useMemo(() => new Map(rows.map((r) => [r.id, searchEntry(r.name, r.code, r.phones.map((p) => p.tel))])), [rows]);
+  const index = React.useMemo(() => new Map(rows.map((r) => [r.id, searchEntry(r.name, r.code, r.phones.map((p) => p.tel), r.buzzer)])), [rows]);
   const scoped = React.useMemo(() => rows.filter((r) => inScope(r, scope, tree)), [rows, scope, tree]);
   const counts = countStatuses(scoped);
   // who should be checked up on, recomputed as check-ins arrive

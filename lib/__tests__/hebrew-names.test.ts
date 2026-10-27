@@ -65,3 +65,26 @@ describe("suggestions", () => {
     expect(suggestHebrew("Xyzzy", "Qwerty", book)).toBeNull();
   });
 });
+
+describe("only part of the name written", () => {
+  const book = new NameBook();
+  book.learn("Zalman", "זלמן");
+  book.learn("Zalman", "זלמן");
+  book.learn("Shneur", "שניאור");
+  it("Zalman for Shneur Zalman: the whole name, never an exact match for the part", () => {
+    expect(suggestHebrew("Zalman", "Shneur Zalman", new NameBook())!.value).toBe("שניאור זלמן");
+    const s = suggestHebrew("Zalman", "Shneur Zalman", book)!;
+    expect(s.value).toBe("שניאור זלמן");
+    expect(s.source).not.toBe("exact");
+  });
+  it("with nothing known for the whole name, the part, as a lesser guess", () => {
+    const b = new NameBook();
+    b.learn("Zalman", "זלמן");
+    const s = suggestHebrew("Zalman", "Qwerty Zalman", b)!;
+    expect(s.value).toBe("זלמן");
+    expect(s.source).toBe("words");
+  });
+  it("the whole name written is still exact", () => {
+    expect(suggestHebrew("Zalman", "Zalman", book)!.source).toBe("exact");
+  });
+});
