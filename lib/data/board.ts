@@ -21,6 +21,8 @@ export type BoardRow = {
   note: string | null;
   medical: boolean;
   phones: BoardPhone[];
+  /** Buzzer number, for search. */
+  buzzer: number | null;
 };
 
 const PARENT_LABEL: Record<string, string> = { mother: "Mom", father: "Dad", guardian: "Guardian" };
@@ -32,7 +34,7 @@ export async function loadBoard(supabase: DB, sessionId: string, withPhones: boo
     fetchAll((from, to) => {
       let q = supabase
         .from("campers_board")
-        .select("id, display_name, first_name, last_name, camper_code, division_id, bunk_id, status, last_event_at, last_event_by, last_event_type, last_event_note, has_medical_flag")
+        .select("id, display_name, first_name, last_name, camper_code, division_id, bunk_id, status, last_event_at, last_event_by, last_event_type, last_event_note, has_medical_flag, current_buzzer_number")
         .eq("session_id", sessionId)
         .is("archived_at", null);
       if (divisionIds) q = q.in("division_id", divisionIds);
@@ -72,5 +74,6 @@ export async function loadBoard(supabase: DB, sessionId: string, withPhones: boo
     note: c.last_event_note,
     medical: Boolean(c.has_medical_flag),
     phones: (phones.get(c.id!) ?? []).sort((a, b) => a.order - b.order).map(({ label, phone, tel }) => ({ label, phone, tel })),
+    buzzer: c.current_buzzer_number ?? null,
   }));
 }

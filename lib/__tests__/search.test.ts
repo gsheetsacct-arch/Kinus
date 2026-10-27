@@ -36,3 +36,67 @@ describe("matchScore", () => {
     expect(matchScore(e, "kn1001")).toBeGreaterThan(0);
   });
 });
+
+describe("similar names and misspellings", () => {
+  const e = (name: string) => searchEntry(name, "100001");
+  const finds = (name: string, q: string) => matchScore(e(name), q) > 0;
+  it("spellings that sound the same", () => {
+    for (const [name, q] of [
+      ["Chaim Cohen", "haim"],
+      ["Menachem Mendel Friedman", "menahem"],
+      ["Tzvi Hirsh Katz", "zvi"],
+      ["Shneur Zalman Levine", "schneur"],
+      ["Shneur Zalman Levine", "shneor zalmen"],
+      ["Moshe Gurary", "moishe"],
+      ["Dovid Shapiro", "david"],
+      ["Rivkah Kaplan", "rivka"],
+      ["Rifka Kaplan", "rivka"],
+      ["Yitzchak Raskin", "itzchok"],
+      ["Sholom Ber", "shalom"],
+      ["Mushka Gordon", "mushky"],
+      ["Chana Hecht", "hannah"],
+      ["מנחם מענדל שפירא", "מנדל"],
+    ]) expect(finds(name, q), `${q} → ${name}`).toBe(true);
+  });
+  it("typos: a letter wrong, missing, extra or swapped, while still typing too", () => {
+    for (const [name, q] of [
+      ["Menachem Friedman", "menahcem"],
+      ["Menachem Friedman", "frideman"],
+      ["Menachem Friedman", "freidman"],
+      ["Levi Kaplan", "kaplna"],
+      ["Yehuda Teitelbaum", "teitlebau"],
+      ["Devorah Fisch", "devora fish"],
+    ]) expect(finds(name, q), `${q} → ${name}`).toBe(true);
+  });
+  it("exact matches still come first, similar ones after", () => {
+    expect(matchScore(e("Khaim Levy"), "khaim")).toBeGreaterThan(matchScore(e("Chaim Levy"), "khaim"));
+    expect(matchScore(e("Chaim Levy"), "khaim")).toBeGreaterThan(0);
+    expect(matchScore(e("Chaim Levy"), "khaim")).toBeLessThan(1);
+  });
+  it("not everything matches", () => {
+    for (const [name, q] of [
+      ["Levi Kaplan", "moshe"],
+      ["Chana Cohen", "chaim"],
+      ["Sarah Levine", "zalman"],
+      ["Leah Wolf", "lea fisch"],
+      ["Eli Raskin", "ali"],
+    ]) expect(finds(name, q), `${q} ✗ ${name}`).toBe(false);
+  });
+});
+
+describe("buzzer numbers", () => {
+  it("a number finds whoever has that buzzer (7 or 007)", () => {
+    const e = searchEntry("Levi Cohen", "100180", [], 7);
+    expect(matchScore(e, "7")).toBeGreaterThan(0);
+    expect(matchScore(e, "007")).toBeGreaterThan(0);
+    expect(matchScore(e, "8")).toBe(0);
+    expect(matchScore(searchEntry("Levi Cohen", "100180"), "7")).toBe(0);
+  });
+});
+
+describe("not too loose", () => {
+  it("a short sound-alike doesn't pull in every name starting the same way", () => {
+    expect(matchScore(searchEntry("Berel Gordon", "1"), "gurery")).toBe(0);
+    expect(matchScore(searchEntry("Mendy Gurary", "1"), "gurery")).toBeGreaterThan(0);
+  });
+});

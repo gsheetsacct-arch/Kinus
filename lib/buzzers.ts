@@ -5,6 +5,22 @@ import { formatBuzzer } from "@/lib/buzzer-format";
 
 export { formatBuzzer };
 
+type Place = { name: string; sort_order: number | null } | null;
+
+/** Printing order: division, bunk (Alef, Beis… / 1, 2… 10), last name, first name. */
+export function byPlaceThenName(a: { first_name: string; last_name: string; divisions: unknown; bunks: unknown }, b: typeof a): number {
+  const [da, db] = [a.divisions as Place, b.divisions as Place];
+  const [ba, bb] = [a.bunks as Place, b.bunks as Place];
+  return (
+    (da?.sort_order ?? 9999) - (db?.sort_order ?? 9999) ||
+    (da?.name ?? "").localeCompare(db?.name ?? "") ||
+    (ba?.sort_order ?? 9999) - (bb?.sort_order ?? 9999) ||
+    compareBunkNames(ba?.name ?? "", bb?.name ?? "") ||
+    a.last_name.localeCompare(b.last_name) ||
+    a.first_name.localeCompare(b.first_name)
+  );
+}
+
 /**
  * Buzzer (pager) numbers: one per camper for the session, 001 and up, kept on the camper
  * (campers.current_buzzer_number) so anyone can look a name up and see the number. Given in
@@ -25,21 +41,7 @@ export async function assignBuzzers(sessionId: string, camperIds?: string[]): Pr
   );
   const wanted = camperIds ? new Set(camperIds) : null;
   let next = rows.reduce((n, c) => Math.max(n, c.current_buzzer_number ?? 0), 0) + 1;
-  type D = { name: string; sort_order: number | null } | null;
-  const todo = rows
-    .filter((c) => c.current_buzzer_number === null && (!wanted || wanted.has(c.id)))
-    .sort((a, b) => {
-      const [da, db] = [a.divisions as unknown as D, b.divisions as unknown as D];
-      const [ba, bb] = [a.bunks as unknown as D, b.bunks as unknown as D];
-      return (
-        (da?.sort_order ?? 9999) - (db?.sort_order ?? 9999) ||
-        (da?.name ?? "").localeCompare(db?.name ?? "") ||
-        (ba?.sort_order ?? 9999) - (bb?.sort_order ?? 9999) ||
-        compareBunkNames(ba?.name ?? "", bb?.name ?? "") ||
-        a.last_name.localeCompare(b.last_name) ||
-        a.first_name.localeCompare(b.first_name)
-      );
-    });
+  const todo = rows.filter((c) => c.current_buzzer_number === null && (!wanted || wanted.has(c.id))).sort(byPlaceThenName);
   if (!todo.length) return { given: 0, first: null, last: null };
   const first = next;
   const plan = todo.map((c) => ({ id: c.id, n: next++ }));

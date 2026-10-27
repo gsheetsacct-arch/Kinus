@@ -887,7 +887,7 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: string[]
                            },
 "next_camper_code":
-{ Args: Record<PropertyKey, never>; Returns: string
+{ Args: { "p_session": string }; Returns: string
                            },
 "normalize_name":
 { Args: { "t": string }; Returns: string

@@ -348,8 +348,21 @@ export function suggestHebrew(current: string, englishName: string, book: NameBo
   const fromField = v ? book.lookup(v) : null;
   const fromNameRaw = englishName.trim() && norm(englishName) !== norm(v) ? book.lookup(englishName) : null;
   const fromName = fromNameRaw ? { ...fromNameRaw, how: `from the English name: ${fromNameRaw.how}` } : null;
+  // only part of the name written ("Zalman" for Shneur Zalman): the whole name's Hebrew, and
+  // never "exact" for the part: it's someone else's whole name
+  if (v && fromField && partOfName(v, englishName)) {
+    if (fromName) return { ...fromName, how: `${fromName.how} (only “${v}” was written)` };
+    return { ...fromField, source: fromField.source === "exact" ? "words" : fromField.source, how: `only “${v}” was written, part of ${englishName.trim()}: ${fromField.how}` };
+  }
   // what the family wrote comes first; the camper's English name only when that finds nothing
   return fromField ?? fromName;
+}
+
+/** Whether `part` is some of the words of `whole`, not all of them ("Zalman" of "Shneur Zalman"). */
+function partOfName(part: string, whole: string): boolean {
+  const p = words(norm(part));
+  const w = words(norm(whole));
+  return p.length > 0 && p.length < w.length && p.every((x) => w.includes(x));
 }
 
 /** Converts letter names typed into a Hebrew field as soon as they're whole ("nun shin" → "נש"). */

@@ -113,9 +113,10 @@ There is no long-running worker. Three mechanisms cover it:
 ## 1.5 Cross-cutting concerns
 
 ### Identity of a camper
-Every camper gets a Kinus-owned, immutable `camper_code` on first import (6 digits,
-last digit a check digit). It is what the barcode encodes and what staff type as a
-fallback. It never changes, even if the export's own ID or the name changes. Matching
+Every camper gets a Kinus-owned `camper_code` on first import: a short number, 0001 and
+up in each session (migration 0037; before it, 6 digits with a check digit, unique across
+sessions). It is what the barcode encodes and what staff type as a fallback. It never
+changes, even if the export's own ID or the name changes. Matching
 on re-import uses the export's ID column when there is one, otherwise a composite
 key; see [doc 4](04-import-and-sync.md).
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { decide, parseScan, cardActions, findScanCode, looksLikeScan } from "../scan";
+import { decide, parseScan, cardActions, findScanCode, looksLikeScan, anyCode } from "../scan";
 import { nextStatus } from "../machine";
 
 describe("decide", () => {
@@ -34,7 +34,21 @@ describe("parseScan", () => {
     expect(parseScan("kn 100016")).toBe("100016");
     expect(parseScan("100016")).toBe("100016");
     expect(parseScan("Levi")).toBeNull();
-    expect(parseScan("KN1000")).toBeNull();
+    expect(parseScan("KN100")).toBeNull();
+  });
+  it("reads the short numbers from tags, keeping their zeros", () => {
+    expect(parseScan("KN0012")).toBe("0012");
+    expect(parseScan("kn 0012")).toBe("0012");
+    expect(parseScan("KN10234")).toBe("10234");
+    // typed alone: maybe the end of a phone number, so it's searched instead
+    expect(parseScan("0012")).toBeNull();
+    expect(findScanCode("0012")).toBeNull();
+    expect(findScanCode("0012", true)).toBe("0012");
+    expect(findScanCode("KN12AB9KN0012")).toBe("0012");
+    expect(anyCode("0012")).toBe("0012");
+    expect(anyCode("KN0012")).toBe("0012");
+    expect(anyCode("100016")).toBe("100016");
+    expect(anyCode("12")).toBeNull();
   });
 });
 

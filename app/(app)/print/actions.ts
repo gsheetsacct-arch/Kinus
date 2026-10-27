@@ -24,7 +24,7 @@ import { dismissLabelUpdates, labelUpdates, refreshPrintedHashes, type LabelUpda
 import { loadMergeSetup, loadPrintCampers } from "@/lib/print/data";
 import { mergeValues } from "@/lib/print/merge";
 import type { Layer, PdfArt, SheetLayout, TemplateSpec, Transform } from "@/lib/print/types";
-import { parseScan } from "@/lib/attendance/scan";
+import { anyCode } from "@/lib/attendance/scan";
 
 const NOT_YOURS = "That's a request for campers outside your part of camp.";
 
@@ -640,8 +640,8 @@ export async function previewValues(
   const supabase = await createClient();
   let id: string | null = null;
   if (who.kind === "code") {
-    const code = parseScan(who.code);
-    if (!code) return { error: "Type a 6-digit camper code." };
+    const code = anyCode(who.code);
+    if (!code) return { error: "Type a camper code (0012)." };
     id = (await supabase.from("campers").select("id").eq("session_id", session.id).eq("camper_code", code).maybeSingle()).data?.id ?? null;
     if (!id) return { error: `No camper ${code} in your area.` };
   } else {

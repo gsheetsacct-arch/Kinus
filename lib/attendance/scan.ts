@@ -21,20 +21,39 @@ export function decide(mode: Exclude<ScanMode, "lookup">, outKind: OutKind, stat
   return { kind: "act", event: "leave", verb: "Checked out · coming back", tone: "out" };
 }
 
-/** Camper code from a scanned barcode or typed text: "KN100016", "kn 100016", "100016". */
+/**
+ * Camper code from a scanned barcode or typed text. Short numbers (0001…) need the tag's "KN"
+ * ("KN0012"): typed alone, four digits may as well be the end of a parent's phone number, so
+ * they're searched instead. The long numbers of older tags read with or without it
+ * ("KN100016", "kn 100016", "100016").
+ */
 export function parseScan(text: string): string | null {
   const t = text.trim().replace(/\s+/g, "");
-  const m = /^(?:KN)?0*(\d{6})$/i.exec(t);
-  return m ? m[1] : null;
+  return /^(?:KN)?0*(\d{6})$/i.exec(t)?.[1] ?? /^KN(\d{4,5})$/i.exec(t)?.[1] ?? null;
 }
 
 /**
  * The code in what a scanner typed, also when junk came first ("KN12AB9KN106518": a damaged
  * read left in the box, then a good scan). Never takes 6 digits out of a longer number.
+ * `camera`: what the camera read is a scan for sure, so a short number counts without "KN".
  */
-export function findScanCode(text: string): string | null {
+export function findScanCode(text: string, camera = false): string | null {
   const t = text.trim().replace(/\s+/g, "");
-  return parseScan(t) ?? /(?:^|\D)(?:KN)?0*(\d{6})$/i.exec(t)?.[1] ?? null;
+  return (
+    parseScan(t) ??
+    /(?:^|\D)(?:KN)?0*(\d{6})$/i.exec(t)?.[1] ??
+    /KN(\d{4,5})$/i.exec(t)?.[1] ??
+    (camera ? (/^(\d{4,5})$/.exec(t)?.[1] ?? null) : null)
+  );
+}
+
+/** A camper code: the short numbers (0012) and the long ones of older tags (100016). */
+export const isCamperCode = (code: string) => /^\d{4,6}$/.test(code);
+
+/** A camper code typed anywhere (a template's preview camper): short or long, "KN" or not. */
+export function anyCode(text: string): string | null {
+  const t = text.trim().replace(/\s+/g, "");
+  return parseScan(t) ?? /^(?:KN)?(\d{4,5})$/i.exec(t)?.[1] ?? null;
 }
 
 /** Looks like a (damaged) tag read rather than a name being typed. */

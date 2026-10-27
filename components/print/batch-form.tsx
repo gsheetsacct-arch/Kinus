@@ -7,6 +7,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { RadioCards } from "@/components/ui/radio-cards";
+import { Segmented } from "@/components/ui/segmented";
 import { BATCH_WHICH_LABELS, type BatchWhichKey } from "@/lib/print/batch-labels";
 import { countBatch, createBatch } from "@/app/(app)/print/actions";
 
@@ -30,7 +31,7 @@ export function BatchForm({ templates, divisions, campLabel, officeTo }: { templ
       live = false;
     };
   }, [template, where, which]);
-  const csv = `/print/export?${new URLSearchParams({ where, which, template })}`;
+  const data = `/print/export?${new URLSearchParams({ where, which, template })}`;
 
   return (
     <ActionForm action={createBatch} className="grid max-w-2xl gap-5 rounded-xl border bg-card p-5 shadow-[var(--shadow-card)]">
@@ -61,22 +62,8 @@ export function BatchForm({ templates, divisions, campLabel, officeTo }: { templ
           ))}
         </Select>
       </Field>
-      <Field
-        label="Which campers"
-        htmlFor="which"
-        hint={
-          which === "changed"
-            ? "Changed means something printed on this label is different now: a moved bunk, a corrected name, a new phone number. Moving things around on the template doesn't count. Labels printed before this option existed count as unchanged."
-            : undefined
-        }
-      >
-        <Select id="which" name="which" value={which} onChange={(e) => setWhich(e.target.value as BatchWhichKey)}>
-          {(Object.keys(BATCH_WHICH_LABELS) as BatchWhichKey[]).map((k) => (
-            <option key={k} value={k}>
-              {BATCH_WHICH_LABELS[k]}
-            </option>
-          ))}
-        </Select>
+      <Field label="Which campers" hint={BATCH_WHICH_LABELS[which].long}>
+        <Segmented name="which" value={which} onChange={setWhich} options={(Object.keys(BATCH_WHICH_LABELS) as BatchWhichKey[]).map((k) => ({ value: k, label: BATCH_WHICH_LABELS[k].short }))} />
       </Field>
       <Field label="What it is and what it's for (optional)" htmlFor="purpose" hint="Shows in the print queue and the office's email, so they know what this batch is.">
         <Input id="purpose" name="purpose" maxLength={200} placeholder="e.g. Luggage tags for the Shabbaton trip, Sunday" />
@@ -105,13 +92,16 @@ export function BatchForm({ templates, divisions, campLabel, officeTo }: { templ
           {count === null ? "Counting…" : count < 0 ? "Couldn't count: try again" : count === 0 ? "No campers match" : `${deliver === "here" ? "Print" : "Email"} ${count * copies} ${count * copies === 1 ? "tag" : "tags"}${copies > 1 ? ` (${count} × ${copies})` : ""}`}
         </Button>
         <Button asChild variant="outline">
-          <a href={csv}>
-            <FileSpreadsheet /> Data for Publisher (CSV)
+          <a href={`${data}&format=xlsx`}>
+            <FileSpreadsheet /> Data in Excel
           </a>
+        </Button>
+        <Button asChild variant="outline">
+          <a href={data}>CSV</a>
         </Button>
       </div>
       <p className="-mt-2 text-xs text-muted-foreground">
-        The CSV has one row per camper with every merge field (FIRST, TSHIRT, DIV…) already converted, for Publisher&apos;s Mailings → Use an existing list.
+        One row per camper with every merge field (FIRST, TSHIRT, DIV…) already converted: for Publisher&apos;s Mailings → Use an existing list, or to work with in Excel.
       </p>
     </ActionForm>
   );

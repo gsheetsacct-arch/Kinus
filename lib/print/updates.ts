@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { loadMergeSetup, loadPrintCampers, toSpec, byBunkThenName } from "./data";
 import { mergeValues } from "./merge";
-import { contentHash, sameContent, templateKeys } from "./content";
+import { contentHash, labelValues, sameContent, templateKeys } from "./content";
 
 /**
  * Labels to print again after a print was done: campers whose details on the label changed
@@ -92,7 +92,8 @@ export async function labelUpdates(sessionId: string, divisionIds: string[] | nu
   const result = used
     .map((t) => {
       const onlyIn = templateDivisionIds(t, campList);
-      const keys = templateKeys(toSpec(t));
+      const spec = toSpec(t);
+      const keys = templateKeys(spec);
       const done = printed.get(t.id)!;
       const waiting = pending.get(t.id) ?? new Set<string>();
       const skip = dismissed[t.id] ?? {};
@@ -103,7 +104,7 @@ export async function labelUpdates(sessionId: string, divisionIds: string[] | nu
       for (const c of full) {
         if (waiting.has(c.id)) continue;
         if (onlyIn && !onlyIn.includes(divisionOf.get(c.id) ?? "")) continue;
-        const vals = values.get(c.id)!;
+        const vals = labelValues(spec, values.get(c.id)!);
         if (skip[c.id] && sameContent(skip[c.id], keys, vals)) continue;
         const was = done.get(c.id);
         if (was) {
@@ -133,10 +134,11 @@ export async function dismissLabelUpdates(update: LabelUpdate, userId: string): 
   if (!ids.length) return;
   const { data: t } = await admin.from("print_templates").select("*").eq("id", update.templateId).single();
   if (!t) return;
-  const keys = templateKeys(toSpec(t));
+  const spec = toSpec(t);
+  const keys = templateKeys(spec);
   const [full, setup, dismissed] = await Promise.all([loadPrintCampers(admin, ids), loadMergeSetup(admin), loadDismissed()]);
   const forTemplate = { ...(dismissed[update.templateId] ?? {}) };
-  for (const c of full) forTemplate[c.id] = contentHash(keys, mergeValues(c, setup.fields, setup.maps));
+  for (const c of full) forTemplate[c.id] = contentHash(keys, labelValues(spec, mergeValues(c, setup.fields, setup.maps)));
   const { error } = await admin
     .from("settings")
     .upsert({ key: `label_updates_dismissed:${update.templateId}`, value: forTemplate, updated_by: userId, updated_at: new Date().toISOString() });

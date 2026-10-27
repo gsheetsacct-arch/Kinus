@@ -118,6 +118,7 @@ export type CamperIndexRow = {
   x?: 1; // not in the latest export
   a?: 1; // archived
   p?: string[]; // parent phone numbers, for search
+  z?: number; // buzzer number, for search
 };
 
 /** Just what the campers page shows and searches, for a camp's divisions (null = all). */
@@ -130,7 +131,7 @@ export async function listCamperIndex(
     fetchAll((from, to) => {
       let q = supabase
         .from("campers_visible")
-        .select("id, display_name, last_name, camper_code, division_id, bunk_id, grade, status, has_medical_flag, in_latest_import, archived_at")
+        .select("id, display_name, last_name, camper_code, division_id, bunk_id, grade, status, has_medical_flag, in_latest_import, archived_at, current_buzzer_number")
         .eq("session_id", f.sessionId);
       if (!f.includeArchived) q = q.is("archived_at", null);
       if (f.divisionIds) q = q.in("division_id", f.divisionIds);
@@ -155,6 +156,7 @@ export async function listCamperIndex(
     if (c.has_medical_flag) r.m = 1;
     if (c.in_latest_import === false) r.x = 1;
     if (c.archived_at) r.a = 1;
+    if (c.current_buzzer_number !== null && c.current_buzzer_number !== undefined) r.z = c.current_buzzer_number;
     const p = byCamper.get(c.id!);
     if (p) r.p = p;
     return r;

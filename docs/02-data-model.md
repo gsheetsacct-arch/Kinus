@@ -73,8 +73,10 @@ merge).
 ### campers
 The roster record. Important columns:
 
-- `camper_code` — Kinus's own 6-digit code (5-digit sequence + Luhn check digit),
-  assigned once, printed in the barcode. Unique across all sessions.
+- `camper_code` — Kinus's own number, 4 digits from 0001 (5 past 9999) in each session:
+  one more than the session's highest (trigger `campers_set_code`), assigned once, printed
+  in the barcode. Unique within the session. Campers from before migration 0037 keep their
+  6 digits (5-digit sequence + Luhn check digit); scanning reads both.
 - `source_id` — the export's `students.id`. Unique per session.
 - `first_name`, `last_name`, `display_name` (generated), `name_normalized`
   (generated; accent- and niqqud-insensitive, for search).
@@ -176,7 +178,9 @@ is browsing by bunk, which is two taps away.
 
 ## 2.5 Identifiers in barcodes
 
-Barcode payload: `KN` + `camper_code`, e.g. `KN104275`. The prefix lets the scan
-listener distinguish a camper tag from anything else a scanner might read. Symbology: Code 128 on tags (dense, reads well with
+Barcode payload: `KN` + `camper_code`, e.g. `KN0012` (older tags `KN104275`). The prefix lets the scan
+listener distinguish a camper tag from anything else a scanner might read. A short number
+typed without it is searched, not acted on (it may be the end of a parent's phone number);
+the camera takes it either way. Symbology: Code 128 on tags (dense, reads well with
 cheap scanners), optionally a QR with the same payload for phone cameras in poor
 light. Both carry the same payload so the handler is the same.

@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { appUrl } from "@/lib/auth/app-url";
-import { decide, type OutKind } from "@/lib/attendance/scan";
+import { decide, isCamperCode, type OutKind } from "@/lib/attendance/scan";
 import { STATUS_LABEL, type AttendanceEventType, type CamperStatus } from "@/lib/attendance/machine";
 import { effectiveLevel, visibleFieldGroups } from "@/lib/auth/permissions";
 import { createPrintJob, officeEmail, processPrintJob } from "@/lib/print/jobs";
@@ -270,7 +270,7 @@ export type CodeLookup =
 export async function lookupCode(code: string): Promise<CodeLookup> {
   await requireUser();
   const session = await getActiveSession();
-  if (!session || !/^\d{6}$/.test(code)) return { found: false, message: "No camper has this code." };
+  if (!session || !isCamperCode(code)) return { found: false, message: "No camper has this code." };
   const supabase = await createClient();
   const { data: mine } = await supabase
     .from("campers")

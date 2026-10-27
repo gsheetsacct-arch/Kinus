@@ -7,7 +7,7 @@ import { mergeValues } from "./merge";
 import { htmlToPdf, type FitNotes } from "./pdf";
 import { sendEmail } from "./email";
 import { backgroundDataUrl, byBunkThenName, imageDataUrls, loadMergeSetup, loadPrintCampers, loadPrintCampersBrief, toSpec } from "./data";
-import { contentHash, sameContent, templateKeys } from "./content";
+import { contentHash, labelValues, sameContent, templateKeys } from "./content";
 import type { TemplateSpec } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 import { isProgressMark, RETRY_MARK, STARTED_MARK } from "./labels";
@@ -29,14 +29,14 @@ export async function changedSince(db: Parameters<typeof loadPrintCampers>[0], s
   if (!printed.size) return new Set();
   const keys = templateKeys(spec);
   const [campers, setup] = await Promise.all([loadPrintCampers(db, [...printed.keys()]), loadMergeSetup(db)]);
-  return new Set(campers.filter((c) => !sameContent(printed.get(c.id)!, keys, mergeValues(c, setup.fields, setup.maps))).map((c) => c.id));
+  return new Set(campers.filter((c) => !sameContent(printed.get(c.id)!, keys, labelValues(spec, mergeValues(c, setup.fields, setup.maps)))).map((c) => c.id));
 }
 
 /** What each camper's label says right now, as fingerprints (see contentHash). */
 export async function labelHashes(db: Parameters<typeof loadPrintCampers>[0], spec: TemplateSpec, camperIds: string[]): Promise<Map<string, string>> {
   const keys = templateKeys(spec);
   const [campers, setup] = await Promise.all([loadPrintCampers(db, camperIds), loadMergeSetup(db)]);
-  return new Map(campers.map((c) => [c.id, contentHash(keys, mergeValues(c, setup.fields, setup.maps))]));
+  return new Map(campers.map((c) => [c.id, contentHash(keys, labelValues(spec, mergeValues(c, setup.fields, setup.maps)))]));
 }
 
 export async function officeEmail(): Promise<{ to: string; cc: string[] }> {
@@ -67,10 +67,14 @@ export async function createPrintJob(
     const other = checked.flatMap(({ data }) => data ?? []).find((c) => !c.division_id || !divisions.includes(c.division_id));
     if (other) throw new Error(`${template.name} is only for ${camps.join(" and ")}${checked.flatMap(({ data }) => data ?? []).length > 1 ? `, and ${other.first_name} ${other.last_name} isn't in it` : ""}.`);
   }
-  // a tag with the buzzer number: whoever has none yet gets the next ones now (kept for good)
-  if (JSON.stringify(template.layers ?? []).includes("BUZZER")) {
-    const { assignBuzzers } = await import("@/lib/buzzers");
-    await assignBuzzers(opts.sessionId, ids);
+  // a tag with the buzzer number: everyone on it needs one first. Numbers are given on purpose
+  // (Print → Batch, in division/bunk/name order), never by printing, and kept for good.
+  if (JSON.stringify(toSpec(template)).includes("BUZZER")) {
+    const without = (await Promise.all(chunks.map((chunk) => admin.from("campers").select("first_name, last_name").in("id", chunk).is("current_buzzer_number", null)))).flatMap(({ data }) => data ?? []);
+    if (without.length)
+      throw new Error(
+        `${without.length === 1 ? `${without[0].first_name} ${without[0].last_name} has` : `${without.length} campers (${without.slice(0, 3).map((c) => `${c.first_name} ${c.last_name}`).join(", ")}${without.length > 3 ? "…" : ""}) have`} no buzzer number yet. A director gives the new ones their numbers on Print → Batch (Buzzer numbers), then print this.`,
+      );
   }
   // what each label says now (for "changed since printed"), read while the request is saved
   const hashing = labelHashes(admin, toSpec(template), ids);

@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { matchScore, searchEntry } from "@/lib/search";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Check, Delete, Save, Search, Undo2 } from "lucide-react";
@@ -74,7 +75,7 @@ export function NameFixer({ rows }: { rows: NameRow[] }) {
     (r) =>
       r.state === tab &&
       (!division || (r.divisionName ?? "No division") === division) &&
-      (!needle || `${r.name} ${r.registration} ${r.fix?.value ?? ""}`.toLowerCase().includes(needle)) &&
+      (!needle || `${r.name} ${r.registration} ${r.fix?.value ?? ""}`.toLowerCase().includes(needle) || matchScore(searchEntry(r.name, ""), q) > 0) &&
       (tab === "fixed" || !source || sourceOf(r) === source),
   );
   // how many of each kind of suggestion, in this tab and division

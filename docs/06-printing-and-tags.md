@@ -186,10 +186,12 @@ A canvas of the tag at real proportions (Print → Templates):
   usual (tested: every sticker on a 30-up sheet reads on its own, sharp and blurred).
 - **Buzzer numbers** (`{{BUZZER}}`, always there; camper field "Buzzer"): one per camper for
   the session, printed 001 and up, kept on the camper (`campers.current_buzzer_number`, no
-  migration). Requesting a tag that shows it gives whoever has none the next numbers, in
-  division, bunk and name order (`lib/buzzers.ts`), before the request is saved; Print a batch
-  has "Number the N without one" (directors over all of camp). Numbers never change once
-  given. The camper card shows it (edit level: Change / Take off; a number another camper has
+  migration). Numbers are given on purpose, never by printing: Print a batch has "Number the
+  N without one" (directors over all of camp), which numbers whoever has none in division,
+  bunk and name order after the highest so far (`lib/buzzers.ts`). Numbers never change once
+  given, so a bunk move reprints the label (it changed) with the same number, and new campers
+  get the next numbers. A tag that shows it is refused for campers without a number yet
+  (named in the message). The camper card shows it (edit level: Change / Take off; a number another camper has
   is refused). Searching a number (7, 007) finds whoever has that buzzer. A final check-out
   frees the buzzer (as before).
 - **Curved text** ("Shape: Curved, top / Curved, bottom"; `curve`, `arc`): the text runs

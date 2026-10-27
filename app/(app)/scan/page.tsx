@@ -21,7 +21,7 @@ export default async function ScanPage() {
   const supabase = await createClient();
   const [rows, tree, { data: templates }] = await Promise.all([
     fetchAll((from, to) =>
-      supabase.from("campers").select("id, camper_code, first_name, last_name, division_id, bunk_id, status").eq("session_id", session.id).is("archived_at", null).order("id").range(from, to),
+      supabase.from("campers").select("id, camper_code, first_name, last_name, division_id, bunk_id, status, current_buzzer_number").eq("session_id", session.id).is("archived_at", null).order("id").range(from, to),
     ),
     loadAreaTree(supabase, session.id),
     loadCardTemplates(supabase).then((data) => ({ data })),
@@ -30,7 +30,7 @@ export default async function ScanPage() {
   const roster: RosterEntry[] = rows.map((c) => {
     const d = c.division_id ? div.get(c.division_id) : undefined;
     const b = d?.bunks.find((x) => x.id === c.bunk_id);
-    return { id: c.id, code: c.camper_code, name: `${c.first_name} ${c.last_name}`, first: c.first_name, last: c.last_name, where: [d?.name, b?.name ?? "no bunk"].filter(Boolean).join(" · "), status: c.status, div: c.division_id };
+    return { id: c.id, code: c.camper_code, name: `${c.first_name} ${c.last_name}`, first: c.first_name, last: c.last_name, where: [d?.name, b?.name ?? "no bunk"].filter(Boolean).join(" · "), status: c.status, div: c.division_id, buzzer: c.current_buzzer_number };
   });
   // the divisions this person checks in (more than one: they pick which line they're at)
   // (only the camp chosen at the top of the menu: American, Hebrew…)

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { normalizeName } from "@/lib/import/normalize";
+import { matchScore, searchEntry } from "@/lib/search";
 import { findScanCode, looksLikeScan, type ScanMode } from "@/lib/attendance/scan";
 import type { CamperStatus } from "@/lib/attendance/machine";
 import { cn, formatTime } from "@/lib/utils";
@@ -16,7 +17,7 @@ import { CamperCard, type TemplateButton } from "./camper-card";
 import { Camera } from "./camera";
 import { feedback } from "./feedback";
 
-export type RosterEntry = { id: string; code: string; name: string; first: string; last: string; where: string; status: CamperStatus; div: string | null };
+export type RosterEntry = { id: string; code: string; name: string; first: string; last: string; where: string; status: CamperStatus; div: string | null; buzzer?: number | null };
 type Line = { id: string; name: string; color: string | null };
 const ANY = "any";
 type Flash = { tone: "in" | "out" | "home" | "already" | "error"; title: string; detail: string };
@@ -73,7 +74,8 @@ export function Scanner({
   }, []);
   React.useEffect(focusBox, [focusBox]);
   const byCode = React.useMemo(() => new Map([...roster, ...extra].map((r) => [r.code, r])), [roster, extra]);
-  const index = React.useMemo(() => [...roster, ...extra].map((r) => ({ r, n: normalizeName(`${r.first} ${r.last}`), f: normalizeName(r.first), l: normalizeName(r.last) })), [roster, extra]);
+  // name in any order, code; similar names and misspellings too (lib/search)
+  const index = React.useMemo(() => [...roster, ...extra].map((r) => ({ r, e: searchEntry(`${r.first} ${r.last}`, r.code, [], r.buzzer ?? null) })), [roster, extra]);
 
   // remember choices on this device
   React.useEffect(() => {
@@ -170,8 +172,8 @@ export function Scanner({
   );
 
   const handleText = React.useCallback(
-    (text: string, method: "scan" | "manual") => {
-      const code = findScanCode(text);
+    (text: string, method: "scan" | "manual", camera = false) => {
+      const code = findScanCode(text, camera);
       if (!code) return false;
       setQ("");
       const r = byCode.get(code);
@@ -199,7 +201,7 @@ export function Scanner({
     },
     [byCode, act, show, final],
   );
-  const onCameraCode = React.useCallback((t: string) => void handleText(t, "scan"), [handleText]);
+  const onCameraCode = React.useCallback((t: string) => void handleText(t, "scan", true), [handleText]);
 
   // USB/Bluetooth scanners type fast and press Enter; catch them even when the box isn't focused.
   // Gaps are measured with the keys' own timestamps: a busy phone (camera decoding) delivers
@@ -229,10 +231,13 @@ export function Scanner({
   const allMatches =
     needle.length >= 2 && !findScanCode(q)
       ? index
-          .filter(({ r, n, f, l }) => n.includes(needle) || f.startsWith(needle) || l.startsWith(needle) || r.code.startsWith(q.trim()))
-          .sort((a, b) => Number(b.n.startsWith(needle)) - Number(a.n.startsWith(needle)) || a.r.last.localeCompare(b.r.last))
+          .map(({ r, e }) => ({ r, score: matchScore(e, q) }))
+          .filter((x) => x.score > 0)
+          .sort((a, b) => b.score - a.score || a.r.last.localeCompare(b.r.last))
       : [];
   const matches = allMatches.slice(0, MAX_RESULTS).map((x) => x.r);
+  // a name that's only similar (spelled differently) is never checked in by Enter: tap it
+  const similar = new Set(allMatches.filter((x) => x.score < 1).map((x) => x.r.id));
 
   // Stop / Start: just for now
   const setCameraOn = (v: boolean) => {
@@ -319,7 +324,7 @@ export function Scanner({
               if (e.key !== "Enter") return;
               e.preventDefault();
               if (handleText(q, "scan")) return;
-              if (matches.length === 1) act(matches[0], "manual");
+              if (matches.length === 1 && !similar.has(matches[0].id)) act(matches[0], "manual");
               else if (!matches.length && looksLikeScan(q)) unreadable(q);
             }}
             placeholder={final ? `Scan a tag or type any camper in ${final.campName}` : "Scan a tag or type a name"}
@@ -338,6 +343,7 @@ export function Scanner({
                     {r.name}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground" dir="auto">
+                    {similar.has(r.id) && <span className="mr-1 rounded bg-muted px-1.5 py-0.5 font-medium">Similar name</span>}
                     {multi && line && line !== ANY && r.div !== line && <span className="mr-1 rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">Other line</span>}
                     {r.where} · {r.code}
                   </span>
