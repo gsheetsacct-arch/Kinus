@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { appUrl } from "@/lib/auth/app-url";
-import { decide, type OutKind } from "@/lib/attendance/scan";
+import { decide, isCamperCode, type OutKind } from "@/lib/attendance/scan";
 import { STATUS_LABEL, type AttendanceEventType, type CamperStatus } from "@/lib/attendance/machine";
 import { effectiveLevel, visibleFieldGroups } from "@/lib/auth/permissions";
 import { createPrintJob, officeEmail, processPrintJob } from "@/lib/print/jobs";
@@ -14,7 +14,6 @@ import { camperCampName, forCamp, templateCamps } from "@/lib/print/template-cam
 import { canUsePrintArea } from "@/lib/auth/permissions";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { formatWhen } from "@/lib/utils";
-import { currentCode, isCamperCode } from "@/lib/camper-codes";
 
 export type ScanOutcome =
   | { ok: true; kind: "act"; camperId: string; name: string; status: CamperStatus; eventId: string; verb: string; tone: "in" | "out" | "home"; autoPrinted: string[] }
@@ -268,12 +267,10 @@ export type CodeLookup =
  * A code the Check in page doesn't have: a walk-in added after the page loaded (then it's
  * returned and checked in), or a child at the wrong line (then say which line).
  */
-export async function lookupCode(read: string): Promise<CodeLookup> {
+export async function lookupCode(code: string): Promise<CodeLookup> {
   await requireUser();
   const session = await getActiveSession();
-  if (!session || !isCamperCode(read)) return { found: false, message: "No camper has this code." };
-  // a tag printed before the short numbers: whoever had that long one
-  const code = await currentCode(session.id, read);
+  if (!session || !isCamperCode(code)) return { found: false, message: "No camper has this code." };
   const supabase = await createClient();
   const { data: mine } = await supabase
     .from("campers")

@@ -1,44 +1,40 @@
 -- =============================================================================
--- Kinus — 0037: short camper numbers (0001, 0002…)
---   * New campers get the next short number: 4 digits from 0001 (5 past 9999), never one
---     a camper had or has. Numbers carry on from session to session, so last year's tag can
---     never check in a different child.
---   * campers.former_code: the long number (100016…) a camper had before getting a short
---     one. Tags already printed with it still scan and look up.
---   * renumber_camper_codes(ids): gives these campers (in this order) short numbers, keeping
---     their long ones as former_code. Only campers that still have a long number; only from
---     the server (Print → Batch, directors over all of camp), in division, bunk, name order.
+-- Kinus — 0037: short camper numbers, 0001 and up in each session
+--   * A new camper gets the session's next number: 4 digits from 0001 (5 past 9999), one
+--     more than the highest in the session (archived campers keep theirs). Numbers are
+--     unique within a session (no longer across sessions): every session starts at 0001.
+--   * Campers from before keep their long numbers (100016…); a session whose campers are
+--     deleted and imported again starts at 0001.
 -- =============================================================================
 
-alter table campers add column if not exists former_code text;
-comment on column campers.former_code is 'The long camper code (100016…) before the short number; old tags still scan.';
-create index if not exists campers_former_code_idx on campers (former_code) where former_code is not null;
-grant select (former_code) on campers to authenticated;
+-- (safe to run again, also over the first version of this migration)
+drop function if exists renumber_camper_codes(uuid[]);
+alter table campers drop column if exists former_code;
+drop sequence if exists camper_number_seq;
 
-create sequence if not exists camper_number_seq start 1;
+alter table campers drop constraint if exists campers_camper_code_key;
+create unique index if not exists campers_session_code_key on campers (session_id, camper_code);
+alter table campers alter column camper_code drop default;
+drop function if exists next_camper_code();
 
--- as the owner: sees every camper (whatever the inserting user may see) and the sequence
-create or replace function next_camper_code() returns text
+-- as the owner: sees every camper of the session, whatever the inserting user may see
+create or replace function next_camper_code(p_session uuid) returns text
 language plpgsql security definer set search_path = public as $$
-declare c text;
+declare n int;
 begin
-  loop
-    c := lpad(nextval('camper_number_seq')::text, 4, '0');
-    exit when not exists (select 1 from campers where camper_code = c or former_code = c);
-  end loop;
-  return c;
+  -- one at a time per session (two imports at once never get the same number)
+  perform pg_advisory_xact_lock(hashtext('camper_code:' || p_session::text));
+  select coalesce(max(camper_code::int), 0) + 1 into n
+    from campers where session_id = p_session and camper_code ~ '^\d{4,5}$';
+  return lpad(n::text, 4, '0');
 end $$;
 
-create or replace function renumber_camper_codes(p_ids uuid[]) returns int
-language plpgsql security definer set search_path = public as $$
-declare n int := 0; i uuid;
+create or replace function set_camper_code() returns trigger
+language plpgsql as $$
 begin
-  foreach i in array p_ids loop
-    update campers set former_code = camper_code, camper_code = next_camper_code()
-     where id = i and former_code is null and length(camper_code) >= 6;
-    if found then n := n + 1; end if;
-  end loop;
-  return n;
+  if new.camper_code is null or new.camper_code = '' then new.camper_code := next_camper_code(new.session_id); end if;
+  return new;
 end $$;
-revoke execute on function renumber_camper_codes(uuid[]) from public, anon, authenticated;
-grant execute on function renumber_camper_codes(uuid[]) to service_role;
+
+drop trigger if exists campers_set_code on campers;
+create trigger campers_set_code before insert on campers for each row execute function set_camper_code();

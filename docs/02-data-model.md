@@ -73,12 +73,10 @@ merge).
 ### campers
 The roster record. Important columns:
 
-- `camper_code` — Kinus's own number, 4 digits from 0001 (5 past 9999), assigned once,
-  printed in the barcode. Unique across all sessions (numbers carry on from one session to
-  the next, so an old tag never reads as another child). Campers from before migration
-  0037 had 6 digits (5-digit sequence + Luhn check digit); "Give short numbers" on Print a
-  batch renumbers them in division, bunk, name order and keeps the old one in
-  `former_code`, which scanning still finds (`lib/camper-codes.ts`).
+- `camper_code` — Kinus's own number, 4 digits from 0001 (5 past 9999) in each session:
+  one more than the session's highest (trigger `campers_set_code`), assigned once, printed
+  in the barcode. Unique within the session. Campers from before migration 0037 keep their
+  6 digits (5-digit sequence + Luhn check digit); scanning reads both.
 - `source_id` — the export's `students.id`. Unique per session.
 - `first_name`, `last_name`, `display_name` (generated), `name_normalized`
   (generated; accent- and niqqud-insensitive, for search).

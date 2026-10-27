@@ -47,6 +47,9 @@ export function findScanCode(text: string, camera = false): string | null {
   );
 }
 
+/** A camper code: the short numbers (0012) and the long ones of older tags (100016). */
+export const isCamperCode = (code: string) => /^\d{4,6}$/.test(code);
+
 /** A camper code typed anywhere (a template's preview camper): short or long, "KN" or not. */
 export function anyCode(text: string): string | null {
   const t = text.trim().replace(/\s+/g, "");

@@ -1,9 +1,25 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { byPlaceThenName } from "@/lib/camper-codes";
+import { compareBunkNames } from "@/lib/bunk-order";
 import { formatBuzzer } from "@/lib/buzzer-format";
 
 export { formatBuzzer };
+
+type Place = { name: string; sort_order: number | null } | null;
+
+/** Printing order: division, bunk (Alef, Beis… / 1, 2… 10), last name, first name. */
+export function byPlaceThenName(a: { first_name: string; last_name: string; divisions: unknown; bunks: unknown }, b: typeof a): number {
+  const [da, db] = [a.divisions as Place, b.divisions as Place];
+  const [ba, bb] = [a.bunks as Place, b.bunks as Place];
+  return (
+    (da?.sort_order ?? 9999) - (db?.sort_order ?? 9999) ||
+    (da?.name ?? "").localeCompare(db?.name ?? "") ||
+    (ba?.sort_order ?? 9999) - (bb?.sort_order ?? 9999) ||
+    compareBunkNames(ba?.name ?? "", bb?.name ?? "") ||
+    a.last_name.localeCompare(b.last_name) ||
+    a.first_name.localeCompare(b.first_name)
+  );
+}
 
 /**
  * Buzzer (pager) numbers: one per camper for the session, 001 and up, kept on the camper
