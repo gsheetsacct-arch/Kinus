@@ -1,28 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { connectorUser } from "@/lib/print/design-connectors";
-import { loadUserById } from "@/lib/auth/user-by-id";
-import { canDesign } from "@/lib/print/designers";
-import { designServer } from "@/lib/print/design-mcp";
+import { designRequest } from "@/lib/print/design-mcp-handler";
 
 export const maxDuration = 60;
 
 /**
- * The design connector (MCP over HTTP): someone's Claude designs Kinus templates. The link's
- * secret part says whose it is (Templates → Design with Claude); it works only while that
- * person may edit templates. Each request stands alone (no sessions to keep).
+ * The design connector with a personal link (Templates → Design with Claude → Make a link):
+ * the link's secret part says whose it is. /api/mcp is the same with sign-in instead.
  */
 async function handle(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const userId = await connectorUser(token);
-  const user = userId ? await loadUserById(userId) : null;
-  if (!user) return NextResponse.json({ error: "This design link isn't valid any more. Make a new one in Kinus: Print → Templates → Design with Claude." }, { status: 401 });
-  if (!(await canDesign(user))) return NextResponse.json({ error: `${user.fullName} can't edit templates any more, so this link doesn't work.` }, { status: 403 });
-  const base = (process.env.APP_URL || request.nextUrl.origin).replace(/\/+$/, "");
-  const server = designServer(user, base);
-  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-  await server.connect(transport);
-  return transport.handleRequest(request);
+  return designRequest(request, token, (error) => NextResponse.json({ error }, { status: 401 }));
 }
 
 export { handle as GET, handle as POST, handle as DELETE };

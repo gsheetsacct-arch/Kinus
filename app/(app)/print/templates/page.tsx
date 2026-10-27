@@ -14,6 +14,7 @@ import { STAFF_ROLES } from "@/lib/labels";
 import { DesignersBox } from "@/components/print/designers-box";
 import { FontsBox } from "@/components/print/fonts-box";
 import { ClaudeBox } from "@/components/print/claude-box";
+import { appUrl } from "@/lib/auth/app-url";
 import { connectorsOf } from "@/lib/print/design-connectors";
 import { customFontLinks, loadCustomFonts } from "@/lib/print/custom-fonts";
 import { customFamily } from "@/lib/print/font-families";
@@ -111,7 +112,7 @@ export default async function TemplatesPage({ searchParams }: { searchParams: Pr
       {!showRetired && (
         <div className="mt-8 space-y-6">
           <style dangerouslySetInnerHTML={{ __html: customFontLinks(fonts) }} />
-          <ClaudeBox links={links} />
+          <ClaudeBox links={links} connector={`${await appUrl()}/api/mcp`} />
           <FontsBox fonts={fonts.map((f) => ({ id: f.id, name: f.name, family: customFamily(f.id), files: f.files.map(({ weight, italic }) => ({ weight, italic })) }))} />
           {isAdmin(user) && <DesignersBox designers={designers} staff={allowable} />}
         </div>

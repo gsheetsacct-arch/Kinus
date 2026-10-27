@@ -8,10 +8,11 @@ import { createDesignLink, removeDesignLink } from "@/app/(app)/print/actions";
 import { formatDateTime } from "@/lib/utils";
 
 /**
- * Design with Claude: a personal link that connects Claude (claude.ai, the Claude app or
- * Claude Code) to Kinus, so it can read, design and preview templates here.
+ * Design with Claude: connects Claude (claude.ai, the Claude app or Claude Code) to Kinus, so it
+ * can read, design and preview templates here. One address for everyone, where each person
+ * signs in to Kinus (what an organization adds to Claude once), or a personal link.
  */
-export function ClaudeBox({ links }: { links: { id: string; label: string; createdAt: string; usedAt?: string }[] }) {
+export function ClaudeBox({ links, connector }: { links: { id: string; label: string; createdAt: string; usedAt?: string }[]; connector: string }) {
   const [label, setLabel] = React.useState("");
   const [url, setUrl] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
@@ -40,6 +41,22 @@ export function ClaudeBox({ links }: { links: { id: string; label: string; creat
           camper&apos;s name fits. It works as you, and only on templates.
         </p>
       </div>
+
+      <div className="space-y-2 rounded-lg border p-3 text-sm">
+        <p className="font-medium">The Kinus connector: one address for everyone</p>
+        <div className="flex gap-2">
+          <Input readOnly value={connector} className="font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+          <Button size="sm" variant="outline" onClick={() => void navigator.clipboard.writeText(connector).then(() => toast.success("Copied."), () => undefined)}>
+            <Copy /> Copy
+          </Button>
+        </div>
+        <p className="text-muted-foreground">
+          A Claude organization (Team or Enterprise): an owner adds it once, under Organization settings → Connectors → Add custom connector, named “Kinus”. Then each person opens
+          Settings → Connectors, clicks Connect next to Kinus and signs in here with their own Kinus account. Personal Claude: add it the same way under Settings → Connectors.
+          Anyone who can edit templates can connect; disconnecting is Remove below.
+        </p>
+      </div>
+      <p className="text-sm text-muted-foreground">Or a personal link, with the sign-in built in (for Claude Code, or where you can&apos;t sign in):</p>
 
       {url ? (
         <div className="space-y-3 rounded-lg border border-primary/30 bg-primary-soft/30 p-3 text-sm">

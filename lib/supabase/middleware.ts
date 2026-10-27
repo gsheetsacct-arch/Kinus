@@ -2,8 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { authRedirect } from "@/lib/auth/redirects";
 
-// /api/mcp: the design connector, reached by Claude with a link of its own (no sign-in cookie)
-const PUBLIC_PATHS = ["/login", "/no-access", "/auth", "/set-password", "/api/webhooks", "/api/cron", "/api/mcp", "/health"];
+// /api/mcp: the design connector, reached by Claude with a link of its own or its sign-in
+// (/api/oauth, /.well-known: no sign-in cookie; the page where people allow it needs one)
+const PUBLIC_PATHS = ["/login", "/no-access", "/auth", "/set-password", "/api/webhooks", "/api/cron", "/api/mcp", "/api/oauth", "/.well-known", "/health"];
 
 export async function updateSession(request: NextRequest) {
   const url = new URL(request.nextUrl.pathname + request.nextUrl.search, `${request.nextUrl.protocol}//${request.headers.get("host") ?? request.nextUrl.host}`);
@@ -35,7 +36,9 @@ export async function updateSession(request: NextRequest) {
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("next", path);
+    // back to the same page after signing in, with what it was asked (Claude's sign-in page)
+    url.search = "";
+    url.searchParams.set("next", path + request.nextUrl.search);
     return NextResponse.redirect(url);
   }
   // Signed-in people on /login are sent on by the page itself: only the browser can
