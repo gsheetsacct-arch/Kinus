@@ -24,10 +24,11 @@ async function save(list: DesignConnector[], by: string | null) {
 }
 
 /** A new link for this person (the secret part is returned once, never stored). */
-export async function createConnector(userId: string, label: string): Promise<{ id: string; token: string }> {
+export async function createConnector(userId: string, label: string, opts: { replace?: boolean } = {}): Promise<{ id: string; token: string }> {
   const token = `kd_${randomBytes(32).toString("base64url")}`;
   const id = randomBytes(6).toString("hex");
-  const list = await load();
+  // connecting again (signing in from Claude): the new link takes the place of the last one
+  const list = (await load()).filter((c) => !(opts.replace && c.userId === userId && c.label === label.trim().slice(0, 60)));
   if (list.filter((c) => c.userId === userId).length >= 10) throw new Error("That's 10 links already: remove one you don't use first.");
   list.push({ id, hash: sha(token), userId, label: label.trim().slice(0, 60) || "Claude", createdAt: new Date().toISOString() });
   await save(list, userId);

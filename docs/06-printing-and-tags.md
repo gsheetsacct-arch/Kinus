@@ -266,9 +266,15 @@ A canvas of the tag at real proportions (Print → Templates):
   templates bucket (`fonts/…`), the list in settings (`custom_fonts`), so no database change.
   A part uses one as `font: "custom:<id>"` (line height 1.4, so tall letters show whole). Check
   the font's licence allows embedding in printed documents.
-- **Design with Claude** (Templates → Design with Claude): a personal link connects someone's
-  Claude to Kinus (an MCP server at `/api/mcp/<link>`; claude.ai / the Claude app: Settings →
-  Connectors → Add custom connector; Claude Code: `claude mcp add --transport http kinus <link>`).
+- **Design with Claude** (Templates → Design with Claude) connects someone's Claude to Kinus,
+  an MCP server, two ways. **One address for everyone**, `/api/mcp`: a Claude organization's
+  owner adds it once as a custom connector, and each person clicks Connect and signs in to
+  Kinus (OAuth 2.1 with PKCE, `lib/oauth.ts`: Claude registers itself at `/api/oauth/register`,
+  only with Claude's own return addresses; `/oauth/authorize` shows what it may do and asks to
+  allow it; `/api/oauth/token` hands Claude a design link of that person, listed as "Claude
+  (connected)" and removable like any link; nothing new is stored: registrations and codes
+  are signed). Or **a personal link**, `/api/mcp/<link>` (claude.ai / the Claude app:
+  Settings → Connectors → Add custom connector; Claude Code: `claude mcp add --transport http kinus <link>`).
   Claude can list and read templates, list fields, fonts and label stock, save templates (the
   same checks as the editor, `lib/print/template-store.ts`), upload pictures (or a whole-tag
   background) and fonts, see a picture of the tag exactly as it prints (`preview_template`,
