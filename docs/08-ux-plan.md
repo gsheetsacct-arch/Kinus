@@ -13,8 +13,8 @@
    the whole layout. Hebrew and French sort naturally within their divisions.
 5. **No training needed.** Role-based navigation shows a counselor three things;
    an admin sees everything. Empty states explain what to do next.
-6. **Loud feedback, quiet errors.** Beep + vibration + full-screen flash on a
-   successful scan; errors are explicit sentences ("Already checked in by Rivky at
+6. **Loud feedback, quiet errors.** Beep + vibration + a coloured result strip
+   (and border) on a successful scan, never covering the camera or the scan box; errors are explicit sentences ("Already checked in by Rivky at
    9:10"), never codes.
 7. **Undo over confirm.** Fast actions are reversible for 6 seconds instead of
    asking "Are you sure?". Only irreversible or bulk actions confirm.
@@ -73,9 +73,10 @@ Described in doc 5. Layout, portrait phone:
 │       ● Léa Gérard 9:11 IN │
 └────────────────────────────┘
 ```
-Every mode is one scan. In Check in / Check out the screen flashes full-screen
-(green for in, blue for out) with the name and the action in words, beeps, and
-offers Undo for 6 s. In Lookup the camper card slides up as a bottom sheet
+Every mode is one scan. In Check in / Check out a strip just above the scan box turns the
+result's colour (green for in, amber for out) with the name and the action in words, the
+scanner's border flashes the same colour, it beeps, and "Just now" offers Undo. Nothing covers
+the camera or the box, so the next tag can be scanned straight away. In Lookup the camper card slides up as a bottom sheet
 (doc 5.3) with the action buttons and the print row.
 
 States: camera permission denied (shows how to enable, search still works);
