@@ -1,0 +1,35 @@
+name: DB → apply migrations
+# Runs the named migration files against the production database, each in one transaction
+# (all of it or none), stopping at the first error. For a database whose migrations were run
+# by hand in the SQL editor (no migration history, so "supabase db push" would start again
+# from 0001). The files are written to be safe to run again.
+# Actions → "DB → apply migrations" → Run workflow, with the file names.
+on:
+  workflow_dispatch:
+    inputs:
+      files:
+        description: "Migration files, separated by spaces (from supabase/migrations)"
+        required: true
+        default: "0037_short_camper_numbers.sql 0038_update_signups.sql"
+        type: string
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          FILES: ${{ inputs.files }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then echo "::error::Add the SUPABASE_DB_URL secret (Supabase → Connect → Direct connection URI, with the password)."; exit 1; fi
+          for f in $FILES; do
+            case "$f" in *[!A-Za-z0-9_.-]*) echo "::error::Not a migration file name: $f"; exit 1;; esac
+            p="supabase/migrations/$f"
+            [ -f "$p" ] || { echo "::error::No such migration: $f"; exit 1; }
+            echo "== $f"
+            psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 --single-transaction -q -f "$p"
+          done
+          psql "$SUPABASE_DB_URL" -qc "notify pgrst, 'reload schema'"
+          echo "Done."
