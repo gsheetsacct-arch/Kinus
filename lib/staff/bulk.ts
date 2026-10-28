@@ -2,7 +2,20 @@ import type { AccessLevel, StaffRole } from "@/lib/auth/permissions";
 import type { AreaTree, AreaValue } from "@/lib/data/areas";
 import { normalizeName } from "@/lib/import/normalize";
 
-export type BulkInputRow = { line: number; name: string; email: string; role: string; where: string; bunk: string; level: string; title: string; phone: string; signs?: string };
+export type BulkInputRow = {
+  line: number;
+  name: string;
+  email: string;
+  role: string;
+  where: string;
+  bunk: string;
+  level: string;
+  title: string;
+  phone: string;
+  signs?: string;
+  /** The registration export: someone accepted but not placed yet still comes in (a warning, not an error). */
+  sourceId?: string;
+};
 export type BulkPlanRow = {
   line: number;
   name: string;
@@ -18,9 +31,11 @@ export type BulkPlanRow = {
   /** "none": listed only (no sign-in, email optional). Counselors are listed only unless the sheet says otherwise. */
   login: "personal" | "none";
   errors: string[];
+  /** Comes in anyway, but worth knowing. */
+  warnings: string[];
 };
 
-const HEADERS: Record<keyof Omit<BulkInputRow, "line">, string[]> = {
+const HEADERS: Record<keyof Omit<BulkInputRow, "line" | "sourceId">, string[]> = {
   name: ["name", "full name", "fullname", "staff", "person"],
   email: ["email", "e-mail", "mail", "email address"],
   role: ["role", "kinus role", "access role"],
@@ -157,6 +172,7 @@ export function planRows(rows: BulkInputRow[], tree: AreaTree, defaults: { role:
   const seen = new Set<string>();
   return rows.map((r) => {
     const errors: string[] = [];
+    const warnings: string[] = [];
     if (!r.name) errors.push("Missing name.");
     let role: StaffRole | null = defaults.role;
     let title = r.title;
@@ -181,9 +197,12 @@ export function planRows(rows: BulkInputRow[], tree: AreaTree, defaults: { role:
     // a Level column from older sheets is read but not used: the role decides (Staff → Roles)
     const a = matchAreas(r.where || defaults.where || "", r.bunk, tree);
     errors.push(...a.errors);
-    if (!a.allAreas && !a.areas.length && !a.errors.length && role !== "office" && role !== "logistics") errors.push("Say where they work: a camp, division, bunk, or “All”.");
+    if (!a.allAreas && !a.areas.length && !a.errors.length && role !== "office" && role !== "logistics") {
+      if (r.sourceId) warnings.push("No division yet: they'll only get texts sent to everyone. Upload the export again once they're placed.");
+      else errors.push("Say where they work: a camp, division, bunk, or “All”.");
+    }
     const level = lvl ?? (defaults.level !== "role" ? defaults.level : null);
     const everywhere = a.allAreas || (!a.areas.length && !a.errors.length && (role === "office" || role === "logistics"));
-    return { line: r.line, name: r.name, email: r.email, role, level, allAreas: everywhere, areas: a.areas, areaText: everywhere ? "All of camp" : a.areas.length ? a.text : "—", title, phone: r.phone, login, errors };
+    return { line: r.line, name: r.name, email: r.email, role, level, allAreas: everywhere, areas: a.areas, areaText: everywhere ? "All of camp" : a.areas.length ? a.text : "—", title, phone: r.phone, login, errors, warnings };
   });
 }

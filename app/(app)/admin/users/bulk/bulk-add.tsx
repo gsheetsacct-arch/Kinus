@@ -30,6 +30,7 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
   const [step, setStep] = React.useState<1 | 2 | 3>(1);
   const [pending, start] = React.useTransition();
   const [rows, setRows] = React.useState<BulkPreview["rows"]>([]);
+  const [skipped, setSkipped] = React.useState<NonNullable<BulkPreview["skipped"]>>([]);
   const [results, setResults] = React.useState<BulkResult[]>([]);
   const [mode, setMode] = React.useState<"invite" | "password">("invite");
   const good = rows.filter((r) => !r.errors.length);
@@ -58,6 +59,7 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
                 const r = await preview(fd);
                 if (!r.ok) return void toast.error(r.error);
                 setRows(r.preview!.rows);
+                setSkipped(r.preview!.skipped ?? []);
                 setStep(2);
               });
             }}
@@ -74,7 +76,7 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
               <Textarea id="text" name="text" rows={10} placeholder={example} className="font-mono text-xs" dir="auto" />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="…or upload a file instead" htmlFor="file" hint=".csv or .xlsx">
+              <Field label="…or upload a file instead" htmlFor="file" hint=".csv or .xlsx, or the staff export from registration as it downloads">
                 <input id="file" name="file" type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" className="block w-full text-sm file:mr-3 file:rounded-md file:border file:bg-card file:px-3 file:py-1.5" />
               </Field>
               <Field label="Role for rows that don't say" htmlFor="default_role">
@@ -96,6 +98,11 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
 
       {step === 2 && (
         <>
+          {skipped.length > 0 && (
+            <Callout title="From the registration export: accepted staff only">
+              Left out: {skipped.map((x) => `${x.count} ${x.status}`).join(", ")}. Upload the export again when more are accepted; people already in Kinus are updated, not added twice.
+            </Callout>
+          )}
           {bad.length > 0 ? (
             <Callout tone="warning" title={`${bad.length} ${bad.length === 1 ? "row needs" : "rows need"} fixing`}>
               Fix them in your spreadsheet and paste again, or go ahead with the {good.length} that are fine. Rows with problems are skipped.
@@ -125,6 +132,7 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {r.email || "no email"}
+                          {r.registration && <span className="block">{r.phone || <span className="text-amber-800 dark:text-amber-200">no phone number</span>}</span>}
                           {r.login === "none" && <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">listed, no sign-in</span>}
                         </div>
                       </td>
@@ -140,6 +148,16 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
                         {r.areaText}
                       </td>
                       <td className="px-4 py-2">
+                        {r.warnings?.length > 0 && !r.errors.length && (
+                          <ul className="mb-1 space-y-0.5 text-xs text-amber-800 dark:text-amber-200">
+                            {r.warnings.map((w, i) => (
+                              <li key={i} className="flex gap-1">
+                                <AlertCircle className="mt-0.5 size-3 shrink-0" />
+                                {w}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                         {r.errors.length ? (
                           <ul className="space-y-0.5 text-xs text-amber-800 dark:text-amber-200">
                             {r.errors.map((e, i) => (

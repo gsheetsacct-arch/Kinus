@@ -570,14 +570,14 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "access_level": Database["public"]['Enums']["access_level"],"all_areas": boolean,"created_at": string,"email": string,"full_name": string,"id": string,"final_checkout": boolean,"is_active": boolean,"login": string,"phone": string | null,"title": string | null,"role": Database["public"]['Enums']["staff_role"]
+                    "access_level": Database["public"]['Enums']["access_level"],"all_areas": boolean,"created_at": string,"email": string,"full_name": string,"id": string,"final_checkout": boolean,"is_active": boolean,"login": string,"phone": string | null,"title": string | null,"source_id": string | null,"address": Json | null,"details": Json | null,"role": Database["public"]['Enums']["staff_role"]
                   }
                   ComputedFields: never
                   Insert: {
-                    "access_level"?: Database["public"]['Enums']["access_level"],"all_areas"?: boolean,"created_at"?: string,"email": string,"full_name": string,"id": string,"final_checkout"?: boolean,"is_active"?: boolean,"login"?: string,"phone"?: string | null,"title"?: string | null,"role"?: Database["public"]['Enums']["staff_role"]
+                    "access_level"?: Database["public"]['Enums']["access_level"],"all_areas"?: boolean,"created_at"?: string,"email": string,"full_name": string,"id": string,"final_checkout"?: boolean,"is_active"?: boolean,"login"?: string,"phone"?: string | null,"title"?: string | null,"source_id"?: string | null,"address"?: Json | null,"details"?: Json | null,"role"?: Database["public"]['Enums']["staff_role"]
                   }
                   Update: {
-                    "access_level"?: Database["public"]['Enums']["access_level"],"all_areas"?: boolean,"created_at"?: string,"email"?: string,"full_name"?: string,"id"?: string,"final_checkout"?: boolean,"is_active"?: boolean,"login"?: string,"phone"?: string | null,"title"?: string | null,"role"?: Database["public"]['Enums']["staff_role"]
+                    "access_level"?: Database["public"]['Enums']["access_level"],"all_areas"?: boolean,"created_at"?: string,"email"?: string,"full_name"?: string,"id"?: string,"final_checkout"?: boolean,"is_active"?: boolean,"login"?: string,"phone"?: string | null,"title"?: string | null,"source_id"?: string | null,"address"?: Json | null,"details"?: Json | null,"role"?: Database["public"]['Enums']["staff_role"]
                   }
                   Relationships: [
                     

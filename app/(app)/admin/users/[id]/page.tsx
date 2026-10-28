@@ -17,6 +17,7 @@ import { ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
 import { encodeArea, grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
 import { formatDateTime } from "@/lib/utils";
+import { addressLine, type StaffAddress } from "@/lib/staff/export";
 import { loadRoles, roleSummary, rolesInUse } from "@/lib/data/roles";
 import { checkinNameOf, shownEmail, type LoginKind } from "@/lib/staff/login-kinds";
 import { deletePeople, removePasskeys, savePerson, sendSignInLink, setActive, setUserPassword } from "../actions";
@@ -35,6 +36,10 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
     signInInfo(),
     loadRoles(admin),
   ]);
+  // what their registration form said (read on its own: a database without migration 0040 still opens the page)
+  const { data: reg } = await admin.from("profiles").select("source_id, address, details").eq("id", id).maybeSingle().then((r) => r, () => ({ data: null }));
+  const regAddress = addressLine(reg?.address as StaffAddress | null);
+  const regDetails = Object.entries((reg?.details ?? {}) as Record<string, string>);
   const summaries = Object.fromEntries(ROLE_ORDER.map((r) => [r, roleSummary(setup, r)]));
   if (!p) notFound();
   const isSelf = me.id === p.id;
@@ -83,6 +88,28 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
           readOnly={!manageable}
         />
       </Section>
+      {(reg?.source_id || regAddress || regDetails.length > 0) && (
+        <Section title="From registration" description={reg?.source_id ? `Registration id ${reg.source_id}. Updated each time the staff export is uploaded (Add many).` : undefined}>
+          <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[minmax(10rem,auto)_1fr]">
+            {regAddress && (
+              <>
+                <dt className="text-muted-foreground">Home address</dt>
+                <dd dir="auto">{regAddress}</dd>
+              </>
+            )}
+            {regDetails.map(([k, v]) => (
+              <div key={k} className="contents">
+                <dt className="text-muted-foreground" dir="auto">
+                  {k}
+                </dt>
+                <dd className="whitespace-pre-wrap" dir="auto">
+                  {v}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </Section>
+      )}
       {manageable && (
         <div className="grid gap-6 lg:grid-cols-2">
           {personal && (
