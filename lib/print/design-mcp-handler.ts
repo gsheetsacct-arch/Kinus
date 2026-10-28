@@ -14,6 +14,10 @@ export const baseUrl = (request: NextRequest) => (process.env.APP_URL || request
  * alone (no sessions to keep). `unauthorized`: the answer without a valid token.
  */
 export async function designRequest(request: NextRequest, token: string, unauthorized: (message: string) => NextResponse): Promise<Response> {
+  // No sessions, so nothing to stream: a GET would open an event stream that never ends, and
+  // keep a function running until it times out (then Claude opens another, all day long).
+  // 405 tells clients there's no stream (the MCP spec's answer); everything works over POST.
+  if (request.method !== "POST") return new NextResponse(null, { status: 405, headers: { Allow: "POST" } });
   const userId = await connectorUser(token);
   const user = userId ? await loadUserById(userId) : null;
   if (!user) return unauthorized("Not connected to Kinus, or the connection was removed. Connect again (Kinus: Print → Templates → Design with Claude).");
