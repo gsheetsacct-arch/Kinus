@@ -1,7 +1,7 @@
 import type { CurrentUser } from "@/lib/auth/permissions";
-import { LEVEL_RANK, canFinalCheckout, canFollowUp, canUsePhoneBook, canUsePrintArea, effectiveLevel, isAdmin, isStaffManager } from "@/lib/auth/permissions";
+import { LEVEL_RANK, canFinalCheckout, canFollowUp, canTextStaff, canUsePhoneBook, canUsePrintArea, effectiveLevel, isAdmin, isStaffManager } from "@/lib/auth/permissions";
 
-export type NavIcon = "DoorOpen" | "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser" | "ShieldCheck";
+export type NavIcon = "DoorOpen" | "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser" | "ShieldCheck" | "MessageSquare";
 export type NavItem = { href: string; label: string; icon: NavIcon; description: string; section: "main" | "admin"; mobile?: boolean };
 
 export function buildNav(user: CurrentUser, opts: { designs?: boolean } = {}): NavItem[] {
@@ -28,6 +28,7 @@ export function buildNav(user: CurrentUser, opts: { designs?: boolean } = {}): N
     { href: "/lists", label: "Lists", icon: "ListChecks", description: "Bunk and division lists to print", section: "main" },
   ];
   if (canUsePhoneBook(user)) nav.push({ href: "/phone-book", label: "Phone book", icon: "BookUser", description: "Call or text the staff you work with", section: "main" });
+  if (canTextStaff(user)) nav.push({ href: "/messages", label: "Text staff", icon: "MessageSquare", description: "Text the staff of your divisions", section: "main" });
   if (canUsePrintArea(user)) nav.push({ href: "/print", label: "Print", icon: "Printer", description: "Name and luggage tags: queue, batches, templates", section: "main" });
   else if (opts.designs) nav.push({ href: "/print/templates", label: "Tag designs", icon: "Printer", description: "The name tag and label templates", section: "main" });
   if (isStaffManager(user)) nav.push({ href: "/admin/users", label: "Staff", icon: "UserCog", description: "Invite people and choose what they can see", section: "main" });

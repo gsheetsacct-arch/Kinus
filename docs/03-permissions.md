@@ -147,3 +147,18 @@ and from where (`update_signups`, one row per number: signing up again renews it
 server reads and writes the table. Directors see the list, the link and a QR code to post
 under Staff → Updates sign-ups, download it as Excel or CSV, and take people off it. A hidden
 field and a limit per address (30 an hour) keep scripts out.
+
+## Text staff (`/messages`, migration 0039)
+Texts to staff through Twilio (setup: 09 §9.5b).
+
+| Sender | May text |
+|---|---|
+| Owner / director over all of camp | Everyone (all staff, directors and office, and the `/updates` sign-ups), or any divisions |
+| Director of a camp or divisions | The staff of their divisions |
+| Division head, head counselor | The staff of their divisions |
+
+A division's staff are the active people whose *Where* covers it (a bunk, the division, or its camp),
+check-in logins excepted. Directors and office over all of camp only get "everyone" texts. Each number
+gets one text even if the person is in several chosen divisions. Before sending, the page shows who it
+goes to and who it can't reach (no phone number, or replied STOP). Directors over all of camp see every
+text sent; others see their own and those sent to their divisions, with each person's delivery status.

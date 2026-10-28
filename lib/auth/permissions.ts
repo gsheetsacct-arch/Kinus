@@ -135,3 +135,10 @@ export const canFinalCheckout = (u: CurrentUser) => Boolean(u.finalCheckout) || 
 
 /** Who gives a check-in login final check-out: whoever makes check-in logins (division heads and head counselors for their own division's, directors). */
 export const canGiveFinalCheckout = (u: CurrentUser) => isDirector(u) || u.role === "division_head" || u.role === "head_counselor";
+
+/** Text staff (Twilio): directors, division heads and head counselors, each to the staff of their own divisions. */
+export const canTextStaff = (u: CurrentUser) => !u.checkinLogin && (isDirector(u) || u.role === "division_head" || u.role === "head_counselor");
+/** Text everyone at once (all staff, directors and office, and the /updates sign-ups): the owner and directors over all of camp. */
+export const canTextEveryone = (u: CurrentUser) => canTextStaff(u) && isAdmin(u);
+/** The divisions this person may text (null = every division). */
+export const textableDivisionIds = (u: CurrentUser): string[] | null => (!canTextStaff(u) ? [] : seesAllCamp(u) ? null : [...new Set(u.coverage.map((c) => c.division_id))]);
