@@ -14,6 +14,7 @@ import { camperCampName, forCamp, templateCamps } from "@/lib/print/template-cam
 import { canUsePrintArea } from "@/lib/auth/permissions";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { formatWhen } from "@/lib/utils";
+import { forCampers } from "@/lib/print/staff-values";
 
 export type ScanOutcome =
   | { ok: true; kind: "act"; camperId: string; name: string; status: CamperStatus; eventId: string; verb: string; tone: "in" | "out" | "home"; autoPrinted: string[] }
@@ -43,7 +44,7 @@ async function autoPrintOnFirstArrival(camperId: string, sessionId: string): Pro
   // only the tags for the camper's camp (templates for some camps only)
   const { data: camper } = await admin.from("campers").select("division_id").eq("id", camperId).maybeSingle();
   const campName = await camperCampName(admin, camper?.division_id ?? null);
-  const mine = templates.filter((t) => forCamp(t, campName) && (campName !== null || !templateCamps(t).length));
+  const mine = templates.filter((t) => forCampers(t) && forCamp(t, campName) && (campName !== null || !templateCamps(t).length));
   if (!mine.length) return [];
   const user = await requireUser();
   after(async () => {

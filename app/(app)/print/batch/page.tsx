@@ -10,6 +10,7 @@ import { canUsePrintArea, isAdmin, visibleDivisionIds } from "@/lib/auth/permiss
 import { BuzzerBox } from "@/components/print/buzzer-box";
 import { buzzerCounts } from "@/lib/buzzers";
 import { forCamp, templateCamps } from "@/lib/print/template-camps";
+import { forCampers } from "@/lib/print/staff-values";
 
 export const metadata = { title: "Print a batch" };
 export const maxDuration = 60;
@@ -35,7 +36,7 @@ export default async function BatchPage() {
       <BatchForm
         templates={(templates ?? [])
           // the current camp's templates (all of them when looking at every camp, with whose they are)
-          .filter((t) => forCamp(t, camp.current?.name))
+          .filter((t) => forCampers(t) && forCamp(t, camp.current?.name))
           .map((t) => ({ id: t.id, name: !camp.current && templateCamps(t).length ? `${t.name} (${templateCamps(t).join(", ")})` : t.name, copies: Number((t as { copies?: number }).copies) || 1 }))}
         divisions={divisions}
         campLabel={camp.camps.length > 1 ? (camp.current ? `All of ${camp.current.name}` : "All camps") : "Everyone"}

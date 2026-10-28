@@ -42,7 +42,8 @@ What works today:
   batches for a camp/division/bunk (everyone, never printed, here now, arrived today),
   template editor with live preview and background images, merge fields with
   conversion tables (Youth Small → YS, Division 2 → 2), and a CSV of converted
-  merge data for Publisher
+  merge data for Publisher, and **staff tags**: templates for staff (name, position,
+  division, bunk, Hebrew name…) printed from Print → Staff tags
 - **Text staff** (`/messages`): texts through Twilio. Directors text everyone or chosen
   divisions; division heads and head counselors text their own divisions' staff. Shows who it
   goes to first, honours STOP replies, and tracks delivery per person (setup: docs/09 §9.5b)

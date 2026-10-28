@@ -64,6 +64,8 @@ export const templateSchema = z.object({
   back: z.object({ flip: z.enum(["long", "short"]), shiftXMm: num(-20, 20).optional(), shiftYMm: num(-20, 20).optional() }).nullable().optional(),
   // the camps it's for, by name (migration 0036); none: every camp
   camps: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
+  // who it's for (migration 0041): campers, or staff (Print → Staff tags)
+  audience: z.enum(["campers", "staff"]).optional(),
   show_on_card: z.boolean(),
   auto_on_first_checkin: z.boolean(),
   copies: z.coerce.number().int().min(1).max(10).default(1),
@@ -99,19 +101,23 @@ export async function storeTemplate(input: TemplateInput): Promise<{ id: string;
     page_height_mm: t.page_height_mm,
     layers: t.layers,
     sheet_layout: t.sheet_layout,
-    show_on_card: t.show_on_card,
-    auto_on_first_checkin: t.auto_on_first_checkin,
+    // staff tags are never offered on camper cards or at check-in
+    show_on_card: t.audience === "staff" ? false : t.show_on_card,
+    auto_on_first_checkin: t.audience === "staff" ? false : t.auto_on_first_checkin,
     copies: t.copies,
     back: t.back ?? null,
-    camps: t.camps ?? [],
+    camps: t.audience === "staff" ? [] : (t.camps ?? []),
+    // only when the save says (a save from the design connector leaves a staff tag a staff tag)
+    ...(t.audience ? { audience: t.audience } : {}),
     updated_at: new Date().toISOString(),
   };
   // settings added by later migrations: if one isn't there yet, save the rest, and say so
   // only if it matters (the setting isn't at its usual value)
-  const later: Record<"copies" | "back" | "camps", { used: boolean; need: string }> = {
+  const later: Record<"copies" | "back" | "camps" | "audience", { used: boolean; need: string }> = {
     copies: { used: t.copies !== 1, need: "To set how many per camper, run migration 0028 in Supabase first." },
     back: { used: Boolean(t.back), need: "To print on both sides, run migration 0035 in Supabase first." },
     camps: { used: Boolean(t.camps?.length), need: "To keep a template to some camps, run migration 0036 in Supabase first." },
+    audience: { used: t.audience === "staff", need: "To make templates for staff, run migration 0041 in Supabase first." },
   };
   const payload: Partial<typeof row> = { ...row };
   const { count } = t.id ? { count: 0 } : await supabase.from("print_templates").select("id", { count: "exact", head: true });

@@ -5,6 +5,7 @@ import { fetchAll } from "@/lib/supabase/fetch-all";
 import { loadMergeSetup, loadPrintCampers, toSpec, byBunkThenName } from "./data";
 import { mergeValues } from "./merge";
 import { contentHash, labelValues, sameContent, templateKeys } from "./content";
+import { forCampers } from "./staff-values";
 
 /**
  * Labels to print again after a print was done: campers whose details on the label changed
@@ -37,9 +38,11 @@ export async function labelUpdates(sessionId: string, divisionIds: string[] | nu
   const admin = createAdminClient();
   let tq = admin.from("print_templates").select("*").not("name", "like", "(retired)%");
   if (only) tq = tq.eq("id", only);
-  const { data: templates, error } = await tq;
+  const { data: all, error } = await tq;
   if (error) throw error;
-  if (!templates?.length) return [];
+  // staff tags aren't tracked for changes (they print from Staff tags, not the queue)
+  const templates = (all ?? []).filter(forCampers);
+  if (!templates.length) return [];
   const history = await fetchAll((from, to) =>
     admin
       .from("print_job_items")

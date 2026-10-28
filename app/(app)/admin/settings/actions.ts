@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { parseExtraFields } from "@/lib/import/extra-fields";
+import { forCampers } from "@/lib/print/staff-values";
 
 const office = z.object({ to: z.string().trim().email("Enter a valid email address.").or(z.literal("")), cc: z.string().trim().optional() });
 
@@ -117,7 +118,8 @@ export async function sendTestEmail(): Promise<ActionResult> {
     if (!setup.configured) return fail("Email isn't set up yet: add RESEND_API_KEY in Vercel (Settings → Environment Variables), then redeploy.");
     // a sample tag from the first template in use, made into a PDF like a real request
     const admin = createAdminClient();
-    const { data: templates } = await admin.from("print_templates").select("*").not("name", "like", "(retired)%").order("sort_order").limit(1);
+    const { data: inUse } = await admin.from("print_templates").select("*").not("name", "like", "(retired)%").order("sort_order").limit(20);
+    const templates = (inUse ?? []).filter(forCampers).slice(0, 1);
     let pdf: Buffer | null = null;
     let pdfNote = "No templates yet, so no PDF was attached.";
     if (templates?.[0]) {

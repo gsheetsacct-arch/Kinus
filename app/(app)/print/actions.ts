@@ -6,7 +6,10 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { canUsePrintArea, isAdmin, visibleDivisionIds } from "@/lib/auth/permissions";
+import { canUsePrintArea, isAdmin, visibleDivisionIds, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
+import { STAFF_ROLES } from "@/lib/labels";
+import { SAMPLE_STAFF, staffValues, type Audience } from "@/lib/print/staff-values";
+import { staffInView } from "@/lib/print/staff";
 import { canDesign, loadDesigners, saveDesigners } from "@/lib/print/designers";
 import { addCustomFont, removeCustomFont } from "@/lib/print/custom-fonts";
 import { storeTemplate, type TemplateInput } from "@/lib/print/template-store";
@@ -374,10 +377,15 @@ export async function duplicateTemplate(fd: FormData): Promise<ActionResult> {
       ...("back" in t ? { back: t.back } : {}),
       ...("camps" in t ? { camps: t.camps } : {}),
     };
+    // "Copy for staff": a camper design turned into a staff one (migration 0041)
+    const audience = fd.get("audience") === "staff" ? "staff" : "audience" in t ? t.audience : null;
+    if (audience === "staff" && !("audience" in t)) return fail("To make templates for staff, run migration 0041 in Supabase first.");
+    if (audience) Object.assign(copy, { audience, ...(audience === "staff" ? { camps: [] } : {}) });
+    const forStaffNow = audience === "staff" && !("audience" in t && t.audience === "staff");
     // a copy of a retired template is a fresh, working one
     const { data, error } = await supabase
       .from("print_templates")
-      .insert({ ...copy, name: `${t.name.replace(/^(\(retired\)\s*)+/, "")} (copy)`, show_on_card: false, auto_on_first_checkin: false })
+      .insert({ ...copy, name: `${t.name.replace(/^(\(retired\)\s*)+/, "")} (${forStaffNow ? "staff" : "copy"})`, show_on_card: false, auto_on_first_checkin: false })
       .select("id")
       .single();
     if (error) throw error;
@@ -504,10 +512,14 @@ export async function codePreviews(items: { type: "barcode" | "qr" | "qr-round";
   });
 }
 
-export async function previewTemplate(spec: TemplateSpec, who: { kind: "sample" } | { kind: "worst" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] }, opts: { fullSheet?: boolean } = {}): Promise<string> {
+export async function previewTemplate(
+  spec: TemplateSpec & { audience?: Audience },
+  who: { kind: "sample" } | { kind: "worst" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] },
+  opts: { fullSheet?: boolean } = {},
+): Promise<string> {
   await requirePreviewer();
-  const r = await previewValues(who);
-  const values = "error" in r ? await sampleValues() : r.values;
+  const r = await previewValues(who, spec.audience);
+  const values = "error" in r ? (spec.audience === "staff" ? staffValues(SAMPLE_STAFF, staffRoleLabel) : await sampleValues()) : r.values;
   // a test sheet: the whole sheet filled, with outlines, to hold against the labels
   const sheet = opts.fullSheet ? spec.sheet_layout : null;
   return previewDocument(spec, [{ values, copies: sheet ? sheet.cols * sheet.rows : 1 }], { fullSheet: opts.fullSheet });
@@ -622,14 +634,35 @@ export async function deleteValueMap(fd: FormData): Promise<ActionResult> {
 
 export type { Layer, SheetLayout };
 
+const staffRoleLabel = (r: string) => STAFF_ROLES[r as StaffRole]?.label ?? r;
+
+/** A staff template's canvas: the made-up staff member, or the staff member whose text is longest (one of everyone's longest, for "worst"). */
+async function staffPreviewValues(user: CurrentUser, who: { kind: string; texts?: { text: string; w: number }[] }): Promise<{ values: Record<string, string>; label: string }> {
+  const sample = { values: staffValues(SAMPLE_STAFF, staffRoleLabel), label: "a sample staff member" };
+  if (who.kind === "sample" || who.kind === "code") return sample;
+  const people = await staffInView(user);
+  if (!people.length) return { ...sample, label: "a sample staff member (no staff yet)" };
+  if (who.kind === "worst") {
+    const keys = [...new Set(people.flatMap((p) => Object.keys(p.values)))];
+    return { values: Object.fromEntries(keys.map((k) => [k, people.map((p) => p.values[k] ?? "").reduce((a, b) => (b.length > a.length ? b : a), "")])), label: "the longest of every field" };
+  }
+  const { fill } = await import("@/lib/print/merge");
+  const texts = (who.texts ?? []).filter((t) => t.text.includes("{{") && t.w > 0).slice(0, 30);
+  const score = (p: (typeof people)[number]) => (texts.length ? Math.max(...texts.map((t) => fill(t.text, (k) => p.values[k] ?? "").length / t.w)) : p.name.length);
+  const best = people.reduce((a, b) => (score(b) > score(a) ? b : a));
+  return { values: best.values, label: `${best.name} (longest text)` };
+}
+
 /**
  * Merge values for the editor's canvas: the built-in sample, a camper by code, or the
  * camper with the longest name (to check long names still fit).
  */
 export async function previewValues(
   who: { kind: "sample" } | { kind: "worst" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] },
+  audience: Audience = "campers",
 ): Promise<{ values: Record<string, string>; label: string } | { error: string }> {
   const user = await requirePreviewer();
+  if (audience === "staff") return staffPreviewValues(user, who);
   const session = await getActiveSession();
   if (who.kind === "sample" || !session) return { values: await sampleValues(), label: "a sample camper" };
   if (who.kind === "worst") {
@@ -680,9 +713,13 @@ export async function previewValues(
  * Every camper's values for these fields (the camp chosen at the top), for the editor's fit
  * check: it measures each text part for each camper exactly as it prints.
  */
-export async function fitCheckPeople(keys: string[]): Promise<{ ok: true; people: { name: string; code: string; values: Record<string, string> }[] } | { ok: false; error: string }> {
+export async function fitCheckPeople(keys: string[], audience: Audience = "campers"): Promise<{ ok: true; people: { name: string; code: string; values: Record<string, string> }[] } | { ok: false; error: string }> {
   try {
-    await requirePreviewer();
+    const user = await requirePreviewer();
+    if (audience === "staff") {
+      const wanted = [...new Set(keys)].slice(0, 40);
+      return { ok: true, people: (await staffInView(user)).map((p) => ({ name: p.name, code: "", values: Object.fromEntries(wanted.map((k) => [k, p.values[k] ?? ""])) })) };
+    }
     const session = await getActiveSession();
     if (!session) return { ok: true, people: [] };
     const wanted = [...new Set(keys.filter((k) => /^[A-Z0-9_]{1,40}$/.test(k)))].slice(0, 40);
