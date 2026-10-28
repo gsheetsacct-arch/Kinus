@@ -610,6 +610,18 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"update_signups": {
+                  Row: {
+                    "id": string,"full_name": string,"phone": string,"phone_e164": string,"consent_text": string,"consented_at": string,"ip": string | null,"user_agent": string | null,"created_at": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "id"?: string,"full_name": string,"phone": string,"phone_e164": string,"consent_text": string,"consented_at"?: string,"ip"?: string | null,"user_agent"?: string | null,"created_at"?: string,"updated_at"?: string
+                  }
+                  Update: {
+                    "id"?: string,"full_name"?: string,"phone"?: string,"phone_e164"?: string,"consent_text"?: string,"consented_at"?: string,"ip"?: string | null,"user_agent"?: string | null,"created_at"?: string,"updated_at"?: string
+                  }
+                  Relationships: []
                 },"settings": {
                   Row: {
                     "key": string,"updated_at": string,"updated_by": string | null,"value": NonNullable<Json>
