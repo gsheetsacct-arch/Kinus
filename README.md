@@ -43,6 +43,9 @@ What works today:
   template editor with live preview and background images, merge fields with
   conversion tables (Youth Small → YS, Division 2 → 2), and a CSV of converted
   merge data for Publisher
+- **Text staff** (`/messages`): texts through Twilio. Directors text everyone or chosen
+  divisions; division heads and head counselors text their own divisions' staff. Shows who it
+  goes to first, honours STOP replies, and tracks delivery per person (setup: docs/09 §9.5b)
 - Fast with a full camp: ~1,000 campers load in well under a second
 
 ## Setting it up (no local tools needed)

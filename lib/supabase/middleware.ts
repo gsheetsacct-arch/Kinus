@@ -5,7 +5,8 @@ import { authRedirect } from "@/lib/auth/redirects";
 // /api/mcp: the design connector, reached by Claude with a link of its own or its sign-in
 // (/api/oauth, /.well-known: no sign-in cookie; the page where people allow it needs one).
 // /updates: staff sign up for text updates, no account needed.
-const PUBLIC_PATHS = ["/login", "/no-access", "/auth", "/set-password", "/api/webhooks", "/api/cron", "/api/mcp", "/api/oauth", "/.well-known", "/health", "/updates"];
+// /api/twilio: Twilio reports deliveries and replies (each request is signed; the route checks it).
+const PUBLIC_PATHS = ["/login", "/no-access", "/auth", "/set-password", "/api/webhooks", "/api/cron", "/api/mcp", "/api/oauth", "/.well-known", "/health", "/updates", "/api/twilio"];
 
 export async function updateSession(request: NextRequest) {
   const url = new URL(request.nextUrl.pathname + request.nextUrl.search, `${request.nextUrl.protocol}//${request.headers.get("host") ?? request.nextUrl.host}`);

@@ -12,9 +12,12 @@ insert into campers (id,session_id,source_id,first_name,last_name,division_id,bu
  ('40000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','2','Léa','Gérard','20000000-0000-0000-0000-000000000002','30000000-0000-0000-0000-000000000002');
 insert into staff_scopes (user_id,division_id,bunk_id) values ('00000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001');
 select camper_code, display_name, name_normalized from campers order by source_id;
--- Luhn check on generated codes
-select camper_code, (select (sum(case when (i%2=0) then (case when d*2>9 then d*2-9 else d*2 end) else d end)) % 10 = 0
-  from (select i, substr(reverse(camper_code), i, 1)::int d from generate_series(1,6) i) t) as luhn_ok from campers;
+-- short numbers from 0001 in each session (migration 0037)
+do $$ begin
+  if (select array_agg(camper_code order by source_id) from campers) <> array['0001','0002'] then
+    raise exception 'camper numbers should start at 0001';
+  end if;
+end $$;
 -- act as counselor
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000002';

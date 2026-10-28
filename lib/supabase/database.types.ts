@@ -610,6 +610,50 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"text_broadcast_recipients": {
+                  Row: {
+                    "id": string,"broadcast_id": string,"profile_id": string | null,"name": string,"phone_e164": string,"twilio_sid": string | null,"status": string,"error_code": string | null,"error_message": string | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "id"?: string,"broadcast_id": string,"profile_id"?: string | null,"name": string,"phone_e164": string,"twilio_sid"?: string | null,"status"?: string,"error_code"?: string | null,"error_message"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "id"?: string,"broadcast_id"?: string,"profile_id"?: string | null,"name"?: string,"phone_e164"?: string,"twilio_sid"?: string | null,"status"?: string,"error_code"?: string | null,"error_message"?: string | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "text_broadcast_recipients_broadcast_id_fkey"
+      columns: ["broadcast_id"]
+isOneToOne: false
+      referencedRelation: "text_broadcasts"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"text_broadcasts": {
+                  Row: {
+                    "id": string,"session_id": string | null,"sent_by": string | null,"sender_name": string,"body": string,"division_ids": string[],"audience": string,"recipient_count": number,"failed_count": number,"created_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "id"?: string,"session_id"?: string | null,"sent_by"?: string | null,"sender_name": string,"body": string,"division_ids"?: string[],"audience": string,"recipient_count"?: number,"failed_count"?: number,"created_at"?: string
+                  }
+                  Update: {
+                    "id"?: string,"session_id"?: string | null,"sent_by"?: string | null,"sender_name"?: string,"body"?: string,"division_ids"?: string[],"audience"?: string,"recipient_count"?: number,"failed_count"?: number,"created_at"?: string
+                  }
+                  Relationships: []
+                },"text_opt_outs": {
+                  Row: {
+                    "phone_e164": string,"opted_out_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "phone_e164": string,"opted_out_at"?: string
+                  }
+                  Update: {
+                    "phone_e164"?: string,"opted_out_at"?: string
+                  }
+                  Relationships: []
                 },"update_signups": {
                   Row: {
                     "id": string,"full_name": string,"phone": string,"phone_e164": string,"consent_text": string,"consented_at": string,"ip": string | null,"user_agent": string | null,"created_at": string,"updated_at": string

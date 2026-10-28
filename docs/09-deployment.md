@@ -189,6 +189,33 @@ A passkey belongs to that exact domain: it won't work on Vercel preview addresse
 a new domain means everyone sets Face ID up again. A lost phone: Staff → the person → **Remove Face
 ID sign-ins**.
 
+## 9.5b Twilio (Text staff)
+
+**Text staff** (`/messages`) sends texts through Twilio. Until it's set up the page shows what's missing.
+
+1. In Twilio, buy a number (US long code or toll-free) and create a **Messaging Service** with that number
+   in its sender pool. US numbers must be registered before carriers deliver them: **A2P 10DLC** brand and
+   campaign for a long code, or **toll-free verification** for a toll-free number. Describe the opt-in as
+   staff giving their cell number to camp for work updates, and the `/updates` sign-up page (its consent
+   wording is in `lib/update-signups.ts`).
+2. Messaging Service → **Opt-out management**: keep it on, so Twilio answers STOP / START / HELP itself.
+3. Messaging Service → **Integration** → *Incoming messages*: *Send a webhook*, Request URL
+   `https://<APP_URL>/api/twilio/inbound` (HTTP POST). STOP replies are recorded there, and Kinus never texts
+   that number again until it replies START.
+4. Vercel → Settings → Environment Variables (Production), then redeploy:
+   - `TWILIO_ACCOUNT_SID` (AC…) and `TWILIO_AUTH_TOKEN` (Twilio console → Account info)
+   - `TWILIO_MESSAGING_SERVICE_SID` (MG…), or `TWILIO_FROM_NUMBER` (+1…) to send from one number without a
+     Messaging Service
+   - `APP_URL` must be set (9.2 step 3): delivery reports come back to `APP_URL/api/twilio/status`, and
+     both webhooks are checked against Twilio's signature for that address.
+5. Apply migration 0039.
+
+Who can send: directors over all of camp text everyone (all staff, directors and office, and the
+`/updates` sign-ups) or any divisions; area directors, division heads and head counselors text the staff
+of their own divisions. A division's staff are the people whose *Where* (Staff page) includes it, with a
+phone number on their profile. Each text, its sender and every recipient's delivery status are kept
+(`text_broadcasts`, `text_broadcast_recipients`; only the server reads them).
+
 ## 9.6 Operations during the program
 
 - Status page for staff: `/health` shows DB reachable, last cron run,

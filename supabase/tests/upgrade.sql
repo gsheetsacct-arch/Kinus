@@ -36,8 +36,10 @@ end $$;
 -- 0032: one key per column whatever the spelling, the filled-in copy kept.
 do $$
 begin
-  assert (select source_data from campers where id = 'c0320000-0000-0000-0000-000000000001')
-    = '{"Family.City": "Brooklyn", "family#state": "NY", "ppa.size": "M"}'::jsonb,
+  -- which spelling is kept follows the database's collation (en_US: "family.city", C: "Family.City")
+  assert (select (select jsonb_object_agg(lower(key), value) from jsonb_each(source_data)) from campers where id = 'c0320000-0000-0000-0000-000000000001')
+    = '{"family.city": "Brooklyn", "family#state": "NY", "ppa.size": "M"}'::jsonb
+    and (select count(*) from campers, jsonb_object_keys(source_data) where id = 'c0320000-0000-0000-0000-000000000001') = 3,
     (select source_data::text from campers where id = 'c0320000-0000-0000-0000-000000000001');
   assert (select options->'headers' from imports where id = 'c0320000-0000-0000-0000-000000000002')
     = '["students.id", "family.city", "family#state"]'::jsonb,
