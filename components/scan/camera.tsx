@@ -1,11 +1,16 @@
 "use client";
 import * as React from "react";
-import { RefreshCw, SwitchCamera } from "lucide-react";
+import { RefreshCw, SwitchCamera, ZoomIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type Detector = { detect: (v: HTMLVideoElement) => Promise<{ rawValue: string }[]> };
 type DetectorCtor = { new (o: { formats: string[] }): Detector; getSupportedFormats?: () => Promise<string[]> };
 const DEVICE_KEY = "kinus:camera-device";
+const ZOOM_KEY = "kinus:camera-zoom";
+// tags are held a little way off: start zoomed in a bit (the button steps through these)
+const ZOOMS = [1, 1.5, 2];
+const START_ZOOM = 1.5;
+type ZoomRange = { min: number; max: number };
 
 function explain(e: unknown): string {
   const name = e instanceof Error ? e.name : "";
@@ -17,7 +22,9 @@ function explain(e: unknown): string {
 }
 
 /**
- * Reads Code 128 / QR codes from the camera. One stream for as long as it's shown (it
+ * Reads QR codes (and the Code 128 barcodes on older labels) from the camera, zoomed in a
+ * little to start with: the phone's own zoom where the browser offers it, otherwise the picture
+ * is enlarged so the tag is easy to aim. One stream for as long as it's shown (it
  * doesn't restart when the page updates), the device's own barcode reader where there
  * is one (Android, Mac, Chromebook) and ZXing elsewhere (Windows, iPhone), upright or
  * sideways. A tag held
@@ -31,10 +38,16 @@ export function Camera({ onCode, onTurnOff }: { onCode: (text: string) => void; 
   const [devices, setDevices] = React.useState<MediaDeviceInfo[]>([]);
   const [state, setState] = React.useState<{ kind: "starting" } | { kind: "on" } | { kind: "error"; message: string }>({ kind: "starting" });
   const [attempt, setAttempt] = React.useState(0);
+  const trackRef = React.useRef<MediaStreamTrack | null>(null);
+  // the camera's own zoom range, or null where the browser has none (iPhone): then the picture is enlarged
+  const [hwZoom, setHwZoom] = React.useState<ZoomRange | null>(null);
+  const [zoom, setZoom] = React.useState(START_ZOOM);
 
   React.useEffect(() => {
     try {
       setDeviceId(localStorage.getItem(DEVICE_KEY));
+      const z = Number(localStorage.getItem(ZOOM_KEY));
+      if (ZOOMS.includes(z)) setZoom(z);
     } catch {
       setDeviceId(null);
     }
@@ -71,6 +84,9 @@ export function Camera({ onCode, onTurnOff }: { onCode: (text: string) => void; 
         v.srcObject = stream;
         await v.play().catch(() => undefined);
         const track = stream.getVideoTracks()[0];
+        trackRef.current = track;
+        const caps = (track.getCapabilities?.() ?? {}) as { zoom?: { min: number; max: number } };
+        setHwZoom(caps.zoom && caps.zoom.max > caps.zoom.min ? { min: caps.zoom.min, max: caps.zoom.max } : null);
         // keep refocusing on phones that allow it (tags are held close)
         await track.applyConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] }).catch(() => undefined);
         if (cancelled) return;
@@ -82,7 +98,7 @@ export function Camera({ onCode, onTurnOff }: { onCode: (text: string) => void; 
 
         const Native = (window as unknown as { BarcodeDetector?: DetectorCtor }).BarcodeDetector;
         const formats = Native ? await Native.getSupportedFormats?.().catch(() => [] as string[]) : [];
-        if (Native && formats?.includes("code_128")) {
+        if (Native && formats?.includes("qr_code")) {
           const detector = new Native({ formats: ["code_128", "qr_code"].filter((f) => formats.includes(f)) });
           const loop = async () => {
             if (cancelled) return;
@@ -141,10 +157,26 @@ export function Camera({ onCode, onTurnOff }: { onCode: (text: string) => void; 
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      trackRef.current = null;
       stream?.getTracks().forEach((t) => t.stop());
       if (el) el.srcObject = null;
     };
   }, [deviceId, attempt]);
+
+  // the camera's own zoom when it has one (sharper: the reader sees the closer picture too)
+  React.useEffect(() => {
+    const track = trackRef.current;
+    if (!track || !hwZoom) return;
+    const z = Math.min(hwZoom.max, Math.max(hwZoom.min, zoom));
+    track.applyConstraints({ advanced: [{ zoom: z } as MediaTrackConstraintSet] }).catch(() => undefined);
+  }, [zoom, hwZoom, state.kind]);
+  const nextZoom = () => {
+    const z = ZOOMS[(ZOOMS.indexOf(zoom) + 1) % ZOOMS.length];
+    setZoom(z);
+    try {
+      localStorage.setItem(ZOOM_KEY, String(z));
+    } catch {}
+  };
 
   const current = (video.current?.srcObject as MediaStream | null)?.getVideoTracks()[0]?.getSettings().deviceId;
   const next = () => {
@@ -174,8 +206,29 @@ export function Camera({ onCode, onTurnOff }: { onCode: (text: string) => void; 
         </div>
       )}
       <div className={state.kind === "error" ? "hidden" : "relative overflow-hidden rounded-xl bg-black"}>
-        <video ref={video} className="aspect-[4/3] max-h-[50dvh] w-full object-cover" muted playsInline autoPlay />
-        {state.kind === "on" && <div className="pointer-events-none absolute inset-x-8 top-1/2 h-20 -translate-y-1/2 rounded-lg border-2 border-white/70" />}
+        <video
+          ref={video}
+          className="aspect-[4/3] max-h-[50dvh] w-full object-cover"
+          // no camera zoom in this browser: enlarge the picture instead, so the tag is easy to aim
+          style={!hwZoom && zoom !== 1 ? { transform: `scale(${zoom})` } : undefined}
+          muted
+          playsInline
+          autoPlay
+        />
+        {/* where to hold the QR code: a square, marked at its corners */}
+        {state.kind === "on" && (
+          <div className="pointer-events-none absolute left-1/2 top-1/2 aspect-square h-[62%] -translate-x-1/2 -translate-y-1/2">
+            <span className="absolute left-0 top-0 size-8 rounded-tl-xl border-l-4 border-t-4 border-white/90" />
+            <span className="absolute right-0 top-0 size-8 rounded-tr-xl border-r-4 border-t-4 border-white/90" />
+            <span className="absolute bottom-0 left-0 size-8 rounded-bl-xl border-b-4 border-l-4 border-white/90" />
+            <span className="absolute bottom-0 right-0 size-8 rounded-br-xl border-b-4 border-r-4 border-white/90" />
+          </div>
+        )}
+        {state.kind === "on" && (
+          <Button size="sm" variant="secondary" className="absolute bottom-2 right-2 opacity-90" onClick={nextZoom} aria-label={`Zoom ${zoom}×: tap to change`}>
+            <ZoomIn /> {zoom}×
+          </Button>
+        )}
         {state.kind === "starting" && <div className="absolute inset-0 flex items-center justify-center text-sm text-white/80">Starting the camera…</div>}
         {state.kind === "on" && devices.length > 1 && (
           <Button size="sm" variant="secondary" className="absolute right-2 top-2 opacity-90" onClick={next} aria-label="Use another camera">
