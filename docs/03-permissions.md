@@ -139,3 +139,11 @@ Allowed people get Templates and Fields & conversions (a "Tag designs" menu item
 otherwise print) and the editor's previews, which show real campers of their own area. Their
 changes are written with the server's key after that check (`lib/print/designers.ts`); the
 database itself still lets only directors over all of camp change templates.
+
+## Text updates sign-up (`/updates`, migration 0038)
+A public page, no account needed: staff give their name and cell number and tick a box to
+agree to text updates from the directors. Each sign-up keeps the exact words agreed to, when,
+and from where (`update_signups`, one row per number: signing up again renews it). Only the
+server reads and writes the table. Directors see the list, the link and a QR code to post
+under Staff → Updates sign-ups, download it as Excel or CSV, and take people off it. A hidden
+field and a limit per address (30 an hour) keep scripts out.

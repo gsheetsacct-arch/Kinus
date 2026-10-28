@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ShieldCheck, UserPlus, Users } from "lucide-react";
+import { MessageSquare, ShieldCheck, UserPlus, Users } from "lucide-react";
 import { carryAreasTo } from "@/lib/staff/carry-areas";
 import { PageHeader } from "@/components/page-header";
 import { Callout } from "@/components/callout";
@@ -91,6 +91,13 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
         description={isDirector(me) ? `${rows.filter((r) => r.active).length} active people` : `Your divisions' staff · ${rows.filter((r) => r.active).length} active. You can add and change ${roles.map((r) => STAFF_ROLES[r].label.toLowerCase() + "s").join(" and ")}.`}
         actions={
           <>
+            {isDirector(me) && (
+              <Button asChild variant="ghost">
+                <Link href="/admin/users/updates">
+                  <MessageSquare /> Updates sign-ups
+                </Link>
+              </Button>
+            )}
             {isAdmin(me) && (
               <Button asChild variant="ghost">
                 <Link href="/admin/roles">
