@@ -26,8 +26,10 @@ export function byPlaceThenName(a: { first_name: string; last_name: string; divi
  * (campers.current_buzzer_number) so anyone can look a name up and see the number. Given in
  * printing order (division, bunk, name), each new one after the highest so far: a sheet of
  * stickers comes out in number order, and nobody's number changes once given.
+ * `redo`: everyone is numbered again from 001 in that order, also those who had a number
+ * (their buzzer labels then need printing again).
  */
-export async function assignBuzzers(sessionId: string, camperIds?: string[]): Promise<{ given: number; first: number | null; last: number | null }> {
+export async function assignBuzzers(sessionId: string, camperIds?: string[], opts: { redo?: boolean } = {}): Promise<{ given: number; first: number | null; last: number | null }> {
   const admin = createAdminClient();
   const { fetchAll } = await import("@/lib/supabase/fetch-all");
   const rows = await fetchAll((from, to) =>
@@ -40,18 +42,25 @@ export async function assignBuzzers(sessionId: string, camperIds?: string[]): Pr
       .range(from, to),
   );
   const wanted = camperIds ? new Set(camperIds) : null;
-  let next = rows.reduce((n, c) => Math.max(n, c.current_buzzer_number ?? 0), 0) + 1;
-  const todo = rows.filter((c) => c.current_buzzer_number === null && (!wanted || wanted.has(c.id))).sort(byPlaceThenName);
+  const redo = Boolean(opts.redo);
+  // numbering a few again from 001 would give them numbers others have
+  if (redo && camperIds) throw new Error("Renumbering is for everyone at once.");
+  let next = redo ? 1 : rows.reduce((n, c) => Math.max(n, c.current_buzzer_number ?? 0), 0) + 1;
+  const todo = rows.filter((c) => (redo || c.current_buzzer_number === null) && (!wanted || wanted.has(c.id))).sort(byPlaceThenName);
   if (!todo.length) return { given: 0, first: null, last: null };
   const first = next;
-  const plan = todo.map((c) => ({ id: c.id, n: next++ }));
+  // renumbering: only those whose number changes are written
+  const plan = todo.map((c) => ({ id: c.id, n: next++, had: c.current_buzzer_number })).filter((p) => p.n !== p.had);
   for (let i = 0; i < plan.length; i += 25) {
     const results = await Promise.all(
-      plan.slice(i, i + 25).map(({ id, n }) => admin.from("campers").update({ current_buzzer_number: n }).eq("id", id).is("current_buzzer_number", null)),
+      plan.slice(i, i + 25).map(({ id, n }) => {
+        const q = admin.from("campers").update({ current_buzzer_number: n }).eq("id", id);
+        return redo ? q : q.is("current_buzzer_number", null);
+      }),
     );
     for (const { error } of results) if (error) throw error;
   }
-  return { given: plan.length, first, last: next - 1 };
+  return { given: redo ? todo.length : plan.length, first, last: next - 1 };
 }
 
 /** Sets or clears one camper's number (a lost or broken buzzer); refuses one another camper has. */

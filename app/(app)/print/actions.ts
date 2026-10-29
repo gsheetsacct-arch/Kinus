@@ -36,16 +36,20 @@ async function requirePrinter() {
   return user;
 }
 
-/** Buzzer (pager) numbers for everyone in the session who has none yet: 001 and up, in division and bunk order. */
-export async function giveBuzzerNumbers(): Promise<ActionResult> {
+/**
+ * Buzzer (pager) numbers for everyone in the session who has none yet: 001 and up, in division
+ * and bunk order. `redo`: everyone again from 001, also those who already had one.
+ */
+export async function giveBuzzerNumbers(redo = false): Promise<ActionResult> {
   const user = await requireUser();
   if (!isAdmin(user)) return fail("Numbering everyone's buzzers is for directors over all of camp.");
   const session = await getActiveSession();
   if (!session) return fail("No active session.");
   try {
     const { assignBuzzers, formatBuzzer } = await import("@/lib/buzzers");
-    const r = await assignBuzzers(session.id);
+    const r = await assignBuzzers(session.id, undefined, { redo });
     revalidatePath("/print/batch");
+    if (redo) return ok(r.given ? `Renumbered ${plural(r.given, "camper")}: ${formatBuzzer(r.first)} to ${formatBuzzer(r.last)}. Print their buzzer labels again.` : "No campers to number.");
     return ok(r.given ? `${plural(r.given, "camper")} got buzzer numbers ${formatBuzzer(r.first)} to ${formatBuzzer(r.last)}.` : "Everyone already has a buzzer number.");
   } catch (e) {
     return fail(errorMessage(e));
