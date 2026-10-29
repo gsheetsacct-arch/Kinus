@@ -1,9 +1,11 @@
 "use server";
 import { headers } from "next/headers";
+import { after } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parsePhone } from "@/lib/import/mapping";
-import { UPDATES_CONSENT } from "@/lib/update-signups";
+import { UPDATES_CONSENT, UPDATES_WELCOME } from "@/lib/update-signups";
+import { sendSms, twilioConfig } from "@/lib/twilio";
 
 export type SignUpState = { ok: boolean; message: string } | null;
 
@@ -11,12 +13,13 @@ const form = z.object({
   name: z.string().trim().min(2, "Your full name, please.").max(100),
   phone: z.string().trim().min(7, "Your cell number, please.").max(30),
   consent: z.literal("yes", { message: "Tick the box to agree to receive updates." }),
+  terms: z.literal("yes", { message: "Tick the box to agree to the Terms of Service and Privacy Policy." }),
   website: z.string().max(0).optional(), // left empty by people; filled by bots
 });
 
 /** A sign-up from the public page (no account needed): saved with the consent as shown. */
 export async function signUpForUpdates(_prev: SignUpState, data: FormData): Promise<SignUpState> {
-  const parsed = form.safeParse({ name: data.get("name"), phone: data.get("phone"), consent: data.get("consent") ?? "", website: data.get("website") ?? "" });
+  const parsed = form.safeParse({ name: data.get("name"), phone: data.get("phone"), consent: data.get("consent") ?? "", terms: data.get("terms") ?? "", website: data.get("website") ?? "" });
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Check the form and try again." };
   // a bot filled the hidden field: answer as if it worked
   if (parsed.data.website) return { ok: true, message: "You're signed up." };
@@ -31,10 +34,23 @@ export async function signUpForUpdates(_prev: SignUpState, data: FormData): Prom
     if ((count ?? 0) >= 30) return { ok: false, message: "Too many sign-ups from here just now. Try again in an hour." };
   }
   const now = new Date().toISOString();
+  // signed up in the last day already (a second tap): no second welcome text
+  const { data: before } = await admin.from("update_signups").select("consented_at").eq("phone_e164", e164).maybeSingle();
+  const welcomed = Boolean(before?.consented_at && Date.now() - new Date(before.consented_at).getTime() < 24 * 3600_000);
   const { error } = await admin.from("update_signups").upsert(
     { full_name: parsed.data.name, phone: parsed.data.phone, phone_e164: e164, consent_text: UPDATES_CONSENT, consented_at: now, ip, user_agent: h.get("user-agent")?.slice(0, 300) ?? null, updated_at: now },
     { onConflict: "phone_e164" },
   );
   if (error) return { ok: false, message: /update_signups/.test(error.message) ? "Sign-ups aren't open yet. Tell the office." : "Couldn't save that. Try again in a minute." };
-  return { ok: true, message: `Thanks, ${parsed.data.name.split(" ")[0]}! You'll get updates at ${e164}.` };
+  // the welcome text, after the answer (Twilio may take a moment); not to a number that replied STOP
+  const twilio = twilioConfig();
+  if (twilio && !welcomed)
+    after(async () => {
+      const { data: stopped } = await admin.from("text_opt_outs").select("phone_e164").eq("phone_e164", e164).maybeSingle();
+      if (!stopped) await sendSms(twilio, { to: e164, body: UPDATES_WELCOME }).catch(() => undefined);
+    });
+  return {
+    ok: true,
+    message: `Thanks, ${parsed.data.name.split(" ")[0]}! You're signed up for camp staff updates at ${e164}${twilio ? ", and a confirmation text is on its way" : ""}. Reply STOP at any time to opt out (if you replied STOP to us before, text START to get messages again).`,
+  };
 }
