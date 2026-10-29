@@ -2,7 +2,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { requireAdmin } from "@/lib/auth/current-user";
+import { getActiveSession, requireAdmin, requireUser } from "@/lib/auth/current-user";
+import { isOwner } from "@/lib/auth/permissions";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { parseExtraFields } from "@/lib/import/extra-fields";
 import { forCampers } from "@/lib/print/staff-values";
@@ -147,6 +149,40 @@ export async function sendTestEmail(): Promise<ActionResult> {
     });
     if (!sent.sent) return fail(`Not sent: ${sent.reason}`);
     return ok(`Test email sent to ${[office.to, ...office.cc].join(", ")}. ${pdfNote} If it doesn't arrive within a few minutes, check the spam folder.`);
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+/**
+ * The owner starts check-in over (after a practice run, say): every check-in and check-out of
+ * the active session is removed, with the follow-ups (coming later, notes), and every camper is
+ * "not here yet" again. Campers, bunks, tags and buzzer numbers stay as they are.
+ */
+export async function resetAttendance(fd: FormData): Promise<ActionResult> {
+  const me = await requireUser();
+  if (!isOwner(me)) return fail("Only the owner can reset check-ins.");
+  if (String(fd.get("confirmText") ?? "").trim() !== "RESET") return fail("Type RESET to confirm.");
+  const session = await getActiveSession();
+  if (!session) return fail("No active session.");
+  try {
+    const admin = createAdminClient();
+    const { fetchAll } = await import("@/lib/supabase/fetch-all");
+    const ids = (await fetchAll((from, to) => admin.from("campers").select("id").eq("session_id", session.id).order("id").range(from, to))).map((c) => c.id);
+    let removed = 0;
+    for (let i = 0; i < ids.length; i += 200) {
+      const chunk = ids.slice(i, i + 200);
+      // the campers first: they point at their last check-in
+      const reset = await admin.from("campers").update({ status: "expected", last_event_id: null }).in("id", chunk).or("status.neq.expected,last_event_id.not.is.null");
+      if (reset.error) throw reset.error;
+      const events = await admin.from("attendance_events").delete({ count: "exact" }).in("camper_id", chunk);
+      if (events.error) throw events.error;
+      removed += events.count ?? 0;
+      const followups = await admin.from("camper_followups").delete().in("camper_id", chunk);
+      if (followups.error) throw followups.error;
+    }
+    for (const p of ["/", "/status", "/scan", "/campers", "/checkout"]) revalidatePath(p);
+    return ok(`Check-ins reset: ${removed.toLocaleString("en-US")} check-ins and check-outs removed, and all ${ids.length.toLocaleString("en-US")} campers are not here yet.`);
   } catch (e) {
     return fail(errorMessage(e));
   }

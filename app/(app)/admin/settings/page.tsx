@@ -12,7 +12,9 @@ import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
 import { extraAnswers } from "@/lib/data/extra-fields";
 import type { ExtraField } from "@/lib/import/extra-fields";
 import Link from "next/link";
-import { saveExtraFields, saveImportSettings, saveMissingRules, saveOfficeEmail, sendTestEmail } from "./actions";
+import { resetAttendance, saveExtraFields, saveImportSettings, saveMissingRules, saveOfficeEmail, sendTestEmail } from "./actions";
+import { FormDialog } from "@/components/form-dialog";
+import { isOwner } from "@/lib/auth/permissions";
 import { emailSetup } from "@/lib/print/email";
 import { parseExtraFields } from "@/lib/import/extra-fields";
 import { DEFAULT_RULES, type MissingRules } from "@/lib/attendance/missing";
@@ -24,7 +26,7 @@ export const metadata = { title: "Settings" };
 
 
 export default async function SettingsPage() {
-  await requireAdmin();
+  const me = await requireAdmin();
   const supabase = await createClient();
   const { data: settings } = await supabase.from("settings").select("key, value");
   const setting = (k: string) => (settings?.find((s) => s.key === k)?.value ?? {}) as Record<string, unknown>;
@@ -149,6 +151,23 @@ export default async function SettingsPage() {
           </ActionForm>
         </Section>
       </div>
+      {isOwner(me) && session && (
+        <Section
+          tone="danger"
+          title="Reset check-ins"
+          description={`Starts check-in over for ${session.name}: every check-in and check-out is removed, with the follow-ups (coming later, notes), and every camper is not here yet again. Campers, bunks, tags and buzzer numbers stay. Only the owner can do this, and it can't be undone.`}
+        >
+          <FormDialog
+            trigger={<Button variant="destructive">Reset all check-ins…</Button>}
+            title="Reset every check-in and check-out?"
+            description={`Everyone in ${session.name} goes back to not here yet, and their check-in history is gone for good.`}
+            action={resetAttendance}
+            submitLabel="Reset check-ins"
+            destructive
+            confirmText="RESET"
+          />
+        </Section>
+      )}
     </div>
   );
 }

@@ -55,7 +55,7 @@ export function FormDialog({
               <Label htmlFor="confirm-text">
                 Type <span className="font-semibold">{confirmText}</span> to confirm
               </Label>
-              <Input id="confirm-text" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" dir="auto" />
+              <Input id="confirm-text" name="confirmText" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" dir="auto" />
             </div>
           )}
           <DialogFooter className="pt-1">
