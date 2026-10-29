@@ -1,9 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-/** Who sends Kinus' texts, as the privacy policy and terms name them. */
-export const ORGANIZATION = "Kinus Tzeirei Hashluchim";
-export const PROGRAM = "Kinus staff text updates";
+export { ORGANIZATION, PROGRAM } from "@/lib/update-signups";
 export const UPDATED = "October 29, 2026";
 
 /** Where people write with questions: the office email (Admin → Settings), if set. */
