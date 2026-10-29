@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Logo } from "@/components/logo";
 import { UPDATES_CONSENT } from "@/lib/update-signups";
 import { SignupForm } from "./signup-form";
@@ -17,7 +18,17 @@ export default function UpdatesPage() {
           </div>
         </div>
         <SignupForm consent={UPDATES_CONSENT} />
-        <p className="text-xs text-muted-foreground">Your number is only for updates from camp. It isn&apos;t shared or sold.</p>
+        <p className="text-xs text-muted-foreground">
+          Your number is only for updates from camp. It isn&apos;t shared or sold. See the{" "}
+          <Link href="/terms" className="underline">
+            text message terms
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="underline">
+            privacy policy
+          </Link>
+          .
+        </p>
       </div>
     </main>
   );
