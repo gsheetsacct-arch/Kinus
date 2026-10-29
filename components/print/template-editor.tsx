@@ -766,7 +766,7 @@ export function TemplateEditor({
         : who === "longest"
           ? ({ kind: "longest", texts: JSON.parse(textsKey) } as const)
           : who === "worst"
-            ? ({ kind: "worst" } as const)
+            ? ({ kind: "worst", texts: JSON.parse(textsKey) } as const)
             : ({ kind: "sample" } as const),
     [who, code, textsKey],
   );
@@ -782,7 +782,7 @@ export function TemplateEditor({
             else setSample(r);
           })
           .catch(() => undefined),
-      who === "longest" ? 600 : 0,
+      who === "longest" || who === "worst" ? 600 : 0,
     );
     return () => {
       live = false;

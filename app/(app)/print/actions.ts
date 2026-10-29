@@ -491,7 +491,7 @@ export async function codePreviews(items: { type: "barcode" | "qr" | "qr-round";
 
 export async function previewTemplate(
   spec: TemplateSpec & { audience?: Audience },
-  who: { kind: "sample" } | { kind: "worst" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] },
+  who: { kind: "sample" } | { kind: "worst"; texts?: { text: string; w: number }[] } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] },
   opts: { fullSheet?: boolean } = {},
 ): Promise<string> {
   await requirePreviewer();
@@ -622,7 +622,7 @@ async function staffPreviewValues(user: CurrentUser, who: { kind: string; texts?
  * camper with the longest name (to check long names still fit).
  */
 export async function previewValues(
-  who: { kind: "sample" } | { kind: "worst" } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] },
+  who: { kind: "sample" } | { kind: "worst"; texts?: { text: string; w: number }[] } | { kind: "code"; code: string } | { kind: "longest"; texts?: { text: string; w: number }[] },
   audience: Audience = "campers",
 ): Promise<{ values: Record<string, string>; label: string } | { error: string }> {
   const user = await requirePreviewer();
@@ -632,7 +632,7 @@ export async function previewValues(
   if (who.kind === "worst") {
     // every field's longest value at once, among the campers this person sees (the camp chosen at the top)
     const camp = await getCampContext();
-    return worstCaseValues(camp.divisionIds ?? visibleDivisionIds(user));
+    return worstCaseValues(camp.divisionIds ?? visibleDivisionIds(user), who.texts);
   }
   const supabase = await createClient();
   let id: string | null = null;

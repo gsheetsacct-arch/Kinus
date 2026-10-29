@@ -92,8 +92,9 @@ Names vary a lot in length (and Hebrew names are on many tags). Before sizing pa
 longest_values: the widest real value of each field (first names, last names, bunks, Hebrew
 names…) and how many campers have it. Give each part room for those, set "size" for an
 ordinary value and "minSize" for the smallest you'd accept. Then check:
-- preview_template camper "worst": every field at once with its longest value. If it fits, every
-  camper fits.
+- preview_template camper "worst": every field at once with its longest value (the fields of one
+  part, like first and last name, from the one camper whose text is widest there, never a
+  made-up mix). If it fits, every camper fits.
 - preview_template camper "longest": the real camper whose text is longest on this tag.
 - check_fit: every camper; lists who went under minSize or didn't fit at all. A background picture (a full-tag design from InDesign, exported as PNG at
 300 dpi, without the names) goes in with upload_picture use "background".`;
