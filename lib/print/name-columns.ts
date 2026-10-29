@@ -3,11 +3,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { canAccessBunk, canUsePrintArea, effectiveLevel, seesAllCamp, type CurrentUser } from "@/lib/auth/permissions";
 
-export type NameColumn = { column: string; label: string; kind: "first" | "last" };
+export type NameColumn = { column: string; label: string; kind: "first" | "last" | "full" };
 
 /**
  * The export columns that hold Hebrew names: the ones the Hebrew-name label fields read
- * ("Hebrew name" → {{source.ppa.hebrew_name}}). First or last name, by their wording.
+ * ("Hebrew name" → {{source.ppa.hebrew_name}}). First, last or full name, by their wording.
  */
 export async function hebrewNameColumns(db: SupabaseClient<Database>): Promise<NameColumn[]> {
   const { data } = await db.from("merge_fields").select("key, label, source_field").order("sort_order");
@@ -19,7 +19,7 @@ export async function hebrewNameColumns(db: SupabaseClient<Database>): Promise<N
     if (!/hebrew|heb\b|heb_|עברית/i.test(words) || !/name|first|last|_first|_last/i.test(words)) continue;
     const column = m[1].trim();
     const key = column.toLowerCase().replace(/#/g, ".");
-    if (!out.has(key)) out.set(key, { column, label: f.label, kind: /last|family|surname/i.test(words) ? "last" : "first" });
+    if (!out.has(key)) out.set(key, { column, label: f.label, kind: /full/i.test(words) ? "full" : /last|family|surname/i.test(words) ? "last" : "first" });
   }
   return [...out.values()];
 }
