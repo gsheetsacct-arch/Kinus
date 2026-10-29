@@ -1,16 +1,10 @@
-import "server-only";
-import { createAdminClient } from "@/lib/supabase/admin";
-
 export { ORGANIZATION, PROGRAM } from "@/lib/update-signups";
 export const UPDATED = "October 29, 2026";
 
-/** Where people write with questions: the office email (Admin → Settings), if set. */
-export async function contactEmail(): Promise<string | null> {
-  try {
-    const { data } = await createAdminClient().from("settings").select("value").eq("key", "office_email").maybeSingle();
-    const to = (data?.value as { to?: string } | null)?.to?.trim();
-    return to || null;
-  } catch {
-    return null;
-  }
+/** Where people write with questions about the texts, the privacy policy and the terms. */
+export const CONTACT_EMAIL = "kinus@youngshluchim.org";
+
+/** The contact address on the sign-up page, the privacy policy and the terms. */
+export async function contactEmail(): Promise<string> {
+  return CONTACT_EMAIL;
 }
