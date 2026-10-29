@@ -1,5 +1,5 @@
 import { LegalPage } from "@/components/legal/legal-page";
-import { ORGANIZATION, UPDATED, contactEmail } from "@/lib/legal";
+import { CAMP, ORGANIZATION, UPDATED, contactEmail } from "@/lib/legal";
 
 export const metadata = { title: "Privacy policy" };
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export default async function PrivacyPage() {
   return (
     <LegalPage title="Privacy policy" updated={UPDATED}>
       <p>
-        {ORGANIZATION} (“we”, “camp”) runs Kinus, the system camp staff use to check campers in and out, print name tags and keep in touch with staff. This policy explains what we keep and
+        {ORGANIZATION} (“we”), which runs the {CAMP} camp program (“camp”), runs Kinus, the system camp staff use to check campers in and out, print name tags and keep in touch with staff. This policy explains what we keep and
         how we use it.
       </p>
       <h2>What we collect</h2>

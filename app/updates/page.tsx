@@ -1,6 +1,6 @@
 import { Logo } from "@/components/logo";
 import { contactEmail } from "@/lib/legal";
-import { ORGANIZATION, UPDATES_ABOUT, UPDATES_CONSENT, UPDATES_FREQUENCY } from "@/lib/update-signups";
+import { CAMP, ORGANIZATION, UPDATES_ABOUT, UPDATES_CONSENT, UPDATES_FREQUENCY } from "@/lib/update-signups";
 import { SignupForm } from "./signup-form";
 
 export const metadata = { title: "Get updates from the directors" };
@@ -20,7 +20,7 @@ export default async function UpdatesPage() {
           <Logo className="size-10" />
           <div>
             <h1 className="text-xl font-semibold leading-tight">Get text updates from {ORGANIZATION}</h1>
-            <p className="text-sm text-muted-foreground">For camp staff, from the camp directors.</p>
+            <p className="text-sm text-muted-foreground">For {CAMP} camp staff, from the camp directors.</p>
           </div>
         </div>
         <p className="text-sm">
