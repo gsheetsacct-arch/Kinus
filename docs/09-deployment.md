@@ -130,6 +130,11 @@ sign-in page's "emailed link", with a fresh link (`emailWayIn` in `lib/staff/acc
   push, and failed anyway without the Supabase keys set for Preview. If the production branch
   changes, change it there too. Pushes that only touch docs, Markdown or `supabase/` are skipped
   (`ignoreCommand`).
+- Function size (Functions Storage on Hobby): Chromium for tag PDFs is 67 MB and is read from
+  disk, so `next.config.ts` adds it to the routes that make PDFs or tag pictures only (21 of
+  67), not every route: about 1.8 GB stored per deployment instead of 5 GB. A new route that
+  makes PDFs has to be added to that list, or its PDFs fail with "…/@sparticuz/chromium/bin does
+  not exist".
 - Node runtime for `/api/print/*` (Chromium); set `maxDuration = 60` on that route.
   The `@sparticuz/chromium` package stays under the 50 MB function limit; verify in
   the first preview.
