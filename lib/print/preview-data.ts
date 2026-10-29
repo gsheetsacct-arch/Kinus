@@ -8,6 +8,7 @@ import { renderDocument } from "./render";
 import { customFontCss } from "./custom-fonts";
 import type { TemplateSpec } from "./types";
 import { widthEstimate } from "./width-estimate";
+import { worstValues, type PartText } from "./worst-case";
 
 /**
  * What previews are filled with, and the preview page itself: for the template editor and
@@ -147,12 +148,17 @@ export async function longestPerField(divisionIds: string[] | null, opts: { keys
 
 /**
  * The worst case: every field at once with its widest real value (the longest first name, the
- * longest last name, the longest bunk…). A tag that fits this fits everyone.
+ * longest bunk…), but the fields printed together in one part (first and last name) from one
+ * real camper: the one whose text is widest there (lib/print/worst-case). A tag that fits this
+ * fits everyone.
  */
-export async function worstCaseValues(divisionIds: string[] | null): Promise<{ values: Record<string, string>; label: string } | { error: string }> {
-  const extremes = await longestPerField(divisionIds, { top: 1 });
-  if (!extremes.some((e) => e.longest.length)) return { error: "No campers to look at." };
+export async function worstCaseValues(divisionIds: string[] | null, parts: PartText[] = []): Promise<{ values: Record<string, string>; label: string } | { error: string }> {
+  const [people, setup] = await Promise.all([allCamperValues(divisionIds), loadMergeSetup(createAdminClient())]);
+  if (!people.length) return { error: "No campers to look at." };
   const values = await sampleValues();
-  for (const e of extremes) if (e.longest[0]) values[e.key] = e.longest[0].value;
-  return { values, label: "the longest of every field at once (worst case)" };
+  for (const f of setup.fields) {
+    const widest = people.map((p) => (p.values[f.key] ?? "").trim()).reduce((a, b) => (widthEstimate(b) > widthEstimate(a) ? b : a), "");
+    if (widest) values[f.key] = widest;
+  }
+  return { values: worstValues(people.map((p) => p.values), parts, values), label: "the longest of every field at once (worst case)" };
 }
