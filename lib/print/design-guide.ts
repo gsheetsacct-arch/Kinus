@@ -34,8 +34,8 @@ Positions are millimetres from the tag's top-left: x, y, w (width), h (height).
   normally; very long names still go smaller, down to 4 pt, to print whole), "wrap": bool
   (more than one line), "valign": "top"|"middle"|"bottom" (where the text sits in its box;
   middle by default, top when it wraps), "lineHeight": number (line spacing × the size for
-  wrapped text; default the font's own, 1.4 for uploaded fonts: lower it to just fit the
-  font's letters, e.g. 1.25 for Poppins), "curve": "top"|"bottom" (the text runs along the
+  wrapped text; default the font's own, 1.4 for uploaded fonts: lower it for snug lines,
+  e.g. 1.2; the tails of g, j, p, q and y hang past the line and print whole), "curve": "top"|"bottom" (the text runs along the
   top or bottom of the circle inside its box, letters upright, centred, shrinking to fit the
   arc: for round stickers make the box the sticker's size), "arc": degrees of the circle it may
   take (default 180), "letterSpacing": em (extra space between letters, × the size; e.g. 0.05

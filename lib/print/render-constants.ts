@@ -12,3 +12,10 @@ export const minPt = (l: { size: number; minSize?: number }) => Math.min(l.minSi
  * Kinus tells the office which ones did. Only past this is text cut.
  */
 export const FLOOR_PT = 4;
+
+/**
+ * How far (× the text size) letters may reach past the top and bottom of a text part and of
+ * each line: the tails of g, j, p, q and y (and accents) print whole at tight line spacing.
+ * Text is still cut at the sides, where fitting keeps it inside.
+ */
+export const DESCENDER_ROOM_EM = 0.3;

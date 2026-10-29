@@ -3,7 +3,7 @@ import * as React from "react";
 import { fill } from "@/lib/print/merge";
 import { fitText } from "@/lib/print/fit";
 import { CURVE_SCALE, curvePath, DEFAULT_ARC, fitCurve } from "@/lib/print/curve";
-import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
+import { DESCENDER_ROOM_EM, FLOOR_PT, minPt } from "@/lib/print/render-constants";
 import { DIVISION_VALUE, pictureFor, textAlignItems, type Layer } from "@/lib/print/types";
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -511,7 +511,8 @@ function Part({
       }}
       onPointerDown={(e) => onStart(e, l, "move")}
     >
-      <div style={inner} className="pointer-events-none overflow-hidden">
+      {/* text clips itself, with room for letters' tails (TextPart) */}
+      <div style={inner} className={cn("pointer-events-none", l.type === "text" && !l.curve ? "overflow-visible" : "overflow-hidden")}>
         {l.type === "text" &&
           (l.curve ? (
             <CurvedPart l={l} values={values} onFit={onFit} />
@@ -803,7 +804,7 @@ function TextPart({
         const over =
           !empty &&
           (span.current.scrollWidth > box.current.clientWidth + 0.5 ||
-            box.current.scrollHeight > box.current.clientHeight + 0.5);
+            span.current.offsetHeight > box.current.clientHeight + 0.5);
         setCut(over ? "cut" : null);
         onFit(l.id, { pt: l.size, overflow: over });
         return;
@@ -848,10 +849,11 @@ function TextPart({
       <div
         ref={box}
         className={cn(
-          "flex size-full overflow-hidden",
+          "flex size-full [overflow:clip]",
           l.wrap ? "whitespace-normal" : "whitespace-nowrap",
         )}
         style={{
+          overflowClipMargin: `${DESCENDER_ROOM_EM}em`,
           fontWeight: l.weight ?? 400,
           color: empty ? "#94a3b8" : safeColor(l.color ?? "#111111", "#111111"),
           textAlign: l.align ?? "left",
@@ -878,8 +880,8 @@ function TextPart({
         <span
           ref={span}
           dir="auto"
-          // clipped to its line like the printed page, so the size measured here is the printed size
-          className="max-w-full overflow-hidden [unicode-bidi:plaintext]"
+          // cut at the sides like the printed page, so the size measured here is the printed size
+          className="max-w-full overflow-x-clip overflow-y-visible [unicode-bidi:plaintext]"
           style={{ textDecoration: l.underline ? "underline" : undefined, textWrap: l.wrap ? "balance" : undefined }}
         >
           {empty ? l.text : text}

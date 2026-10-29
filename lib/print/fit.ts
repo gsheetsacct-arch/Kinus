@@ -5,12 +5,12 @@
  * `below` says it went under the smallest size, `overflow` that it doesn't fit even at the floor.
  */
 export function fitText(box: HTMLElement, text: HTMLElement, targetPx: number, minPx: number, floorPx = minPx): { px: number; overflow: boolean; below: boolean } {
-  const over = () => text.scrollWidth > box.clientWidth + 0.5 || box.scrollHeight > box.clientHeight + 0.5;
+  const over = () => text.scrollWidth > box.clientWidth + 0.5 || text.offsetHeight > box.clientHeight + 0.5;
   let s = targetPx;
   box.style.fontSize = `${s}px`;
   if (!over()) return { px: s, overflow: false, below: false };
   // text on more lines steps down from its size: a jump would skip the sizes where it fits on fewer lines
-  const r = getComputedStyle(box).whiteSpace === "nowrap" ? Math.min(box.clientWidth / Math.max(text.scrollWidth, 1), box.clientHeight / Math.max(box.scrollHeight, 1)) : 1;
+  const r = getComputedStyle(box).whiteSpace === "nowrap" ? Math.min(box.clientWidth / Math.max(text.scrollWidth, 1), box.clientHeight / Math.max(text.offsetHeight, 1)) : 1;
   // the same steps as the printed page (half a pixel), so the editor's size is the printed size
   s = Math.max(minPx, Math.floor(s * Math.min(1, r) * 2) / 2);
   box.style.fontSize = `${s}px`;
