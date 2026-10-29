@@ -1,4 +1,5 @@
 import { DIVISION_VALUE } from "./types";
+import { countryName, stateCode } from "@/lib/address-codes";
 
 /** Who a template is for (migration 0041): campers, or staff (Print → Staff tags). */
 export type Audience = "campers" | "staff";
@@ -25,6 +26,11 @@ export const STAFF_FIELDS: { key: string; label: string }[] = [
   { key: "PHONE", label: "Phone" },
   { key: "EMAIL", label: "Email" },
   { key: "TSHIRT", label: "T-shirt size (registration)" },
+  { key: "ADDRESS", label: "Street address (registration)" },
+  { key: "CITY", label: "City (registration)" },
+  { key: "STATE", label: "State, as its code: NY (registration)" },
+  { key: "ZIP", label: "Zip code (registration)" },
+  { key: "COUNTRY", label: "Country: USA… (registration)" },
   { key: "STAFF_ID", label: "Registration id" },
 ];
 
@@ -36,6 +42,8 @@ export type StaffPerson = {
   email: string | null;
   sourceId?: string | null;
   details?: Record<string, string> | null;
+  /** Home address from registration (lib/staff/export). */
+  address?: { street?: string; city?: string; state?: string; zip?: string; country?: string } | null;
   /** Where they work, in order: their division(s), with the bunk if they have one. */
   places: { division: string; color: string | null; camp: string | null; bunk: string | null }[];
 };
@@ -66,6 +74,12 @@ export function staffValues(p: StaffPerson, roleLabel: (role: string) => string)
     PHONE: p.phone ?? "",
     EMAIL: p.email ?? "",
     TSHIRT: detail(p.details, "T-shirt size", "Tshirt size"),
+    // states and countries the same way on every tag: NY, USA (lib/address-codes)
+    ADDRESS: p.address?.street ?? "",
+    CITY: p.address?.city ?? "",
+    STATE: stateCode(p.address?.state),
+    ZIP: p.address?.zip ?? "",
+    COUNTRY: countryName(p.address?.country),
     STAFF_ID: p.sourceId ?? "",
     // a picture part with a different picture per division goes by the first one
     [DIVISION_VALUE]: divisions[0] ?? "",
@@ -81,5 +95,6 @@ export const SAMPLE_STAFF: StaffPerson = {
   email: "mendel@example.org",
   sourceId: "1234",
   details: { "Full hebrew name": "מנחם מענדל", "T-shirt size": "L" },
+  address: { street: "770 Eastern Parkway", city: "Brooklyn", state: "New York", zip: "11213", country: "United States" },
   places: [{ division: "Division 2", color: "#2563eb", camp: "American", bunk: "Bunk Lamed" }],
 };

@@ -35,6 +35,7 @@ export function toSpec(t: Database["public"]["Tables"]["print_templates"]["Row"]
     sheet_layout: (t.sheet_layout as SheetLayout | null) ?? null,
     background_path: t.background_path,
     back: ((t as { back?: unknown }).back as BackSide | null | undefined) ?? null,
+    thermal: Boolean((t as { thermal?: boolean }).thermal),
   };
 }
 

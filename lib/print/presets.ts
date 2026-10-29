@@ -179,5 +179,6 @@ export function isRoundLabel(w: number, h: number, sheet: SheetLayout | null): b
 export function currentPreset(w: number, h: number, sheet: SheetLayout | null): LabelPreset | null {
   const near = (a: number, b: number) => Math.abs(a - b) < 0.6;
   if (sheet) return LABEL_PRESETS.find((p) => p.id === sheet.preset && near(p.widthMm, w) && near(p.heightMm, h)) ?? null;
-  return LABEL_PRESETS.find((p) => !p.sheet && near(p.widthMm, w) && near(p.heightMm, h)) ?? null;
+  // a label-printer label either way round (a 4×6 designed upright, as the printer feeds it)
+  return LABEL_PRESETS.find((p) => !p.sheet && ((near(p.widthMm, w) && near(p.heightMm, h)) || (near(p.widthMm, h) && near(p.heightMm, w)))) ?? null;
 }

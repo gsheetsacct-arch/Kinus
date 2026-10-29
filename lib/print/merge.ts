@@ -2,6 +2,7 @@ import { getFieldValue, type CamperLike } from "@/lib/fields";
 import { DIVISION_VALUE, type MergeField, type Transform, type ValueMap } from "./types";
 import { convertNumber } from "@/lib/hebrew-number";
 import { withFixes } from "@/lib/source-fixes";
+import { addressColumn } from "@/lib/address-codes";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
@@ -25,7 +26,10 @@ export function sourceValues(c: CamperLike & { division_color?: string | null; s
         if (v || !columns.has(columnKey(k))) columns.set(columnKey(k), v);
       }
     }
-    return columns.get(columnKey(name));
+    const v = columns.get(columnKey(name));
+    // a state or country prints the same way on every tag: NY, USA (lib/address-codes)
+    const tidy = v ? addressColumn(columnKey(name)) : null;
+    return tidy ? tidy(v!) : v;
   };
   return (key) => {
     if (key.startsWith("source.")) return column(key.slice(7)) ?? "";

@@ -120,6 +120,8 @@ export type TemplateSpec = {
   background_path?: string | null;
   /** Set: printed on both sides (migration 0035). */
   back?: BackSide | null;
+  /** For a thermal label printer (migration 0042): black and white only, the page the size of the label (lib/print/thermal). */
+  thermal?: boolean;
 };
 
 export type PrintItem = { values: Record<string, string>; copies: number };

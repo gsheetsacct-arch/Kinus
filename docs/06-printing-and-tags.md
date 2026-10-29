@@ -512,6 +512,7 @@ copied design mostly just works:
 | `{{POSITION}}` `{{ROLE}}` | their position (Learning head…) and Kinus role |
 | `{{DIVISION}}` `{{BUNK}}` `{{CAMP}}` `{{DIVISION_COLOR}}` | where they work (several: joined with commas; the colour of the first) |
 | `{{PHONE}}` `{{EMAIL}}` | their profile |
+| `{{ADDRESS}}` `{{CITY}}` `{{STATE}}` `{{ZIP}}` `{{COUNTRY}}` | their home address from registration (state as its code, NY; the US as USA) |
 
 The editor previews them with a made-up staff member, the staff member with the longest text,
 or every field's longest at once, and the fit check measures every staff member. Staff
@@ -527,6 +528,35 @@ page) and the browser's print dialog comes up; *Save as PDF* keeps a file. Direc
 office over all of camp print for all staff, division heads for the staff of their divisions.
 Staff tags don't go through the print queue (its items are campers) and aren't tracked for
 changes.
+
+## 6.7b Thermal label printers (migration 0042)
+
+Zebra, Rollo, MUNBYN and other thermal printers print black only: colour and grey come out as a
+speckle of dots that blurs names and stops codes scanning. **Thermal label printer** (a switch in
+the template editor, under the label stock; `print_templates.thermal`) prints the template for one
+(`lib/print/thermal`):
+
+- every colour as solid black or white, whichever it's closer to (dark blue text black, a yellow
+  band white; white text on a dark band stays readable), the division colour per tag too;
+- barcodes and QR codes solid black; pictures and the background in black and white (a picture
+  uploaded as a PDF prints as its picture, so it's black and white too);
+- one label a page, the page the size of the label. A label wider than tall (the Zebra 4×6 as the
+  label picker gives it, 152.4 × 101.6 mm) goes on a page turned the way the printer feeds it, so
+  a 4″ × 6″ label is always a 4″ × 6″ page: in PDFs, the emailed PDF, browser printing and staff
+  tags. Print with the printer's own size (4 × 6) and 100% scale, not "fit to page".
+
+Migration 0042 adds a ready-made **Luggage tag 4×6 (thermal)**, upright as it comes out of the
+printer: division band, name, bunk, a QR code of the camper's code (25 mm and more scans well at
+203 dpi) and the number under it. Copy it to make your own.
+
+## 6.7c States and countries
+
+A state or country prints the same way on every tag, whatever the form said (`lib/address-codes`):
+any export column called state, province or country (`{{family.state}}`, a merge field made from
+it, a staff tag's `{{STATE}}`) prints a US state or Canadian province as its two-letter code
+("New York", "N.Y." → NY) and the United States as USA (the United Kingdom as UK). Anything it
+doesn't know prints as typed. Labels printed before this that show a state come up once as
+"changed since printed".
 
 ## 6.8 Email (Resend)
 

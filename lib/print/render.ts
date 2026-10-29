@@ -7,6 +7,7 @@ import { DIVISION_VALUE, onBack, pictureFor, sheetPlacement, textAlignItems, tex
 import { FLOOR_PT, minPt, PX_PER_PT } from "./render-constants";
 import { isRoundLabel } from "./presets";
 import { CURVE_SCALE, curvePath, DEFAULT_ARC } from "./curve";
+import { THERMAL_PICTURE_CSS, thermalLayers, thermalValues, turnsOnPage } from "./thermal";
 
 /** A CSS class for a stored picture (the same path always gets the same class). */
 export function imageClass(path: string): string {
@@ -115,10 +116,13 @@ export function stackColumns<T>(slots: (T | null)[], cols: number, stack: number
  * into a PDF by Chromium.
  */
 export function renderDocument(
-  t: TemplateSpec,
-  items: PrintItem[],
+  spec: TemplateSpec,
+  given: PrintItem[],
   opts: { background?: string | null; outlines?: boolean; skip?: number; usedSlots?: number[]; images?: Record<string, string>; stack?: number; /** @font-face rules for the template's uploaded fonts (customFontCss). */ fontCss?: string } = {},
 ): string {
+  // a thermal printer: black and white only (lib/print/thermal)
+  const t = spec.thermal ? { ...spec, layers: thermalLayers(spec.layers) } : spec;
+  const items = spec.thermal ? thermalValues(given) : given;
   const sheet = t.sheet_layout;
   const per = sheet && sheet.cols > 0 && sheet.rows > 0 ? sheet.cols * sheet.rows : 0;
   // a part-used label sheet: the labels already peeled off stay empty (only on the first sheet).
@@ -174,6 +178,13 @@ export function renderDocument(
       }
     }
     body = pages.join("");
+  } else if (turnsOnPage(t)) {
+    // a label printer fed the narrow way (a 6″ × 4″ design on 4″ × 6″ labels): each page is the
+    // label as the printer feeds it, with the design turned a quarter onto it
+    const [w, h] = [t.page_width_mm, t.page_height_mm];
+    pageCss = `@page{size:${h}mm ${w}mm;margin:0}.pg{position:relative;width:${h}mm;height:${w}mm;overflow:hidden;break-after:page}.pg>.tag{position:absolute;left:0;top:0;transform-origin:0 0;transform:translateX(${h}mm) rotate(90deg)}`;
+    const page = (html: string) => `<div class="pg">${html}</div>`;
+    body = tags.map((v) => (v ? page(front(v)) + (back ? page(tagHtml(t, v, null, "back")) : "") : "")).join("");
   } else {
     pageCss = `@page{size:${t.page_width_mm}mm ${t.page_height_mm}mm;margin:0}.tag{break-after:page}`;
     // one tag a page: front, then its back on the next page (the back of the same label)
@@ -196,7 +207,7 @@ body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-w
 .bc{display:flex;flex-direction:column;background:#fff}.bc .bars{flex:1;min-height:0}.bc svg{width:100%;height:100%;display:block}
 .bc-text{font-size:7pt;text-align:center;letter-spacing:0.5pt;line-height:1.2;padding-top:0.4mm}
 .qr svg{width:100%;height:100%;display:block}
-@media screen{body{background:#e2e8f0;padding:8mm;display:flex;flex-wrap:wrap;gap:6mm;align-items:flex-start}.tag,.sheet{flex-shrink:0;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}}
+@media screen{body{background:#e2e8f0;padding:8mm;display:flex;flex-wrap:wrap;gap:6mm;align-items:flex-start}.tag,.sheet,.pg{flex-shrink:0;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}.pg>.tag{box-shadow:none}}${t.thermal ? `\n${THERMAL_PICTURE_CSS}` : ""}
 .used{background:repeating-linear-gradient(45deg,#f1f5f9 0 2mm,#fff 2mm 4mm);outline:0.3mm dashed #94a3b8}
 @media screen{.sheet.back,.tag.back:not(.sheet>.tag){outline:0.6mm dashed #94a3b8}.sheet.back::before,body>.tag.back::after{content:"Back";position:absolute;top:1mm;right:1mm;z-index:5;font:600 8pt sans-serif;color:#475569;background:#f1f5f9;padding:0.3mm 1.5mm;border-radius:1mm}}
 @media print{body{display:block}.used{display:none}}

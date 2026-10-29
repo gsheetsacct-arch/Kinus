@@ -1,5 +1,6 @@
 import type { BulkInputRow } from "./bulk";
 import { matchRole } from "./bulk";
+import { countryName, stateCode } from "@/lib/address-codes";
 
 /** The staff export from registration ("Main Program Report"): ppa.*, students.*, group_types.*, applications.* columns. */
 export type StaffAddress = { street: string; city: string; state: string; zip: string; country: string };
@@ -104,6 +105,9 @@ export function readStaffExport(grid: string[][]): ExportRead {
   return { rows: out, skipped: [...skipped].map(([status, count]) => ({ status, count })).sort((a, b) => b.count - a.count) };
 }
 
-/** "4 Main Street, Brooklyn, NY 11213" */
-export const addressLine = (a: Partial<StaffAddress> | null | undefined) =>
-  a ? [a.street, a.city, [a.state, a.zip].filter(Boolean).join(" "), a.country && !/^(us|usa|united states)$/i.test(a.country) ? a.country : ""].filter(Boolean).join(", ") : "";
+/** "4 Main Street, Brooklyn, NY 11213" (the country only outside the USA) */
+export const addressLine = (a: Partial<StaffAddress> | null | undefined) => {
+  if (!a) return "";
+  const country = countryName(a.country);
+  return [a.street, a.city, [stateCode(a.state), a.zip].filter(Boolean).join(" "), country === "USA" ? "" : country].filter(Boolean).join(", ");
+};

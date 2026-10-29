@@ -2,7 +2,7 @@
 export const DESIGN_GUIDE = `# Designing Kinus templates
 
 Kinus prints name tags, luggage tags and labels for camp: one tag per camper, filled with each
-camper's details. A template is JSON; you change it with save_template and look at it with
+camper's details, and staff tags (one per staff member, filled from the staff list). A template is JSON; you change it with save_template and look at it with
 preview_template (a picture exactly as it prints) and check_fit (every real camper).
 
 ## Workflow
@@ -19,7 +19,9 @@ preview_template (a picture exactly as it prints) and check_fit (every real camp
   "sheet_layout": null | {...}                    // null: one tag per page (label printer);
                                                   // a sheet: copy "sheet" from list_label_stock
   "back": null | {"flip": "long"|"short"},       // two-sided: parts with "side":"back" print behind
-  "camps": [] | ["American", ...],               // only for these camps; [] every camp
+  "audience": "campers" | "staff",              // whose tag (default campers); staff tags print from Print → Staff tags
+  "thermal": bool,                                // for a thermal label printer: black and white only, a page per label
+  "camps": [] | ["American", ...],               // only for these camps; [] every camp (campers only)
   "show_on_card": bool, "auto_on_first_checkin": bool, "copies": 1-10,
   "layers": [ part, ... ] }                       // drawn in order: later parts on top
 
@@ -60,10 +62,30 @@ Positions are millimetres from the tag's top-left: x, y, w (width), h (height).
   previews show a picture of it.
 Every part may also have "locked", "hidden", and "side":"back" (on a two-sided template).
 
+## Staff tags
+A template with "audience": "staff" is filled from the staff list: list_fields and longest_values
+with for "staff" show what it can say ({{FIRST}}, {{LAST}}, {{FULL}}, {{HEBREW_NAME}},
+{{POSITION}}, {{ROLE}}, {{DIVISION}}, {{BUNK}}, {{CAMP}}, {{DIVISION_COLOR}}, {{PHONE}}…).
+preview_template and check_fit use staff for it ("camper" may be a staff member's name). To
+turn a camper design into a staff one, copy_template with for "staff" (the camper one stays),
+then change the parts that say camper things (a camper's QR code means nothing on a staff tag).
+Staff tags have no camps, card button or check-in printing.
+
+## Thermal label printers
+Zebra, Rollo and other thermal printers print black only: a colour or grey comes out speckled.
+"thermal": true prints every colour as solid black or white (whichever it's closer to), codes
+black and pictures black and white; preview_template shows it so. Design for it: black text, solid
+black bands with white text, no pale tints. The Zebra 4×6 (list_label_stock "4×6") is 101.6 mm
+wide and 152.4 mm tall as it comes out of the printer: design it that way up (or 152.4 × 101.6 and
+Kinus turns each label onto a 4″ × 6″ page). A QR code of {{BARCODE}} at least 25 mm wide scans
+well on a 203 dpi printer.
+
 ## Fonts and colours
 "font" is "sans" (default), "rounded", "serif", "display", or an uploaded one "custom:<id>"
 (list_fonts; upload_font adds the designer's own). Every font prints with Hebrew and French
 letters (missing letters fall back to Kinus Sans). Colours are #rrggbb.
+States and countries print the same way everywhere: a state or country column ({{family.state}},
+a field made from it, a staff tag's {{STATE}}) prints as its code, NY, and the US as USA.
 
 ## Design around the text
 Names vary a lot in length (and Hebrew names are on many tags). Before sizing parts, run
