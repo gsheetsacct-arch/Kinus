@@ -124,6 +124,12 @@ sign-in page's "emailed link", with a fresh link (`emailWayIn` in `lib/staff/acc
 
 - Project linked to the repo; Production branch `main`; previews for PRs
   (triggered by the deploy hook from the db workflow, Git auto-deploy disabled).
+- What builds (`vercel.json` → `git.deploymentEnabled`): the production branch
+  (`claude/gracious-noether-nc1kf8`) only. `dev` and the working branches Claude pushes to
+  (`claude/*`) don't make preview deployments: they used build time and deployments on every
+  push, and failed anyway without the Supabase keys set for Preview. If the production branch
+  changes, change it there too. Pushes that only touch docs, Markdown or `supabase/` are skipped
+  (`ignoreCommand`).
 - Node runtime for `/api/print/*` (Chromium); set `maxDuration = 60` on that route.
   The `@sparticuz/chromium` package stays under the 50 MB function limit; verify in
   the first preview.
