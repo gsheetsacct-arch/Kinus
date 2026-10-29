@@ -1,9 +1,14 @@
 import "server-only";
+import fs from "node:fs";
+import path from "node:path";
+import type { Box } from "./pdf-art";
 
 /**
- * HTML → PDF with headless Chromium. Locally/CI set CHROMIUM_PATH; on Vercel the
- * @sparticuz/chromium build is used. Throws if no browser is available; callers fall
- * back to the printable HTML page.
+ * Everything Kinus does with headless Chromium: HTML → PDF, pictures of tags, pictures of
+ * PDF artwork. Only /api/render imports this (Chromium is big, so it ships in that one
+ * function); everything else asks it through lib/print/chromium. Locally/CI set
+ * CHROMIUM_PATH; on Vercel the @sparticuz/chromium build is used. Throws if no browser is
+ * available; callers fall back to the printable HTML page.
  */
 export type FitNotes = { smaller: { text: string; pt: number }[]; cut: string[] };
 
@@ -162,4 +167,55 @@ async function withPdfArt(page: import("puppeteer-core").Page, art: Record<strin
     sheet.drawPage(layers[i], { x: 0, y: 0, width, height });
   }
   return Buffer.from(await out.save());
+}
+
+let pdfjs: { lib: string; worker: string } | null = null;
+const pdfjsSource = () =>
+  (pdfjs ??= {
+    lib: fs.readFileSync(path.join(process.cwd(), "node_modules/pdfjs-dist/build/pdf.min.js"), "utf8"),
+    worker: fs.readFileSync(path.join(process.cwd(), "node_modules/pdfjs-dist/build/pdf.worker.min.js"), "utf8"),
+  });
+
+/** Pictures (PNG) of PDF pages, each cropped to its box, about 300 dpi (at most 3000 px long). */
+export async function pdfPictures(bytes: Uint8Array, boxes: Box[]): Promise<Buffer[]> {
+  const src = pdfjsSource();
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.setContent("<!doctype html><html><body></body></html>");
+    await page.addScriptTag({ content: src.lib });
+    const pngs = (await page.evaluate(
+      async (data: string, worker: string, boxes: Box[]) => {
+        const lib = (window as unknown as { pdfjsLib: { GlobalWorkerOptions: { workerSrc: string }; getDocument: (o: object) => { promise: Promise<{ getPage: (n: number) => Promise<{ view: number[]; getViewport: (o: { scale: number }) => object; render: (o: object) => { promise: Promise<void> } }> }> } } }).pdfjsLib;
+        lib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([worker], { type: "text/javascript" }));
+        const bin = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+        // no script from the PDF runs (isEvalSupported off)
+        const doc = await lib.getDocument({ data: bin, isEvalSupported: false, disableFontFace: false }).promise;
+        const out: string[] = [];
+        for (let i = 0; i < boxes.length; i++) {
+          const p = await doc.getPage(i + 1);
+          const b = boxes[i];
+          const scale = Math.min(300 / 72, 3000 / Math.max(b.w, b.h));
+          const viewport = p.getViewport({ scale });
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(b.w * scale);
+          canvas.height = Math.round(b.h * scale);
+          const ctx = canvas.getContext("2d")!;
+          ctx.fillStyle = "#fff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          // the box's top-left corner to the canvas's (PDF y runs up, from the page's own box)
+          const [x0, , , y1] = p.view;
+          await p.render({ canvasContext: ctx, viewport, transform: [1, 0, 0, 1, -(b.x - x0) * scale, -(y1 - (b.y + b.h)) * scale] }).promise;
+          out.push(canvas.toDataURL("image/png").split(",")[1]);
+        }
+        return out;
+      },
+      Buffer.from(bytes).toString("base64"),
+      src.worker,
+      boxes,
+    )) as string[];
+    return pngs.map((b) => Buffer.from(b, "base64"));
+  } finally {
+    await browser.close();
+  }
 }

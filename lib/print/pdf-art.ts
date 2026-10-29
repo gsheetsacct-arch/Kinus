@@ -1,8 +1,6 @@
 import "server-only";
-import fs from "node:fs";
-import path from "node:path";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { launchBrowser } from "./pdf";
+import { renderPictures } from "./chromium";
 import type { Layer, PdfArt } from "./types";
 
 /**
@@ -18,7 +16,7 @@ import type { Layer, PdfArt } from "./types";
 export const MAX_PDF_BYTES = 15 * 1024 * 1024;
 const MAX_PAGES = 6;
 
-type Box = { x: number; y: number; w: number; h: number };
+export type Box = { x: number; y: number; w: number; h: number };
 
 /** The pages of a PDF: their boxes (pt) and the one to use, for a tag `tag` mm (or none). */
 export async function pdfPages(bytes: Uint8Array, tag?: { w: number; h: number } | null): Promise<{ box: Box; widthMm: number; heightMm: number }[]> {
@@ -43,57 +41,6 @@ export async function pdfPages(bytes: Uint8Array, tag?: { w: number; h: number }
   });
 }
 
-let pdfjs: { lib: string; worker: string } | null = null;
-const pdfjsSource = () =>
-  (pdfjs ??= {
-    lib: fs.readFileSync(path.join(process.cwd(), "node_modules/pdfjs-dist/build/pdf.min.js"), "utf8"),
-    worker: fs.readFileSync(path.join(process.cwd(), "node_modules/pdfjs-dist/build/pdf.worker.min.js"), "utf8"),
-  });
-
-/** Pictures (PNG) of PDF pages, each cropped to its box, about 300 dpi (at most 3000 px long). */
-export async function pdfPictures(bytes: Uint8Array, boxes: Box[]): Promise<Buffer[]> {
-  const src = pdfjsSource();
-  const browser = await launchBrowser();
-  try {
-    const page = await browser.newPage();
-    await page.setContent("<!doctype html><html><body></body></html>");
-    await page.addScriptTag({ content: src.lib });
-    const pngs = (await page.evaluate(
-      async (data: string, worker: string, boxes: Box[]) => {
-        const lib = (window as unknown as { pdfjsLib: { GlobalWorkerOptions: { workerSrc: string }; getDocument: (o: object) => { promise: Promise<{ getPage: (n: number) => Promise<{ view: number[]; getViewport: (o: { scale: number }) => object; render: (o: object) => { promise: Promise<void> } }> }> } } }).pdfjsLib;
-        lib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([worker], { type: "text/javascript" }));
-        const bin = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
-        // no script from the PDF runs (isEvalSupported off)
-        const doc = await lib.getDocument({ data: bin, isEvalSupported: false, disableFontFace: false }).promise;
-        const out: string[] = [];
-        for (let i = 0; i < boxes.length; i++) {
-          const p = await doc.getPage(i + 1);
-          const b = boxes[i];
-          const scale = Math.min(300 / 72, 3000 / Math.max(b.w, b.h));
-          const viewport = p.getViewport({ scale });
-          const canvas = document.createElement("canvas");
-          canvas.width = Math.round(b.w * scale);
-          canvas.height = Math.round(b.h * scale);
-          const ctx = canvas.getContext("2d")!;
-          ctx.fillStyle = "#fff";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          // the box's top-left corner to the canvas's (PDF y runs up, from the page's own box)
-          const [x0, , , y1] = p.view;
-          await p.render({ canvasContext: ctx, viewport, transform: [1, 0, 0, 1, -(b.x - x0) * scale, -(y1 - (b.y + b.h)) * scale] }).promise;
-          out.push(canvas.toDataURL("image/png").split(",")[1]);
-        }
-        return out;
-      },
-      Buffer.from(bytes).toString("base64"),
-      src.worker,
-      boxes,
-    )) as string[];
-    return pngs.map((b) => Buffer.from(b, "base64"));
-  } finally {
-    await browser.close();
-  }
-}
-
 /**
  * Stores a PDF and a picture of each page (templates/pictures/…). Returns, per page, the
  * picture's path and the `pdf` a picture part keeps, with the page's size.
@@ -102,14 +49,16 @@ export async function storePdfArt(bytes: Uint8Array, tag?: { w: number; h: numbe
   if (bytes.length > MAX_PDF_BYTES) throw new Error("PDFs up to 15 MB, please.");
   if (Buffer.from(bytes.subarray(0, 5)).toString() !== "%PDF-") throw new Error("That isn't a PDF.");
   const pages = await pdfPages(bytes, tag);
-  const pngs = await pdfPictures(bytes, pages.map((p) => p.box));
   const base = `pictures/${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const store = createAdminClient().storage.from("templates");
-  const saved = await Promise.all([
-    store.upload(`${base}.pdf`, bytes, { contentType: "application/pdf", upsert: false }),
-    ...pngs.map((png, i) => store.upload(`${base}-p${i + 1}.png`, png, { contentType: "image/png", upsert: false })),
-  ]);
-  for (const { error } of saved) if (error) throw error;
+  // the PDF first: the pictures are made from it where Chromium is (/api/render), straight into storage
+  const { error } = await store.upload(`${base}.pdf`, bytes, { contentType: "application/pdf", upsert: false });
+  if (error) throw error;
+  const pngs = await renderPictures(
+    `${base}.pdf`,
+    pages.map((p) => p.box),
+    pages.map((_, i) => `${base}-p${i + 1}.png`),
+  );
   return pages.map((p, i) => ({
     path: `${base}-p${i + 1}.png`,
     pdf: { path: `${base}.pdf`, page: i + 1, box: [p.box.x, p.box.y, p.box.w, p.box.h] },
@@ -119,9 +68,11 @@ export async function storePdfArt(bytes: Uint8Array, tag?: { w: number; h: numbe
   }));
 }
 
-/** The PDFs a template's picture parts were made from, by path: for the PDFs Kinus makes. */
-export async function loadPdfArt(layers: Layer[]): Promise<Record<string, Uint8Array>> {
-  const paths = [...new Set(layers.flatMap((l) => (l.type === "image" && l.pdf && !l.hidden ? [l.pdf.path] : [])))];
+/** Where the PDFs a template's picture parts were made from are (templates/…), for the PDFs Kinus makes. */
+export const pdfArtPaths = (layers: Layer[]): string[] => [...new Set(layers.flatMap((l) => (l.type === "image" && l.pdf && !l.hidden ? [l.pdf.path] : [])))];
+
+/** Those PDFs, by path (where the PDF is made: /api/render). */
+export async function loadPdfArt(paths: string[]): Promise<Record<string, Uint8Array>> {
   if (!paths.length) return {};
   const store = createAdminClient().storage.from("templates");
   const files = await Promise.all(paths.map((p) => store.download(p).then(async ({ data }) => (data ? new Uint8Array(await data.arrayBuffer()) : null))));
