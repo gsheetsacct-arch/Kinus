@@ -1,10 +1,10 @@
 "use client";
 import * as React from "react";
 import { toast } from "sonner";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ChevronRight, Phone, Radio, Search, X } from "lucide-react";
+import { AlertTriangle, Clock, MessageSquare, Phone, Radio, Search, UserCheck, UserX, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
@@ -18,16 +18,24 @@ import { createClient } from "@/lib/supabase/client";
 import { CAMP_TIME_ZONE, cn, formatPhone, formatWhen } from "@/lib/utils";
 import { campClock, missingStates, type CampStart, type DivisionCount, type Followup, type MissingRules } from "@/lib/attendance/missing";
 import { boardChanges, bulkAttendance } from "@/app/(app)/status/actions";
+import { checkInNow, clearFollowup, markNotComing, saveFollowup, undoNotComing } from "@/app/(app)/missing/actions";
+import { FollowupDialog, type FollowupDlg } from "./followup-dialog";
 
 type Tree = { groups: { id: string; name: string }[]; divisions: { id: string; name: string; group_id: string | null; bunks: { id: string; name: string }[] }[] };
 
-const TILES: { status: CamperStatus; label: string; tone: string }[] = [
-  { status: "present", label: STATUS_LABEL.present, tone: "text-status-present" },
-  { status: "out", label: STATUS_LABEL.out, tone: "text-amber-600 dark:text-amber-400" },
-  { status: "expected", label: STATUS_LABEL.expected, tone: "text-muted-foreground" },
-  { status: "departed", label: STATUS_LABEL.departed, tone: "text-status-departed" },
-  { status: "no_show", label: STATUS_LABEL.no_show, tone: "text-status-no-show" },
+// the views at the top: a row of small counts, each one a filter
+type View = CamperStatus | "check" | "later" | "";
+const VIEWS: { view: View; label: string }[] = [
+  { view: "present", label: STATUS_LABEL.present },
+  { view: "out", label: "Out" },
+  { view: "expected", label: STATUS_LABEL.expected },
+  { view: "check", label: "Check up" },
+  { view: "later", label: "Coming later" },
+  { view: "departed", label: STATUS_LABEL.departed },
+  { view: "no_show", label: STATUS_LABEL.no_show },
+  { view: "", label: "Everyone" },
 ];
+const ONLY: Record<string, string> = { medical: "Medical flag", no_bunk: "No bunk yet", note: "With a follow-up note" };
 const BULK: { event: AttendanceEventType; label: string; danger?: boolean }[] = [
   { event: "arrival", label: "Check in" },
   { event: "leave", label: "Out · coming back" },
@@ -56,6 +64,11 @@ function useNow(serverNow: string) {
   return { now, ready };
 }
 
+/**
+ * Who's here, and who isn't yet: every camper in a place, live. The counts at the top filter
+ * the list (here, out, not here yet, check up on, coming later…); campers not here yet can be
+ * followed up from their row (a note, coming later, not coming, check in).
+ */
 export function StatusBoard({
   rows: initialRows,
   tree,
@@ -66,11 +79,12 @@ export function StatusBoard({
   canScan,
   templates,
   rules,
+  ruleText,
   campStarted: started,
   divisionCounts,
   followups,
   linkScope,
-  linkStatus,
+  linkView,
   canFollowUp = true,
 }: {
   rows: BoardRow[];
@@ -82,34 +96,51 @@ export function StatusBoard({
   canScan: boolean;
   templates: TemplateButton[];
   rules: MissingRules;
+  /** When a camper is flagged "check up", in words. */
+  ruleText?: string;
   /** Someone in the session has arrived (session-wide). */
   campStarted: CampStart;
   /** Each division's arrivals for the whole session, so the share is the division's, not just what's on screen. */
   divisionCounts?: Record<string, DivisionCount>;
   followups: Record<string, Followup>;
-  /** Opened from a link (Home tiles and cards): this place and status. */
+  /** Opened from a link (Home tiles and cards): this place and view. */
   linkScope?: BoardScope | null;
-  linkStatus?: CamperStatus | "";
-  /** Counselors can't open Not here yet: the banner is just information for them. */
+  linkView?: View;
+  /** Following up (notes, coming later, not coming) is for head staff; counselors see the flags. */
   canFollowUp?: boolean;
 }) {
   const [rows, setRows] = React.useState(initialRows);
   const [scope, chooseScopeRaw] = useScope(SCOPE_KEY, defaultScope, (x) => scopeExists(x, tree) && (x.kind === "all" || rows.some((r) => inScope(r, x, tree))), decodeScope, linkScope);
-  const [status, setStatus] = React.useState<CamperStatus | "">(linkStatus ?? "present");
+  const [view, setView] = React.useState<View>(linkView ?? "present");
+  const [only, setOnly] = React.useState("");
+  const [sort, setSort] = React.useState<"name" | "recent">("name");
   const [q, setQ] = React.useState("");
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
   const [open, setOpen] = React.useState<string | null>(null);
   const [bulk, setBulk] = React.useState<{ action: (typeof BULK)[number]; ids: string[] } | null>(null);
+  const [dlg, setDlg] = React.useState<FollowupDlg>(null);
+  const [pending, start] = React.useTransition();
   const [live, setLive] = React.useState(false);
   const [updated, setUpdated] = React.useState(serverNow);
   const since = React.useRef(serverNow);
   const { now, ready } = useNow(serverNow);
   React.useEffect(() => setRows(initialRows), [initialRows]);
+  const canAct = canScan && canFollowUp;
 
   const chooseScope = (v: string) => {
     chooseScopeRaw(v);
     setSelected(new Set());
+  };
+  const chooseView = (v: View) => {
+    setView((cur) => (cur === v ? "" : v));
+    setSelected(new Set());
+    // a link (?status=…) is a starting point: keep the address bar the page's own
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      sp.delete("status");
+      window.history.replaceState(window.history.state, "", window.location.pathname + (sp.size ? `?${sp}` : ""));
+    } catch {}
   };
 
   // live: a push from the database when anyone checks a camper in or out, plus a slow poll as a safety net
@@ -152,7 +183,7 @@ export function StatusBoard({
   // notes and rule changes aren't check-ins, so the quick updates above don't carry them
   const router = useRouter();
   React.useEffect(() => {
-    const t = setInterval(() => document.visibilityState === "visible" && router.refresh(), 90000);
+    const t = setInterval(() => document.visibilityState === "visible" && router.refresh(), 60000);
     const onVisible = () => document.visibilityState === "visible" && router.refresh();
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -160,6 +191,16 @@ export function StatusBoard({
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [router]);
+
+  const run = (fn: () => Promise<{ ok: boolean; message?: string; error?: string }>, after?: () => void) =>
+    start(async () => {
+      const r = await fn();
+      if (!r.ok) return void toast.error(r.error);
+      toast.success(r.message);
+      after?.();
+      refresh();
+      router.refresh();
+    });
 
   const index = React.useMemo(() => new Map(rows.map((r) => [r.id, searchEntry(r.name, r.code, r.phones.map((p) => p.tel), r.buzzer)])), [rows]);
   const scoped = React.useMemo(() => rows.filter((r) => inScope(r, scope, tree)), [rows, scope, tree]);
@@ -170,13 +211,22 @@ export function StatusBoard({
     () => missingStates(rows, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE), started, divisionCounts),
     [rows, rules, followups, now, started, divisionCounts],
   );
-  const toCheck = scoped.filter((r) => flags.get(r.id)?.kind === "check").length;
+  const kindOf = React.useCallback((r: BoardRow) => (r.status === "expected" ? (flags.get(r.id)?.kind ?? "waiting") : null), [flags]);
+  const count = (v: View) => (v === "" ? counts.total : v === "check" || v === "later" ? scoped.filter((r) => kindOf(r) === v).length : counts[v]);
   const shown = React.useMemo(() => {
-    const out = scoped.filter((r) => (!status || r.status === status) && (!q.trim() || matchScore(index.get(r.id)!, q) > 0));
-    return out.sort((a, b) => a.last.localeCompare(b.last) || a.name.localeCompare(b.name));
-  }, [scoped, status, q, index]);
+    const out = scoped.filter(
+      (r) =>
+        (!view || (view === "check" || view === "later" ? kindOf(r) === view : r.status === view)) &&
+        (!only || (only === "medical" ? r.medical : only === "no_bunk" ? !r.bunkId : Boolean(followups[r.id]?.note))) &&
+        (!q.trim() || matchScore(index.get(r.id)!, q) > 0),
+    );
+    // not here yet: the ones to check up on first, then coming later, then the rest
+    const urgency = (r: BoardRow) => ({ check: 0, later: 1, waiting: 2 })[kindOf(r) ?? "waiting"] ?? 3;
+    return out.sort((a, b) => (sort === "recent" ? (b.at ?? "").localeCompare(a.at ?? "") : 0) || urgency(a) - urgency(b) || a.last.localeCompare(b.last) || a.name.localeCompare(b.name));
+  }, [scoped, view, only, q, index, sort, kindOf, followups]);
   const groups = groupRows(shown, scope, tree);
   const groupTotals = React.useMemo(() => new Map(groupRows(scoped, scope, tree).map((g) => [g.key, g.counts])), [scoped, scope, tree]);
+  const filtered = Boolean(view || only || q);
 
   // only the changes that apply to the campers picked, each with how many it would change
   const bulkOptions = React.useMemo(() => {
@@ -195,8 +245,8 @@ export function StatusBoard({
     });
 
   return (
-    <div className="space-y-4 pb-24" data-ready={ready ? "" : undefined}>
-      <div className="no-print flex flex-wrap items-center gap-3">
+    <div className={cn("space-y-3 pb-24", pending && "opacity-80")} data-ready={ready ? "" : undefined}>
+      <div className="no-print flex flex-wrap items-center gap-x-3 gap-y-2">
         <ScopeSelect value={scope} onChange={chooseScope} rows={rows} tree={tree} campLabel={campLabel} />
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground" title={live ? "Updates appear by themselves" : "Checking for updates every 15 seconds"}>
           <Radio className={cn("size-3.5", live ? "text-status-present" : "text-muted-foreground")} />
@@ -205,64 +255,68 @@ export function StatusBoard({
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-        {TILES.map((t) => (
-          <button
-            key={t.status}
-            type="button"
-            onClick={() => setStatus((s) => (s === t.status ? "" : t.status))}
-            aria-pressed={status === t.status}
-            className={cn(
-              "rounded-xl border bg-card p-3 text-left shadow-[var(--shadow-card)] transition-colors hover:border-primary/40",
-              status === t.status && "border-primary ring-2 ring-primary/30",
-              t.status === "present" && "col-span-2 sm:col-span-1",
-            )}
-          >
-            <div className="text-xs font-medium text-muted-foreground">{t.label}</div>
-            <div className={cn("mt-0.5 text-2xl font-semibold tabular-nums", t.tone)}>
-              {counts[t.status]}
-              {t.status === "present" && <span className="text-sm font-normal text-muted-foreground"> / {counts.total - counts.departed - counts.no_show}</span>}
-            </div>
-          </button>
-        ))}
+      {/* the counts, small: each one shows just those campers */}
+      <div className="no-print -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none]" role="group" aria-label="Show">
+        {VIEWS.map((v) => {
+          const n = count(v.view);
+          const alert = v.view === "check" && n > 0;
+          if ((v.view === "check" || v.view === "later" || v.view === "departed" || v.view === "no_show" || v.view === "out") && !n && view !== v.view) return null;
+          return (
+            <button
+              key={v.view || "all"}
+              type="button"
+              onClick={() => chooseView(v.view)}
+              aria-pressed={view === v.view}
+              title={v.view === "check" && ruleText ? `Flagged once ${ruleText}` : undefined}
+              className={cn(
+                "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border bg-card px-3 text-sm transition-colors hover:border-primary/40",
+                alert && "border-amber-400 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100",
+                view === v.view && "border-primary bg-primary text-primary-foreground hover:border-primary",
+              )}
+            >
+              {alert && <AlertTriangle className="size-3.5" />}
+              {v.label}
+              <span className={cn("font-semibold tabular-nums", view !== v.view && !alert && "text-muted-foreground")}>
+                {n}
+                {v.view === "present" && <span className="font-normal opacity-70">/{counts.total - counts.departed - counts.no_show}</span>}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      {toCheck > 0 &&
-        (canFollowUp ? (
-          <Link href="/missing" className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100">
-            <AlertTriangle className="size-4 shrink-0" />
-            <span className="flex-1">
-              <strong>{toCheck}</strong> {toCheck === 1 ? "camper" : "campers"} to check up on: still not here when they should be.
-            </span>
-            <ChevronRight className="size-4" />
-          </Link>
-        ) : (
-          <p className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100">
-            <AlertTriangle className="size-4 shrink-0" />
-            <span>
-              <strong>{toCheck}</strong> {toCheck === 1 ? "camper" : "campers"} still not here when they should be (marked “check up”). Your head counselor is following up.
-            </span>
-          </p>
-        ))}
-
-      <div className="no-print relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a camper on this board" className="pl-9 pr-9" dir="auto" aria-label="Find a camper on this board" />
-        {q && (
-          <button type="button" onClick={() => setQ("")} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted" aria-label="Clear">
-            <X className="size-4" />
-          </button>
-        )}
+      <div className="no-print grid grid-cols-2 gap-2 sm:grid-cols-[1fr_auto_auto]">
+        <div className="relative col-span-2 sm:col-span-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a camper" className="h-9 pl-9 pr-9" dir="auto" aria-label="Find a camper" />
+          {q && (
+            <button type="button" onClick={() => setQ("")} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Clear">
+              <X className="size-4" />
+            </button>
+          )}
+        </div>
+        <Select value={only} onChange={(e) => setOnly(e.target.value)} className="h-9" aria-label="Only">
+          <option value="">Every camper</option>
+          {Object.entries(ONLY).map(([k, label]) => (
+            <option key={k} value={k}>
+              {label}
+            </option>
+          ))}
+        </Select>
+        <Select value={sort} onChange={(e) => setSort(e.target.value as "name" | "recent")} className="h-9" aria-label="Sort">
+          <option value="name">By name</option>
+          <option value="recent">Latest change first</option>
+        </Select>
       </div>
-      {(status || q) && (
+      {filtered && (
         <p className="text-sm text-muted-foreground">
-          Showing {shown.length} of {scoped.length}
-          {status && ` · ${TILES.find((t) => t.status === status)?.label.toLowerCase()}`}.{" "}
+          Showing {shown.length} of {scoped.length}.{" "}
           <button
             type="button"
             className="-my-2 py-2 text-primary hover:underline"
             onClick={() => {
-              setStatus("");
+              setView("");
+              setOnly("");
               setQ("");
             }}
           >
@@ -294,39 +348,74 @@ export function StatusBoard({
               </span>
             </header>
             <ul className="divide-y">
-              {(expanded.has(g.key) || q.trim() ? g.rows : g.rows.slice(0, ROWS_PER_GROUP)).map((r) => (
-                <li key={r.id} className={cn("flex items-start gap-3 px-4 py-2.5", selected.has(r.id) && "bg-primary-soft/40")}>
-                  {canBulk && <input type="checkbox" className="mt-0.5 size-5 accent-[var(--primary)]" checked={selected.has(r.id)} onChange={(e) => toggle([r.id], e.target.checked)} aria-label={`Select ${r.name}`} />}
-                  <button type="button" onClick={() => setOpen(r.id)} className="min-w-0 flex-1 text-left">
-                    <span className="flex items-center gap-1.5">
-                      <span className="truncate font-medium hover:underline" dir="auto">
-                        {r.name}
+              {(expanded.has(g.key) || q.trim() ? g.rows : g.rows.slice(0, ROWS_PER_GROUP)).map((r) => {
+                const st = flags.get(r.id);
+                const f = followups[r.id];
+                const waiting = r.status === "expected";
+                return (
+                  <li key={r.id} className={cn("flex flex-wrap items-start gap-x-3 gap-y-2 px-4 py-2.5", selected.has(r.id) && "bg-primary-soft/40", st?.kind === "check" && "bg-amber-50/60 dark:bg-amber-950/20")}>
+                    {canBulk && <input type="checkbox" className="mt-0.5 size-5 accent-[var(--primary)]" checked={selected.has(r.id)} onChange={(e) => toggle([r.id], e.target.checked)} aria-label={`Select ${r.name}`} />}
+                    <button type="button" onClick={() => setOpen(r.id)} className="min-w-0 flex-1 basis-48 text-left">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate font-medium hover:underline" dir="auto">
+                          {r.name}
+                        </span>
+                        {r.medical && <AlertTriangle className="size-3.5 shrink-0 text-amber-500" aria-label="Medical flag" />}
+                        {st?.kind === "check" && <span className="shrink-0 rounded-full bg-amber-100 px-1.5 text-[11px] font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">check up</span>}
+                        {st?.kind === "later" && <span className="shrink-0 rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground">coming {ready ? formatWhen(st.until, now) : "later"}</span>}
                       </span>
-                      {r.medical && <AlertTriangle className="size-3.5 shrink-0 text-amber-500" aria-label="Medical flag" />}
-                      {flags.get(r.id)?.kind === "check" && <span className="shrink-0 rounded-full bg-amber-100 px-1.5 text-[11px] font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">check up</span>}
-                      {flags.get(r.id)?.kind === "later" && <span className="shrink-0 rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground">coming later</span>}
-                    </span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {r.at ? `${formatWhen(r.at, now)} · ${eventLabel(r)}${r.by ? ` by ${r.by}` : ""}` : r.at ? " " : "Not checked in yet"}
-                      {r.note && !isUndo(r) && <span dir="auto"> · “{r.note}”</span>}
-                      <span className="font-mono"> · {r.code}</span>
-                    </span>
-                  </button>
-                  <span className="flex shrink-0 flex-col items-end gap-1 sm:flex-row-reverse sm:items-center sm:gap-2">
-                    <StatusBadge status={r.status} />
-                    {r.phones.length > 0 && (
-                      <span className="flex gap-1">
-                        {r.phones.slice(0, 2).map((p, i) => (
-                          <a key={`${p.label}-${i}`} href={`tel:${p.tel}`} className="inline-flex h-9 items-center gap-1 rounded-md border px-2.5 text-xs hover:bg-muted sm:h-7" title={`Call ${p.label}: ${formatPhone(p.phone)}`}>
-                            <Phone className="size-3" /> {p.label}
-                            <span className="hidden text-muted-foreground lg:inline">{formatPhone(p.phone)}</span>
-                          </a>
-                        ))}
+                      <span className="block truncate text-xs text-muted-foreground" dir="auto">
+                        {st?.kind === "check" ? st.reason : r.at ? `${formatWhen(r.at, now)} · ${eventLabel(r)}${r.by ? ` by ${r.by}` : ""}` : "Not checked in yet"}
+                        {r.note && !isUndo(r) && <span dir="auto"> · “{r.note}”</span>}
+                        <span className="font-mono"> · {r.code}</span>
                       </span>
-                    )}
-                  </span>
-                </li>
-              ))}
+                      {f?.note && (waiting || r.status === "no_show") && (
+                        <span className="mt-0.5 flex items-start gap-1 text-xs" dir="auto">
+                          <MessageSquare className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
+                          <span>
+                            {f.note}
+                            <span className="text-muted-foreground">
+                              {" "}
+                              · {formatWhen(f.at, now)}
+                              {f.by ? ` by ${f.by}` : ""}
+                            </span>
+                          </span>
+                        </span>
+                      )}
+                    </button>
+                    <span className="flex flex-wrap items-center justify-end gap-1.5">
+                      {r.phones.slice(0, 2).map((p, i) => (
+                        <a key={`${p.label}-${i}`} href={`tel:${p.tel}`} className="inline-flex h-9 items-center gap-1 rounded-md border px-2.5 text-xs hover:bg-muted sm:h-7" title={`Call ${p.label}: ${formatPhone(p.phone)}`}>
+                          <Phone className="size-3" /> {p.label}
+                          <span className="hidden text-muted-foreground lg:inline">{formatPhone(p.phone)}</span>
+                        </a>
+                      ))}
+                      {canAct && waiting && (
+                        <>
+                          <Button size="sm" variant="outline" className="h-9 sm:h-7" disabled={pending} onClick={() => setDlg({ kind: "note", row: r })} title="A note: what you found out">
+                            <MessageSquare /> <span className="sr-only sm:not-sr-only">Note</span>
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-9 sm:h-7" disabled={pending} onClick={() => setDlg({ kind: "later", row: r })} title="Coming later: no check-up flag until then">
+                            <Clock /> <span className="sr-only sm:not-sr-only">Later</span>
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-9 sm:h-7" disabled={pending} onClick={() => setDlg({ kind: "not_coming", row: r })} title="Not coming">
+                            <UserX /> <span className="sr-only sm:not-sr-only">Not coming</span>
+                          </Button>
+                          <Button size="sm" className="h-9 bg-status-present text-white hover:bg-status-present/90 sm:h-7" disabled={pending} onClick={() => run(() => checkInNow(r.id))}>
+                            <UserCheck /> Check in
+                          </Button>
+                        </>
+                      )}
+                      {canAct && r.status === "no_show" && (
+                        <Button size="sm" variant="outline" className="h-9 sm:h-7" disabled={pending} onClick={() => run(() => undoNotComing(r.id))}>
+                          Coming after all
+                        </Button>
+                      )}
+                      {!(canAct && (waiting || r.status === "no_show")) && <StatusBadge status={r.status} />}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
             {/* a whole camp is hundreds of rows: draw a bunk's first ones, the rest on request (phones stay quick) */}
             {!expanded.has(g.key) && !q.trim() && g.rows.length > ROWS_PER_GROUP && (
@@ -337,7 +426,11 @@ export function StatusBoard({
           </section>
         );
       })}
-      {!groups.length && <p className="rounded-xl border bg-card px-4 py-10 text-center text-sm text-muted-foreground">{!rows.length ? "No campers here yet." : status === "present" && !q ? "Nobody has checked in here yet." : "Nobody matches."}</p>}
+      {!groups.length && (
+        <p className="rounded-xl border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
+          {!rows.length ? "No campers here yet." : view === "present" && !q && !only ? "Nobody has checked in here yet." : view === "expected" && !q && !only ? "Everyone expected here has arrived." : "Nobody matches."}
+        </p>
+      )}
 
       {canBulk && selected.size > 0 && (
         <div className="no-print fixed inset-x-0 bottom-16 z-40 px-3 md:bottom-4 md:left-64">
@@ -364,6 +457,16 @@ export function StatusBoard({
           {open && <CamperCard camperId={open} templates={templates} canScan={canScan} onAction={() => refresh()} />}
         </DialogContent>
       </Dialog>
+      <FollowupDialog
+        dlg={dlg}
+        followup={dlg ? followups[dlg.row.id] : undefined}
+        onClose={() => setDlg(null)}
+        onLater={(id, until, note) => run(() => saveFollowup(id, { until, note }), () => setDlg(null))}
+        onNote={(id, note) => run(() => saveFollowup(id, { note }), () => setDlg(null))}
+        onClear={(id) => run(() => clearFollowup(id), () => setDlg(null))}
+        onNotComing={(id, reason) => run(() => markNotComing(id, reason), () => setDlg(null))}
+        pending={pending}
+      />
       <BulkConfirm
         action={bulk?.action ?? null}
         count={bulk?.ids.length ?? 0}

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBoard } from "@/components/status/status-board";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { LEVEL_RANK, canFollowUp, effectiveLevel, isDirector, seesAllCamp, visibleFieldGroups } from "@/lib/auth/permissions";
+import { LEVEL_RANK, canFollowUp, effectiveLevel, isAdmin, isDirector, seesAllCamp, visibleFieldGroups } from "@/lib/auth/permissions";
 import { loadAreaTree } from "@/lib/data/areas";
 import { loadBoard } from "@/lib/data/board";
 import { campStarted, divisionCounts, loadFollowups, loadRules } from "@/lib/data/missing";
@@ -38,9 +38,29 @@ export default async function StatusPage({ searchParams }: { searchParams: Promi
   const inCamp = (id: string | null) => !camp.divisionIds || (id !== null && camp.divisionIds.includes(id));
   const campTree = { groups: tree.groups, divisions: tree.divisions.filter((d) => inCamp(d.id)) };
   const label = everyoneLabel(camp);
+  const ruleText = [rules.percent ? `${rules.percent}% of their division is here` : null, rules.after_time ? `it's past ${rules.after_time}` : null].filter(Boolean).join(" or ");
+  const views = ["check", "later", ...Object.keys(STATUS_LABEL)];
+  const linkView = sp.status === "all" ? "" : sp.status && views.includes(sp.status) ? (sp.status as CamperStatus | "check" | "later") : undefined;
   return (
     <div>
-      <PageHeader title="Who's here" description="Where every camper is right now. Tap a name to check them in or out." />
+      <PageHeader
+        title="Who's here"
+        description={
+          <>
+            Where every camper is right now, and who hasn&apos;t arrived yet. Tap a name to check them in or out.
+            {isAdmin(user) && ruleText && (
+              <>
+                {" "}
+                Flagged “check up” once {ruleText} (
+                <Link href="/admin/settings" className="text-primary hover:underline">
+                  change
+                </Link>
+                ).
+              </>
+            )}
+          </>
+        }
+      />
       <StatusBoard
         rows={rows}
         tree={campTree}
@@ -51,12 +71,13 @@ export default async function StatusPage({ searchParams }: { searchParams: Promi
         canScan={LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan}
         templates={templates ?? []}
         rules={rules}
+        ruleText={ruleText}
         campStarted={started}
         divisionCounts={counts}
         canFollowUp={canFollowUp(user)}
         followups={followups}
         linkScope={decodeScope(sp.where)}
-        linkStatus={sp.status === "all" ? "" : sp.status && sp.status in STATUS_LABEL ? (sp.status as CamperStatus) : undefined}
+        linkView={linkView}
       />
     </div>
   );

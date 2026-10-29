@@ -58,7 +58,7 @@ export async function saveMissingRules(fd: FormData): Promise<ActionResult> {
     const { error } = await supabase.from("settings").upsert({ key: "missing_rules", value: d, updated_by: me.id, updated_at: new Date().toISOString() });
     if (error) throw error;
     revalidatePath("/admin/settings");
-    revalidatePath("/missing");
+    revalidatePath("/status");
     return ok("Saved.");
   } catch (e) {
     return fail(errorMessage(e));

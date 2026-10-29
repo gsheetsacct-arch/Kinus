@@ -107,7 +107,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
       {toCheck > 0 && (
         <Link
-          href="/missing"
+          href="/status?status=check"
           className="flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 shadow-[var(--shadow-card)] hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100"
         >
           <AlertTriangle className="size-5 shrink-0" />
