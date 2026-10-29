@@ -7,7 +7,7 @@ import { authRedirect } from "@/lib/auth/redirects";
 // /updates: staff sign up for text updates, no account needed.
 // /api/twilio: Twilio reports deliveries and replies (each request is signed; the route checks it).
 // /api/render: Kinus asking its own PDF maker (signed with the server's key; the route checks it).
-const PUBLIC_PATHS = ["/login", "/no-access", "/auth", "/set-password", "/api/webhooks", "/api/cron", "/api/mcp", "/api/oauth", "/.well-known", "/health", "/updates", "/api/twilio", "/api/render"];
+const PUBLIC_PATHS = ["/login", "/no-access", "/auth", "/set-password", "/api/webhooks", "/api/cron", "/api/mcp", "/api/oauth", "/.well-known", "/health", "/updates", "/privacy", "/terms", "/api/twilio", "/api/render"];
 
 export async function updateSession(request: NextRequest) {
   const url = new URL(request.nextUrl.pathname + request.nextUrl.search, `${request.nextUrl.protocol}//${request.headers.get("host") ?? request.nextUrl.host}`);
