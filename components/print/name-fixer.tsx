@@ -20,7 +20,7 @@ export type NameRow = {
   divisionColor: string | null;
   column: string;
   columnLabel: string;
-  kind: "first" | "last";
+  kind: "first" | "last" | "full";
   /** What the registration says. */
   registration: string;
   fix: { value: string; was: string } | null;
