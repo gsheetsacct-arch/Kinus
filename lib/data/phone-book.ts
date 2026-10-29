@@ -8,7 +8,7 @@ export type PhoneBookEntry = { id: string; name: string; role: StaffRole; title:
 export type PhoneBookSection = { key: string; title: string; color: string | null; entries: PhoneBookEntry[] };
 
 // head staff first, then counselors, then everyone else
-const RANK: Record<string, number> = { owner: 0, director: 1, division_head: 2, head_counselor: 3, counselor: 4, scanner: 5, office: 6, logistics: 7 };
+const RANK: Record<string, number> = { owner: 0, director: 1, division_head: 2, kloli: 2.5, head_counselor: 3, counselor: 4, scanner: 5, office: 6, logistics: 7 };
 
 /**
  * The phone book for this person: one section per division in their area (its head staff,
@@ -38,7 +38,7 @@ export async function loadPhoneBook(me: CurrentUser, sessionId: string, campDivi
     const list: (PhoneBookEntry & { order: number })[] = [];
     for (const p of people ?? []) {
       if (p.all_areas || p.role === "owner") continue;
-      if (headsOnly && p.role !== "head_counselor" && p.role !== "division_head") continue;
+      if (headsOnly && p.role !== "head_counselor" && p.role !== "kloli" && p.role !== "division_head") continue;
       const here = (byUser.get(p.id) ?? []).filter((s) => s.division_id === d.id || (s.group_id && s.group_id === d.group_id));
       if (!here.length) continue;
       const bunks = here.filter((s) => s.bunk_id).map((s) => bunkName.get(s.bunk_id!)!).filter(Boolean);

@@ -5,13 +5,14 @@ export const STAFF_ROLES: Record<StaffRole, { label: string; description: string
   owner: { label: "Owner", description: "Everything, everywhere, including other owners.", defaultLevel: "edit", audience: "director" },
   director: { label: "Director", description: "Runs camp, or part of it.", defaultLevel: "edit", audience: "director" },
   division_head: { label: "Division head", description: "Runs a division.", defaultLevel: "edit", audience: "division_head" },
+  kloli: { label: "Kloli", description: "Oversees the head counselors and counselors of a division.", defaultLevel: "scan", audience: "head_counselor" },
   head_counselor: { label: "Head counselor", description: "Oversees the counselors of a division.", defaultLevel: "scan", audience: "head_counselor" },
   counselor: { label: "Counselor", description: "Looks after a bunk.", defaultLevel: "scan", audience: "counselor" },
   scanner: { label: "Check-in helper", description: "Helps check campers in and out at the gate.", defaultLevel: "scan", audience: "counselor" },
   office: { label: "Office", description: "Works in the camp office.", defaultLevel: "view", audience: "office" },
   logistics: { label: "Logistics", description: "Buses, pickup and drop-off.", defaultLevel: "scan", audience: "office" },
 };
-export const ROLE_ORDER: StaffRole[] = ["director", "division_head", "head_counselor", "counselor", "scanner", "office", "logistics", "owner"];
+export const ROLE_ORDER: StaffRole[] = ["director", "division_head", "kloli", "head_counselor", "counselor", "scanner", "office", "logistics", "owner"];
 
 export const ACCESS_LEVELS: Record<AccessLevel, { label: string; description: string }> = {
   view: { label: "View only", description: "See campers and where they are." },
@@ -32,6 +33,7 @@ export const ROLE_EXTRAS: Record<StaffRole, string[]> = {
   owner: ["Everything, including other owners"],
   director: ["Manages staff in their area", "Prints and runs batches", "Over all of camp: imports, templates and settings"],
   division_head: ["Manages head counselors, counselors and check-in helpers in their divisions", "Prints and runs batches", "Follows up on campers who haven't arrived"],
+  kloli: ["Manages head counselors, counselors and check-in helpers in their divisions", "Follows up on campers who haven't arrived"],
   head_counselor: ["Manages counselors and check-in helpers in their divisions", "Follows up on campers who haven't arrived"],
   counselor: ["Phone book: their head counselor and division head"],
   scanner: ["Phone book: their head counselor and division head"],

@@ -25,7 +25,7 @@ export type CurrentUser = {
 };
 
 export const LEVEL_RANK: Record<AccessLevel, number> = { view: 1, scan: 2, edit: 3 };
-const ROLE_RANK: Record<StaffRole, number> = { owner: 9, director: 8, division_head: 6, head_counselor: 5, office: 4, logistics: 4, counselor: 3, scanner: 2 };
+const ROLE_RANK: Record<StaffRole, number> = { owner: 9, director: 8, division_head: 6, kloli: 5.5, head_counselor: 5, office: 4, logistics: 4, counselor: 3, scanner: 2 };
 
 export const effectiveLevel = (u: CurrentUser): AccessLevel => (u.role === "owner" ? "edit" : u.level);
 export const isOwner = (u: CurrentUser) => u.role === "owner";
@@ -34,7 +34,7 @@ export const isAdmin = (u: CurrentUser) => u.role === "owner" || (u.role === "di
 /** Directors of any area: staff for their area, bulk actions, corrections. */
 export const isDirector = (u: CurrentUser) => u.role === "owner" || u.role === "director";
 /** Who runs a Staff page: directors, and division heads and head counselors for the staff of their own divisions. */
-export const isStaffManager = (u: CurrentUser) => isDirector(u) || u.role === "division_head" || u.role === "head_counselor";
+export const isStaffManager = (u: CurrentUser) => isDirector(u) || u.role === "division_head" || u.role === "kloli" || u.role === "head_counselor";
 export const seesAllCamp = (u: CurrentUser) => u.role === "owner" || u.allAreas;
 export const roleRank = (r: StaffRole) => ROLE_RANK[r];
 
@@ -71,6 +71,7 @@ export function presetAudiencesFor(u: CurrentUser): string[] {
       return ["counselor", "head_counselor", "division_head", "director", "office", "custom"];
     case "division_head":
       return ["division_head", "head_counselor", "counselor", "custom"];
+    case "kloli":
     case "head_counselor":
       return ["head_counselor", "counselor", "custom"];
     case "office":
@@ -113,7 +114,8 @@ export function canManageRole(me: CurrentUser, role: StaffRole): boolean {
   if (me.role === "owner") return true;
   if (isAdmin(me)) return role !== "owner";
   if (isDirector(me)) return roleRank(role) < roleRank("director");
-  if (me.role === "division_head") return role === "head_counselor" || role === "counselor" || role === "scanner";
+  if (me.role === "division_head") return role === "kloli" || role === "head_counselor" || role === "counselor" || role === "scanner";
+  if (me.role === "kloli") return role === "head_counselor" || role === "counselor" || role === "scanner";
   if (me.role === "head_counselor") return role === "counselor" || role === "scanner";
   return false;
 }
@@ -134,10 +136,10 @@ export const canFollowUp = (u: CurrentUser) => u.role !== "counselor";
 export const canFinalCheckout = (u: CurrentUser) => Boolean(u.finalCheckout) || (seesAllCamp(u) && LEVEL_RANK[effectiveLevel(u)] >= LEVEL_RANK.scan);
 
 /** Who gives a check-in login final check-out: whoever makes check-in logins (division heads and head counselors for their own division's, directors). */
-export const canGiveFinalCheckout = (u: CurrentUser) => isDirector(u) || u.role === "division_head" || u.role === "head_counselor";
+export const canGiveFinalCheckout = (u: CurrentUser) => isDirector(u) || u.role === "division_head" || u.role === "kloli" || u.role === "head_counselor";
 
 /** Text staff (Twilio): directors, division heads and head counselors, each to the staff of their own divisions. */
-export const canTextStaff = (u: CurrentUser) => !u.checkinLogin && (isDirector(u) || u.role === "division_head" || u.role === "head_counselor");
+export const canTextStaff = (u: CurrentUser) => !u.checkinLogin && (isDirector(u) || u.role === "division_head" || u.role === "kloli" || u.role === "head_counselor");
 /** Text everyone at once (all staff, directors and office, and the /updates sign-ups): the owner and directors over all of camp. */
 export const canTextEveryone = (u: CurrentUser) => canTextStaff(u) && isAdmin(u);
 /** The divisions this person may text (null = every division). */

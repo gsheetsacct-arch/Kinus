@@ -96,10 +96,11 @@ function tagHtml(t: TemplateSpec, values: Record<string, string>, background: st
  * The tags of one sheet (in reading order, null = a used label) moved so that consecutive
  * tags run down a column, `stack` rows at a time: with 2 copies each, A sits over A and B
  * over B beside it. The same labels are filled (the sheet the office keeps track of stays
- * right); only which tag goes on which label changes. stack 1: unchanged.
+ * right); only which tag goes on which label changes. stack 1: unchanged. When the copies fill
+ * whole rows (3 copies on a 3-across sheet), they go across a row instead, as they're read.
  */
 export function stackColumns<T>(slots: (T | null)[], cols: number, stack: number): (T | null)[] {
-  if (stack <= 1 || cols <= 1) return slots;
+  if (stack <= 1 || cols <= 1 || cols % stack === 0) return slots;
   const filled = slots.map((t, k) => (t === null ? -1 : k)).filter((k) => k >= 0);
   const order = [...filled].sort((a, b) => {
     const [ra, rb] = [Math.floor(a / cols), Math.floor(b / cols)];
@@ -151,7 +152,7 @@ export function renderDocument(
     // every label at its exact place on the sheet, as the label maker publishes it
     pageCss = `@page{size:${pw}mm ${ph}mm;margin:0}.sheet{position:relative;width:${pw}mm;height:${ph}mm;overflow:hidden;break-after:page}.sheet>.tag{position:absolute}`;
     const pages: string[] = [];
-    // copies of one camper go down a column (bands of `stack` rows), not across a row
+    // copies of one camper go down a column (bands of `stack` rows), unless they fill whole rows
     const stack = Math.min(sheet.rows, Math.max(1, Math.round(opts.stack ?? Math.max(1, ...items.map((it) => it.copies)))));
     for (let i = 0; i < tags.length; i += per) {
       const slots = stackColumns(tags.slice(i, i + per), sheet.cols, stack);

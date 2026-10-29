@@ -18,6 +18,7 @@ export const metadata = { title: "Add many staff" };
 const ROLE_WORDS: Partial<Record<string, string>> = {
   director: "Admin",
   division_head: "DH, Rosh",
+  kloli: "Klolim, Klali",
   head_counselor: "HC, Head staff",
   counselor: "Counsellor, Staff, Madrich",
   scanner: "Helper, Scanner, Volunteer",
