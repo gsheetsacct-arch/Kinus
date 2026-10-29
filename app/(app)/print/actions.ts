@@ -6,13 +6,12 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { canUsePrintArea, isAdmin, visibleDivisionIds, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
-import { STAFF_ROLES } from "@/lib/labels";
-import { SAMPLE_STAFF, staffValues, type Audience } from "@/lib/print/staff-values";
-import { staffInView } from "@/lib/print/staff";
+import { canUsePrintArea, isAdmin, visibleDivisionIds, type CurrentUser } from "@/lib/auth/permissions";
+import type { Audience } from "@/lib/print/staff-values";
+import { sampleStaffValues, staffInView, staffPreview } from "@/lib/print/staff";
 import { canDesign, loadDesigners, saveDesigners } from "@/lib/print/designers";
 import { addCustomFont, removeCustomFont } from "@/lib/print/custom-fonts";
-import { storeTemplate, type TemplateInput } from "@/lib/print/template-store";
+import { copyTemplate, storeTemplate, type TemplateInput } from "@/lib/print/template-store";
 import { previewDocument, sampleValues, worstCaseValues } from "@/lib/print/preview-data";
 import { createConnector, revokeConnector } from "@/lib/print/design-connectors";
 export type { TemplateInput };
@@ -361,36 +360,10 @@ export async function saveTemplate(input: TemplateInput): Promise<ActionResult &
 export async function duplicateTemplate(fd: FormData): Promise<ActionResult> {
   try {
     await requireDesigner();
-    const supabase = createAdminClient();
-    const { data: t } = await supabase.from("print_templates").select("*").eq("id", String(fd.get("id"))).single();
-    if (!t) return fail("Template not found.");
-    const copy = {
-      kind: t.kind,
-      division_id: t.division_id,
-      page_width_mm: t.page_width_mm,
-      page_height_mm: t.page_height_mm,
-      background_path: t.background_path,
-      layers: t.layers,
-      sheet_layout: t.sheet_layout,
-      sort_order: t.sort_order + 1,
-      ...("copies" in t ? { copies: t.copies } : {}),
-      ...("back" in t ? { back: t.back } : {}),
-      ...("camps" in t ? { camps: t.camps } : {}),
-    };
-    // "Copy for staff": a camper design turned into a staff one (migration 0041)
-    const audience = fd.get("audience") === "staff" ? "staff" : "audience" in t ? t.audience : null;
-    if (audience === "staff" && !("audience" in t)) return fail("To make templates for staff, run migration 0041 in Supabase first.");
-    if (audience) Object.assign(copy, { audience, ...(audience === "staff" ? { camps: [] } : {}) });
-    const forStaffNow = audience === "staff" && !("audience" in t && t.audience === "staff");
-    // a copy of a retired template is a fresh, working one
-    const { data, error } = await supabase
-      .from("print_templates")
-      .insert({ ...copy, name: `${t.name.replace(/^(\(retired\)\s*)+/, "")} (${forStaffNow ? "staff" : "copy"})`, show_on_card: false, auto_on_first_checkin: false })
-      .select("id")
-      .single();
-    if (error) throw error;
+    // "For staff": a camper design turned into a staff one (migration 0041)
+    const r = await copyTemplate(String(fd.get("id")), { for: fd.get("audience") === "staff" ? "staff" : undefined });
     revalidatePath("/print/templates");
-    return ok("Copied.", `/print/templates/${data.id}`);
+    return ok("Copied.", `/print/templates/${r.id}`);
   } catch (e) {
     return fail(errorMessage(e));
   }
@@ -519,7 +492,7 @@ export async function previewTemplate(
 ): Promise<string> {
   await requirePreviewer();
   const r = await previewValues(who, spec.audience);
-  const values = "error" in r ? (spec.audience === "staff" ? staffValues(SAMPLE_STAFF, staffRoleLabel) : await sampleValues()) : r.values;
+  const values = "error" in r ? (spec.audience === "staff" ? sampleStaffValues() : await sampleValues()) : r.values;
   // a test sheet: the whole sheet filled, with outlines, to hold against the labels
   const sheet = opts.fullSheet ? spec.sheet_layout : null;
   return previewDocument(spec, [{ values, copies: sheet ? sheet.cols * sheet.rows : 1 }], { fullSheet: opts.fullSheet });
@@ -634,23 +607,10 @@ export async function deleteValueMap(fd: FormData): Promise<ActionResult> {
 
 export type { Layer, SheetLayout };
 
-const staffRoleLabel = (r: string) => STAFF_ROLES[r as StaffRole]?.label ?? r;
-
-/** A staff template's canvas: the made-up staff member, or the staff member whose text is longest (one of everyone's longest, for "worst"). */
+/** A staff template's canvas: the made-up staff member, the staff member whose text is longest, or every field's longest at once (lib/print/staff). */
 async function staffPreviewValues(user: CurrentUser, who: { kind: string; texts?: { text: string; w: number }[] }): Promise<{ values: Record<string, string>; label: string }> {
-  const sample = { values: staffValues(SAMPLE_STAFF, staffRoleLabel), label: "a sample staff member" };
-  if (who.kind === "sample" || who.kind === "code") return sample;
-  const people = await staffInView(user);
-  if (!people.length) return { ...sample, label: "a sample staff member (no staff yet)" };
-  if (who.kind === "worst") {
-    const keys = [...new Set(people.flatMap((p) => Object.keys(p.values)))];
-    return { values: Object.fromEntries(keys.map((k) => [k, people.map((p) => p.values[k] ?? "").reduce((a, b) => (b.length > a.length ? b : a), "")])), label: "the longest of every field" };
-  }
-  const { fill } = await import("@/lib/print/merge");
-  const texts = (who.texts ?? []).filter((t) => t.text.includes("{{") && t.w > 0).slice(0, 30);
-  const score = (p: (typeof people)[number]) => (texts.length ? Math.max(...texts.map((t) => fill(t.text, (k) => p.values[k] ?? "").length / t.w)) : p.name.length);
-  const best = people.reduce((a, b) => (score(b) > score(a) ? b : a));
-  return { values: best.values, label: `${best.name} (longest text)` };
+  const r = await staffPreview(user, who.kind === "code" ? "sample" : who.kind, who.texts);
+  return "error" in r ? { values: sampleStaffValues(), label: "a sample staff member" } : r;
 }
 
 /**

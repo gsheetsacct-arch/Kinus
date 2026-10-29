@@ -66,6 +66,8 @@ export const templateSchema = z.object({
   camps: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
   // who it's for (migration 0041): campers, or staff (Print → Staff tags)
   audience: z.enum(["campers", "staff"]).optional(),
+  // for a thermal label printer (migration 0042): black and white, the page the size of the label
+  thermal: z.boolean().optional(),
   show_on_card: z.boolean(),
   auto_on_first_checkin: z.boolean(),
   copies: z.coerce.number().int().min(1).max(10).default(1),
@@ -109,15 +111,17 @@ export async function storeTemplate(input: TemplateInput): Promise<{ id: string;
     camps: t.audience === "staff" ? [] : (t.camps ?? []),
     // only when the save says (a save from the design connector leaves a staff tag a staff tag)
     ...(t.audience ? { audience: t.audience } : {}),
+    ...(t.thermal !== undefined ? { thermal: t.thermal } : {}),
     updated_at: new Date().toISOString(),
   };
   // settings added by later migrations: if one isn't there yet, save the rest, and say so
   // only if it matters (the setting isn't at its usual value)
-  const later: Record<"copies" | "back" | "camps" | "audience", { used: boolean; need: string }> = {
+  const later: Record<"copies" | "back" | "camps" | "audience" | "thermal", { used: boolean; need: string }> = {
     copies: { used: t.copies !== 1, need: "To set how many per camper, run migration 0028 in Supabase first." },
     back: { used: Boolean(t.back), need: "To print on both sides, run migration 0035 in Supabase first." },
     camps: { used: Boolean(t.camps?.length), need: "To keep a template to some camps, run migration 0036 in Supabase first." },
     audience: { used: t.audience === "staff", need: "To make templates for staff, run migration 0041 in Supabase first." },
+    thermal: { used: Boolean(t.thermal), need: "To set a template for a thermal printer, run migration 0042 in Supabase first." },
   };
   const payload: Partial<typeof row> = { ...row };
   const { count } = t.id ? { count: 0 } : await supabase.from("print_templates").select("id", { count: "exact", head: true });
@@ -134,4 +138,43 @@ export async function storeTemplate(input: TemplateInput): Promise<{ id: string;
     if (error || !data) throw error ?? new Error("The template wasn't saved.");
     return { id: t.id ?? data.id, created: !t.id };
   }
+}
+
+/**
+ * A copy of a template to change (a copy of a retired one is a fresh, working one). for: "staff"
+ * turns a camper design into a staff one (migration 0041); the copy is never offered on camper
+ * cards or at check-in until someone turns that on.
+ */
+export async function copyTemplate(id: string, opts: { for?: "campers" | "staff"; name?: string } = {}): Promise<{ id: string; name: string }> {
+  const supabase = createAdminClient();
+  const { data: t } = await supabase.from("print_templates").select("*").eq("id", id).maybeSingle();
+  if (!t) throw new Error("Template not found.");
+  const copy: Record<string, unknown> = {
+    kind: t.kind,
+    division_id: t.division_id,
+    page_width_mm: t.page_width_mm,
+    page_height_mm: t.page_height_mm,
+    background_path: t.background_path,
+    layers: t.layers,
+    sheet_layout: t.sheet_layout,
+    sort_order: t.sort_order + 1,
+    // settings from later migrations, where the database has them
+    ...("copies" in t ? { copies: t.copies } : {}),
+    ...("back" in t ? { back: t.back } : {}),
+    ...("camps" in t ? { camps: t.camps } : {}),
+    ...("thermal" in t ? { thermal: t.thermal } : {}),
+  };
+  const was = "audience" in t ? t.audience : "campers";
+  const audience = opts.for ?? was;
+  if (audience === "staff" && !("audience" in t)) throw new Error("To make templates for staff, run migration 0041 in Supabase first.");
+  if ("audience" in t) copy.audience = audience;
+  if (audience === "staff") copy.camps = [];
+  const name = opts.name?.trim() || `${t.name.replace(/^(\(retired\)\s*)+/, "")} (${audience === "staff" && was !== "staff" ? "staff" : "copy"})`;
+  const { data, error } = await supabase
+    .from("print_templates")
+    .insert({ ...(copy as object), name, show_on_card: false, auto_on_first_checkin: false } as never)
+    .select("id")
+    .single();
+  if (error) throw error;
+  return { id: (data as { id: string }).id, name };
 }

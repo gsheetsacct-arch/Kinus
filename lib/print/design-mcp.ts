@@ -7,13 +7,15 @@ import { FONTS } from "./font-families";
 import { addCustomFont, loadCustomFonts } from "./custom-fonts";
 import { findPresets, presetById } from "./presets";
 import { loadMergeSetup, toSpec } from "./data";
-import { storeTemplate, templateSchema } from "./template-store";
+import { copyTemplate, storeTemplate, templateSchema } from "./template-store";
 import { allCamperValues, camperValues, longestPerField, previewDocument, sampleValues, worstCaseValues } from "./preview-data";
 import { htmlToPng, type PartFit } from "./pdf";
 import { renderDocument } from "./render";
+import { thermalLayers, thermalValues } from "./thermal";
 import type { Layer, TemplateSpec } from "./types";
 import { DESIGN_GUIDE } from "./design-guide";
-import { forCampers } from "./staff-values";
+import { audienceOf, STAFF_FIELDS, type Audience } from "./staff-values";
+import { sampleStaffValues, staffInView, staffLongest, staffPreview } from "./staff";
 
 /**
  * The design connector: Claude reads, designs and previews Kinus templates directly (MCP,
@@ -24,21 +26,22 @@ import { forCampers } from "./staff-values";
 
 
 const json = (v: unknown) => JSON.stringify(v, null, 2);
+const thermalItems = (values: Record<string, string>) => thermalValues([{ values, copies: 1 }])[0].values;
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
 const problem = (t: string) => ({ content: [{ type: "text" as const, text: t }], isError: true });
 
-/** A draft or saved template, checked as the editor checks it. */
-async function resolveSpec(input: { template_id?: string; template?: Record<string, unknown> }): Promise<TemplateSpec> {
+/** A draft or saved template, checked as the editor checks it (with who it's for: campers or staff). */
+async function resolveSpec(input: { template_id?: string; template?: Record<string, unknown> }): Promise<TemplateSpec & { audience: Audience }> {
   if (input.template) {
     const parsed = templateSchema.safeParse(input.template);
     if (!parsed.success) throw new Error(`The template isn't valid: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).slice(0, 5).join("; ")}`);
     const t = parsed.data;
-    return { id: t.id, name: t.name, kind: t.kind, page_width_mm: t.page_width_mm, page_height_mm: t.page_height_mm, layers: t.layers as Layer[], sheet_layout: t.sheet_layout, back: t.back ?? null };
+    return { id: t.id, name: t.name, kind: t.kind, page_width_mm: t.page_width_mm, page_height_mm: t.page_height_mm, layers: t.layers as Layer[], sheet_layout: t.sheet_layout, back: t.back ?? null, thermal: Boolean(t.thermal), audience: t.audience ?? "campers" };
   }
   if (!input.template_id) throw new Error("Give template_id, or a draft template.");
   const { data } = await createAdminClient().from("print_templates").select("*").eq("id", input.template_id).maybeSingle();
   if (!data) throw new Error("No template with that id.");
-  return toSpec(data);
+  return { ...toSpec(data), audience: audienceOf(data) };
 }
 
 function fitReport(fit: PartFit, spec: TemplateSpec, campers?: number): string {
@@ -65,23 +68,24 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
 
   server.registerTool(
     "list_templates",
-    { title: "List templates", description: "Every template: id, name, size, label stock, camps.", annotations: { readOnlyHint: true } },
+    { title: "List templates", description: "Every template: id, name, who it's for (campers or staff), size, label stock, thermal printer, camps.", annotations: { readOnlyHint: true } },
     async () => {
       const { data } = await createAdminClient().from("print_templates").select("*").order("sort_order").order("name");
       return text(
         json(
-          // camper tags: the connector previews and checks with campers (staff tags are made in Kinus)
-          (data ?? []).filter(forCampers).map((t) => {
+          (data ?? []).map((t) => {
             const sheet = t.sheet_layout as { preset?: string; cols?: number; rows?: number } | null;
             return {
               id: t.id,
               name: t.name,
               retired: t.name.startsWith("(retired)"),
+              for: audienceOf(t),
               kind: t.kind,
               size_mm: `${Number(t.page_width_mm)} × ${Number(t.page_height_mm)}`,
               label_stock: sheet ? (presetById(sheet.preset)?.name ?? `${sheet.cols} × ${sheet.rows} sheet`) : "one per label (label printer)",
               parts: (t.layers as unknown[]).length,
               two_sided: Boolean((t as { back?: unknown }).back),
+              thermal: Boolean((t as { thermal?: boolean }).thermal),
               camps: (t as { camps?: string[] }).camps ?? [],
               editor: editorLink(t.id),
             };
@@ -101,11 +105,13 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
         json({
           id: t.id,
           name: t.name,
+          audience: audienceOf(t),
           kind: t.kind,
           page_width_mm: Number(t.page_width_mm),
           page_height_mm: Number(t.page_height_mm),
           sheet_layout: t.sheet_layout,
           back: (t as { back?: unknown }).back ?? null,
+          thermal: Boolean((t as { thermal?: boolean }).thermal),
           camps: (t as { camps?: string[] }).camps ?? [],
           show_on_card: t.show_on_card,
           auto_on_first_checkin: t.auto_on_first_checkin,
@@ -119,8 +125,22 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
 
   server.registerTool(
     "list_fields",
-    { title: "List fields", description: "What can go on a tag: each field's {{KEY}}, its name, and what it says for a sample camper.", annotations: { readOnlyHint: true } },
-    async () => {
+    {
+      title: "List fields",
+      description: "What can go on a tag: each field's {{KEY}}, its name, and what it says for a sample. for: \"staff\" lists what a staff tag can say instead.",
+      inputSchema: { for: z.enum(["campers", "staff"]).optional().describe("Whose tag: campers (default) or staff") },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ for: audience }) => {
+      if (audience === "staff") {
+        const sample = sampleStaffValues();
+        return text(
+          json({
+            fields: STAFF_FIELDS.map((f) => ({ key: `{{${f.key}}}`, name: f.label, sample: sample[f.key] ?? "" })),
+            also: "Staff tags are filled from the staff list. The camper names are reused where they mean the same thing, so a camper design copied for staff (copy_template) mostly just works.",
+          }),
+        );
+      }
       const [setup, sample] = await Promise.all([loadMergeSetup(createAdminClient()), sampleValues()]);
       return text(
         json({
@@ -170,10 +190,16 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
       inputSchema: {
         fields: z.array(z.string()).optional().describe('Field keys without braces, e.g. ["FIRST", "HEB_FIRST"]; leave out for every field on the merge list'),
         top: z.number().int().min(1).max(20).default(5),
+        for: z.enum(["campers", "staff"]).optional().describe("Whose values: campers (default) or staff"),
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ fields, top }) => {
+    async ({ fields, top, for: audience }) => {
+      if (audience === "staff") {
+        const list = await staffLongest(user, fields?.map((f) => f.replace(/[{}]/g, "").trim()), top);
+        if (!list.some((f) => f.filled)) return text("No staff yet (or none in your part of camp).");
+        return text(json(list.map((f) => ({ field: `{{${f.key}}}`, name: f.label, filled_in_for: f.filled, longest: f.longest }))));
+      }
       const list = await longestPerField(scope, { keys: fields?.map((f) => f.replace(/[{}]/g, "").trim()), top });
       if (!list.some((f) => f.filled)) return text("No campers yet (or none in your part of camp).");
       return text(
@@ -193,14 +219,17 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     "preview_template",
     {
       title: "Preview a template",
-      description: "A picture of the tag exactly as it prints (front, and back when two-sided), filled with a sample or real camper, and how each text part fitted. Give template_id, or a draft template (unsaved).",
+      description:
+        "A picture of the tag exactly as it prints (front, and back when two-sided; black and white on a thermal printer), filled with a sample or a real camper (a staff member for a staff template), and how each text part fitted. Give template_id, or a draft template (unsaved).",
       inputSchema: {
         template_id: z.guid().optional(),
         template: z.record(z.string(), z.unknown()).optional().describe("A draft template (same JSON as get_template), to preview before saving"),
         camper: z
           .string()
           .optional()
-          .describe('"sample" (default); "worst" (every field at once with its longest real value: if this fits, everyone fits); "longest" (the real camper with the longest text on this tag); or a camper code (0012, or a long one like 100016)'),
+          .describe(
+            '"sample" (default); "worst" (every field at once with its longest real value: if this fits, everyone fits); "longest" (the real camper, or staff member, with the longest text on this tag); or a camper code (0012, or a long one like 100016), or for a staff template a staff member\'s name',
+          ),
       },
       annotations: { readOnlyHint: true },
     },
@@ -208,21 +237,28 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
       try {
         const spec = await resolveSpec(input);
         const who = (input.camper ?? "sample").trim().toLowerCase();
+        const texts = spec.layers.flatMap((l) => (l.type === "text" && !l.hidden ? [{ text: l.text, w: l.w }] : []));
         let values: Record<string, string>;
         let label = "a sample camper";
-        if (who === "sample") values = await sampleValues();
+        if (spec.audience === "staff") {
+          const r = await staffPreview(user, input.camper ?? "sample", texts);
+          if ("error" in r) return problem(r.error);
+          values = r.values;
+          label = r.label;
+        } else if (who === "sample") values = await sampleValues();
         else if (who === "worst") {
           const r = await worstCaseValues(scope);
           if ("error" in r) return problem(r.error);
           values = r.values;
           label = r.label;
         } else {
-          const r = await camperValues(who === "longest" ? { kind: "longest", texts: spec.layers.flatMap((l) => (l.type === "text" && !l.hidden ? [{ text: l.text, w: l.w }] : [])) } : { kind: "code", code: who }, scope);
+          const r = await camperValues(who === "longest" ? { kind: "longest", texts } : { kind: "code", code: who }, scope);
           if ("error" in r) return problem(r.error);
           values = r.values;
           label = r.label;
         }
-        const html = await previewDocument({ ...spec, sheet_layout: null }, [{ values, copies: 1 }], { outlines: false });
+        // the design as it stands (a thermal label's page turn is for the printer, not the picture)
+        const html = await previewDocument({ ...spec, sheet_layout: null, ...(spec.thermal && spec.page_width_mm > spec.page_height_mm ? { thermal: false, layers: thermalLayers(spec.layers) } : {}) }, [{ values: spec.thermal ? thermalItems(values) : values, copies: 1 }], { outlines: false });
         const { images, fit } = await htmlToPng(html, { tags: spec.back ? 2 : 1 });
         return {
           content: [
@@ -240,19 +276,20 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     "check_fit",
     {
       title: "Check every camper fits",
-      description: "Fills the tag with every real camper and reports, per text part, who went under its smallest size or didn't fit at all. Use it to design around long names.",
+      description: "Fills the tag with every real camper (every staff member, for a staff template) and reports, per text part, who went under its smallest size or didn't fit at all. Use it to design around long names.",
       inputSchema: { template_id: z.guid().optional(), template: z.record(z.string(), z.unknown()).optional() },
       annotations: { readOnlyHint: true },
     },
     async (input) => {
       try {
         const spec = await resolveSpec(input);
-        const people = await allCamperValues(scope);
-        if (!people.length) return text("No campers to check yet (or none in your part of camp).");
+        const staff = spec.audience === "staff";
+        const people = staff ? (await staffInView(user)).map((p) => ({ name: p.name, values: p.values })) : await allCamperValues(scope);
+        if (!people.length) return text(`No ${staff ? "staff" : "campers"} to check yet (or none in your part of camp).`);
         const textOnly: TemplateSpec = { ...spec, sheet_layout: null, back: null, layers: spec.layers.filter((l) => l.type === "text" && !l.hidden && l.side !== "back") };
         const html = renderDocument(textOnly, people.map((p) => ({ values: p.values, copies: 1 })), { fontCss: await (await import("./custom-fonts")).customFontCss(textOnly) });
         const { fit } = await htmlToPng(html, { tags: 0 });
-        return text(`${people.length} campers checked on ${spec.name}.\n${fitReport(fit, textOnly, people.length)}`);
+        return text(`${people.length} ${staff ? "staff members" : "campers"} checked on ${spec.name}.\n${fitReport(fit, textOnly, people.length)}`);
       } catch (e) {
         return problem(e instanceof Error ? e.message : String(e));
       }
@@ -263,7 +300,8 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     "save_template",
     {
       title: "Save a template",
-      description: "Creates a template (no id) or replaces one (with its id) with this JSON. It's used for printing at once: preview first. Returns the id and the editor link.",
+      description:
+        "Creates a template (no id) or replaces one (with its id) with this JSON. It's used for printing at once: preview first. A new staff tag: \"audience\": \"staff\". For a thermal label printer: \"thermal\": true. Returns the id and the editor link.",
       inputSchema: { template: z.record(z.string(), z.unknown()).describe("The whole template, as get_template returns it") },
       annotations: { destructiveHint: true },
     },
@@ -274,6 +312,29 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
         if (Array.isArray(t.layers)) t.layers = (t.layers as Record<string, unknown>[]).map((l) => ({ ...l, id: typeof l.id === "string" && l.id ? l.id : Math.random().toString(36).slice(2, 8) }));
         const r = await storeTemplate(t as never);
         return text(`${r.created ? "Created" : "Saved"} “${String(t.name)}” (id ${r.id}). Open it in Kinus: ${editorLink(r.id)}`);
+      } catch (e) {
+        return problem(e instanceof Error ? e.message : String(e));
+      }
+    },
+  );
+
+  server.registerTool(
+    "copy_template",
+    {
+      title: "Copy a template",
+      description:
+        'A copy of a template to work on (the original stays as it is). for: "staff" makes the copy a staff tag: a camper design turned into a staff one, filled from the staff list and printed from Print → Staff tags. Returns the new id.',
+      inputSchema: {
+        template_id: z.guid(),
+        for: z.enum(["campers", "staff"]).optional().describe("Who the copy is for; leave out to keep the same"),
+        name: z.string().max(120).optional().describe("The copy's name (default: the original's, marked copy or staff)"),
+      },
+      annotations: { destructiveHint: false },
+    },
+    async ({ template_id, for: audience, name }) => {
+      try {
+        const r = await copyTemplate(template_id, { for: audience, name });
+        return text(`Copied as “${r.name}” (id ${r.id})${audience === "staff" ? ", a staff tag: list_fields with for \"staff\" shows what it can say" : ""}. Open it in Kinus: ${editorLink(r.id)}`);
       } catch (e) {
         return problem(e instanceof Error ? e.message : String(e));
       }

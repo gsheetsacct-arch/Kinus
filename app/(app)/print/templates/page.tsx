@@ -134,6 +134,7 @@ export default async function TemplatesPage({ searchParams }: { searchParams: Pr
                       {t.background_path && <Badge variant="outline">background image</Badge>}
                       {templateCamps(t).length > 0 && <Badge variant="primary">{templateCamps(t).join(" · ")} only</Badge>}
                       {Boolean((t as { back?: unknown }).back) && <Badge variant="outline">both sides</Badge>}
+                      {Boolean((t as { thermal?: boolean }).thermal) && <Badge variant="outline">thermal printer</Badge>}
                     </div>
                   </li>
                 );

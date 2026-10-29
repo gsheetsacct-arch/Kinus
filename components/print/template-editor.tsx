@@ -1664,6 +1664,21 @@ export function TemplateEditor({
                   Choose labels (Avery, Dymo, Brother…)
                 </Button>
               </div>
+              <label className="flex items-center justify-between gap-3">
+                <span className="text-sm">
+                  <span className="font-medium">Thermal label printer</span>
+                  <span className="block text-xs text-muted-foreground">
+                    For Zebra, Rollo and other thermal printers, which print only black: colours print as solid black or white, codes in solid black, pictures in black and white.
+                    {!sheet && W > H
+                      ? ` Each label is a page of its own, turned the way the printer feeds it (${+H.toFixed(1)} × ${+W.toFixed(1)} mm).`
+                      : !sheet
+                        ? " Each label is a page of its own, the size of the label."
+                        : ""}{" "}
+                    Print preview shows it as it prints.
+                  </span>
+                </span>
+                <Switch checked={Boolean(t.thermal)} onCheckedChange={(v) => update({ thermal: v })} />
+              </label>
               <details className="text-sm" open={!preset}>
                 <summary className="cursor-pointer text-xs text-muted-foreground">Size and layout by hand</summary>
                 <div className="mt-2 space-y-3">
