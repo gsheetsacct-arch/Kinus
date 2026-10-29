@@ -9,6 +9,8 @@ import { canGiveFinalCheckout, canGrantAreas, canManageRole, isAdmin, type Acces
 import { STAFF_ROLES } from "@/lib/labels";
 import { decodeArea, grantableTree, loadAreaTree, type AreaValue } from "@/lib/data/areas";
 import { planRows, readRows, type BulkPlanRow } from "@/lib/staff/bulk";
+import { isStaffExport, readStaffExport, type StaffAddress } from "@/lib/staff/export";
+import type { Json } from "@/lib/supabase/database.types";
 import { decodeText } from "@/lib/import/decode";
 import { normalizeName } from "@/lib/import/normalize";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
@@ -65,15 +67,21 @@ async function assertCanAssign(me: CurrentUser, target: { id?: string; role?: St
 }
 
 /** Role and where. What they can do follows from the role (Staff → Roles; set by the database). */
-async function writeAccess(userId: string, v: { role: StaffRole; allAreas: boolean; areas: AreaValue[]; full_name?: string; phone?: string | null; title?: string | null }) {
+type FromRegistration = { source_id: string; address: StaffAddress | null; details: Record<string, string> };
+async function writeAccess(userId: string, v: { role: StaffRole; allAreas: boolean; areas: AreaValue[]; full_name?: string; phone?: string | null; title?: string | null; registration?: FromRegistration }) {
   const admin = createAdminClient();
-  const patch: { role: StaffRole; all_areas: boolean; full_name?: string; phone?: string | null; title?: string | null } = {
+  const patch: { role: StaffRole; all_areas: boolean; full_name?: string; phone?: string | null; title?: string | null; source_id?: string; address?: Json; details?: Json } = {
     role: v.role,
     all_areas: v.role === "owner" ? true : v.allAreas,
   };
   if (v.full_name !== undefined) patch.full_name = v.full_name;
   if (v.phone !== undefined) patch.phone = v.phone;
   if (v.title !== undefined) patch.title = v.title;
+  if (v.registration) {
+    patch.source_id = v.registration.source_id;
+    patch.address = v.registration.address;
+    patch.details = v.registration.details;
+  }
   const { error } = await admin.from("profiles").update(patch).eq("id", userId);
   if (error) throw error;
   const del = await admin.from("staff_scopes").delete().eq("user_id", userId);
@@ -172,7 +180,11 @@ async function createAccount(email: string, fullName: string, role: StaffRole, m
 // ---------------------------------------------------------------------------
 // Bulk add
 // ---------------------------------------------------------------------------
-export type BulkPreview = { rows: (BulkPlanRow & { existingId: string | null; existingRole: StaffRole | null })[] };
+export type BulkPreview = {
+  rows: (BulkPlanRow & { existingId: string | null; existingRole: StaffRole | null; registration?: FromRegistration })[];
+  /** The registration export: people left out because they aren't accepted, by status. */
+  skipped?: { status: string; count: number }[];
+};
 
 export async function previewBulkAdd(fd: FormData): Promise<ActionResult & { preview?: BulkPreview }> {
   const me = await requireStaffManager();
@@ -194,13 +206,21 @@ export async function previewBulkAdd(fd: FormData): Promise<ActionResult & { pre
     } else return fail("Paste the list or choose a file.");
     const defaultRole = z.enum(ROLES).catch("counselor").parse(fd.get("default_role"));
     // someone over one division (most head counselors) can leave the division column empty
-    const rows = planRows(readRows(grid), tree, { role: defaultRole, level: "role", where: tree.divisions.length === 1 ? tree.divisions[0].name : undefined });
-    if (!rows.length) return fail("No rows found.");
+    // the registration export: accepted staff only, with their id, address and the rest of their form
+    const exported = isStaffExport(grid) ? readStaffExport(grid) : null;
+    const input = exported ? exported.rows : readRows(grid);
+    const rows = planRows(input, tree, { role: defaultRole, level: "role", where: tree.divisions.length === 1 ? tree.divisions[0].name : undefined });
+    if (!rows.length) return fail(exported?.skipped.length ? `Nobody in this export is accepted yet (${exported.skipped.map((x) => `${x.count} ${x.status}`).join(", ")}).` : "No rows found.");
     const emails = rows.map((r) => r.email).filter(Boolean);
-    const [{ data: byEmail }, { data: listedPeople }] = await Promise.all([
+    const sourceIds = exported ? exported.rows.map((r) => r.sourceId).filter(Boolean) : [];
+    const [{ data: byEmail }, { data: listedPeople }, { data: bySource }] = await Promise.all([
       admin.from("profiles").select("id, email, role, full_name").in("email", emails.length ? emails : ["-"]),
       // listed-only people without an email are matched by name (uploading the sheet again updates them)
       admin.from("profiles").select("id, email, role, full_name").eq("login", "none"),
+      // the same person from an earlier upload of the export (read on its own: needs migration 0040)
+      sourceIds.length
+        ? admin.from("profiles").select("id, email, role, full_name, source_id").in("source_id", sourceIds).then((r) => r, () => ({ data: [] }))
+        : Promise.resolve({ data: [] as { id: string; email: string; role: StaffRole; full_name: string; source_id: string | null }[] }),
     ]);
     const existing = [...(byEmail ?? []), ...(listedPeople ?? []).filter((p) => !byEmail?.some((x) => x.id === p.id))];
     const lookup = await divisionGroupLookup();
@@ -208,9 +228,14 @@ export async function previewBulkAdd(fd: FormData): Promise<ActionResult & { pre
     // someone already in Kinus may only be changed if they work inside my area (not taken from another division)
     const outside = new Set<string>();
     for (const p of existing ?? []) await assertCanManage(me, [p.id]).catch(() => outside.add(p.id));
-    const out = rows.map((r) => {
+    const out = rows.map((r, i) => {
+      const reg = exported?.rows[i];
       const sameName = (p: { full_name: string }) => normalizeName(p.full_name) === normalizeName(r.name);
-      const ex = (r.email ? existing.find((p) => p.email.toLowerCase() === r.email) : existing.find((p) => isPlaceholderEmail(p.email) && sameName(p))) ?? null;
+      // their registration id first, then email, then (listed people without an email) name
+      const ex =
+        (reg?.sourceId ? (bySource ?? []).find((p) => p.source_id === reg.sourceId) : null) ??
+        (r.email ? existing.find((p) => p.email.toLowerCase() === r.email) : existing.find((p) => isPlaceholderEmail(p.email) && sameName(p))) ??
+        null;
       const errors = [...r.errors];
       if (r.role && !canManageRole(me, r.role)) errors.push(`You can't add a ${STAFF_ROLES[r.role].label.toLowerCase()}.`);
       else if (r.role && removed.has(r.role) && r.role !== ex?.role) errors.push(notInUse(r.role));
@@ -218,9 +243,10 @@ export async function previewBulkAdd(fd: FormData): Promise<ActionResult & { pre
       if (ex?.id === me.id) errors.push("That's you.");
       else if (ex && outside.has(ex.id) && canManageRole(me, ex.role)) errors.push("Already works outside your area; ask a director to move them.");
       if (!canGrantAreas(me, r.areas, r.allAreas, lookup)) errors.push("Outside your own area.");
-      return { ...r, errors, existingId: ex?.id ?? null, existingRole: ex?.role ?? null };
+      const registration = reg ? { source_id: reg.sourceId, address: reg.address, details: reg.details } : undefined;
+      return { ...r, errors, existingId: ex?.id ?? null, existingRole: ex?.role ?? null, registration };
     });
-    return { ok: true, preview: { rows: out } };
+    return { ok: true, preview: { rows: out, skipped: exported?.skipped } };
   } catch (e) {
     return fail(errorMessage(e));
   }
@@ -239,21 +265,21 @@ export async function applyBulkAdd(rowsJson: string, mode: "invite" | "password"
       if (r.existingId) {
         await assertCanManage(me, [r.existingId]);
         await assertCanAssign(me, { id: r.existingId, role: r.existingRole ?? undefined }, { role: r.role, allAreas: r.allAreas, areas: r.areas });
-        await writeAccess(r.existingId, { role: r.role, allAreas: r.allAreas, areas: r.areas, title: r.title || undefined, phone: r.phone || undefined });
+        await writeAccess(r.existingId, { role: r.role, allAreas: r.allAreas, areas: r.areas, title: r.title || undefined, phone: r.phone || undefined, registration: r.registration });
         results.push({ ...base, outcome: "updated" });
         continue;
       }
       await assertCanAssign(me, null, { role: r.role, allAreas: r.allAreas, areas: r.areas });
       if (r.login === "none") {
         const id = await createAccount(r.email || (await placeholderEmail()), r.name, r.role, "none");
-        await writeAccess(id, { role: r.role, allAreas: r.allAreas, areas: r.areas, full_name: r.name, title: r.title || null, phone: r.phone || null });
+        await writeAccess(id, { role: r.role, allAreas: r.allAreas, areas: r.areas, full_name: r.name, title: r.title || null, phone: r.phone || null, registration: r.registration });
         await setLoginKind(id, "none");
         results.push({ ...base, outcome: "listed" });
         continue;
       }
       const password = mode === "password" ? generatePassword() : undefined;
       const id = await createAccount(r.email, r.name, r.role, password ? { password } : "invite");
-      await writeAccess(id, { role: r.role, allAreas: r.allAreas, areas: r.areas, full_name: r.name, title: r.title || null, phone: r.phone || null });
+      await writeAccess(id, { role: r.role, allAreas: r.allAreas, areas: r.areas, full_name: r.name, title: r.title || null, phone: r.phone || null, registration: r.registration });
       results.push({ ...base, outcome: password ? "created" : "invited", password });
     } catch (e) {
       results.push({ ...base, outcome: "failed", detail: errorMessage(e) });

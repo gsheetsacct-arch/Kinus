@@ -550,14 +550,14 @@ isOneToOne: false
                   ]
                 },"print_templates": {
                   Row: {
-                    "auto_on_first_checkin": boolean,"back": Json | null,"camps": string[],"copies": number,"background_path": string | null,"created_at": string,"division_id": string | null,"id": string,"is_default": boolean,"kind": Database["public"]['Enums']["print_kind"],"layers": NonNullable<Json>,"name": string,"page_height_mm": number,"page_width_mm": number,"sheet_layout": Json | null,"show_on_card": boolean,"sort_order": number,"source_file_path": string | null,"updated_at": string
+                    "audience": string,"auto_on_first_checkin": boolean,"back": Json | null,"camps": string[],"copies": number,"background_path": string | null,"created_at": string,"division_id": string | null,"id": string,"is_default": boolean,"kind": Database["public"]['Enums']["print_kind"],"layers": NonNullable<Json>,"name": string,"page_height_mm": number,"page_width_mm": number,"sheet_layout": Json | null,"show_on_card": boolean,"sort_order": number,"source_file_path": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "auto_on_first_checkin"?: boolean,"back"?: Json | null,"camps"?: string[],"copies"?: number,"background_path"?: string | null,"created_at"?: string,"division_id"?: string | null,"id"?: string,"is_default"?: boolean,"kind": Database["public"]['Enums']["print_kind"],"layers"?: NonNullable<Json>,"name": string,"page_height_mm": number,"page_width_mm": number,"sheet_layout"?: Json | null,"show_on_card"?: boolean,"sort_order"?: number,"source_file_path"?: string | null,"updated_at"?: string
+                    "audience"?: string,"auto_on_first_checkin"?: boolean,"back"?: Json | null,"camps"?: string[],"copies"?: number,"background_path"?: string | null,"created_at"?: string,"division_id"?: string | null,"id"?: string,"is_default"?: boolean,"kind": Database["public"]['Enums']["print_kind"],"layers"?: NonNullable<Json>,"name": string,"page_height_mm": number,"page_width_mm": number,"sheet_layout"?: Json | null,"show_on_card"?: boolean,"sort_order"?: number,"source_file_path"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "auto_on_first_checkin"?: boolean,"back"?: Json | null,"camps"?: string[],"copies"?: number,"background_path"?: string | null,"created_at"?: string,"division_id"?: string | null,"id"?: string,"is_default"?: boolean,"kind"?: Database["public"]['Enums']["print_kind"],"layers"?: NonNullable<Json>,"name"?: string,"page_height_mm"?: number,"page_width_mm"?: number,"sheet_layout"?: Json | null,"show_on_card"?: boolean,"sort_order"?: number,"source_file_path"?: string | null,"updated_at"?: string
+                    "audience"?: string,"auto_on_first_checkin"?: boolean,"back"?: Json | null,"camps"?: string[],"copies"?: number,"background_path"?: string | null,"created_at"?: string,"division_id"?: string | null,"id"?: string,"is_default"?: boolean,"kind"?: Database["public"]['Enums']["print_kind"],"layers"?: NonNullable<Json>,"name"?: string,"page_height_mm"?: number,"page_width_mm"?: number,"sheet_layout"?: Json | null,"show_on_card"?: boolean,"sort_order"?: number,"source_file_path"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -570,14 +570,14 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "access_level": Database["public"]['Enums']["access_level"],"all_areas": boolean,"created_at": string,"email": string,"full_name": string,"id": string,"final_checkout": boolean,"is_active": boolean,"login": string,"phone": string | null,"title": string | null,"role": Database["public"]['Enums']["staff_role"]
+                    "access_level": Database["public"]['Enums']["access_level"],"all_areas": boolean,"created_at": string,"email": string,"full_name": string,"id": string,"final_checkout": boolean,"is_active": boolean,"login": string,"phone": string | null,"title": string | null,"source_id": string | null,"address": Json | null,"details": Json | null,"role": Database["public"]['Enums']["staff_role"]
                   }
                   ComputedFields: never
                   Insert: {
-                    "access_level"?: Database["public"]['Enums']["access_level"],"all_areas"?: boolean,"created_at"?: string,"email": string,"full_name": string,"id": string,"final_checkout"?: boolean,"is_active"?: boolean,"login"?: string,"phone"?: string | null,"title"?: string | null,"role"?: Database["public"]['Enums']["staff_role"]
+                    "access_level"?: Database["public"]['Enums']["access_level"],"all_areas"?: boolean,"created_at"?: string,"email": string,"full_name": string,"id": string,"final_checkout"?: boolean,"is_active"?: boolean,"login"?: string,"phone"?: string | null,"title"?: string | null,"source_id"?: string | null,"address"?: Json | null,"details"?: Json | null,"role"?: Database["public"]['Enums']["staff_role"]
                   }
                   Update: {
-                    "access_level"?: Database["public"]['Enums']["access_level"],"all_areas"?: boolean,"created_at"?: string,"email"?: string,"full_name"?: string,"id"?: string,"final_checkout"?: boolean,"is_active"?: boolean,"login"?: string,"phone"?: string | null,"title"?: string | null,"role"?: Database["public"]['Enums']["staff_role"]
+                    "access_level"?: Database["public"]['Enums']["access_level"],"all_areas"?: boolean,"created_at"?: string,"email"?: string,"full_name"?: string,"id"?: string,"final_checkout"?: boolean,"is_active"?: boolean,"login"?: string,"phone"?: string | null,"title"?: string | null,"source_id"?: string | null,"address"?: Json | null,"details"?: Json | null,"role"?: Database["public"]['Enums']["staff_role"]
                   }
                   Relationships: [
                     

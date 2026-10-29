@@ -16,6 +16,7 @@ import { imageDataUrls, backgroundDataUrl, toSpec } from "@/lib/print/data";
 import { embeddedFontCss } from "@/lib/print/fonts";
 import { FONTS } from "@/lib/print/font-families";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { audienceOf, STAFF_FIELDS } from "@/lib/print/staff-values";
 import { deleteTemplate, uploadBackground } from "../../actions";
 
 export const metadata = { title: "Template" };
@@ -23,19 +24,22 @@ export const maxDuration = 60;
 
 const BLANK: EditorTemplate = { name: "New template", kind: "name_tag", page_width_mm: 90, page_height_mm: 55, layers: [], sheet_layout: null, show_on_card: false, auto_on_first_checkin: false, copies: 1 };
 
-export default async function TemplatePage({ params }: { params: Promise<{ id: string }> }) {
-  const [user, { id }] = await Promise.all([requireUser(), params]);
+export default async function TemplatePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ for?: string }> }) {
+  const [user, { id }, { for: forWho }] = await Promise.all([requireUser(), params, searchParams]);
   if (!(await canDesign(user))) redirect("/print");
   const supabase = await createClient();
   const { data: fieldRows } = await supabase.from("merge_fields").select("*").order("sort_order").order("key");
   const fields = (fieldRows ?? []).map((f) => ({ key: f.key, label: f.label, enabled: (f as { enabled?: boolean }).enabled ?? true }));
-  let initial = BLANK;
+  // a new staff tag (Templates → New staff template)
+  let initial: EditorTemplate = forWho === "staff" ? { ...BLANK, name: "Staff name tag", audience: "staff" } : BLANK;
   if (id !== "new") {
     if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
     const { data: t } = await supabase.from("print_templates").select("*").eq("id", id).maybeSingle();
     if (!t) notFound();
-    initial = { ...toSpec(t), show_on_card: t.show_on_card, auto_on_first_checkin: t.auto_on_first_checkin, copies: Number((t as { copies?: number }).copies) || 1, camps: templateCamps(t) };
+    initial = { ...toSpec(t), show_on_card: t.show_on_card, auto_on_first_checkin: t.auto_on_first_checkin, copies: Number((t as { copies?: number }).copies) || 1, camps: templateCamps(t), audience: audienceOf(t) };
   }
+  // a staff tag says what the staff list knows (name, position, division…), not camper fields
+  const editorFields = initial.audience === "staff" ? STAFF_FIELDS.map((f) => ({ ...f, enabled: true })) : fields;
   // the background and the print fonts, so the canvas looks and measures like the print
   const session = await getActiveSession();
   const [backgroundUrl, pictures, { data: divisionRows }] = await Promise.all([
@@ -103,7 +107,7 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
       {initial.name.startsWith("(retired)") && (
         <Callout tone="warning">This template is retired: it isn&apos;t offered for printing or on camper cards. To use it again, copy it (the copy is a normal template).</Callout>
       )}
-      <TemplateEditor key={initial.id ?? "new"} initial={initial} fields={fields} background={background} backgroundUrl={backgroundUrl} pictures={pictures} divisions={divisions} camps={(campRows ?? []).map((c) => c.name)} customFonts={customFonts.map(({ id, name }) => ({ id, name }))} />
+      <TemplateEditor key={initial.id ?? "new"} initial={initial} fields={editorFields} background={background} backgroundUrl={backgroundUrl} pictures={pictures} divisions={divisions} camps={(campRows ?? []).map((c) => c.name)} customFonts={customFonts.map(({ id, name }) => ({ id, name }))} />
     </div>
   );
 }

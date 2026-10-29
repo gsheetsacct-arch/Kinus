@@ -15,6 +15,7 @@ import { cleanUsed, sheetStock, usedBefore } from "./sheet-position";
 import { campDivisions, templateCamps, templateDivisionIds } from "./template-camps";
 import { customFontCss } from "./custom-fonts";
 import { loadPdfArt } from "./pdf-art";
+import { forCampers } from "./staff-values";
 
 /** Office, directors and admins print for anyone; others need check-in access to the camper. */
 export function canPrintFor(user: CurrentUser, camper: { division_id: string | null; bunk_id: string | null }) {
@@ -53,6 +54,7 @@ export async function createPrintJob(
   const admin = createAdminClient();
   const { data: template } = await admin.from("print_templates").select("*").eq("id", opts.templateId).single();
   if (!template) throw new Error("That template no longer exists.");
+  if (!forCampers(template)) throw new Error(`${template.name} is a staff tag: print it from Print → Staff tags.`);
   const ids = [...new Set(opts.camperIds)];
   if (!ids.length) throw new Error("No campers selected.");
   // permission check per camper (all chunks side by side)

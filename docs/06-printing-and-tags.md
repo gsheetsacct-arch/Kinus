@@ -497,6 +497,37 @@ check-in or moving parts around on the template doesn't. Labels printed before
 0019 count as unchanged. Also "Bunk sheets for division X", and the
 Publisher data-source export (6.3 B) from the same screen.
 
+## 6.7a Staff tags (migration 0041)
+
+A template is for campers (the default) or for **staff** (`print_templates.audience`). Make one
+under Templates → **New staff template**, or turn a camper design into a staff one with its
+**For staff** button (a copy; the camper one stays). Staff templates are filled from the staff
+list instead of the merge fields, with the same names where they mean the same thing, so a
+copied design mostly just works:
+
+| Field | From |
+|---|---|
+| `{{FIRST}}` `{{LAST}}` `{{FULL}}` | their name (the last word is the last name) |
+| `{{HEBREW_NAME}}` `{{TSHIRT}}` `{{STAFF_ID}}` | the registration export (Staff → Add many, migration 0040) |
+| `{{POSITION}}` `{{ROLE}}` | their position (Learning head…) and Kinus role |
+| `{{DIVISION}}` `{{BUNK}}` `{{CAMP}}` `{{DIVISION_COLOR}}` | where they work (several: joined with commas; the colour of the first) |
+| `{{PHONE}}` `{{EMAIL}}` | their profile |
+
+The editor previews them with a made-up staff member, the staff member with the longest text,
+or every field's longest at once, and the fit check measures every staff member. Staff
+templates have no camper settings (camps, print button on the camper card, printing at first
+check-in) and are never offered for campers: not on camper cards, at check-in, in batches, in
+the queue's "changed since printed", nor by the design connector (`forCampers`, which also keeps
+every template a camper one until 0041 is applied).
+
+**Print → Staff tags** (`/print/staff`): pick a staff template, filter by division, role or name,
+tick who (everyone shown to start with), how many each, and **Print**. The tags open in a new tab
+(`POST /print/staff/sheet`, the same rendering as camper tags, label sheets included, or one a
+page) and the browser's print dialog comes up; *Save as PDF* keeps a file. Directors and the
+office over all of camp print for all staff, division heads for the staff of their divisions.
+Staff tags don't go through the print queue (its items are campers) and aren't tracked for
+changes.
+
 ## 6.8 Email (Resend)
 
 - Verified domain (SPF/DKIM); from `tags@<your-domain>` (`EMAIL_FROM`). Without it,

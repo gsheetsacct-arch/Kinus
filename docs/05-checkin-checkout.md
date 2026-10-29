@@ -46,8 +46,11 @@ Browsing by bunk does the same.
 
 ## 5.2 Input methods, in priority order
 
-1. **Camera scan** (phone): `@zxing/browser` reads Code 128 and QR. The viewfinder
-   is the top half of the screen in Check in / Check out modes. Torch toggle.
+1. **Camera scan** (phone): reads the tags' QR codes (and Code 128 on older labels), with
+   the phone's own reader where there is one and `@zxing/browser` elsewhere. A square guide
+   marks where to hold the tag. The camera starts zoomed in a bit (1.5×; a button steps
+   1× / 1.5× / 2×, remembered per device): the camera's own zoom where the browser offers it,
+   otherwise the picture is enlarged so the tag is easy to aim.
 2. **Hardware scanner** (USB/Bluetooth keyboard wedge on a laptop/tablet): a global
    key listener collects a fast burst (< 50 ms between keys) ending in Enter and
    routes it to the same handler, even when no input is focused.

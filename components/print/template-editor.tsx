@@ -59,7 +59,8 @@ import { useCode } from "./code-image";
 import { fill } from "@/lib/print/merge";
 import { LeaveGuard } from "@/components/leave-guard";
 
-export type EditorTemplate = TemplateSpec & { show_on_card: boolean; auto_on_first_checkin: boolean; copies: number; camps?: string[] };
+/** audience "staff": filled from the staff list and printed from Print → Staff tags (migration 0041). */
+export type EditorTemplate = TemplateSpec & { show_on_card: boolean; auto_on_first_checkin: boolean; copies: number; camps?: string[]; audience?: "campers" | "staff" };
 export type MergeKey = { key: string; label: string; enabled: boolean };
 
 const ICON = { text: Type, barcode: Barcode, qr: QrCode, box: Square, image: ImageIcon } as const;
@@ -490,6 +491,8 @@ export function TemplateEditor({
 }) {
   const router = useRouter();
   const [t, setT] = React.useState<EditorTemplate>(() => ({ ...initial, layers: initial.layers.map((l) => ({ ...l, id: l.id || uid() })) }));
+  // a staff tag: staff fields and staff previews, none of the camper-only settings
+  const staff = t.audience === "staff";
   // the selected parts (Shift-click or drag a box to select several)
   const [selected, setSelected] = React.useState<string[]>([]);
   // two-sided templates: which side the canvas and the parts list show
@@ -772,7 +775,7 @@ export function TemplateEditor({
     let live = true;
     const timer = setTimeout(
       () =>
-        previewValues(whoArg)
+        previewValues(whoArg, t.audience)
           .then((r) => {
             if (!live) return;
             if ("error" in r) toast.error(r.error);
@@ -785,7 +788,7 @@ export function TemplateEditor({
       live = false;
       clearTimeout(timer);
     };
-  }, [whoArg, who, code]);
+  }, [whoArg, who, code, t.audience]);
 
   const persist = async (leaving = false) => {
     const sent = version.current;
@@ -865,13 +868,13 @@ export function TemplateEditor({
   React.useEffect(() => {
     let live = true;
     setPeople(null);
-    fitCheckPeople(usedKey ? usedKey.split(",") : [])
+    fitCheckPeople(usedKey ? usedKey.split(",") : [], t.audience)
       .then((r) => live && setPeople(r.ok ? r.people : []))
       .catch(() => live && setPeople([]));
     return () => {
       live = false;
     };
-  }, [usedKey]);
+  }, [usedKey, t.audience]);
   const textLayersKey = JSON.stringify(t.layers.filter((l) => l.type === "text" && !l.hidden));
   React.useEffect(() => {
     if (!people) return;
@@ -963,14 +966,22 @@ export function TemplateEditor({
         </label>
         <label className="space-y-1">
           <span className="block text-xs text-muted-foreground">Show it with</span>
-          <Select value={who} onChange={(e) => setWho(e.target.value as typeof who)} className="h-9 w-48">
-            <option value="sample">A sample camper</option>
-            <option value="longest">The longest text (checks every camper)</option>
-            <option value="worst">The longest of every field at once (worst case)</option>
-            <option value="code">A camper by code…</option>
-          </Select>
+          {staff ? (
+            <Select value={who === "code" ? "sample" : who} onChange={(e) => setWho(e.target.value as typeof who)} className="h-9 w-48">
+              <option value="sample">A sample staff member</option>
+              <option value="longest">The longest text (checks all staff)</option>
+              <option value="worst">The longest of every field at once (worst case)</option>
+            </Select>
+          ) : (
+            <Select value={who} onChange={(e) => setWho(e.target.value as typeof who)} className="h-9 w-48">
+              <option value="sample">A sample camper</option>
+              <option value="longest">The longest text (checks every camper)</option>
+              <option value="worst">The longest of every field at once (worst case)</option>
+              <option value="code">A camper by code…</option>
+            </Select>
+          )}
         </label>
-        {who === "code" && (
+        {who === "code" && !staff && (
           <label className="space-y-1">
             <span className="block text-xs text-muted-foreground">Camper code</span>
             <Input value={code} onChange={(e) => setCode(e.target.value.trim())} placeholder="0012" inputMode="numeric" className="h-9 w-28" />
@@ -1102,7 +1113,7 @@ export function TemplateEditor({
           {used.length > 0 && (
             <details className="rounded-lg border bg-card text-sm">
               <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
-                What the fields say for {sample.label || "this camper"}
+                What the fields say for {sample.label || (staff ? "this staff member" : "this camper")}
                 {used.some((k) => fields.some((f) => f.key === k) && !(sample.values[k] ?? "").trim()) && <span className="ml-1 text-amber-700 dark:text-amber-400">· some are empty</span>}
               </summary>
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border-t px-3 py-2 text-xs">
@@ -1110,7 +1121,7 @@ export function TemplateEditor({
                   <React.Fragment key={k}>
                     <dt className="font-mono text-muted-foreground">{`{{${k}}}`}</dt>
                     <dd dir="auto" className={cn("truncate", !(sample.values[k] ?? "").trim() && "italic text-amber-700 dark:text-amber-400")}>
-                      {(sample.values[k] ?? "").trim() || (fields.some((f) => f.key === k) ? "empty for this camper" : "not a field")}
+                      {(sample.values[k] ?? "").trim() || (fields.some((f) => f.key === k) ? `empty for this ${staff ? "person" : "camper"}` : "not a field")}
                     </dd>
                   </React.Fragment>
                 ))}
@@ -1605,7 +1616,7 @@ export function TemplateEditor({
                   </Button>
                 </div>
               )}
-              {(camps.length > 1 || (t.camps?.length ?? 0) > 0) && (
+              {!staff && (camps.length > 1 || (t.camps?.length ?? 0) > 0) && (
                 <fieldset className="space-y-1.5">
                   <legend className="text-sm font-medium">For which camps</legend>
                   <div className="flex flex-wrap gap-x-4 gap-y-1.5">
@@ -1739,22 +1750,26 @@ export function TemplateEditor({
                   aria-label="How many per camper"
                 />
               </label>
-              <label className="flex items-center justify-between gap-3">
-                <span className="text-sm">
-                  <span className="font-medium">Print button at check-in</span>
-                  <span className="block text-xs text-muted-foreground">
-                    Adds a “{t.name || "this tag"}” button to every camper&apos;s card, on Check in and on the camper&apos;s page. Staff tap it when a tag is lost or wrong, and it goes to the office to print. Leave it off for labels only the office prints.
+              {!staff && (
+                <label className="flex items-center justify-between gap-3">
+                  <span className="text-sm">
+                    <span className="font-medium">Print button at check-in</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Adds a “{t.name || "this tag"}” button to every camper&apos;s card, on Check in and on the camper&apos;s page. Staff tap it when a tag is lost or wrong, and it goes to the office to print. Leave it off for labels only the office prints.
+                    </span>
                   </span>
-                </span>
-                <Switch checked={t.show_on_card} onCheckedChange={(v) => update({ show_on_card: v })} />
-              </label>
-              <label className="flex items-center justify-between gap-3">
-                <span className="text-sm">
-                  <span className="font-medium">Print by itself at first check-in</span>
-                  <span className="block text-xs text-muted-foreground">The first time each camper is checked in, this tag goes to the office print queue on its own, without anyone tapping. Only once per camper. These aren&apos;t emailed one by one: the office prints them together from the queue.</span>
-                </span>
-                <Switch checked={t.auto_on_first_checkin} onCheckedChange={(v) => update({ auto_on_first_checkin: v })} />
-              </label>
+                  <Switch checked={t.show_on_card} onCheckedChange={(v) => update({ show_on_card: v })} />
+                </label>
+              )}
+              {!staff && (
+                <label className="flex items-center justify-between gap-3">
+                  <span className="text-sm">
+                    <span className="font-medium">Print by itself at first check-in</span>
+                    <span className="block text-xs text-muted-foreground">The first time each camper is checked in, this tag goes to the office print queue on its own, without anyone tapping. Only once per camper. These aren&apos;t emailed one by one: the office prints them together from the queue.</span>
+                  </span>
+                  <Switch checked={t.auto_on_first_checkin} onCheckedChange={(v) => update({ auto_on_first_checkin: v })} />
+                </label>
+              )}
               {background}
             </div>
           </details>

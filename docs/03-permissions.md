@@ -59,6 +59,18 @@ taken away there stay as they are.
 - **Add many at once**: paste rows from a spreadsheet (name, email, role, division or
   group, bunk) or upload CSV/XLSX; the preview flags typos with suggestions; new
   people get invitation emails (or starting passwords to hand out).
+- **The registration staff export** (migration 0040): upload it as it downloads, on the same
+  page. Kinus recognises it by its columns and takes **accepted** staff only (the preview says how
+  many were left out, by status). From each person: name, registration id (`students.id`), phone
+  (`phone_number_we_can_reach_you`, else `phone_number`; `cell_phone` is a yes/no question),
+  email, division and bunk (`group_types.division` / `group_types.bunks`), position (a position
+  Kinus knows, like *Counselor*, sets the role), and home address. Every other column with
+  anything in it is kept as their form's details (columns empty on every row are dropped), shown
+  under *From registration* on the person's page. They come in listed (phone book, lists, texts;
+  no sign-in) and sign-in is turned on per person. Uploading the export again updates the same
+  people (matched by registration id, then email). Someone accepted but not placed yet comes in
+  with a warning and only gets texts sent to everyone; a division or bunk name Kinus doesn't know
+  holds that row back with a suggestion. Address, id and details are read only through the server.
 - **Staff list**: search, filter by role / where / status, sort, tick people, and
   change role and where (replace or add), email sign-in links, deactivate, or delete.
 

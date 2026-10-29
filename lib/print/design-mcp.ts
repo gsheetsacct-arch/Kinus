@@ -13,6 +13,7 @@ import { htmlToPng, type PartFit } from "./pdf";
 import { renderDocument } from "./render";
 import type { Layer, TemplateSpec } from "./types";
 import { DESIGN_GUIDE } from "./design-guide";
+import { forCampers } from "./staff-values";
 
 /**
  * The design connector: Claude reads, designs and previews Kinus templates directly (MCP,
@@ -69,7 +70,8 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
       const { data } = await createAdminClient().from("print_templates").select("*").order("sort_order").order("name");
       return text(
         json(
-          (data ?? []).map((t) => {
+          // camper tags: the connector previews and checks with campers (staff tags are made in Kinus)
+          (data ?? []).filter(forCampers).map((t) => {
             const sheet = t.sheet_layout as { preset?: string; cols?: number; rows?: number } | null;
             return {
               id: t.id,

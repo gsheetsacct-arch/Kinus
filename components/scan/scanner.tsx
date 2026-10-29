@@ -30,6 +30,14 @@ const FLASH: Record<Flash["tone"], string> = {
   already: "bg-slate-600 text-white",
   error: "bg-destructive text-white",
 };
+// the scanner's border takes the result's colour for a moment: readable from across the table
+const FLASH_RING: Record<Flash["tone"], string> = {
+  in: "ring-status-present",
+  out: "ring-status-out",
+  home: "ring-status-departed",
+  already: "ring-slate-500",
+  error: "ring-destructive",
+};
 // the server allows 30 s; the button goes a little earlier so a late tap doesn't fail
 const UNDO_MS = 25000;
 const MAX_RESULTS = 12;
@@ -120,7 +128,7 @@ export function Scanner({
 
   const show = React.useCallback((f: Flash) => {
     setFlash(f);
-    setTimeout(() => setFlash((cur) => (cur === f ? null : cur)), f.tone === "error" ? 2600 : 1700);
+    setTimeout(() => setFlash((cur) => (cur === f ? null : cur)), f.tone === "error" ? 6000 : 4000);
   }, []);
 
   const act = React.useCallback(
@@ -263,7 +271,7 @@ export function Scanner({
     toast.success(`Undone: ${r.name}`);
   };
 
-  const tint = final ? "ring-status-departed/40" : mode === "in" ? "ring-status-present/40" : mode === "out" ? "ring-status-out/50" : "ring-border";
+  const tint = flash ? FLASH_RING[flash.tone] : final ? "ring-status-departed/40" : mode === "in" ? "ring-status-present/40" : mode === "out" ? "ring-status-out/50" : "ring-border";
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -271,7 +279,7 @@ export function Scanner({
         <LineBar divisions={divisions} line={line} lineDiv={lineDiv} onChoose={chooseLine} />
       )}
       {final && <CheckoutProgress campName={final.campName} divisions={final.divisions} roster={[...roster, ...extra]} statuses={statuses} />}
-      <div className={cn("space-y-3 rounded-2xl border bg-card p-3 shadow-[var(--shadow-card)] ring-4", tint)}>
+      <div className={cn("space-y-3 rounded-2xl border bg-card p-3 shadow-[var(--shadow-card)] ring-4 transition-[box-shadow] duration-150", tint)}>
         {final && (
           <div className="flex items-center gap-3 rounded-xl bg-status-departed px-4 py-3 text-white">
             <DoorOpen className="size-6 shrink-0" />
@@ -311,6 +319,21 @@ export function Scanner({
               {m === "out" ? "Check out · coming back" : label}
             </button>
           ))}
+        </div>
+        {/* the last scan's result, in place: the box and camera below stay in view and still for the next tag */}
+        <div aria-live="assertive" className="h-16">
+          {flash ? (
+            <button type="button" onClick={() => (setFlash(null), focusBox())} className={cn("flex h-full w-full flex-col justify-center rounded-xl px-4 text-left", FLASH[flash.tone])}>
+              <span className="truncate text-xl font-bold leading-tight" dir="auto">
+                {flash.title}
+              </span>
+              <span className="truncate text-sm font-medium opacity-90" dir="auto">
+                {flash.detail}
+              </span>
+            </button>
+          ) : (
+            <div className="flex h-full items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">{mode === "lookup" ? "Ready to look up" : "Ready for the next tag"}</div>
+          )}
         </div>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
@@ -426,18 +449,6 @@ export function Scanner({
         </section>
       )}
 
-      {flash && (
-        <button
-          className={cn("fixed inset-0 z-[60] flex flex-col items-center justify-center gap-3 p-8 text-center", FLASH[flash.tone])}
-          onClick={() => setFlash(null)}
-          aria-live="assertive"
-        >
-          <span className="text-4xl font-bold sm:text-5xl" dir="auto">
-            {flash.title}
-          </span>
-          <span className="text-xl font-medium opacity-90">{flash.detail}</span>
-        </button>
-      )}
 
       <Dialog open={Boolean(wrong)} onOpenChange={(o) => !o && (setWrong(null), focusBox())}>
         <DialogContent className="border-amber-400">

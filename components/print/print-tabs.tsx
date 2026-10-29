@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-/** Queue · Print a batch (people who print) · Templates · Fields (people who design) · Hebrew names */
+/** Queue · Print a batch · Staff tags (people who print) · Templates · Fields (people who design) · Hebrew names */
 export function PrintTabs({ prints, designs, names }: { prints: boolean; designs: boolean; names?: boolean }) {
   const pathname = usePathname();
   const tabs = [
@@ -11,6 +11,7 @@ export function PrintTabs({ prints, designs, names }: { prints: boolean; designs
       ? [
           { href: "/print", label: "Queue", match: (p: string) => p === "/print" || p.startsWith("/print/jobs") },
           { href: "/print/batch", label: "Print a batch", match: (p: string) => p.startsWith("/print/batch") },
+          { href: "/print/staff", label: "Staff tags", match: (p: string) => p.startsWith("/print/staff") },
         ]
       : []),
     ...(designs

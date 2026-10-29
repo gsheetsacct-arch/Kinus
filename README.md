@@ -33,8 +33,8 @@ What works today:
   menu picks the camp (everyone starts in American). Divisions are placed in camps
   automatically by name
 - **Check in** (`/scan`): Check in / Check out (coming back or going home) / Look up
-  modes; USB/Bluetooth scanner, phone camera, or name/code search; full-screen
-  colour flash and sound; 30-second undo; one-tap tag requests from the camper card
+  modes; USB/Bluetooth scanner, phone camera, or name/code search; colour
+  result strip and sound, ready for the next tag at once; 30-second undo; one-tap tag requests from the camper card
 - **Who's here** (`/status`): live board by bunk or division with counts, who
   checked each camper in or out and when, tap-to-call parents; directors check in,
   send home or mark no-show many campers at once and correct a status with a reason
@@ -42,7 +42,8 @@ What works today:
   batches for a camp/division/bunk (everyone, never printed, here now, arrived today),
   template editor with live preview and background images, merge fields with
   conversion tables (Youth Small → YS, Division 2 → 2), and a CSV of converted
-  merge data for Publisher
+  merge data for Publisher, and **staff tags**: templates for staff (name, position,
+  division, bunk, Hebrew name…) printed from Print → Staff tags
 - **Text staff** (`/messages`): texts through Twilio. Directors text everyone or chosen
   divisions; division heads and head counselors text their own divisions' staff. Shows who it
   goes to first, honours STOP replies, and tracks delivery per person (setup: docs/09 §9.5b)
