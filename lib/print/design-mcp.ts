@@ -9,7 +9,8 @@ import { findPresets, presetById } from "./presets";
 import { loadMergeSetup, toSpec } from "./data";
 import { copyTemplate, storeTemplate, templateSchema } from "./template-store";
 import { allCamperValues, camperValues, longestPerField, previewDocument, sampleValues, worstCaseValues } from "./preview-data";
-import { htmlToPng, type PartFit } from "./pdf";
+import type { PartFit } from "./pdf";
+import { renderPng } from "./chromium";
 import { renderDocument } from "./render";
 import { thermalLayers, thermalValues } from "./thermal";
 import type { Layer, TemplateSpec } from "./types";
@@ -259,7 +260,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
         }
         // the design as it stands (a thermal label's page turn is for the printer, not the picture)
         const html = await previewDocument({ ...spec, sheet_layout: null, ...(spec.thermal && spec.page_width_mm > spec.page_height_mm ? { thermal: false, layers: thermalLayers(spec.layers) } : {}) }, [{ values: spec.thermal ? thermalItems(values) : values, copies: 1 }], { outlines: false });
-        const { images, fit } = await htmlToPng(html, { tags: spec.back ? 2 : 1 });
+        const { images, fit } = await renderPng(html, { tags: spec.back ? 2 : 1, base: appUrl });
         return {
           content: [
             ...images.map((png) => ({ type: "image" as const, data: png.toString("base64"), mimeType: "image/png" })),
@@ -288,7 +289,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
         if (!people.length) return text(`No ${staff ? "staff" : "campers"} to check yet (or none in your part of camp).`);
         const textOnly: TemplateSpec = { ...spec, sheet_layout: null, back: null, layers: spec.layers.filter((l) => l.type === "text" && !l.hidden && l.side !== "back") };
         const html = renderDocument(textOnly, people.map((p) => ({ values: p.values, copies: 1 })), { fontCss: await (await import("./custom-fonts")).customFontCss(textOnly) });
-        const { fit } = await htmlToPng(html, { tags: 0 });
+        const { fit } = await renderPng(html, { tags: 0, base: appUrl });
         return text(`${people.length} ${staff ? "staff members" : "campers"} checked on ${spec.name}.\n${fitReport(fit, textOnly, people.length)}`);
       } catch (e) {
         return problem(e instanceof Error ? e.message : String(e));

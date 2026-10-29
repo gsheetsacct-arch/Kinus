@@ -4,7 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { canAccessBunk, seesAllCamp, type CurrentUser } from "@/lib/auth/permissions";
 import { renderDocument } from "./render";
 import { mergeValues } from "./merge";
-import { htmlToPdf, type FitNotes } from "./pdf";
+import type { FitNotes } from "./pdf";
+import { renderPdf } from "./chromium";
 import { sendEmail } from "./email";
 import { backgroundDataUrl, byBunkThenName, imageDataUrls, loadMergeSetup, loadPrintCampers, loadPrintCampersBrief, toSpec } from "./data";
 import { contentHash, labelValues, sameContent, templateKeys } from "./content";
@@ -14,7 +15,7 @@ import { isProgressMark, RETRY_MARK, STARTED_MARK } from "./labels";
 import { cleanUsed, sheetStock, usedBefore } from "./sheet-position";
 import { campDivisions, templateCamps, templateDivisionIds } from "./template-camps";
 import { customFontCss } from "./custom-fonts";
-import { loadPdfArt } from "./pdf-art";
+import { pdfArtPaths } from "./pdf-art";
 import { forCampers } from "./staff-values";
 
 /** Office, directors and admins print for anyone; others need check-in access to the camper. */
@@ -137,7 +138,7 @@ async function loadPrintSet(jobIds: string[]) {
     imageDataUrls(admin, spec.layers),
     customFontCss(spec),
     // uploaded PDF artwork, for PDFs made with it as it is
-    loadPdfArt(spec.layers),
+    pdfArtPaths(spec.layers),
   ]);
   campers.sort(byBunkThenName);
   return { jobs, spec, campers, copiesOf, setup, background, images, fontCss, art, askedMoreThanOnce };
@@ -200,7 +201,7 @@ export async function printSetPdf(jobIds: string[], opts: SetOpts & { part?: num
   const parts = total <= first ? 1 : 1 + Math.ceil((total - first) / size);
   const part = Math.min(parts - 1, Math.max(0, Math.floor(opts.part ?? 0)));
   const tags: [number, number] | undefined = parts === 1 ? undefined : part === 0 ? [0, first] : [first + (part - 1) * size, first + part * size];
-  const pdf = await htmlToPdf(setHtml(set, { ...opts, tags }).html, undefined, set.art);
+  const { pdf } = await renderPdf(setHtml(set, { ...opts, tags }).html, { art: set.art });
   // "×" (4×6) as "x": some browsers drop a download's name with it
   const fileName = `${spec.name.replace(/×/g, "x").replace(/[\\/:*?"<>|]+/g, "-").trim() || "Tags"} - ${total} ${total === 1 ? "tag" : "tags"}.pdf`;
   return { pdf, parts, fileName };
@@ -321,7 +322,9 @@ export async function processPrintJob(jobId: string, appUrl: string, opts: { ret
     let fit: FitNotes | null = null;
     try {
       if (job.tags > PDF_MAX_TAGS) throw new Error(`more than ${PDF_MAX_TAGS.toLocaleString("en-US")} tags; print it from Kinus`);
-      const made = await htmlToPdf(html, (n) => (fit = n), art);
+      const r = await renderPdf(html, { art, base: appUrl });
+      const made = r.pdf;
+      fit = r.fit;
       if (parts > 1) {
         const out = admin.storage.from("print-output");
         const saved = await Promise.all([

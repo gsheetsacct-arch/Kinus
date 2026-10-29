@@ -103,11 +103,11 @@ export async function saveExtraFields(fd: FormData): Promise<ActionResult> {
 export async function sendTestEmail(): Promise<ActionResult> {
   await requireAdmin();
   try {
-    const [{ createAdminClient }, { officeEmail }, { sendEmail, emailSetup }, { htmlToPdf }, { renderDocument }, { loadMergeSetup, toSpec, backgroundDataUrl }, { mergeValues, SAMPLE_CAMPER }] = await Promise.all([
+    const [{ createAdminClient }, { officeEmail }, { sendEmail, emailSetup }, { renderPdf }, { renderDocument }, { loadMergeSetup, toSpec, backgroundDataUrl }, { mergeValues, SAMPLE_CAMPER }] = await Promise.all([
       import("@/lib/supabase/admin"),
       import("@/lib/print/jobs"),
       import("@/lib/print/email"),
-      import("@/lib/print/pdf"),
+      import("@/lib/print/chromium"),
       import("@/lib/print/render"),
       import("@/lib/print/data"),
       import("@/lib/print/merge"),
@@ -132,7 +132,7 @@ export async function sendTestEmail(): Promise<ActionResult> {
           images: await imageDataUrls(admin, spec.layers),
           fontCss: await (await import("@/lib/print/custom-fonts")).customFontCss(spec),
         });
-        pdf = await htmlToPdf(html);
+        pdf = (await renderPdf(html)).pdf;
         pdfNote = `A sample “${spec.name}” PDF is attached (${Math.max(1, Math.round(pdf.length / 1024))} KB).`;
       } catch (e) {
         pdfNote = `The PDF couldn't be made (${e instanceof Error ? e.message : String(e)}), so requests will arrive without one; the office can still print them from the queue.`;
