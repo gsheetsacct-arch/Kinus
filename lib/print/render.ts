@@ -4,7 +4,7 @@ import { embeddedFontCss } from "./fonts";
 import { FONTS, fontStack, isCustomFont, lineHeightOf, type FontKey } from "./font-families";
 import { fill } from "./merge";
 import { DIVISION_VALUE, onBack, pictureFor, sheetPlacement, textAlignItems, textSpacingCss, type Layer, type PrintItem, type SheetLayout, type TemplateSpec } from "./types";
-import { FLOOR_PT, minPt, PX_PER_PT } from "./render-constants";
+import { DESCENDER_ROOM_EM, FLOOR_PT, minPt, PX_PER_PT } from "./render-constants";
 import { isRoundLabel } from "./presets";
 import { CURVE_SCALE, curvePath, DEFAULT_ARC } from "./curve";
 import { THERMAL_PICTURE_CSS, thermalLayers, thermalValues, turnsOnPage } from "./thermal";
@@ -203,7 +203,8 @@ body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-w
     .join("")}
 .l{position:absolute;overflow:hidden}
 .t{display:flex;align-items:center;white-space:nowrap}
-.t span{max-width:100%;overflow:hidden;text-overflow:clip;unicode-bidi:plaintext}
+.l.t{overflow:clip;overflow-clip-margin:${DESCENDER_ROOM_EM}em}
+.t span{max-width:100%;overflow-x:clip;overflow-y:visible;text-overflow:clip;unicode-bidi:plaintext}
 .tc svg{display:block;overflow:visible}.t.wrap{white-space:normal;align-items:flex-start}.t.wrap span{text-wrap:balance}
 .bc{display:flex;flex-direction:column;background:#fff}.bc .bars{flex:1;min-height:0}.bc svg{width:100%;height:100%;display:block}
 .bc-text{font-size:7pt;text-align:center;letter-spacing:0.5pt;line-height:1.2;padding-top:0.4mm}
@@ -213,7 +214,7 @@ body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-w
 @media screen{.sheet.back,.tag.back:not(.sheet>.tag){outline:0.6mm dashed #94a3b8}.sheet.back::before,body>.tag.back::after{content:"Back";position:absolute;top:1mm;right:1mm;z-index:5;font:600 8pt sans-serif;color:#475569;background:#f1f5f9;padding:0.3mm 1.5mm;border-radius:1mm}}
 @media print{body{display:block}.used{display:none}}
 </style></head><body>${body}<script>
-(function(){${CURVE_SCRIPT}function fit(){document.querySelectorAll("[data-fit]:not(.tc)").forEach(function(el){var span=el.firstElementChild;var min=parseFloat(el.getAttribute("data-min"))||8;var floor=parseFloat(el.getAttribute("data-floor"))||min;var s=parseFloat(getComputedStyle(el).fontSize);var over=function(){return span.scrollWidth>el.clientWidth+0.5||el.scrollHeight>el.clientHeight+0.5};if(!over())return;var r=Math.min(el.clientWidth/Math.max(span.scrollWidth,1),el.clientHeight/Math.max(el.scrollHeight,1));/* text on more lines steps down from its size: a jump would skip the sizes where it fits on fewer lines */if(getComputedStyle(el).whiteSpace!=="nowrap")r=1;s=Math.max(min,Math.floor(s*Math.min(1,r)*2)/2);el.style.fontSize=s+"px";var guard=80;while(guard-->0&&s>min&&over()){s=Math.max(min,s-0.5);el.style.fontSize=s+"px";}
+(function(){${CURVE_SCRIPT}function fit(){document.querySelectorAll("[data-fit]:not(.tc)").forEach(function(el){var span=el.firstElementChild;var min=parseFloat(el.getAttribute("data-min"))||8;var floor=parseFloat(el.getAttribute("data-floor"))||min;var s=parseFloat(getComputedStyle(el).fontSize);var over=function(){return span.scrollWidth>el.clientWidth+0.5||span.offsetHeight>el.clientHeight+0.5};if(!over())return;var r=Math.min(el.clientWidth/Math.max(span.scrollWidth,1),el.clientHeight/Math.max(span.offsetHeight,1));/* text on more lines steps down from its size: a jump would skip the sizes where it fits on fewer lines */if(getComputedStyle(el).whiteSpace!=="nowrap")r=1;s=Math.max(min,Math.floor(s*Math.min(1,r)*2)/2);el.style.fontSize=s+"px";var guard=80;while(guard-->0&&s>min&&over()){s=Math.max(min,s-0.5);el.style.fontSize=s+"px";}
 /* a name too long even at the smallest size goes smaller, so it prints whole: marked for the office */
 guard=400;while(guard-->0&&s>floor&&over()){s=Math.max(floor,s-0.5);el.style.fontSize=s+"px";}if(s<min)el.setAttribute("data-small",(Math.round(s*0.75*2)/2).toString());if(over())el.setAttribute("data-cut","1");});fitCurves();document.body.setAttribute("data-fitted","1");}
 if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fit)}else{window.addEventListener("load",fit)}})();

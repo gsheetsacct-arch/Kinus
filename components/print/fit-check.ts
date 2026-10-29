@@ -2,7 +2,7 @@
 import { fill } from "@/lib/print/merge";
 import { fitText } from "@/lib/print/fit";
 import { CURVE_SCALE, DEFAULT_ARC, fitCurve } from "@/lib/print/curve";
-import { FLOOR_PT, minPt } from "@/lib/print/render-constants";
+import { DESCENDER_ROOM_EM, FLOOR_PT, minPt } from "@/lib/print/render-constants";
 import { textAlignItems, textSpacingCss, type Layer } from "@/lib/print/types";
 import { fontStack, lineHeightOf } from "@/lib/print/font-families";
 
@@ -37,10 +37,10 @@ export function checkFit(l: TextLayer, people: FitPerson[]): FitResult {
   const host = document.createElement("div");
   host.style.cssText = "position:fixed;left:-20000px;top:0;visibility:hidden;pointer-events:none";
   const box = document.createElement("div");
-  box.style.cssText = `display:flex;align-items:${textAlignItems(l)};overflow:hidden;line-height:${l.lineHeight ?? lineHeightOf(l.font)};width:${w}px;height:${h}px;white-space:${l.wrap ? "normal" : "nowrap"};font-weight:${l.weight ?? 400};font-style:${l.italic ? "italic" : "normal"};font-family:${fontStack(l.font)};text-align:${l.align ?? "left"};${textSpacingCss(l)}`;
+  box.style.cssText = `display:flex;align-items:${textAlignItems(l)};overflow:clip;overflow-clip-margin:${DESCENDER_ROOM_EM}em;line-height:${l.lineHeight ?? lineHeightOf(l.font)};width:${w}px;height:${h}px;white-space:${l.wrap ? "normal" : "nowrap"};font-weight:${l.weight ?? 400};font-style:${l.italic ? "italic" : "normal"};font-family:${fontStack(l.font)};text-align:${l.align ?? "left"};${textSpacingCss(l)}`;
   const span = document.createElement("span");
   span.dir = "auto";
-  span.style.cssText = `max-width:100%;overflow:hidden;unicode-bidi:plaintext;${l.wrap ? "text-wrap:balance;" : ""}text-decoration:${l.underline ? "underline" : "none"}`;
+  span.style.cssText = `max-width:100%;overflow-x:clip;overflow-y:visible;unicode-bidi:plaintext;${l.wrap ? "text-wrap:balance;" : ""}text-decoration:${l.underline ? "underline" : "none"}`;
   box.appendChild(span);
   host.appendChild(box);
   document.body.appendChild(host);
@@ -60,7 +60,7 @@ export function checkFit(l: TextLayer, people: FitPerson[]): FitResult {
       out.checked++;
       if (l.fit === false) {
         box.style.fontSize = `${target}px`;
-        const over = span.scrollWidth > box.clientWidth + 0.5 || box.scrollHeight > box.clientHeight + 0.5;
+        const over = span.scrollWidth > box.clientWidth + 0.5 || span.offsetHeight > box.clientHeight + 0.5;
         if (over) out.cut.push({ name: p.name, code: p.code });
         continue;
       }

@@ -9,6 +9,8 @@ import { renderDocument } from "./render";
 import { customFontCss } from "./custom-fonts";
 import { SAMPLE_STAFF, STAFF_FIELDS, staffValues, type StaffPerson } from "./staff-values";
 import { fill } from "./merge";
+import { widthEstimate } from "./width-estimate";
+import { worstValues } from "./worst-case";
 import type { TemplateSpec } from "./types";
 
 export type StaffToPrint = { id: string; name: string; role: string; title: string | null; divisionIds: string[]; values: Record<string, string> };
@@ -91,7 +93,9 @@ export async function staffPreview(
   if (!people.length) return { ...sample, label: "a sample staff member (no staff yet)" };
   if (w === "worst") {
     const keys = [...new Set(people.flatMap((p) => Object.keys(p.values)))];
-    return { values: Object.fromEntries(keys.map((k) => [k, people.map((p) => p.values[k] ?? "").reduce((a, b) => (b.length > a.length ? b : a), "")])), label: "the longest of every field" };
+    const widest = Object.fromEntries(keys.map((k) => [k, people.map((p) => p.values[k] ?? "").reduce((a, b) => (widthEstimate(b) > widthEstimate(a) ? b : a), "")]));
+    // the fields printed together (first and last name) from one real person: lib/print/worst-case
+    return { values: worstValues(people.map((p) => p.values), texts, widest), label: "the longest of every field" };
   }
   if (w === "longest") {
     const parts = texts.filter((t) => t.text.includes("{{") && t.w > 0).slice(0, 30);

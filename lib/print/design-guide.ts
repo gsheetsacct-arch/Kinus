@@ -34,8 +34,8 @@ Positions are millimetres from the tag's top-left: x, y, w (width), h (height).
   normally; very long names still go smaller, down to 4 pt, to print whole), "wrap": bool
   (more than one line), "valign": "top"|"middle"|"bottom" (where the text sits in its box;
   middle by default, top when it wraps), "lineHeight": number (line spacing × the size for
-  wrapped text; default the font's own, 1.4 for uploaded fonts: lower it to just fit the
-  font's letters, e.g. 1.25 for Poppins), "curve": "top"|"bottom" (the text runs along the
+  wrapped text; default the font's own, 1.4 for uploaded fonts: lower it for snug lines,
+  e.g. 1.2; the tails of g, j, p, q and y hang past the line and print whole), "curve": "top"|"bottom" (the text runs along the
   top or bottom of the circle inside its box, letters upright, centred, shrinking to fit the
   arc: for round stickers make the box the sticker's size), "arc": degrees of the circle it may
   take (default 180), "letterSpacing": em (extra space between letters, × the size; e.g. 0.05
@@ -92,8 +92,9 @@ Names vary a lot in length (and Hebrew names are on many tags). Before sizing pa
 longest_values: the widest real value of each field (first names, last names, bunks, Hebrew
 names…) and how many campers have it. Give each part room for those, set "size" for an
 ordinary value and "minSize" for the smallest you'd accept. Then check:
-- preview_template camper "worst": every field at once with its longest value. If it fits, every
-  camper fits.
+- preview_template camper "worst": every field at once with its longest value (the fields of one
+  part, like first and last name, from the one camper whose text is widest there, never a
+  made-up mix). If it fits, every camper fits.
 - preview_template camper "longest": the real camper whose text is longest on this tag.
 - check_fit: every camper; lists who went under minSize or didn't fit at all. A background picture (a full-tag design from InDesign, exported as PNG at
 300 dpi, without the names) goes in with upload_picture use "background".`;

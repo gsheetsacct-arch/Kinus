@@ -229,7 +229,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
           .string()
           .optional()
           .describe(
-            '"sample" (default); "worst" (every field at once with its longest real value: if this fits, everyone fits); "longest" (the real camper, or staff member, with the longest text on this tag); or a camper code (0012, or a long one like 100016), or for a staff template a staff member\'s name',
+            '"sample" (default); "worst" (every field at once with its longest real value, the fields of one part from one real camper: if this fits, everyone fits); "longest" (the real camper, or staff member, with the longest text on this tag); or a camper code (0012, or a long one like 100016), or for a staff template a staff member\'s name',
           ),
       },
       annotations: { readOnlyHint: true },
@@ -248,7 +248,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
           label = r.label;
         } else if (who === "sample") values = await sampleValues();
         else if (who === "worst") {
-          const r = await worstCaseValues(scope);
+          const r = await worstCaseValues(scope, texts);
           if ("error" in r) return problem(r.error);
           values = r.values;
           label = r.label;

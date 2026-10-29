@@ -34,6 +34,13 @@ describe("line spacing", () => {
     const html = renderDocument({ name: "t", kind: "name_tag", page_width_mm: 98, page_height_mm: 127, sheet_layout: null, layers: [name] }, [{ values: {}, copies: 1 }]);
     expect(html).toContain('if(getComputedStyle(el).whiteSpace!=="nowrap")r=1;');
   });
+  it("letters' tails hang past the line and the box instead of being cut", () => {
+    const html = renderDocument({ name: "t", kind: "name_tag", page_width_mm: 98, page_height_mm: 127, sheet_layout: null, layers: [{ ...name, wrap: true, lineHeight: 1.2 }] }, [{ values: { FIRST: "Yogi", LAST: "Gurary" }, copies: 1 }]);
+    expect(html).toContain(".l.t{overflow:clip;overflow-clip-margin:0.3em}");
+    expect(html).toContain(".t span{max-width:100%;overflow-x:clip;overflow-y:visible;");
+    // the lines' height decides the fit, not the letters hanging past them
+    expect(html).toContain("span.offsetHeight>el.clientHeight+0.5");
+  });
 });
 
 describe("curved text", () => {
