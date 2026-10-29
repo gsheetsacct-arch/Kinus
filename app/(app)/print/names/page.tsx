@@ -21,9 +21,9 @@ export default async function HebrewNamesPage() {
   if (!canFixNames(user)) redirect("/print");
   if (!session) return <p className="text-muted-foreground">No active session.</p>;
   const admin = createAdminClient();
-  const columns = await hebrewNameColumns(admin);
+  const named = await hebrewNameColumns(admin);
   const header = <PageHeader title="Hebrew names" description="Hebrew names typed in English or spelled out (nun shin beis tes), fixed once. New uploads keep the fixes." />;
-  if (!columns.length)
+  if (!named.length)
     return (
       <div>
         {header}
@@ -46,11 +46,20 @@ export default async function HebrewNamesPage() {
       return { ...c, division_name: d?.name ?? null, division_color: d?.color ?? null, bunk_name: b?.name ?? null, fixes: parseFixes((c as { source_fixes?: unknown }).source_fixes) };
     })
     .sort(byBunkThenName);
-  // what's already in Hebrew teaches the suggestions (siblings' last name, others with the same first name)
-  const books = { first: new NameBook(), last: new NameBook() };
+  // a field reading a column this export doesn't have (or nobody filled in) would list every
+  // camper as missing it: those columns aren't shown
+  const columns = named.filter((col) => list.some((c) => extraValue(withFixes(c.source_data, c.fixes), col.column)));
+  // the English a Hebrew-name column is compared with: a full name is the first and last name
+  const englishOf = (c: (typeof list)[number], kind: "first" | "last" | "full") => (kind === "first" ? c.first_name : kind === "last" ? c.last_name : `${c.first_name} ${c.last_name}`);
+  // what's already in Hebrew teaches the suggestions (siblings' last name, others with the same first name);
+  // full names learn from the first and last names too, word by word
+  const books = { first: new NameBook(), last: new NameBook(), full: new NameBook() };
   for (const c of list) {
     const row = withFixes(c.source_data, c.fixes);
-    for (const col of columns) books[col.kind].learn(col.kind === "first" ? c.first_name : c.last_name, extraValue(row, col.column));
+    for (const col of columns) {
+      books[col.kind].learn(englishOf(c, col.kind), extraValue(row, col.column));
+      if (col.kind !== "full") books.full.learn(englishOf(c, col.kind), extraValue(row, col.column));
+    }
   }
   const rows: NameRow[] = [];
   for (const c of list) {
@@ -60,7 +69,7 @@ export default async function HebrewNamesPage() {
       const now = fix ? fix.value : registration;
       const state = fix ? "fixed" : !now ? "empty" : hasEnglish(now) ? "english" : isHebrew(now) ? null : "english";
       if (!state) continue;
-      const english = col.kind === "first" ? c.first_name : c.last_name;
+      const english = englishOf(c, col.kind);
       rows.push({
         camperId: c.id,
         name: `${c.first_name} ${c.last_name}`,

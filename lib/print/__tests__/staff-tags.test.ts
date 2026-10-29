@@ -21,6 +21,12 @@ const levi: StaffPerson = {
 };
 
 describe("staff tags", () => {
+  it("reads registration answers by the export's column name too, as camper tags write them", () => {
+    const v = staffValues(levi, label);
+    expect(fill("{{source.ppa.full_hebrew_name}}", (k) => v[k] ?? "")).toBe("לוי יצחק");
+    expect(fill("{{ppa.full_hebrew_name}} · {{ppa.t-shirt_size}}", (k) => v[k] ?? "")).toBe("לוי יצחק · M");
+  });
+
   it("only templates marked for staff are kept out of camper printing", () => {
     expect(forCampers({ audience: "staff" })).toBe(false);
     expect(forCampers({ audience: "campers" })).toBe(true);

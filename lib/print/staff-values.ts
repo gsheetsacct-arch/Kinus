@@ -54,6 +54,23 @@ const detail = (d: Record<string, string> | null | undefined, ...names: string[]
 };
 const unique = (xs: (string | null | undefined)[]) => [...new Set(xs.filter((x): x is string => Boolean(x)))];
 
+// the export's column prefixes (lib/staff/export keeps the answers by their wording: "Full hebrew name")
+const PREFIXES = ["ppa", "students", "group_types", "applications", "programs"];
+
+/**
+ * The registration answers under the export's own column names too, as a camper tag would
+ * write them: "Full hebrew name" is {{source.ppa.full_hebrew_name}} and {{ppa.full_hebrew_name}}.
+ */
+function byColumn(details: Record<string, string> | null | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [label, v] of Object.entries(details ?? {})) {
+    if (!v) continue;
+    const column = label.trim().toLowerCase().replace(/\s*\/\s*/g, "_/_").replace(/\s+/g, "_");
+    for (const p of PREFIXES) out[`source.${p}.${column}`] = out[`${p}.${column}`] = v;
+  }
+  return out;
+}
+
 /** One staff member's values for a staff tag. "Levi Yitzchak Cohen": first "Levi Yitzchak", last "Cohen". */
 export function staffValues(p: StaffPerson, roleLabel: (role: string) => string): Record<string, string> {
   const words = p.name.trim().split(/\s+/).filter(Boolean);
@@ -61,6 +78,7 @@ export function staffValues(p: StaffPerson, roleLabel: (role: string) => string)
   const last = words.length > 1 ? words[words.length - 1] : "";
   const divisions = unique(p.places.map((x) => x.division));
   return {
+    ...byColumn(p.details),
     FIRST: first,
     LAST: last,
     FULL: words.join(" "),
