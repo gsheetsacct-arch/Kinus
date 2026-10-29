@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
 import { FIELD_BY_KEY } from "@/lib/fields";
+import { parseFlags } from "@/lib/camper-flags";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 
 const schema = z.object({
@@ -29,6 +30,7 @@ export async function savePreset(fd: FormData): Promise<ActionResult> {
       group_by: d.group_by || null,
       sort: [...(d.group_by ? [{ field: d.group_by, dir: "asc" }] : []), { field: d.sort_field, dir: "asc" }],
       is_default: d.is_default === "on",
+      filters: { only: parseFlags(fd.getAll("only").map(String).join(",")) },
     };
     const { error } = d.id ? await supabase.from("list_presets").update(row).eq("id", d.id) : await supabase.from("list_presets").insert({ ...row, created_by: me.id });
     if (error) throw error;
@@ -54,7 +56,7 @@ export async function copyPreset(fd: FormData): Promise<ActionResult> {
   const me = await requireAdmin();
   try {
     const supabase = await createClient();
-    const { data: p, error } = await supabase.from("list_presets").select("name, audience, columns, sort, group_by").eq("id", String(fd.get("id"))).single();
+    const { data: p, error } = await supabase.from("list_presets").select("name, audience, columns, sort, group_by, filters").eq("id", String(fd.get("id"))).single();
     if (error || !p) return fail("Layout not found.");
     const { data: names } = await supabase.from("list_presets").select("name");
     let name = `Copy of ${p.name}`;
