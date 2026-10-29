@@ -164,7 +164,7 @@ function setHtml(set: PrintSet, opts: SetOpts & { tags?: [number, number] }) {
   const made = itemsOf(set, opts);
   const campers = made.campers;
   let items = made.items;
-  // copies of one camper stack down a column of the label sheet
+  // copies of one camper stack down a column of the label sheet (across, when they fill whole rows)
   const stack = Math.max(1, ...items.map((i) => i.copies));
   // one part of a big PDF: tags from..to (whole sheets, so no labels are skipped between parts)
   if (opts.tags) items = items.flatMap((i) => Array.from({ length: i.copies }, () => ({ values: i.values, copies: 1 }))).slice(...opts.tags);

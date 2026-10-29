@@ -15,6 +15,7 @@ import { AreaPicker } from "./area-picker";
 type Kind = "bunk" | "division" | "camp";
 const KIND: Partial<Record<StaffRole, Kind>> = {
   counselor: "bunk",
+  kloli: "division",
   head_counselor: "division",
   division_head: "division",
   scanner: "division",

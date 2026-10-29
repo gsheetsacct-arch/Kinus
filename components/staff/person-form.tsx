@@ -166,7 +166,7 @@ export function PersonForm({
 }
 
 /** Roles in the order people think of them: up the bunk ladder, then the rest. */
-const FORM_ORDER: StaffRole[] = ["counselor", "head_counselor", "division_head", "director", "scanner", "office", "logistics", "owner"];
+const FORM_ORDER: StaffRole[] = ["counselor", "head_counselor", "kloli", "division_head", "director", "scanner", "office", "logistics", "owner"];
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (

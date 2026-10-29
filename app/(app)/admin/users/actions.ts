@@ -17,7 +17,7 @@ import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result"
 import { checkinEmail, emailWayIn, generatePassword, placeholderEmail, setLoginKind } from "@/lib/staff/accounts";
 import { checkinLoginProblem, checkinName, isPlaceholderEmail, type LoginKind } from "@/lib/staff/login-kinds";
 
-const ROLES = ["owner", "director", "division_head", "head_counselor", "counselor", "scanner", "office", "logistics"] as const;
+const ROLES = ["owner", "director", "division_head", "kloli", "head_counselor", "counselor", "scanner", "office", "logistics"] as const;
 const signInRedirect = async () => `${await appUrl()}/login?next=/set-password`;
 
 /** Roles removed on Staff → Roles aren't given to anyone new. */

@@ -25,4 +25,8 @@ describe("stackColumns", () => {
     expect(stackColumns(s, 3, 2).filter(Boolean).length).toBe(5);
     expect(grid(stackColumns(s, 3, 2), 3)).toEqual(["A B C", "A B"]);
   });
+  it("puts copies across when they fill whole rows (3 on a 3-across sheet)", () => {
+    expect(grid(stackColumns(["A", "A", "A", "B", "B", "B"], 3, 3), 3)).toEqual(["A A A", "B B B"]);
+    expect(grid(stackColumns(["A", "A", "B", "B"], 4, 2), 4)).toEqual(["A A B B"]);
+  });
 });

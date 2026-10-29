@@ -53,6 +53,26 @@ describe("the registration staff export", () => {
     ]);
   });
 
+  it("brings in confirmed staff only, not those still pending confirmation", () => {
+    const statuses = ["Accepted - Confirmed", "Counselor Accepted -Pending Confirmation", "Kloli Accepted - Pending Confirmation", "Waiting List", "In Progress", "Rejected", "Kloli Accepted - Confirmed"];
+    const r = readStaffExport(grid(statuses.map((st, i) => ({ ...levi, "students.id": String(i), "applications.status": st }))));
+    expect(r.rows.map((x) => x.sourceId)).toEqual(["0", "6"]);
+    expect(r.skipped.map((x) => x.status)).toHaveLength(5);
+  });
+
+  it("takes each person's role from the export: staff group, then the status, then their position", () => {
+    const r = readStaffExport(
+      grid([
+        { ...levi, "students.id": "1", "applications.status": "Kloli Accepted - Confirmed" },
+        { ...levi, "students.id": "2", "group_types.staff": "Klolim" },
+        { ...levi, "students.id": "3", "ppa.email_address": "hc@example.org", "ppa.position": "Head Counselor", "applications.status": "Accepted - Confirmed" },
+      ]),
+    ).rows;
+    expect(r.map((x) => x.role)).toEqual(["kloli", "Klolim", ""]);
+    const planned = planRows(r, tree, { role: "counselor", level: "role" });
+    expect(planned.map((x) => x.role)).toEqual(["kloli", "kloli", "head_counselor"]);
+  });
+
   it("reads name, id, phone (not the yes/no question), division, bunk and address", () => {
     const [p] = readStaffExport(grid([levi])).rows;
     expect(p).toMatchObject({ line: 2, sourceId: "3391", name: "Levi Cohen", email: "levi@example.org", phone: "(718) 555-0100", where: "Division 2", bunk: "Bunk Chof", title: "Counselor", signs: "no" });

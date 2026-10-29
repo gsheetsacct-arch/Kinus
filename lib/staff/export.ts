@@ -7,8 +7,18 @@ export type StaffAddress = { street: string; city: string; state: string; zip: s
 export type ExportRow = BulkInputRow & { sourceId: string; address: StaffAddress | null; details: Record<string, string> };
 export type ExportRead = { rows: ExportRow[]; skipped: { status: string; count: number }[] };
 
-/** Only accepted staff come in; anyone still applying, under review or turned down is left out. */
-export const isAccepted = (status: string) => /^(accepted|approved|hired)$/i.test(status.trim());
+/**
+ * Only confirmed staff come in ("Accepted - Confirmed", "Kloli Accepted - Confirmed"); anyone
+ * accepted but not yet confirmed, still applying, waiting or turned down is left out.
+ */
+export function isAccepted(status: string): boolean {
+  const s = status.trim().toLowerCase();
+  if (/^(accepted|approved|hired)$/.test(s)) return true;
+  return /\baccepted\b/.test(s) && /\bconfirmed\b/.test(s) && !/pending|unconfirmed|not (accepted|confirmed)/.test(s);
+}
+
+/** The role a status names before "Accepted" ("Kloli Accepted - Confirmed" → kloli), if any. */
+const statusRole = (status: string) => matchRole(status.split(/\baccepted\b/i)[0].replace(/[-–:]+$/, ""));
 
 // "ppa.phone_number_we_can_reach_you" → "phone number we can reach you"
 const key = (h: string) => h.trim().toLowerCase().replace(/^(ppa|students|group_types|applications|programs)\./, "").replace(/[_]+/g, " ").trim();
@@ -76,6 +86,8 @@ export function readStaffExport(grid: string[][]): ExportRead {
       return;
     }
     const groupRole = at(r, FIELDS.role);
+    // the role: the staff group, else what the status says they were accepted as, else (planRows) their position
+    const role = matchRole(groupRole) ? groupRole : (statusRole(status) ?? "");
     const details: Record<string, string> = {};
     head.forEach((h, i) => {
       if (!filled.has(i) || USED.has(lower[i]) || NOT_DETAILS.has(lower[i]) || !r[i]) return;
@@ -89,7 +101,7 @@ export function readStaffExport(grid: string[][]): ExportRead {
       sourceId: at(r, FIELDS.id),
       name: [at(r, FIELDS.first), at(r, FIELDS.last)].filter(Boolean).join(" "),
       email: at(r, FIELDS.email).toLowerCase(),
-      role: matchRole(groupRole) ? groupRole : "",
+      role,
       // a position Kinus knows ("Counselor") is used as the role (planRows); anything else is their position
       title: at(r, FIELDS.position),
       phone: at(r, FIELDS.phone, looksLikePhone),

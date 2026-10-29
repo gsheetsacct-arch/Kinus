@@ -86,6 +86,7 @@ export function readRows(grid: string[][]): BulkInputRow[] {
 const ROLE_WORDS: [StaffRole, string[]][] = [
   ["director", ["director", "admin", "administrator", "camp director", "program director"]],
   ["division_head", ["division head", "head of division", "dh", "division director", "rosh"]],
+  ["kloli", ["kloli", "klolim", "klali", "kloli'm"]],
   ["head_counselor", ["head counselor", "head counsellor", "hc", "head staff", "learning head"]],
   ["counselor", ["counselor", "counsellor", "staff", "madrich", "cabin counselor", "bunk counselor"]],
   ["scanner", ["check-in helper", "check in helper", "helper", "scanner", "volunteer"]],
