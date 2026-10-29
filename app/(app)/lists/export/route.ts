@@ -5,6 +5,7 @@ import { buildList, getPresetsFor } from "@/lib/data/lists";
 import { getCampContext } from "@/lib/data/camp";
 import { FIELD_BY_KEY } from "@/lib/fields";
 import { exportFormat, tableDownload } from "@/lib/export";
+import { parseFlags } from "@/lib/camper-flags";
 
 /** The list as CSV or Excel (?format=xlsx). */
 export async function GET(request: NextRequest) {
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
   const preset = presets.find((p) => p.id === sp.get("preset")) ?? presets[0];
   if (!preset) return new NextResponse("No preset", { status: 404 });
   const [{ data: fv }, camp] = await Promise.all([supabase.from("field_visibility").select("field_group, roles"), getCampContext()]);
-  const list = await buildList(supabase, user, preset, { sessionId: session.id, divisionId: sp.get("division") || undefined, bunkId: sp.get("bunk") || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name }, fv ?? []);
+  const list = await buildList(supabase, user, preset, { sessionId: session.id, divisionId: sp.get("division") || undefined, bunkId: sp.get("bunk") || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name, only: parseFlags(sp.get("only")) }, fv ?? []);
   // the group (bunk/division) as its own first column, unless the list already shows it
   const withGroup = Boolean(preset.group_by) && !list.columns.some((c) => c.key === preset.group_by);
   const rows: (string | boolean | null)[][] = [[...(withGroup ? [FIELD_BY_KEY[preset.group_by!]?.label ?? "Group"] : []), ...list.columns.map((c) => c.label)]];

@@ -48,7 +48,7 @@ export default async function SettingsPage() {
 
       <Section
         title="Campers who haven't arrived"
-        description="On “Not here yet”, campers still missing are flagged “check up on” so someone calls home. Nothing is flagged before the first camper of the session arrives."
+        description="On Who’s here, campers still missing are flagged “check up on” so someone calls home. Nothing is flagged before the first camper of the session arrives."
       >
         <ActionForm action={saveMissingRules} warnUnsaved className="group grid gap-4 sm:grid-cols-2">
           <Field label="Flag once this share of their division is here" htmlFor="percent" hint="Percent of the camper's whole division that has arrived. 0 turns this off.">

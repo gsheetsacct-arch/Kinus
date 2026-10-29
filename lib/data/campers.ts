@@ -3,6 +3,7 @@ import { buzzerQuery } from "@/lib/buzzer-format";
 import type { Database } from "@/lib/supabase/database.types";
 import type { ContactLike } from "@/lib/fields";
 import { fetchAll } from "@/lib/supabase/fetch-all";
+import { camperFlags, FLAG_COLUMNS, type CamperFlag } from "@/lib/camper-flags";
 
 type DB = SupabaseClient<Database>;
 export type CamperVisible = Database["public"]["Views"]["campers_visible"]["Row"];
@@ -19,6 +20,8 @@ export type CamperFilter = {
   status?: string;
   q?: string;
   includeArchived?: boolean;
+  /** Only campers with every one of these (lib/camper-flags). */
+  only?: CamperFlag[];
 };
 
 const ALWAYS = ["id", "display_name", "first_name", "last_name", "division_id", "bunk_id", "status", "archived_at"];
@@ -44,7 +47,8 @@ export async function listCampers(supabase: DB, f: CamperFilter): Promise<Camper
     if (ids.length === 0) return [];
   }
   if (f.divisionIds && !f.divisionIds.length) return [];
-  const columns = f.fields ? selectFor(f.fields) : "*";
+  const only = f.only ?? [];
+  const columns = f.fields ? selectFor(only.length ? [...f.fields, ...FLAG_COLUMNS] : f.fields) : "*";
   const withContacts = !f.fields || f.fields.some((k) => k.startsWith("contact."));
   const rows = await fetchAll<CamperVisible>((from, to) => {
     // typed as "*": rows carry only the asked-for columns, and the code only reads those
@@ -57,6 +61,14 @@ export async function listCampers(supabase: DB, f: CamperFilter): Promise<Camper
     if (ids) query = query.in("id", ids);
     return query.order("last_name").order("first_name").order("id").range(from, to);
   });
+  const later = only.includes("later") ? await comingLater(supabase, f.sessionId) : null;
+  if (only.length) {
+    const keep = rows.filter((c) => {
+      const has = camperFlags(c, Boolean(later?.has(c.id!)));
+      return only.every((k) => has.has(k));
+    });
+    rows.splice(0, rows.length, ...keep);
+  }
   const [{ data: divisions }, { data: bunks }, contacts] = await Promise.all([
     supabase.from("divisions").select("id, name").eq("session_id", f.sessionId),
     supabase.from("bunks").select("id, name, divisions!inner(session_id)").eq("divisions.session_id", f.sessionId),
@@ -115,6 +127,8 @@ export type CamperIndexRow = {
   g: string | null; // grade
   s: NonNullable<CamperVisible["status"]>;
   m?: 1; // medical flag
+  f?: CamperFlag[]; // the flags besides medical (lib/camper-flags)
+  t?: string; // coming later: when
   x?: 1; // not in the latest export
   a?: 1; // archived
   p?: string[]; // parent phone numbers, for search
@@ -127,11 +141,12 @@ export async function listCamperIndex(
   f: { sessionId: string; divisionIds: string[] | null; includeArchived?: boolean; withPhones: boolean },
 ): Promise<CamperIndexRow[]> {
   if (f.divisionIds && !f.divisionIds.length) return [];
-  const [rows, phones] = await Promise.all([
+  const [rows, phones, later] = await Promise.all([
     fetchAll((from, to) => {
       let q = supabase
         .from("campers_visible")
-        .select("id, display_name, last_name, camper_code, division_id, bunk_id, grade, status, has_medical_flag, in_latest_import, archived_at, current_buzzer_number")
+        // the flags' columns (FLAG_COLUMNS) too
+        .select("id, display_name, last_name, camper_code, grade, in_latest_import, archived_at, current_buzzer_number, division_id, has_medical_flag, has_epipen, medical_notes, allergies, notes_from_parents, staff_notes, bunk_id, status")
         .eq("session_id", f.sessionId);
       if (!f.includeArchived) q = q.is("archived_at", null);
       if (f.divisionIds) q = q.in("division_id", f.divisionIds);
@@ -144,6 +159,7 @@ export async function listCamperIndex(
           return q.order("id").range(from, to);
         })
       : Promise.resolve([]),
+    comingLater(supabase, f.sessionId),
   ]);
   const byCamper = new Map<string, string[]>();
   for (const k of phones) {
@@ -153,7 +169,11 @@ export async function listCamperIndex(
   }
   return rows.map((c) => {
     const r: CamperIndexRow = { i: c.id!, n: c.display_name ?? "", l: c.last_name ?? "", c: c.camper_code ?? "", d: c.division_id, b: c.bunk_id, g: c.grade, s: c.status! };
-    if (c.has_medical_flag) r.m = 1;
+    const flags = camperFlags(c, later.has(c.id!));
+    if (flags.has("medical")) r.m = 1;
+    flags.delete("medical");
+    if (flags.size) r.f = [...flags];
+    if (flags.has("later")) r.t = later.get(c.id!)!;
     if (c.in_latest_import === false) r.x = 1;
     if (c.archived_at) r.a = 1;
     if (c.current_buzzer_number !== null && c.current_buzzer_number !== undefined) r.z = c.current_buzzer_number;
@@ -161,4 +181,12 @@ export async function listCamperIndex(
     if (p) r.p = p;
     return r;
   });
+}
+
+/** Campers with a "coming later" time (Missing page), and when, for a session's campers the user can see. */
+export async function comingLater(supabase: DB, sessionId: string): Promise<Map<string, string>> {
+  const rows = await fetchAll((from, to) =>
+    supabase.from("camper_followups").select("camper_id, until, campers!inner(session_id)").eq("campers.session_id", sessionId).not("until", "is", null).order("camper_id").range(from, to),
+  );
+  return new Map(rows.map((r) => [r.camper_id, r.until!]));
 }

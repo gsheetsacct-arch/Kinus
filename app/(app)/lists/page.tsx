@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { visibleDivisionIds } from "@/lib/auth/permissions";
+import { visibleDivisionIds, visibleFieldGroups } from "@/lib/auth/permissions";
+import { CAMPER_FLAGS, flagsFor, isFlag } from "@/lib/camper-flags";
 import { buildList, getPresetsFor } from "@/lib/data/lists";
 import { PrintButton } from "./print-button";
 import { ListGroups } from "@/components/lists/list-groups";
@@ -46,8 +47,13 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
     order.map((a) => presets.find((p) => p.audience === a && p.is_default) ?? presets.find((p) => p.audience === a)).find(Boolean) ??
     presets.find((p) => p.is_default) ??
     presets[0];
-  const list = preset ? await buildList(supabase, user, preset, { sessionId: session.id, divisionId: divisionId || undefined, bunkId: bunkId || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name }, fv ?? []) : null;
-  const qs = new URLSearchParams({ ...(preset ? { preset: preset.id } : {}), ...(divisionId ? { division: divisionId } : {}), ...(bunkId ? { bunk: bunkId } : {}) }).toString();
+  // "only campers with a medical flag" etc., on top of what the layout itself keeps to
+  const flags = flagsFor(visibleFieldGroups(user, fv ?? [])).filter((k) => !preset?.only.includes(k));
+  const onlyFlag = sp.only && isFlag(sp.only) && flags.includes(sp.only) ? sp.only : undefined;
+  const list = preset
+    ? await buildList(supabase, user, preset, { sessionId: session.id, divisionId: divisionId || undefined, bunkId: bunkId || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name, only: onlyFlag ? [onlyFlag] : [] }, fv ?? [])
+    : null;
+  const qs = new URLSearchParams({ ...(preset ? { preset: preset.id } : {}), ...(divisionId ? { division: divisionId } : {}), ...(bunkId ? { bunk: bunkId } : {}), ...(onlyFlag ? { only: onlyFlag } : {}) }).toString();
 
   return (
     <div>
@@ -72,7 +78,7 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
           ) : undefined
         }
       />
-      <ListFilters className="no-print mb-6 grid gap-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] md:grid-cols-[1fr_200px_180px]">
+      <ListFilters className="no-print mb-6 grid gap-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] md:grid-cols-[1fr_200px_180px_180px]">
         <label className="space-y-1">
           <span className="block text-xs font-medium text-muted-foreground">List</span>
           <Select name="preset" defaultValue={preset?.id ?? ""}>
@@ -104,6 +110,17 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
             .map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="space-y-1">
+          <span className="block text-xs font-medium text-muted-foreground">Only</span>
+          <Select name="only" defaultValue={onlyFlag ?? ""}>
+            <option value="">{preset?.only.length ? "As the layout says" : "Every camper"}</option>
+            {flags.map((k) => (
+              <option key={k} value={k}>
+                {CAMPER_FLAGS[k].label}
               </option>
             ))}
           </Select>

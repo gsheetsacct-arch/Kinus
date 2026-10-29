@@ -14,6 +14,7 @@ import { requireAdmin } from "@/lib/auth/current-user";
 import { FIELDS, UNGATED_GROUPS, type FieldGroup } from "@/lib/fields";
 import { AUDIENCES, FIELD_GROUPS } from "@/lib/labels";
 import { copyPreset, deletePreset, savePreset } from "../actions";
+import { CAMPER_FLAGS, FLAG_KEYS, parseFlags } from "@/lib/camper-flags";
 
 export const metadata = { title: "List layout" };
 
@@ -36,6 +37,7 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
   const columns = new Set((preset?.columns as string[] | undefined) ?? ["display_name", "bunk"]);
   const extraFields = await loadExtraFields();
   const sort = (preset?.sort as { field: string; dir: string }[] | undefined) ?? [];
+  const only = new Set(parseFlags(((preset?.filters as { only?: string[] } | null)?.only ?? []).join(",")));
   const sortField = sort.find((s) => s.field !== preset?.group_by)?.field ?? "last_name";
 
   return (
@@ -85,6 +87,16 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                 <option value="camper_code">Camper code</option>
               </Select>
             </Field>
+            <fieldset className="space-y-1.5">
+              <legend className="mb-1 text-sm font-medium">Only campers who have</legend>
+              {FLAG_KEYS.map((k) => (
+                <label key={k} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="only" value={k} defaultChecked={only.has(k)} className="size-4 accent-[var(--primary)]" />
+                  {CAMPER_FLAGS[k].label}
+                </label>
+              ))}
+              <p className="text-xs text-muted-foreground">None ticked: every camper. Ticked: only those with all of them (e.g. a nurse&apos;s list of campers with a medical flag).</p>
+            </fieldset>
             <label className="flex items-start gap-2 text-sm">
               <input type="checkbox" name="is_default" defaultChecked={preset?.is_default ?? false} className="mt-0.5 size-4" />
               <span>Open this layout first for that role</span>

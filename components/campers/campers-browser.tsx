@@ -10,10 +10,11 @@ import { StatusBadge } from "@/components/status-badge";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
 import { matchScore, searchEntry } from "@/lib/search";
 import type { CamperIndexRow } from "@/lib/data/campers";
-import { cn } from "@/lib/utils";
+import { CAMPER_FLAGS, type CamperFlag } from "@/lib/camper-flags";
+import { cn, formatWhen } from "@/lib/utils";
 
 type Division = { id: string; name: string; bunks: { id: string; name: string }[] };
-type Filters = { q: string; division: string; bunk: string; status: string; sort: string };
+type Filters = { q: string; division: string; bunk: string; status: string; only: string; sort: string };
 const PAGE = 100;
 
 /** Updates the address bar without a server round trip, so back/refresh keep the search. */
@@ -31,8 +32,29 @@ function writeUrl(f: Filters) {
  * The whole camp in the browser: searching and filtering are instant, and only the
  * first rows are drawn until you ask for more.
  */
-export function CampersBrowser({ rows, divisions, initial, archivedHref }: { rows: CamperIndexRow[]; divisions: Division[]; initial: Partial<Filters>; archivedHref: string | null }) {
-  const [f, setF] = React.useState<Filters>({ q: "", division: "", bunk: "", status: "", sort: "name", ...initial });
+const has = (r: CamperIndexRow, k: CamperFlag) => (k === "medical" ? Boolean(r.m) : Boolean(r.f?.includes(k)));
+// "Medical first", "With notes first"…: these flags can be sorted on
+const SORT_FLAGS: { key: CamperFlag; label: string }[] = [
+  { key: "medical", label: "Medical first" },
+  { key: "notes", label: "With notes first" },
+  { key: "later", label: "Coming later first" },
+];
+
+export function CampersBrowser({
+  rows,
+  divisions,
+  flags,
+  initial,
+  archivedHref,
+}: {
+  rows: CamperIndexRow[];
+  divisions: Division[];
+  /** The "only campers who…" filters this person can use (lib/camper-flags). */
+  flags: CamperFlag[];
+  initial: Partial<Filters>;
+  archivedHref: string | null;
+}) {
+  const [f, setF] = React.useState<Filters>({ q: "", division: "", bunk: "", status: "", only: "", sort: "name", ...initial });
   const [shown, setShown] = React.useState(PAGE);
   const q = React.useDeferredValue(f.q);
   const set = (patch: Partial<Filters>) =>
@@ -55,25 +77,28 @@ export function CampersBrowser({ rows, divisions, initial, archivedHref }: { row
       if (f.division && r.d !== f.division) continue;
       if (f.bunk && r.b !== f.bunk) continue;
       if (f.status && r.s !== f.status) continue;
+      if (f.only && !has(r, f.only as CamperFlag)) continue;
       const score = matchScore(e, q);
       if (score > 0) out.push({ r, score });
     }
     const byName = (a: CamperIndexRow, b: CamperIndexRow) => a.l.localeCompare(b.l) || a.n.localeCompare(b.n);
     out.sort((a, b) => {
       if (q.trim() && a.score !== b.score) return b.score - a.score;
+      const flag = SORT_FLAGS.find((s) => `flag:${s.key}` === f.sort)?.key;
+      if (flag) return Number(has(b.r, flag)) - Number(has(a.r, flag)) || byName(a.r, b.r);
       if (f.sort === "bunk") return (bOrder.get(a.r.b ?? "") ?? 1e9) - (bOrder.get(b.r.b ?? "") ?? 1e9) || byName(a.r, b.r);
       if (f.sort === "status") return a.r.s.localeCompare(b.r.s) || byName(a.r, b.r);
       return byName(a.r, b.r);
     });
     return out.map((x) => x.r);
-  }, [index, q, f.division, f.bunk, f.status, f.sort, bOrder]);
+  }, [index, q, f.division, f.bunk, f.status, f.only, f.sort, bOrder]);
 
   const bunks = f.division ? (divisions.find((d) => d.id === f.division)?.bunks ?? []) : divisions.flatMap((d) => d.bunks);
-  const filtering = Boolean(f.q || f.division || f.bunk || f.status);
+  const filtering = Boolean(f.q || f.division || f.bunk || f.status || f.only);
 
   return (
     <div className="space-y-4">
-      <div className="no-print grid gap-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] md:grid-cols-[1fr_180px_160px_140px_140px]">
+      <div className="no-print grid gap-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] md:grid-cols-2 lg:grid-cols-[1fr_170px_150px_140px_160px_170px]">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -115,17 +140,30 @@ export function CampersBrowser({ rows, divisions, initial, archivedHref }: { row
             </option>
           ))}
         </Select>
+        <Select value={f.only} onChange={(e) => set({ only: e.target.value })} aria-label="Only campers who">
+          <option value="">Every camper</option>
+          {flags.map((k) => (
+            <option key={k} value={k}>
+              {CAMPER_FLAGS[k].label}
+            </option>
+          ))}
+        </Select>
         <Select value={f.sort} onChange={(e) => set({ sort: e.target.value })} aria-label="Sort by">
           <option value="name">By last name</option>
           <option value="bunk">By bunk</option>
           <option value="status">By status</option>
+          {SORT_FLAGS.filter((s) => flags.includes(s.key)).map((s) => (
+            <option key={s.key} value={`flag:${s.key}`}>
+              {s.label}
+            </option>
+          ))}
         </Select>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
         <span>
           {filtered.length === rows.length ? `${rows.length} campers` : `${filtered.length} of ${rows.length} campers`}
           {filtering && (
-            <button type="button" className="ml-2 text-primary hover:underline" onClick={() => set({ q: "", division: "", bunk: "", status: "" })}>
+            <button type="button" className="ml-2 text-primary hover:underline" onClick={() => set({ q: "", division: "", bunk: "", status: "", only: "" })}>
               Clear filters
             </button>
           )}
@@ -158,6 +196,9 @@ export function CampersBrowser({ rows, divisions, initial, archivedHref }: { row
                     {r.n}
                   </span>
                   {r.m && <Badge variant="warning">medical</Badge>}
+                  {r.f?.includes("epipen") && <Badge variant="destructive">{CAMPER_FLAGS.epipen.badge}</Badge>}
+                  {r.f?.includes("notes") && <Badge variant="outline">{CAMPER_FLAGS.notes.badge}</Badge>}
+                  {r.t && <Badge variant="info">coming later · {formatWhen(r.t)}</Badge>}
                   {r.x && <Badge variant="outline">not in export</Badge>}
                   {r.a && <Badge variant="secondary">archived</Badge>}
                 </span>

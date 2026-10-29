@@ -8,6 +8,7 @@ import { canAddWalkIn, isAdmin, visibleFieldGroups } from "@/lib/auth/permission
 import { listCamperIndex } from "@/lib/data/campers";
 import { loadAreaTree } from "@/lib/data/areas";
 import { getCampContext } from "@/lib/data/camp";
+import { flagsFor, isFlag } from "@/lib/camper-flags";
 
 export const metadata = { title: "Campers" };
 
@@ -19,11 +20,13 @@ export default async function CampersPage({ searchParams }: { searchParams: Prom
   const supabase = await createClient();
   const [camp, tree, { data: fv }] = await Promise.all([getCampContext(), loadAreaTree(supabase, session.id), supabase.from("field_visibility").select("field_group, roles")]);
   const archived = sp.archived === "1";
+  const groups = visibleFieldGroups(user, fv ?? []);
+  const flags = flagsFor(groups);
   const rows = await listCamperIndex(supabase, {
     sessionId: session.id,
     divisionIds: camp.divisionIds,
     includeArchived: archived,
-    withPhones: visibleFieldGroups(user, fv ?? []).has("contacts"),
+    withPhones: groups.has("contacts"),
   });
   const divisions = tree.divisions.filter((d) => !camp.divisionIds || camp.divisionIds.includes(d.id));
   const rest = new URLSearchParams(Object.entries(sp).filter(([k, v]) => k !== "archived" && v) as [string, string][]);
@@ -46,7 +49,15 @@ export default async function CampersPage({ searchParams }: { searchParams: Prom
         key={camp.current?.id ?? "all"}
         rows={rows}
         divisions={divisions}
-        initial={{ q: sp.q ?? "", division: divisions.some((d) => d.id === sp.division) ? sp.division : "", bunk: sp.bunk ?? "", status: sp.status ?? "", sort: sp.sort ?? "name" }}
+        flags={flags}
+        initial={{
+          q: sp.q ?? "",
+          division: divisions.some((d) => d.id === sp.division) ? sp.division : "",
+          bunk: sp.bunk ?? "",
+          status: sp.status ?? "",
+          only: sp.only && isFlag(sp.only) && flags.includes(sp.only) ? sp.only : "",
+          sort: sp.sort ?? "name",
+        }}
         archivedHref={isAdmin(user) || archived ? `/campers${rest.size ? `?${rest}` : ""}` : null}
       />
     </div>
