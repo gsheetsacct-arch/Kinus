@@ -75,3 +75,13 @@ describe("Twilio's signature", () => {
     expect(validTwilioSignature("other", url, params, sign(url, params))).toBe(false);
   });
 });
+
+describe("text prefix", () => {
+  it("names the camp and the sender's role", async () => {
+    const { textPrefix } = await import("../sms");
+    expect(textPrefix("head_counselor")).toBe("Kinus Tzeirei Hashluchim - HC: ");
+    expect(textPrefix("division_head")).toBe("Kinus Tzeirei Hashluchim - DH: ");
+    expect(textPrefix("director")).toBe("Kinus Tzeirei Hashluchim - Director: ");
+    expect(textPrefix("something_new")).toBe("Kinus Tzeirei Hashluchim: ");
+  });
+});

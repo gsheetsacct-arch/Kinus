@@ -60,7 +60,7 @@ export default async function MessagesPage() {
         </Callout>
       )}
       <Section title="New text">
-        <Compose camps={camps} recipients={recipients} canEveryone={everyone} configured={!missing.length && !error && Boolean(twilioConfig())} />
+        <Compose camps={camps} recipients={recipients} canEveryone={everyone} role={me.role} configured={!missing.length && !error && Boolean(twilioConfig())} />
       </Section>
       {(sent ?? []).length > 0 && (
         <Section title="Sent" bodyClassName="p-0">
