@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { canTextStaff, isAdmin, textableDivisionIds } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDateTime, formatPhone } from "@/lib/utils";
+import { ReplyList } from "@/components/messages/reply-list";
 
 export const metadata = { title: "Text" };
 
@@ -31,13 +32,18 @@ export default async function MessagePage({ params }: { params: Promise<{ id: st
   const allowed = textableDivisionIds(me);
   const mine = isAdmin(me) || b.sent_by === me.id || (b.division_ids.length > 0 && (!allowed || b.division_ids.some((d) => allowed.includes(d))));
   if (!mine) notFound();
-  const { data: rows } = await admin.from("text_broadcast_recipients").select("id, name, phone_e164, status, error_code, error_message").eq("broadcast_id", id).order("name");
+  const [{ data: rows }, { data: replies }] = await Promise.all([
+    admin.from("text_broadcast_recipients").select("id, name, phone_e164, status, error_code, error_message").eq("broadcast_id", id).order("name"),
+    // what people texted back (migration 0045): none until it's applied
+    admin.from("text_replies").select("id, name, phone_e164, body, received_at").eq("broadcast_id", id).order("received_at"),
+  ]);
   const list = rows ?? [];
   const counts = list.reduce<Record<string, number>>((n, r) => ({ ...n, [STATUS[r.status]?.label ?? r.status]: (n[STATUS[r.status]?.label ?? r.status] ?? 0) + 1 }), {});
   const stillSending = list.some((r) => ["queued", "accepted", "sending"].includes(r.status));
   return (
     <div className="space-y-6">
-      {stillSending && <AutoRefresh every={10_000} />}
+      {/* delivery reports and replies come in by themselves */}
+      <AutoRefresh every={stillSending ? 10_000 : 30_000} />
       <PageHeader
         title={`To ${b.audience}`}
         back={{ href: "/messages", label: "Text staff" }}
@@ -47,6 +53,9 @@ export default async function MessagePage({ params }: { params: Promise<{ id: st
         <p className="whitespace-pre-wrap" dir="auto">
           {b.body}
         </p>
+      </Section>
+      <Section title="Replies" description={replies?.length ? `${replies.length} ${replies.length === 1 ? "reply" : "replies"}` : "What people text back shows here."} bodyClassName={replies?.length ? "p-0" : undefined}>
+        {replies?.length ? <ReplyList replies={replies} /> : <p className="text-sm text-muted-foreground">No replies yet.</p>}
       </Section>
       <Section
         title="Delivery"

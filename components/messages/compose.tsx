@@ -7,14 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Segmented } from "@/components/ui/segmented";
-import { pickRecipients, smsSegments, type TextRecipient } from "@/lib/sms";
+import { pickRecipients, smsSegments, textPrefix, type TextRecipient } from "@/lib/sms";
 import { cn } from "@/lib/utils";
 import { sendText } from "@/app/(app)/messages/actions";
 
 export type ComposeCamp = { id: string; name: string; divisions: { id: string; name: string; color: string | null }[] };
 
 /** Write a text, pick who gets it (everyone, or divisions), see exactly who that is, send. */
-export function Compose({ camps, recipients, canEveryone, configured }: { camps: ComposeCamp[]; recipients: TextRecipient[]; canEveryone: boolean; configured: boolean }) {
+export function Compose({ camps, recipients, canEveryone, configured, role }: { camps: ComposeCamp[]; recipients: TextRecipient[]; canEveryone: boolean; configured: boolean; role: string }) {
   const router = useRouter();
   const all = camps.flatMap((c) => c.divisions);
   const [mode, setMode] = React.useState<"everyone" | "divisions">(canEveryone ? "everyone" : "divisions");
@@ -25,7 +25,9 @@ export function Compose({ camps, recipients, canEveryone, configured }: { camps:
 
   const divisionIds = mode === "everyone" ? null : [...picked];
   const { to, skipped } = React.useMemo(() => pickRecipients(recipients, divisionIds), [recipients, mode, picked]); // eslint-disable-line react-hooks/exhaustive-deps
-  const seg = smsSegments(body.trim());
+  const prefix = textPrefix(role);
+  // counted as it goes out: with the camp and role in front
+  const seg = smsSegments(body.trim() ? prefix + body.trim() : "");
   const nothingPicked = mode === "divisions" && picked.size === 0;
   const toggle = (ids: string[], on: boolean) =>
     setPicked((p) => {
@@ -105,9 +107,9 @@ export function Compose({ camps, recipients, canEveryone, configured }: { camps:
         <label htmlFor="text-body" className="text-sm font-medium">
           Message
         </label>
-        <Textarea id="text-body" value={body} onChange={(e) => setBody(e.target.value)} rows={5} maxLength={1600} dir="auto" placeholder="Staff meeting tonight at 9:30 in the dining room." />
+        <Textarea id="text-body" value={body} onChange={(e) => setBody(e.target.value)} rows={5} maxLength={1600 - prefix.length} dir="auto" placeholder="Staff meeting tonight at 9:30 in the dining room." />
         <p className="text-xs text-muted-foreground">
-          {seg.length} characters
+          Starts with “{prefix.trim()}” · {seg.length} characters
           {seg.segments > 1 && ` · sent as ${seg.segments} texts each`}
           {seg.unicode && seg.length > 0 && " · Hebrew, emoji and other special characters fit 70 to a text instead of 160"}
         </p>

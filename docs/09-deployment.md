@@ -219,7 +219,8 @@ ID sign-ins**.
      Messaging Service
    - `APP_URL` must be set (9.2 step 3): delivery reports come back to `APP_URL/api/twilio/status`, and
      both webhooks are checked against Twilio's signature for that address.
-5. Apply migration 0039.
+5. Apply migrations 0039 and 0045. Replies people text back (anything but STOP / START / HELP) show under the
+   text they answer on Text staff (0045).
 
 Who can send: directors over all of camp text everyone (all staff, directors and office, and the
 `/updates` sign-ups) or any divisions; area directors, division heads and head counselors text the staff

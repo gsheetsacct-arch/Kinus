@@ -7,7 +7,7 @@ import { appUrl } from "@/lib/auth/app-url";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { loadAreaTree } from "@/lib/data/areas";
 import { loadTextRecipients } from "@/lib/data/text-recipients";
-import { pickRecipients } from "@/lib/sms";
+import { pickRecipients, textPrefix } from "@/lib/sms";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendSms, TwilioError, twilioConfig } from "@/lib/twilio";
 
@@ -28,7 +28,10 @@ export async function sendText(raw: { body: string; divisionIds: string[] | null
   if (!config) return fail("Texting isn't set up yet: Twilio's details need adding in Vercel.");
   const parsed = input.safeParse(raw);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the message and try again.");
-  const { body, divisionIds } = parsed.data;
+  const { divisionIds } = parsed.data;
+  // the camp and the sender's role go first ("Kinus Tzeirei Hashluchim - HC: …"), as registered with the carriers
+  const body = textPrefix(me.role) + parsed.data.body;
+  if (body.length > 1600) return fail("That's too long for a text (1,600 characters at most, with the name in front).");
   if (divisionIds === null && !canTextEveryone(me)) return fail("Only directors over all of camp can text everyone.");
   const allowed = textableDivisionIds(me);
   if (divisionIds && allowed && divisionIds.some((d) => !allowed.includes(d))) return fail("You can only text the staff of your own divisions.");

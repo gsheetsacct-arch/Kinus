@@ -1,3 +1,4 @@
+import { CAMP } from "@/lib/update-signups";
 /** Text messages to staff: the parts the compose screen and the server share (no secrets here). */
 
 /** Someone who may get a staff text: a staff member, or a sign-up from /updates who isn't one. */
@@ -65,3 +66,16 @@ export function optKeyword(body: string): "stop" | "start" | "help" | null {
 /** Twilio's statuses in the order a message moves through them. Reports can arrive out of order: a status only replaces an earlier one. */
 const STATUS_RANK: Record<string, number> = { queued: 0, accepted: 0, sending: 1, sent: 2, delivered: 3, undelivered: 3, failed: 3 };
 export const laterStatus = (current: string, next: string) => next in STATUS_RANK && (STATUS_RANK[next] ?? 0) > (STATUS_RANK[current] ?? 0);
+
+// how a role signs a text: short where staff know the short form
+const ROLE_SIGN: Record<string, string> = { owner: "Director", director: "Director", division_head: "DH", kloli: "Kloli", head_counselor: "HC", counselor: "Counselor", office: "Office", logistics: "Logistics" };
+
+/**
+ * What every staff text starts with: the camp, as registered with the carriers, and who it's
+ * from ("Kinus Tzeirei Hashluchim - HC: "), so staff see who's texting and texts match the
+ * registered samples.
+ */
+export function textPrefix(role: string): string {
+  const sign = ROLE_SIGN[role];
+  return `${CAMP}${sign ? ` - ${sign}` : ""}: `;
+}
