@@ -13,6 +13,7 @@ import { Section } from "@/components/section";
 import { Callout } from "@/components/callout";
 import { Steps } from "@/components/steps";
 import { STAFF_ROLES } from "@/lib/labels";
+import { errorsFor } from "@/lib/staff/bulk";
 import type { StaffRole } from "@/lib/auth/permissions";
 import type { ActionResult } from "@/lib/actions/result";
 import type { BulkPreview, BulkResult } from "../actions";
@@ -20,9 +21,11 @@ import type { BulkPreview, BulkResult } from "../actions";
 type Props = {
   roles: StaffRole[];
   preview: (fd: FormData) => Promise<ActionResult & { preview?: BulkPreview }>;
-  apply: (rowsJson: string, mode: "invite" | "password") => Promise<ActionResult & { results?: BulkResult[] }>;
+  apply: (rowsJson: string, mode: Mode) => Promise<ActionResult & { results?: BulkResult[] }>;
   example: string;
 };
+
+type Mode = "invite" | "password" | "none";
 
 const csvCell = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
 
@@ -32,9 +35,11 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
   const [rows, setRows] = React.useState<BulkPreview["rows"]>([]);
   const [skipped, setSkipped] = React.useState<NonNullable<BulkPreview["skipped"]>>([]);
   const [results, setResults] = React.useState<BulkResult[]>([]);
-  const [mode, setMode] = React.useState<"invite" | "password">("invite");
-  const good = rows.filter((r) => !r.errors.length);
-  const bad = rows.filter((r) => r.errors.length);
+  const [mode, setMode] = React.useState<Mode>("invite");
+  // only listed (no sign-in), nobody needs an email
+  const errs = (r: BulkPreview["rows"][number]) => errorsFor(r.errors, mode);
+  const good = rows.filter((r) => !errs(r).length);
+  const bad = rows.filter((r) => errs(r).length);
 
   const downloadPasswords = () => {
     const lines = ["Name,Email,Starting password", ...results.filter((r) => r.password).map((r) => [r.name, r.email, r.password!].map(csvCell).join(","))];
@@ -59,6 +64,8 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
                 const r = await preview(fd);
                 if (!r.ok) return void toast.error(r.error);
                 setRows(r.preview!.rows);
+                // the registration export (and lists of counselors) add people without sign-in: start there
+                setMode(r.preview!.rows.some((x) => !x.existingId && x.login === "personal") ? "invite" : "none");
                 setSkipped(r.preview!.skipped ?? []);
                 setStep(2);
               });
@@ -99,7 +106,7 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
       {step === 2 && (
         <>
           {skipped.length > 0 && (
-            <Callout title="From the registration export: accepted staff only">
+            <Callout title="From the registration export: confirmed staff only">
               Left out: {skipped.map((x) => `${x.count} ${x.status}`).join(", ")}. Upload the export again when more are accepted; people already in Kinus are updated, not added twice.
             </Callout>
           )}
@@ -124,7 +131,7 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
                 </thead>
                 <tbody>
                   {rows.map((r) => (
-                    <tr key={r.line} className={`border-t align-top ${r.errors.length ? "bg-amber-50/70 dark:bg-amber-950/20" : ""}`}>
+                    <tr key={r.line} className={`border-t align-top ${errs(r).length ? "bg-amber-50/70 dark:bg-amber-950/20" : ""}`}>
                       <td className="px-4 py-2 text-xs text-muted-foreground">{r.line}</td>
                       <td className="px-4 py-2">
                         <div className="font-medium" dir="auto">
@@ -133,7 +140,7 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
                         <div className="text-xs text-muted-foreground">
                           {r.email || "no email"}
                           {r.registration && <span className="block">{r.phone || <span className="text-amber-800 dark:text-amber-200">no phone number</span>}</span>}
-                          {r.login === "none" && <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">listed, no sign-in</span>}
+                          {(r.login === "none" || (mode === "none" && !r.existingId)) && <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">listed, no sign-in</span>}
                         </div>
                       </td>
                       <td className="px-4 py-2">
@@ -148,7 +155,7 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
                         {r.areaText}
                       </td>
                       <td className="px-4 py-2">
-                        {r.warnings?.length > 0 && !r.errors.length && (
+                        {r.warnings?.length > 0 && !errs(r).length && (
                           <ul className="mb-1 space-y-0.5 text-xs text-amber-800 dark:text-amber-200">
                             {r.warnings.map((w, i) => (
                               <li key={i} className="flex gap-1">
@@ -158,9 +165,9 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
                             ))}
                           </ul>
                         )}
-                        {r.errors.length ? (
+                        {errs(r).length ? (
                           <ul className="space-y-0.5 text-xs text-amber-800 dark:text-amber-200">
-                            {r.errors.map((e, i) => (
+                            {errs(r).map((e, i) => (
                               <li key={i} className="flex gap-1">
                                 <AlertCircle className="mt-0.5 size-3 shrink-0" />
                                 {e}
@@ -189,10 +196,11 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
               </table>
             </div>
           </Section>
-          <Section title="How should new people sign in?">
-            <div className="grid gap-2 sm:grid-cols-2">
+          <Section title="Do new people sign in?">
+            <div className="grid gap-2 sm:grid-cols-3">
               {[
-                { v: "invite" as const, label: "Email them an invitation", desc: "They click the link and choose their own password. Recommended." },
+                { v: "none" as const, label: "Just add them to the list", desc: "No sign-in: they're in the staff list, phone book, lists and texts. Turn sign-in on for anyone later, on their page." },
+                { v: "invite" as const, label: "Email them an invitation", desc: "They click the link and choose their own password." },
                 { v: "password" as const, label: "Give them a starting password", desc: "No email is sent. You download a list of passwords to hand out." },
               ].map((o) => (
                 <label key={o.v} className={`flex cursor-pointer items-start gap-3 rounded-lg border bg-card p-3 text-sm ${mode === o.v ? "border-primary bg-primary-soft/50 ring-1 ring-primary" : ""}`}>
