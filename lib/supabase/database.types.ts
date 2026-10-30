@@ -654,6 +654,18 @@ isOneToOne: false
                     "phone_e164"?: string,"opted_out_at"?: string
                   }
                   Relationships: []
+                },"text_replies": {
+                  Row: {
+                    "id": string,"broadcast_id": string | null,"profile_id": string | null,"name": string | null,"phone_e164": string,"body": string,"twilio_sid": string | null,"received_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "id"?: string,"broadcast_id"?: string | null,"profile_id"?: string | null,"name"?: string | null,"phone_e164": string,"body": string,"twilio_sid"?: string | null,"received_at"?: string
+                  }
+                  Update: {
+                    "id"?: string,"broadcast_id"?: string | null,"profile_id"?: string | null,"name"?: string | null,"phone_e164"?: string,"body"?: string,"twilio_sid"?: string | null,"received_at"?: string
+                  }
+                  Relationships: []
                 },"update_signups": {
                   Row: {
                     "id": string,"full_name": string,"phone": string,"phone_e164": string,"consent_text": string,"consented_at": string,"ip": string | null,"user_agent": string | null,"created_at": string,"updated_at": string

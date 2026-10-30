@@ -12,6 +12,7 @@ import { loadTextRecipients } from "@/lib/data/text-recipients";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { twilioConfig, twilioMissing } from "@/lib/twilio";
 import { formatWhen } from "@/lib/utils";
+import { ReplyList } from "@/components/messages/reply-list";
 
 export const metadata = { title: "Text staff" };
 // sending to a few hundred staff runs inside this page's action
@@ -41,6 +42,13 @@ export default async function MessagesPage() {
   let history = admin.from("text_broadcasts").select("id, sender_name, body, audience, recipient_count, failed_count, created_at").order("created_at", { ascending: false }).limit(30);
   if (!isAdmin(me)) history = history.or(allowed?.length ? `sent_by.eq.${me.id},division_ids.ov.{${allowed.join(",")}}` : `sent_by.eq.${me.id}`);
   const { data: sent, error } = await history;
+  // replies (migration 0045): how many each text got, and, for directors over all of camp, the ones that answer no text
+  const [{ data: replied }, { data: loose }] = await Promise.all([
+    sent?.length ? admin.from("text_replies").select("broadcast_id").in("broadcast_id", sent.map((b) => b.id)) : Promise.resolve({ data: [] as { broadcast_id: string | null }[] }),
+    isAdmin(me) ? admin.from("text_replies").select("id, name, phone_e164, body, received_at").is("broadcast_id", null).order("received_at", { ascending: false }).limit(30) : Promise.resolve({ data: [] }),
+  ]);
+  const replyCount = new Map<string, number>();
+  for (const r of replied ?? []) if (r.broadcast_id) replyCount.set(r.broadcast_id, (replyCount.get(r.broadcast_id) ?? 0) + 1);
   const missing = twilioMissing();
 
   return (
@@ -75,6 +83,7 @@ export default async function MessagesPage() {
                     <span className="block text-xs text-muted-foreground" dir="auto">
                       {formatWhen(b.created_at)} · {b.sender_name} → {b.audience} · {b.recipient_count} {b.recipient_count === 1 ? "person" : "people"}
                       {b.failed_count > 0 && <span className="text-destructive"> · {b.failed_count} not sent</span>}
+                      {replyCount.get(b.id) ? <span className="font-medium text-primary"> · {replyCount.get(b.id)} {replyCount.get(b.id) === 1 ? "reply" : "replies"}</span> : null}
                     </span>
                   </span>
                   <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
@@ -82,6 +91,11 @@ export default async function MessagesPage() {
               </li>
             ))}
           </ul>
+        </Section>
+      )}
+      {(loose ?? []).length > 0 && (
+        <Section title="Other texts to the camp number" description="Texts that don't answer anything sent in the last week." bodyClassName="p-0">
+          <ReplyList replies={loose ?? []} />
         </Section>
       )}
     </div>
