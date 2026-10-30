@@ -8,7 +8,7 @@ export type PhoneBookEntry = { id: string; name: string; role: StaffRole; title:
 export type PhoneBookSection = { key: string; title: string; color: string | null; entries: PhoneBookEntry[] };
 
 // head staff first, then counselors, then everyone else
-const RANK: Record<string, number> = { owner: 0, director: 1, division_head: 2, kloli: 2.5, head_counselor: 3, counselor: 4, scanner: 5, office: 6, logistics: 7 };
+const RANK: Record<string, number> = { owner: 0, director: 1, division_head: 2, kloli: 2.5, head_counselor: 3, counselor: 4, scanner: 5, office: 6, logistics: 7, staff: 8 };
 
 /**
  * The phone book for this person: one section per division in their area (its head staff,

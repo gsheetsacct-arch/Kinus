@@ -17,7 +17,7 @@ import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result"
 import { checkinEmail, emailWayIn, generatePassword, placeholderEmail, setLoginKind } from "@/lib/staff/accounts";
 import { checkinLoginProblem, checkinName, isPlaceholderEmail, type LoginKind } from "@/lib/staff/login-kinds";
 
-const ROLES = ["owner", "director", "division_head", "kloli", "head_counselor", "counselor", "scanner", "office", "logistics"] as const;
+const ROLES = ["owner", "director", "division_head", "kloli", "head_counselor", "counselor", "scanner", "office", "logistics", "staff"] as const;
 const signInRedirect = async () => `${await appUrl()}/login?next=/set-password`;
 
 /** Roles removed on Staff → Roles aren't given to anyone new. */
@@ -204,7 +204,7 @@ export async function previewBulkAdd(fd: FormData): Promise<ActionResult & { pre
       const wb = XLSX.read(text.trim(), { type: "string", raw: true, FS: text.includes("\t") ? "\t" : "," });
       grid = XLSX.utils.sheet_to_json<string[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: false });
     } else return fail("Paste the list or choose a file.");
-    const defaultRole = z.enum(ROLES).catch("counselor").parse(fd.get("default_role"));
+    const defaultRole = z.enum(ROLES).catch("staff").parse(fd.get("default_role"));
     // someone over one division (most head counselors) can leave the division column empty
     // the registration export: accepted staff only, with their id, address and the rest of their form
     const exported = isStaffExport(grid) ? readStaffExport(grid) : null;

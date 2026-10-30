@@ -25,7 +25,7 @@ export type CurrentUser = {
 };
 
 export const LEVEL_RANK: Record<AccessLevel, number> = { view: 1, scan: 2, edit: 3 };
-const ROLE_RANK: Record<StaffRole, number> = { owner: 9, director: 8, division_head: 6, kloli: 5.5, head_counselor: 5, office: 4, logistics: 4, counselor: 3, scanner: 2 };
+const ROLE_RANK: Record<StaffRole, number> = { owner: 9, director: 8, division_head: 6, kloli: 5.5, head_counselor: 5, office: 4, logistics: 4, counselor: 3, scanner: 2, staff: 1 };
 
 export const effectiveLevel = (u: CurrentUser): AccessLevel => (u.role === "owner" ? "edit" : u.level);
 export const isOwner = (u: CurrentUser) => u.role === "owner";
@@ -108,15 +108,16 @@ export function canGrantAreas(
 /**
  * Who may manage whom: owners anyone; directors over all of camp anyone but owners; area
  * directors anyone below director; a division head their head counselors, counselors and
- * check-in helpers; a head counselor their counselors and check-in helpers.
+ * check-in helpers (and staff with no particular role); a head counselor their counselors,
+ * check-in helpers and staff.
  */
 export function canManageRole(me: CurrentUser, role: StaffRole): boolean {
   if (me.role === "owner") return true;
   if (isAdmin(me)) return role !== "owner";
   if (isDirector(me)) return roleRank(role) < roleRank("director");
-  if (me.role === "division_head") return role === "kloli" || role === "head_counselor" || role === "counselor" || role === "scanner";
-  if (me.role === "kloli") return role === "head_counselor" || role === "counselor" || role === "scanner";
-  if (me.role === "head_counselor") return role === "counselor" || role === "scanner";
+  if (me.role === "division_head") return role === "kloli" || role === "head_counselor" || role === "counselor" || role === "scanner" || role === "staff";
+  if (me.role === "kloli") return role === "head_counselor" || role === "counselor" || role === "scanner" || role === "staff";
+  if (me.role === "head_counselor") return role === "counselor" || role === "scanner" || role === "staff";
   return false;
 }
 

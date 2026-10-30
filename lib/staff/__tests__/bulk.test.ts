@@ -100,3 +100,13 @@ describe("just adding people to the list", () => {
     expect(errorsFor([MISSING_EMAIL, "Unknown role “x”."], "none")).toEqual(["Unknown role “x”."]);
   });
 });
+
+describe("the Staff role", () => {
+  it("is what \"staff\" means on a sheet, without taking head staff or counselors", async () => {
+    const { matchRole } = await import("../bulk");
+    expect(matchRole("Staff")).toBe("staff");
+    expect(matchRole("Kitchen staff")).toBe("staff");
+    expect(matchRole("Head staff")).toBe("head_counselor");
+    expect(matchRole("Counselor")).toBe("counselor");
+  });
+});

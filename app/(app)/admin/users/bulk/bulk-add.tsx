@@ -87,7 +87,7 @@ export function BulkAdd({ roles, preview, apply, example }: Props) {
                 <input id="file" name="file" type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" className="block w-full text-sm file:mr-3 file:rounded-md file:border file:bg-card file:px-3 file:py-1.5" />
               </Field>
               <Field label="Role for rows that don't say" htmlFor="default_role">
-                <Select id="default_role" name="default_role" defaultValue="counselor">
+                <Select id="default_role" name="default_role" defaultValue="staff">
                   {roles.map((r) => (
                     <option key={r} value={r}>
                       {STAFF_ROLES[r].label}

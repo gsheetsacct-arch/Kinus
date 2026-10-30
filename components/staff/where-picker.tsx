@@ -16,6 +16,7 @@ type Kind = "bunk" | "division" | "camp";
 const KIND: Partial<Record<StaffRole, Kind>> = {
   counselor: "bunk",
   kloli: "division",
+  staff: "division",
   head_counselor: "division",
   division_head: "division",
   scanner: "division",

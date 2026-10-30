@@ -10,9 +10,10 @@ export const STAFF_ROLES: Record<StaffRole, { label: string; description: string
   counselor: { label: "Counselor", description: "Looks after a bunk.", defaultLevel: "scan", audience: "counselor" },
   scanner: { label: "Check-in helper", description: "Helps check campers in and out at the gate.", defaultLevel: "scan", audience: "counselor" },
   office: { label: "Office", description: "Works in the camp office.", defaultLevel: "view", audience: "office" },
+  staff: { label: "Staff", description: "On the staff list, with no particular role.", defaultLevel: "view", audience: "counselor" },
   logistics: { label: "Logistics", description: "Buses, pickup and drop-off.", defaultLevel: "scan", audience: "office" },
 };
-export const ROLE_ORDER: StaffRole[] = ["director", "division_head", "kloli", "head_counselor", "counselor", "scanner", "office", "logistics", "owner"];
+export const ROLE_ORDER: StaffRole[] = ["director", "division_head", "kloli", "head_counselor", "counselor", "scanner", "office", "logistics", "staff", "owner"];
 
 export const ACCESS_LEVELS: Record<AccessLevel, { label: string; description: string }> = {
   view: { label: "View only", description: "See campers and where they are." },
@@ -39,6 +40,7 @@ export const ROLE_EXTRAS: Record<StaffRole, string[]> = {
   scanner: ["Phone book: their head counselor and division head"],
   office: ["Prints and runs batches", "Follows up on campers who haven't arrived"],
   logistics: ["Prints and runs batches (bus tags)", "Follows up on campers who haven't arrived"],
+  staff: ["In the phone book, lists and texts for their divisions"],
 };
 
 export const LANGUAGES: Record<string, string> = { he: "Hebrew", fr: "French", en: "English" };
