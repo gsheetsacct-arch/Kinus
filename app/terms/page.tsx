@@ -1,5 +1,5 @@
 import { LegalPage } from "@/components/legal/legal-page";
-import { ORGANIZATION, PROGRAM, UPDATED, contactEmail } from "@/lib/legal";
+import { CAMP, ORGANIZATION, PROGRAM, UPDATED, contactEmail } from "@/lib/legal";
 
 export const metadata = { title: "Text message terms" };
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export default async function TermsPage() {
     <LegalPage title="Text message terms" updated={UPDATED}>
       <h2>{PROGRAM}</h2>
       <p>
-        {ORGANIZATION} sends text messages to its camp staff and to people who sign up at our updates page: schedules, reminders, changes and urgent notices about camp. Staff receive
+        {ORGANIZATION}, which runs the {CAMP} camp program, sends text messages to its camp staff and to people who sign up at our updates page: schedules, reminders, changes and urgent notices about camp. Staff receive
         them because they gave their mobile number to camp on their staff application; others receive them because they signed up and agreed to receive them.
       </p>
       <ul>

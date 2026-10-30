@@ -1,4 +1,4 @@
-export { ORGANIZATION, PROGRAM } from "@/lib/update-signups";
+export { CAMP, ORGANIZATION, PROGRAM } from "@/lib/update-signups";
 export const UPDATED = "October 29, 2026";
 
 /** Where people write with questions about the texts, the privacy policy and the terms. */
