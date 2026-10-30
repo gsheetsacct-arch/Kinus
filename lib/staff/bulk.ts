@@ -169,6 +169,11 @@ export function matchAreas(where: string, bunk: string, tree: AreaTree): { allAr
   return { allAreas: false, areas, text: names.join(", "), errors };
 }
 
+/** The error for someone who'd sign in without an email: no error when they're only listed (no sign-in). */
+export const MISSING_EMAIL = "Missing email: everyone who signs in needs one.";
+/** A row's errors when everyone new is only listed (no sign-in): an email isn't needed then. */
+export const errorsFor = (errors: string[], mode: "invite" | "password" | "none") => (mode === "none" ? errors.filter((e) => e !== MISSING_EMAIL) : errors);
+
 export function planRows(rows: BulkInputRow[], tree: AreaTree, defaults: { role: StaffRole; level: AccessLevel | "role"; where?: string }): BulkPlanRow[] {
   const seen = new Set<string>();
   return rows.map((r) => {
@@ -191,7 +196,7 @@ export function planRows(rows: BulkInputRow[], tree: AreaTree, defaults: { role:
     const said = (r.signs ?? "").trim().toLowerCase();
     const login: "personal" | "none" = /^(y|yes|true|1|x|✓)$/.test(said) ? "personal" : /^(n|no|false|0|-)$/.test(said) ? "none" : role === "counselor" ? "none" : "personal";
     if (r.email && !EMAIL.test(r.email)) errors.push(`“${r.email}” isn't an email address.`);
-    else if (!r.email && login === "personal") errors.push("Missing email: everyone who signs in needs one.");
+    else if (!r.email && login === "personal") errors.push(MISSING_EMAIL);
     else if (r.email && seen.has(r.email)) errors.push("This email is listed twice.");
     if (r.email) seen.add(r.email);
     const lvl = r.level ? matchLevel(r.level) : null;

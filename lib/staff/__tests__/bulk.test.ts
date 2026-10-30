@@ -92,3 +92,11 @@ describe("sign-in", () => {
     expect(plan[2].errors[0]).toMatch(/Missing email/);
   });
 });
+
+describe("just adding people to the list", () => {
+  it("doesn't need an email when nobody new signs in", async () => {
+    const { errorsFor, MISSING_EMAIL } = await import("../bulk");
+    expect(errorsFor([MISSING_EMAIL], "invite")).toEqual([MISSING_EMAIL]);
+    expect(errorsFor([MISSING_EMAIL, "Unknown role “x”."], "none")).toEqual(["Unknown role “x”."]);
+  });
+});

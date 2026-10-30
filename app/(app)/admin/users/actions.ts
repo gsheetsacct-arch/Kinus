@@ -8,7 +8,7 @@ import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
 import { canGiveFinalCheckout, canGrantAreas, canManageRole, isAdmin, type AccessLevel, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
 import { STAFF_ROLES } from "@/lib/labels";
 import { decodeArea, grantableTree, loadAreaTree, type AreaValue } from "@/lib/data/areas";
-import { planRows, readRows, type BulkPlanRow } from "@/lib/staff/bulk";
+import { errorsFor, planRows, readRows, type BulkPlanRow } from "@/lib/staff/bulk";
 import { isStaffExport, readStaffExport, type StaffAddress } from "@/lib/staff/export";
 import type { Json } from "@/lib/supabase/database.types";
 import { decodeText } from "@/lib/import/decode";
@@ -254,12 +254,12 @@ export async function previewBulkAdd(fd: FormData): Promise<ActionResult & { pre
 
 export type BulkResult = { line: number; name: string; email: string; outcome: "invited" | "created" | "listed" | "updated" | "failed"; detail?: string; password?: string };
 
-export async function applyBulkAdd(rowsJson: string, mode: "invite" | "password"): Promise<ActionResult & { results?: BulkResult[] }> {
+export async function applyBulkAdd(rowsJson: string, mode: "invite" | "password" | "none"): Promise<ActionResult & { results?: BulkResult[] }> {
   const me = await requireStaffManager();
   const rows = JSON.parse(rowsJson) as BulkPreview["rows"];
   const results: BulkResult[] = [];
   for (const r of rows) {
-    if (r.errors.length || !r.role) continue;
+    if (errorsFor(r.errors, mode).length || !r.role) continue;
     const base = { line: r.line, name: r.name, email: r.email };
     try {
       if (r.existingId) {
@@ -270,7 +270,8 @@ export async function applyBulkAdd(rowsJson: string, mode: "invite" | "password"
         continue;
       }
       await assertCanAssign(me, null, { role: r.role, allAreas: r.allAreas, areas: r.areas });
-      if (r.login === "none") {
+      // "Just add them to the list": nobody new signs in
+      if (r.login === "none" || mode === "none") {
         const id = await createAccount(r.email || (await placeholderEmail()), r.name, r.role, "none");
         await writeAccess(id, { role: r.role, allAreas: r.allAreas, areas: r.areas, full_name: r.name, title: r.title || null, phone: r.phone || null, registration: r.registration });
         await setLoginKind(id, "none");
@@ -287,7 +288,7 @@ export async function applyBulkAdd(rowsJson: string, mode: "invite" | "password"
   }
   revalidatePath("/admin/users");
   const n = (o: BulkResult["outcome"]) => results.filter((x) => x.outcome === o).length;
-  return { ok: true, message: `${n("invited") + n("created")} added, ${n("updated")} updated${n("failed") ? `, ${n("failed")} failed` : ""}.`, results };
+  return { ok: true, message: `${n("invited") + n("created") + n("listed")} added, ${n("updated")} updated${n("failed") ? `, ${n("failed")} failed` : ""}.`, results };
 }
 
 
