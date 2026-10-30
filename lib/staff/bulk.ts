@@ -88,10 +88,11 @@ const ROLE_WORDS: [StaffRole, string[]][] = [
   ["division_head", ["division head", "head of division", "dh", "division director", "rosh"]],
   ["kloli", ["kloli", "klolim", "klali", "kloli'm"]],
   ["head_counselor", ["head counselor", "head counsellor", "hc", "head staff", "learning head"]],
-  ["counselor", ["counselor", "counsellor", "staff", "madrich", "cabin counselor", "bunk counselor"]],
+  ["counselor", ["counselor", "counsellor", "madrich", "cabin counselor", "bunk counselor"]],
   ["scanner", ["check-in helper", "check in helper", "helper", "scanner", "volunteer"]],
   ["office", ["office", "secretary", "registration"]],
   ["logistics", ["logistics", "transport", "transportation", "buses"]],
+  ["staff", ["staff", "general staff", "other"]],
 ];
 export function matchRole(text: string): StaffRole | null {
   const t = text.trim().toLowerCase().replace(/\s+/g, " ");
@@ -194,7 +195,7 @@ export function planRows(rows: BulkInputRow[], tree: AreaTree, defaults: { role:
     }
     // counselors are listed (phone book, bunk) without signing in, unless the sheet says they sign in
     const said = (r.signs ?? "").trim().toLowerCase();
-    const login: "personal" | "none" = /^(y|yes|true|1|x|✓)$/.test(said) ? "personal" : /^(n|no|false|0|-)$/.test(said) ? "none" : role === "counselor" ? "none" : "personal";
+    const login: "personal" | "none" = /^(y|yes|true|1|x|✓)$/.test(said) ? "personal" : /^(n|no|false|0|-)$/.test(said) ? "none" : role === "counselor" || role === "staff" ? "none" : "personal";
     if (r.email && !EMAIL.test(r.email)) errors.push(`“${r.email}” isn't an email address.`);
     else if (!r.email && login === "personal") errors.push(MISSING_EMAIL);
     else if (r.email && seen.has(r.email)) errors.push("This email is listed twice.");
