@@ -103,6 +103,7 @@ async function JobPrint({ id, open, autoPrint }: { id: string; open: boolean; au
       parts={summary.parts}
       tags={summary.tags}
       campers={summary.campers}
+      order={summary.order}
       open={open}
       autoPrint={autoPrint}
     />

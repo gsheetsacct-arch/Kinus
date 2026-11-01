@@ -7,7 +7,7 @@ import { mergeValues } from "./merge";
 import type { FitNotes } from "./pdf";
 import { renderPdf } from "./chromium";
 import { sendEmail } from "./email";
-import { backgroundDataUrl, byBunkThenName, imageDataUrls, loadMergeSetup, loadPrintCampers, loadPrintCampersBrief, sortFor, toSpec, type PrintOrder } from "./data";
+import { backgroundDataUrl, byBunkThenName, imageDataUrls, loadMergeSetup, loadPrintCampers, loadPrintCampersBrief, parseOrder, sortFor, toSpec, type PrintOrder } from "./data";
 import { contentHash, labelValues, sameContent, templateKeys } from "./content";
 import type { TemplateSpec } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
@@ -50,7 +50,7 @@ export async function officeEmail(): Promise<{ to: string; cc: string[] }> {
 
 export async function createPrintJob(
   user: CurrentUser,
-  opts: { sessionId: string; templateId: string; camperIds: string[]; copies?: number; deliverTo?: string | null; note?: string | null },
+  opts: { sessionId: string; templateId: string; camperIds: string[]; copies?: number; deliverTo?: string | null; note?: string | null; /** the order it prints in (default by bunk) */ order?: PrintOrder },
 ): Promise<{ id: string; count: number; copies: number }> {
   const admin = createAdminClient();
   const { data: template } = await admin.from("print_templates").select("*").eq("id", opts.templateId).single();
@@ -86,10 +86,11 @@ export async function createPrintJob(
   const deliver = opts.deliverTo?.trim() || "";
   const { data: job, error } = await admin
     .from("print_jobs")
-    .insert({ session_id: opts.sessionId, kind: template.kind, template_id: template.id, deliver_to: deliver, requested_by: user.id, status: "queued", item_count: ids.length, note: opts.note ?? null })
+    // by bunk is the column's default: written only when another order is asked (works before migration 0049)
+    .insert({ session_id: opts.sessionId, kind: template.kind, template_id: template.id, deliver_to: deliver, requested_by: user.id, status: "queued", item_count: ids.length, note: opts.note ?? null, ...(opts.order && opts.order !== "bunk" ? { print_order: opts.order } : {}) })
     .select("id")
     .single();
-  if (error) throw error;
+  if (error) throw /print_order/.test(error.message) ? new Error("Printing in another order needs a database update first (migration 0049). Print by bunk for now.") : error;
   // how many of each: as asked, else the template's usual number (migration 0028)
   const copies = Math.min(Math.max(Math.round(opts.copies ?? (Number((template as { copies?: number }).copies) || 1)), 1), 10);
   const hashes = await hashing;
@@ -141,10 +142,13 @@ async function loadPrintSet(jobIds: string[]) {
     pdfArtPaths(spec.layers),
   ]);
   campers.sort(byBunkThenName);
-  return { jobs, spec, campers, copiesOf, setup, background, images, fontCss, art, askedMoreThanOnce };
+  return { jobs, spec, campers, copiesOf, setup, background, images, fontCss, art, askedMoreThanOnce, order: savedOrder(jobs) };
 }
 
 const divisionOf = (c: { division_id?: string | null }) => c.division_id ?? null;
+
+/** The order the request was asked to print in (the first one's, for several printed together). */
+const savedOrder = (jobs: { print_order?: string | null }[]): PrintOrder => parseOrder(jobs[0]?.print_order);
 
 type SetOpts = { /** by bunk (default), division or last name */ order?: PrintOrder; start?: number; used?: number[]; divisionId?: string | null; copies?: number; /** each tag on a page of its own (not on the template's label sheet) */ single?: boolean };
 
@@ -154,8 +158,9 @@ const specFor = (set: PrintSet, opts: SetOpts): TemplateSpec => (opts.single ? {
 /** The campers printed (all, or one division) and how many of each. */
 function itemsOf(set: PrintSet, opts: SetOpts) {
   const picked = opts.divisionId === undefined ? set.campers : set.campers.filter((c) => divisionOf(c as never) === opts.divisionId);
-  // loaded by bunk; another order when asked
-  const campers = opts.order && opts.order !== "bunk" ? [...picked].sort(sortFor(opts.order)) : picked;
+  // loaded by bunk; another order when asked (on the print page), else the one the request was made with
+  const order = opts.order ?? set.order;
+  const campers = order !== "bunk" ? [...picked].sort(sortFor(order)) : picked;
   // copies: as asked, or the same number of each chosen when printing
   const copiesOf = (id: string) => (opts.copies ? Math.min(10, Math.max(1, Math.round(opts.copies))) : (set.copiesOf.get(id) ?? 1));
   return { campers, items: campers.map((c) => ({ values: mergeValues(c, set.setup.fields, set.setup.maps), copies: copiesOf(c.id) })) };
@@ -215,6 +220,7 @@ export async function printSetSummary(jobIds: string[]) {
   const req = await loadRequests(jobIds);
   const campers = await loadPrintCampersBrief(req.admin, [...req.copiesOf.keys()]);
   campers.sort(byBunkThenName);
+  const order = savedOrder(req.jobs);
   const set = { ...req, campers };
   const tagsOf = (cs: typeof set.campers) => cs.reduce((n, c) => n + (set.copiesOf.get(c.id) ?? 1), 0);
   const parts = new Map<string, { divisionId: string | null; name: string; color: string | null; tags: number; campers: number }>();
@@ -229,6 +235,8 @@ export async function printSetSummary(jobIds: string[]) {
   return {
     templateId: set.spec.id ?? set.jobs[0].template_id,
     templateName: set.spec.name,
+    /** the order it was asked to print in */
+    order,
     spec: set.spec,
     stock: sheetStock(set.spec),
     tags: tagsOf(set.campers),

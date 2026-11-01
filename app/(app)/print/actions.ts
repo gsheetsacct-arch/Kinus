@@ -205,6 +205,8 @@ const batchSchema = z.object({
   deliver_to: z.string().trim().optional(),
   // what it is and what it's for, in the person's words
   purpose: z.string().trim().max(200).optional(),
+  // the order it prints in (and the emailed PDF is in)
+  order: z.enum(["bunk", "division", "name"]).default("bunk"),
 });
 
 const WHICH_SHORT: Record<BatchWhich, string | null> = { all: null, not_printed: "not printed before", changed: "new or changed", present: "here now", arrived_today: "arrived today" };
@@ -250,6 +252,7 @@ export async function createBatch(fd: FormData): Promise<ActionResult> {
       copies: d.copies,
       deliverTo: d.deliver === "email" ? d.deliver_to || null : user.email,
       note: [d.purpose, await placeName(supabase, d.where), WHICH_SHORT[d.which]].filter(Boolean).join(" · "),
+      order: d.order,
     });
     if (d.deliver === "email") {
       const base = await appUrl();

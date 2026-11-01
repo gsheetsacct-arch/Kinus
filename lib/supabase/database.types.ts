@@ -512,14 +512,14 @@ isOneToOne: false
                   ]
                 },"print_jobs": {
                   Row: {
-                    "deliver_to": string,"email_message_id": string | null,"error": string | null,"id": string,"item_count": number,"kind": Database["public"]['Enums']["print_kind"],"note": string | null,"pdf_path": string | null,"printed_at": string | null,"printed_by": string | null,"requested_at": string,"requested_by": string | null,"session_id": string,"status": Database["public"]['Enums']["print_status"],"template_id": string | null
+                    "deliver_to": string,"email_message_id": string | null,"error": string | null,"id": string,"item_count": number,"kind": Database["public"]['Enums']["print_kind"],"note": string | null,"pdf_path": string | null,"print_order": string,"printed_at": string | null,"printed_by": string | null,"requested_at": string,"requested_by": string | null,"session_id": string,"status": Database["public"]['Enums']["print_status"],"template_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "deliver_to": string,"email_message_id"?: string | null,"error"?: string | null,"id"?: string,"item_count"?: number,"kind": Database["public"]['Enums']["print_kind"],"note"?: string | null,"pdf_path"?: string | null,"printed_at"?: string | null,"printed_by"?: string | null,"requested_at"?: string,"requested_by"?: string | null,"session_id": string,"status"?: Database["public"]['Enums']["print_status"],"template_id"?: string | null
+                    "deliver_to": string,"email_message_id"?: string | null,"error"?: string | null,"id"?: string,"item_count"?: number,"kind": Database["public"]['Enums']["print_kind"],"note"?: string | null,"pdf_path"?: string | null,"print_order"?: string,"printed_at"?: string | null,"printed_by"?: string | null,"requested_at"?: string,"requested_by"?: string | null,"session_id": string,"status"?: Database["public"]['Enums']["print_status"],"template_id"?: string | null
                   }
                   Update: {
-                    "deliver_to"?: string,"email_message_id"?: string | null,"error"?: string | null,"id"?: string,"item_count"?: number,"kind"?: Database["public"]['Enums']["print_kind"],"note"?: string | null,"pdf_path"?: string | null,"printed_at"?: string | null,"printed_by"?: string | null,"requested_at"?: string,"requested_by"?: string | null,"session_id"?: string,"status"?: Database["public"]['Enums']["print_status"],"template_id"?: string | null
+                    "deliver_to"?: string,"email_message_id"?: string | null,"error"?: string | null,"id"?: string,"item_count"?: number,"kind"?: Database["public"]['Enums']["print_kind"],"note"?: string | null,"pdf_path"?: string | null,"print_order"?: string,"printed_at"?: string | null,"printed_by"?: string | null,"requested_at"?: string,"requested_by"?: string | null,"session_id"?: string,"status"?: Database["public"]['Enums']["print_status"],"template_id"?: string | null
                   }
                   Relationships: [
                     {

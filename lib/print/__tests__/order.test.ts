@@ -16,3 +16,14 @@ describe("staff print order", () => {
     expect(names("name")).toEqual(["Adler", "Cohen", "Gold", "Levi"]);
   });
 });
+
+describe("camper print order", () => {
+  it("by division then last name, or by last name", async () => {
+    const { sortFor } = await import("../data");
+    const c = (first_name: string, last_name: string, division_name: string | null, bunk_name: string | null) => ({ first_name, last_name, division_name, bunk_name }) as never;
+    const rows = [c("A", "Zalman", "Division 2", "Bunk ב"), c("B", "Adler", "Division 10", "Bunk א"), c("C", "Katz", "Division 2", "Bunk א"), c("D", "Berg", null, null)];
+    const last = (o: "division" | "name") => [...rows].sort(sortFor(o)).map((x: { last_name: string }) => x.last_name);
+    expect(last("division")).toEqual(["Katz", "Zalman", "Adler", "Berg"]);
+    expect(last("name")).toEqual(["Adler", "Berg", "Katz", "Zalman"]);
+  });
+});
