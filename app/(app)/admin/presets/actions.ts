@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/auth/current-user";
 import { FIELD_BY_KEY } from "@/lib/fields";
 import { parseFlags } from "@/lib/camper-flags";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
+import { SLEEPING_COLUMN } from "@/lib/sleeping";
 
 const schema = z.object({
   id: z.guid().optional().or(z.literal("")),
@@ -20,7 +21,7 @@ export async function savePreset(fd: FormData): Promise<ActionResult> {
   const me = await requireAdmin();
   try {
     const d = schema.parse(Object.fromEntries(fd));
-    const columns = fd.getAll("columns").map(String).filter((k) => FIELD_BY_KEY[k] || /^source\.[^\s{}|]{1,120}$/.test(k));
+    const columns = fd.getAll("columns").map(String).filter((k) => FIELD_BY_KEY[k] || k === SLEEPING_COLUMN || /^source\.[^\s{}|]{1,120}$/.test(k));
     if (columns.length === 0) return fail("Tick at least one column.");
     const supabase = await createClient();
     const row = {
