@@ -53,8 +53,10 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
   // "only campers with a medical flag" etc., on top of what the layout itself keeps to
   const flags = flagsFor(visibleFieldGroups(user, fv ?? [])).filter((k) => !preset?.only.includes(k));
   const onlyFlag = sp.only && isFlag(sp.only) && flags.includes(sp.only) ? sp.only : undefined;
+  // each bunk's counselors and their phones under its title: only when asked for
+  const counselors = sp.counselors === "1";
   const list = preset
-    ? await buildList(supabase, user, preset, { sessionId: session.id, divisionId: divisionId || undefined, bunkId: bunkId || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name, only: onlyFlag ? [onlyFlag] : [] }, fv ?? [])
+    ? await buildList(supabase, user, preset, { sessionId: session.id, divisionId: divisionId || undefined, bunkId: bunkId || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name, only: onlyFlag ? [onlyFlag] : [], counselors }, fv ?? [])
     : null;
   const qs = new URLSearchParams({ ...(preset ? { preset: preset.id } : {}), ...(divisionId ? { division: divisionId } : {}), ...(bunkId ? { bunk: bunkId } : {}), ...(onlyFlag ? { only: onlyFlag } : {}) }).toString();
 
@@ -128,6 +130,12 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
             ))}
           </Select>
         </label>
+        {preset?.group_by === "bunk" && (
+          <label className="flex items-center gap-2 text-sm md:col-span-4">
+            <input type="checkbox" name="counselors" value="1" defaultChecked={counselors} className="size-4 accent-[var(--primary)]" />
+            Show counselors <span className="text-muted-foreground">(each bunk&apos;s counselors and their phones, under the bunk)</span>
+          </label>
+        )}
         <noscript>
           <Button type="submit" variant="secondary">
             Show
