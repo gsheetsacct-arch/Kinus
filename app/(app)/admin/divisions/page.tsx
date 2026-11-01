@@ -152,6 +152,8 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
     return usesHebrewLetters(names) && !inNaturalOrder(names);
   });
   const empty = divs.filter((d) => campersIn(d.id) === 0);
+  // bunks of divisions that still have campers, with none of their own
+  const emptyBunks = divs.filter((d) => campersIn(d.id) > 0).flatMap((d) => bunksOf(d.id).filter((b) => campersIn(d.id, b.id) === 0));
   const selected = divs.find((d) => d.id === selectedId) ?? divs[0];
 
   const addDivision = (
@@ -196,6 +198,82 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
       </span>
     </DivisionTab>
   );
+  const bunkRow = (d: (typeof divs)[number], b: NonNullable<typeof bunks>[number], i: number, all: NonNullable<typeof bunks>) => {
+                    const n = campersIn(d.id, b.id);
+                    const others = all.filter((x) => x.id !== b.id);
+                    return (
+                      <li key={b.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium" dir="auto">
+                            {b.name}
+                          </span>
+                          <Link href={`/campers?division=${d.id}&bunk=${b.id}`} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
+                            <Users className="size-3" /> {n} {n === 1 ? "camper" : "campers"}
+                          </Link>
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <MoveButtons action={moveBunk} id={b.id} first={i === 0} last={i === all.length - 1} />
+                          <FormDialog
+                            trigger={
+                              <Button size="sm" variant="ghost" title="Rename">
+                                <Pencil /> <span className="sr-only sm:not-sr-only">Rename</span>
+                              </Button>
+                            }
+                            title="Rename bunk"
+                            description="Tip: if the export spells it differently, the next import will create the bunk again under the export's name."
+                            action={saveBunk}
+                          >
+                            <input type="hidden" name="id" value={b.id} />
+                            <input type="hidden" name="division_id" value={d.id} />
+                            <Field label="Bunk name" htmlFor={`bunk-${b.id}`}>
+                              <Input id={`bunk-${b.id}`} name="name" defaultValue={b.name} required dir="auto" />
+                            </Field>
+                          </FormDialog>
+                          {others.length > 0 && (
+                          <FormDialog
+                            trigger={
+                              <Button size="sm" variant="ghost" title="Merge into another bunk">
+                                <Merge /> <span className="sr-only sm:not-sr-only">Merge</span>
+                              </Button>
+                            }
+                            title={`Merge ${b.name}`}
+                            description={`Move its ${n} ${n === 1 ? "camper" : "campers"} into another bunk of ${d.name}.`}
+                            action={mergeBunk}
+                            submitLabel="Merge"
+                          >
+                            <input type="hidden" name="id" value={b.id} />
+                            <Field label="Merge into" htmlFor={`into-${b.id}`} hint="All its campers and any staff access move to that bunk, and this bunk is removed.">
+                              <Select id={`into-${b.id}`} name="into" defaultValue="" required>
+                                <option value="" disabled>
+                                  Choose a bunk…
+                                </option>
+                                {others.map((o) => (
+                                  <option key={o.id} value={o.id}>
+                                    {o.name}
+                                  </option>
+                                ))}
+                              </Select>
+                            </Field>
+                          </FormDialog>
+                          )}
+                          <FormDialog
+                            trigger={
+                              <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive" title="Delete" aria-label={`Delete ${b.name}`}>
+                                <Trash2 />
+                              </Button>
+                            }
+                            title={`Delete ${b.name}?`}
+                            description={n ? `Its ${n} campers stay in ${d.name} without a bunk. To keep them together, use Merge instead.` : "It has no campers."}
+                            action={deleteBunk}
+                            submitLabel="Delete bunk"
+                            destructive
+                          >
+                            <input type="hidden" name="id" value={b.id} />
+                          </FormDialog>
+                        </span>
+                      </li>
+                    );
+  };
   const ungrouped = divs.filter((d) => !d.group_id || !groups.some((g) => g.id === d.group_id));
 
   return (
@@ -224,10 +302,10 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
           )
         }
       />
-      {empty.length > 0 && (
+      {(empty.length > 0 || emptyBunks.length > 0) && (
         <Callout
           tone="warning"
-          title={`${empty.length} ${empty.length === 1 ? "division has" : "divisions have"} no campers`}
+          title={[empty.length && `${empty.length} ${empty.length === 1 ? "division has" : "divisions have"} no campers`, emptyBunks.length && `${plural(emptyBunks.length, "bunk")} ${emptyBunks.length === 1 ? "has" : "have"} no campers`].filter(Boolean).join("; ")}
           action={
             <ActionForm action={removeEmpty} confirm="Remove empty divisions and bunks?" confirmDetail="Every division and bunk with no campers and no staff access is removed." confirmLabel="Remove them" danger>
               <Button size="sm" variant="outline" type="submit">
@@ -236,7 +314,8 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
             </ActionForm>
           }
         >
-          {empty.map((d) => d.name).join(", ")}. These are often left over from an earlier import.
+          {[...empty.map((d) => d.name), ...emptyBunks.map((b) => b.name)].slice(0, 12).join(", ")}
+          {empty.length + emptyBunks.length > 12 ? ` and ${empty.length + emptyBunks.length - 12} more` : ""}. These are often left over from an earlier import. Bunks a staff member is given are kept.
         </Callout>
       )}
       {!divs.length ? (
@@ -351,83 +430,17 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
                 <p className="p-5 text-sm text-muted-foreground">No bunks in this division yet.</p>
               ) : (
                 <ul className="divide-y">
-                  {bunksOf(d.id).map((b, i, all) => {
-                    const n = campersIn(d.id, b.id);
-                    const others = all.filter((x) => x.id !== b.id);
-                    return (
-                      <li key={b.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-medium" dir="auto">
-                            {b.name}
-                          </span>
-                          <Link href={`/campers?division=${d.id}&bunk=${b.id}`} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
-                            <Users className="size-3" /> {n} {n === 1 ? "camper" : "campers"}
-                          </Link>
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <MoveButtons action={moveBunk} id={b.id} first={i === 0} last={i === all.length - 1} />
-                          <FormDialog
-                            trigger={
-                              <Button size="sm" variant="ghost" title="Rename">
-                                <Pencil /> <span className="sr-only sm:not-sr-only">Rename</span>
-                              </Button>
-                            }
-                            title="Rename bunk"
-                            description="Tip: if the export spells it differently, the next import will create the bunk again under the export's name."
-                            action={saveBunk}
-                          >
-                            <input type="hidden" name="id" value={b.id} />
-                            <input type="hidden" name="division_id" value={d.id} />
-                            <Field label="Bunk name" htmlFor={`bunk-${b.id}`}>
-                              <Input id={`bunk-${b.id}`} name="name" defaultValue={b.name} required dir="auto" />
-                            </Field>
-                          </FormDialog>
-                          {others.length > 0 && (
-                          <FormDialog
-                            trigger={
-                              <Button size="sm" variant="ghost" title="Merge into another bunk">
-                                <Merge /> <span className="sr-only sm:not-sr-only">Merge</span>
-                              </Button>
-                            }
-                            title={`Merge ${b.name}`}
-                            description={`Move its ${n} ${n === 1 ? "camper" : "campers"} into another bunk of ${d.name}.`}
-                            action={mergeBunk}
-                            submitLabel="Merge"
-                          >
-                            <input type="hidden" name="id" value={b.id} />
-                            <Field label="Merge into" htmlFor={`into-${b.id}`} hint="All its campers and any staff access move to that bunk, and this bunk is removed.">
-                              <Select id={`into-${b.id}`} name="into" defaultValue="" required>
-                                <option value="" disabled>
-                                  Choose a bunk…
-                                </option>
-                                {others.map((o) => (
-                                  <option key={o.id} value={o.id}>
-                                    {o.name}
-                                  </option>
-                                ))}
-                              </Select>
-                            </Field>
-                          </FormDialog>
-                          )}
-                          <FormDialog
-                            trigger={
-                              <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive" title="Delete" aria-label={`Delete ${b.name}`}>
-                                <Trash2 />
-                              </Button>
-                            }
-                            title={`Delete ${b.name}?`}
-                            description={n ? `Its ${n} campers stay in ${d.name} without a bunk. To keep them together, use Merge instead.` : "It has no campers."}
-                            action={deleteBunk}
-                            submitLabel="Delete bunk"
-                            destructive
-                          >
-                            <input type="hidden" name="id" value={b.id} />
-                          </FormDialog>
-                        </span>
-                      </li>
-                    );
-                  })}
+                  {bunksOf(d.id).map((b, i, all) => (campersIn(d.id, b.id) > 0 ? bunkRow(d, b, i, all) : null))}
                 </ul>
+              )}
+              {/* bunks no camper is in any more (left from an earlier import): out of the way, still here to rename, merge or delete */}
+              {bunksOf(d.id).some((b) => campersIn(d.id, b.id) === 0) && (
+                <details className="border-t">
+                  <summary className="cursor-pointer px-5 py-2.5 text-sm text-muted-foreground hover:text-foreground">
+                    {plural(bunksOf(d.id).filter((b) => campersIn(d.id, b.id) === 0).length, "empty bunk")} (no campers)
+                  </summary>
+                  <ul className="divide-y border-t bg-muted/30">{bunksOf(d.id).map((b, i, all) => (campersIn(d.id, b.id) === 0 ? bunkRow(d, b, i, all) : null))}</ul>
+                </details>
               )}
               <div className="flex flex-wrap items-center gap-2 border-t p-4">
                 <FormDialog
