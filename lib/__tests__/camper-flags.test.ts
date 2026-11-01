@@ -13,8 +13,8 @@ describe("camper flags", () => {
   });
 
   it("offers only the filters someone can see", () => {
-    expect(flagsFor(new Set())).toEqual(["medical", "later", "no_bunk"]);
-    expect(flagsFor(new Set(["medical", "staff_notes"]))).toEqual(["medical", "epipen", "notes", "later", "no_bunk"]);
+    expect(flagsFor(new Set())).toEqual(["medical", "later", "no_bunk", "staying", "going_home"]);
+    expect(flagsFor(new Set(["medical", "staff_notes"]))).toEqual(["medical", "epipen", "notes", "later", "no_bunk", "staying", "going_home"]);
   });
 
   it("reads them from the address bar", () => {

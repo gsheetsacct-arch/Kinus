@@ -1,6 +1,6 @@
 /**
  * The "only campers who…" filters, the same on every page (Campers, Lists, list layouts):
- * a medical flag, an EpiPen, notes, coming later, no bunk yet. What a person can't see
+ * a medical flag, an EpiPen, notes, coming later, no bunk yet, sleeping at the Kinus or going home. What a person can't see
  * (medical details, notes) is masked for them, so it never matches for them either; the
  * filters they can't use aren't offered.
  */
@@ -12,6 +12,9 @@ export const CAMPER_FLAGS = {
   notes: { label: "Has notes", badge: "notes", needs: "notes" },
   later: { label: "Coming later", badge: "coming later", needs: null },
   no_bunk: { label: "No bunk yet", badge: "no bunk", needs: null },
+  // the registration's "Sleeping At The Kinus" (lib/data/sleeping)
+  staying: { label: "Sleeping at the Kinus", badge: "sleeping", needs: null },
+  going_home: { label: "Going home (not sleeping)", badge: "going home", needs: null },
 } as const satisfies Record<string, { label: string; badge: string; needs: FieldGroup | "notes" | null }>;
 export type CamperFlag = keyof typeof CAMPER_FLAGS;
 export const FLAG_KEYS = Object.keys(CAMPER_FLAGS) as CamperFlag[];
@@ -38,6 +41,8 @@ export type FlagSource = {
   staff_notes?: string | null;
   bunk_id?: string | null;
   status?: string | null;
+  /** The registration's "Sleeping At The Kinus": yes, no, or not answered (lib/data/sleeping). */
+  sleeping?: boolean | null;
 };
 
 /** Which flags a camper has. `later`: they have a "coming later" follow-up (Missing). */
@@ -48,6 +53,8 @@ export function camperFlags(c: FlagSource, later: boolean): Set<CamperFlag> {
   if (filled(c.notes_from_parents) || filled(c.staff_notes)) out.add("notes");
   if (later && c.status === "expected") out.add("later");
   if (!c.bunk_id) out.add("no_bunk");
+  if (c.sleeping === true) out.add("staying");
+  if (c.sleeping === false) out.add("going_home");
   return out;
 }
 
