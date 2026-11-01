@@ -55,7 +55,7 @@ export function BatchForm({ templates, divisions, campLabel, officeTo }: { templ
       <Field label="Which campers" hint={BATCH_WHICH_LABELS[which].long}>
         <Segmented name="which" value={which} onChange={setWhich} options={(Object.keys(BATCH_WHICH_LABELS) as BatchWhichKey[]).map((k) => ({ value: k, label: BATCH_WHICH_LABELS[k].short }))} />
       </Field>
-      <Field label="Order" hint={order === "bunk" ? "Division, then bunk, then last name." : order === "division" ? "Division, then last name (bunks mixed)." : "Last name, everyone together."}>
+      <Field label="Order" hint={order === "bunk" ? "Division, then bunk, then last name (Hebrew and French divisions: the Hebrew last name)." : order === "division" ? "Division, then last name, bunks mixed (Hebrew and French divisions: the Hebrew last name)." : "Last name, everyone together."}>
         <Segmented name="order" value={order} onChange={setOrder} options={PRINT_ORDERS.map((o) => ({ value: o.value, label: o.label }))} />
       </Field>
       <Field label="What it is and what it's for (optional)" htmlFor="purpose" hint="Shows in the print queue and the office's email, so they know what this batch is.">

@@ -27,3 +27,13 @@ describe("camper print order", () => {
     expect(last("name")).toEqual(["Adler", "Berg", "Katz", "Zalman"]);
   });
 });
+
+describe("Hebrew and French divisions", () => {
+  it("sort by the Hebrew last name within the bunk, those without one after", async () => {
+    const { byBunkThenName, sortFor } = await import("../data");
+    const c = (last_name: string, heb_last: string | null, bunk_name = "Bunk א") => ({ first_name: "X", last_name, division_name: "Hebrew Division", bunk_name, heb_last }) as never;
+    const rows = [c("Aaron", "שוורץ"), c("Zeitlin", "אברהמי"), c("Mendel", null), c("Berg", "גולד")];
+    expect([...rows].sort(byBunkThenName).map((x: { last_name: string }) => x.last_name)).toEqual(["Zeitlin", "Berg", "Aaron", "Mendel"]);
+    expect([...rows].sort(sortFor("division")).map((x: { last_name: string }) => x.last_name)).toEqual(["Zeitlin", "Berg", "Aaron", "Mendel"]);
+  });
+});
