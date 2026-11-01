@@ -2,7 +2,7 @@ import "server-only";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { visibleDivisionIds, type CurrentUser } from "@/lib/auth/permissions";
+import { canUsePrintArea, visibleDivisionIds, type CurrentUser } from "@/lib/auth/permissions";
 import { FONTS } from "./font-families";
 import { addCustomFont, loadCustomFonts } from "./custom-fonts";
 import { findPresets, presetById } from "./presets";
@@ -514,6 +514,163 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
         if (notHebrew.length) return problem(`Hebrew letters only (nothing saved). Not Hebrew: ${notHebrew.slice(0, 5).map((f) => `${f.camper_id} "${f.value}"`).join(", ")}`);
         const message = await saveHebrewNameFixes(user, fixes.map((f) => ({ camperId: f.camper_id, column: f.column, value: f.value })));
         return text(message);
+      } catch (e) {
+        return problem(e instanceof Error ? e.message : String(e));
+      }
+    },
+  );
+
+  server.registerTool(
+    "queue_print_job",
+    {
+      title: "Add a print job to the queue",
+      description:
+        'Asks for tags of a camper template, the same as Print a batch: for everyone you can print for, a division, a bunk, or some campers (by camper code). which: "not_printed" (default: only campers who never got this tag), "changed" (new, and anyone whose details on this tag changed since printed), "all", "present" (checked in now), "arrived_today". order: "bunk" (default), "division" or "name". deliver: "queue" (waits in Print → Queue for the office to print) or "email" (the PDF is made and emailed, to email_to or the office). Use dry_run first to see how many and who.',
+      inputSchema: {
+        template_id: z.guid(),
+        division: z.string().optional().describe("A division's name (leave out for everyone)"),
+        bunk: z.string().optional().describe("A bunk's name (in division, when given)"),
+        camper_codes: z.array(z.string()).max(2000).optional().describe("Instead of a place: these campers (their 4-digit codes)"),
+        which: z.enum(["not_printed", "changed", "all", "present", "arrived_today"]).default("not_printed"),
+        order: z.enum(["bunk", "division", "name"]).default("bunk"),
+        copies: z.number().int().min(1).max(10).optional().describe("Of each (default: the template's usual number)"),
+        purpose: z.string().max(200).optional().describe("What it is and what it's for, shown in the queue and the email"),
+        deliver: z.enum(["queue", "email"]).default("queue"),
+        email_to: z.string().optional().describe('With deliver "email": the address (default: the office)'),
+        dry_run: z.boolean().default(false).describe("Only count and list who, without asking"),
+      },
+      annotations: { destructiveHint: false },
+    },
+    async ({ template_id, division, bunk, camper_codes, which, order, copies, purpose, deliver, email_to, dry_run }) => {
+      try {
+        if (!canUsePrintArea(user)) return problem(`${user.fullName} can't ask for prints (printing is for the office, directors and division heads).`);
+        const session = await activeSession();
+        if (!session) return problem("No active session.");
+        const admin = createAdminClient();
+        const { data: tpl } = await admin.from("print_templates").select("id, name").eq("id", template_id).maybeSingle();
+        if (!tpl) return problem("No template with that id (list_templates).");
+        let ids: string[];
+        let place: string;
+        if (camper_codes?.length) {
+          const codes = [...new Set(camper_codes.map((c) => c.trim()).filter(Boolean))];
+          const { data } = await admin.from("campers").select("id, camper_code, division_id").eq("session_id", session.id).is("archived_at", null).in("camper_code", codes);
+          const found = (data ?? []).filter((c) => !scope || (c.division_id && scope.includes(c.division_id)));
+          const missing = codes.filter((code) => !found.some((c) => c.camper_code === code));
+          if (missing.length) return problem(`No camper of yours with code ${missing.slice(0, 10).join(", ")}${missing.length > 10 ? "…" : ""}.`);
+          ids = found.map((c) => c.id);
+          place = `${ids.length} chosen`;
+        } else {
+          const { data: divs } = await admin.from("divisions").select("id, name, bunks(id, name)").eq("session_id", session.id);
+          const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+          const d = division ? (divs ?? []).find((x) => same(x.name, division)) : undefined;
+          if (division && !d) return problem(`No division called "${division}". Divisions: ${(divs ?? []).map((x) => x.name).join(", ")}.`);
+          const bunks = (d ? [d] : (divs ?? [])).flatMap((x) => (x.bunks as { id: string; name: string }[]).map((b) => ({ ...b, division: x.name })));
+          const b = bunk ? bunks.filter((x) => same(x.name, bunk)) : [];
+          if (bunk && b.length !== 1) return problem(b.length ? `More than one bunk is called "${bunk}": say the division too.` : `No bunk called "${bunk}"${d ? ` in ${d.name}` : ""}.`);
+          const { batchCamperIds } = await import("./batch");
+          ids = await batchCamperIds(admin, session.id, { divisionIds: scope, divisionId: d?.id, bunkId: b[0]?.id }, which, template_id);
+          place = b[0] ? `${b[0].division} · ${b[0].name}` : d ? d.name : "Everyone";
+        }
+        if (!ids.length) return text(`No campers match (${place}, ${which}): nothing to print.`);
+        if (ids.length > 2000) return problem("That's more than 2,000 tags: one division at a time.");
+        if (dry_run) {
+          const { data: some } = await admin.from("campers").select("first_name, last_name").in("id", ids.slice(0, 15));
+          return text(`${ids.length} campers would get “${tpl.name}” (${place}, ${which}, by ${order}): ${(some ?? []).map((c) => `${c.first_name} ${c.last_name}`).join(", ")}${ids.length > 15 ? "…" : ""}`);
+        }
+        const { createPrintJob, processPrintJob } = await import("./jobs");
+        const WHICH: Record<string, string | null> = { all: null, not_printed: "not printed before", changed: "new or changed", present: "here now", arrived_today: "arrived today" };
+        const job = await createPrintJob(user, {
+          sessionId: session.id,
+          templateId: template_id,
+          camperIds: ids,
+          copies,
+          deliverTo: deliver === "email" ? email_to?.trim() || null : user.email,
+          note: [purpose, place, WHICH[which], "asked through Claude"].filter(Boolean).join(" · "),
+          order,
+        });
+        if (deliver === "email") {
+          const { after } = await import("next/server");
+          after(() => processPrintJob(job.id, appUrl));
+        } else await admin.from("print_jobs").update({ status: "ready" }).eq("id", job.id);
+        return text(`${deliver === "email" ? "Asked: the PDF is being made and emailed" : "Added to the print queue"}: ${job.count} × “${tpl.name}”${job.copies > 1 ? ` (${job.copies} of each)` : ""}, ${place}. ${appUrl}/print/jobs/${job.id}`);
+      } catch (e) {
+        return problem(e instanceof Error ? e.message : String(e));
+      }
+    },
+  );
+
+  server.registerTool(
+    "list_print_jobs",
+    {
+      title: "Print jobs",
+      description: "The latest print requests (newest first) this person may open: id, tag, how many, status, note, and whether a PDF was made. get_print_pdf gives a download link.",
+      inputSchema: { limit: z.number().int().min(1).max(50).default(15), status: z.enum(["any", "open", "printed"]).default("any").describe('"open": not printed yet') },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ limit, status }) => {
+      try {
+        const session = await activeSession();
+        if (!session) return problem("No active session.");
+        const admin = createAdminClient();
+        let q = admin.from("print_jobs").select("id, status, item_count, note, requested_at, pdf_path, requested_by, print_order, print_templates(name), profiles:requested_by(full_name)").eq("session_id", session.id).order("requested_at", { ascending: false }).limit(limit * 3);
+        if (status === "open") q = q.not("status", "in", "(printed,cancelled)");
+        if (status === "printed") q = q.eq("status", "printed");
+        const { data } = await q;
+        const { jobsVisibleTo } = await import("./access");
+        const mine: unknown[] = [];
+        for (const j of data ?? []) {
+          if (mine.length >= limit) break;
+          if (!(await jobsVisibleTo(user, [j.id]))) continue;
+          mine.push({
+            id: j.id,
+            tag: (j.print_templates as { name: string } | null)?.name ?? "(deleted template)",
+            campers: j.item_count,
+            status: j.status,
+            order: j.print_order,
+            note: j.note,
+            asked: j.requested_at,
+            by: (j.profiles as { full_name: string } | null)?.full_name ?? null,
+            pdf_made: Boolean(j.pdf_path),
+          });
+        }
+        return text(mine.length ? json(mine) : "No print requests yet.");
+      } catch (e) {
+        return problem(e instanceof Error ? e.message : String(e));
+      }
+    },
+  );
+
+  server.registerTool(
+    "get_print_pdf",
+    {
+      title: "Download a print job's PDF",
+      description:
+        "A download link (valid 24 hours) to a print request's PDF, in the order it was asked for. An emailed request's PDF as it was sent; otherwise it's made now. A big request is made in parts (about 200 tags each): the answer says how many; ask for each with part 0, 1, ….",
+      inputSchema: { job_id: z.guid(), part: z.number().int().min(0).optional().describe("For a big request: which part (from 0)") },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ job_id, part }) => {
+      try {
+        const { jobsVisibleTo } = await import("./access");
+        if (!(await jobsVisibleTo(user, [job_id]))) return problem("No print request with that id that you may open (list_print_jobs).");
+        const admin = createAdminClient();
+        const out = admin.storage.from("print-output");
+        const { data: job } = await admin.from("print_jobs").select("pdf_path, print_templates(name)").eq("id", job_id).maybeSingle();
+        const name = ((job?.print_templates as { name: string } | null)?.name ?? "Tags").replace(/[\\/:*?"<>|]+/g, "-");
+        if (job?.pdf_path && part === undefined) {
+          const { data, error } = await out.createSignedUrl(job.pdf_path, 86400, { download: `${name}.pdf` });
+          if (error) throw error;
+          return text(`The PDF as it was emailed: ${data.signedUrl}\n(link valid 24 hours)`);
+        }
+        const { printSetPdf } = await import("./jobs");
+        const r = await printSetPdf([job_id], { part: part ?? 0 });
+        const path = `claude/${job_id}-${part ?? 0}.pdf`;
+        const { error: up } = await out.upload(path, r.pdf, { contentType: "application/pdf", upsert: true });
+        if (up) throw up;
+        const file = r.parts > 1 ? r.fileName.replace(/\.pdf$/, ` (part ${(part ?? 0) + 1} of ${r.parts}).pdf`) : r.fileName;
+        const { data, error } = await out.createSignedUrl(path, 86400, { download: file });
+        if (error) throw error;
+        return text(`${file}: ${data.signedUrl}\n(link valid 24 hours)${r.parts > 1 ? `\nThis request is in ${r.parts} parts: ask for part ${(part ?? 0) + 1 < r.parts ? (part ?? 0) + 1 : 0}… up to ${r.parts - 1}. Or print it whole from Kinus: ${appUrl}/print/jobs/${job_id}` : ""}`);
       } catch (e) {
         return problem(e instanceof Error ? e.message : String(e));
       }

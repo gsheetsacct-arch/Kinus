@@ -1,5 +1,5 @@
 import { getFieldValue, type CamperLike } from "@/lib/fields";
-import { DIVISION_VALUE, type MergeField, type Transform, type ValueMap } from "./types";
+import { DIVISION_VALUE, type MergeField, type TemplateSpec, type Transform, type ValueMap } from "./types";
 import { convertNumber } from "@/lib/hebrew-number";
 import { withFixes } from "@/lib/source-fixes";
 import { addressColumn } from "@/lib/address-codes";
@@ -143,3 +143,32 @@ export const SAMPLE_VALUES: Record<string, string> = {
   MOTHER_PHONE: "+1 718 555 0100",
   FATHER_PHONE: "+1 917 555 0199",
 };
+
+const word = (w: string) => new RegExp(`(^|[^a-z])${w}([^a-z]|$)`, "i");
+// not the camper's own name: parents', contacts' and staff names
+const NOT_CAMPER = /mother|father|parent|contact|emergency|guardian|counsel|staff/i;
+const HEBREW = /heb|hebrew|עברית/i;
+
+/**
+ * The merge fields a template prints as the camper's last and first name, English or Hebrew
+ * (LAST, "Last name", HEB_LAST, "Hebrew last name"…): prints are sorted by these, so the order
+ * follows what the tags say. A tag with both the English and the Hebrew name sorts by the one
+ * printed larger (the English one when the same); a tag with neither by LAST / FIRST.
+ */
+export function printedNameKeys(spec: Pick<TemplateSpec, "layers">, fields: Pick<MergeField, "key" | "label">[]): { last?: string; first?: string } {
+  // each field the tag's text uses, with the largest size it prints at
+  const size = new Map<string, number>();
+  for (const l of spec.layers) {
+    if (l.type !== "text" || l.hidden) continue;
+    for (const m of l.text.matchAll(/\{\{([^{}]+)\}\}/g))
+      for (const k of m[1].split("|").map((x: string) => x.trim())) size.set(k, Math.max(size.get(k) ?? 0, l.size ?? 0));
+  }
+  const pick = (re: RegExp, plain: string) => {
+    const names = fields.filter((f) => !NOT_CAMPER.test(`${f.key} ${f.label}`) && (f.key === plain || re.test(f.key) || re.test(f.label)));
+    const onTag = names
+      .filter((f) => size.has(f.key))
+      .sort((a, b) => size.get(b.key)! - size.get(a.key)! || Number(HEBREW.test(`${a.key} ${a.label}`)) - Number(HEBREW.test(`${b.key} ${b.label}`)) || Number(b.key === plain) - Number(a.key === plain));
+    return (onTag[0] ?? names.find((f) => f.key === plain))?.key;
+  };
+  return { last: pick(word("(last|surname|family)"), "LAST"), first: pick(word("first"), "FIRST") };
+}
