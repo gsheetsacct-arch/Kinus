@@ -13,6 +13,7 @@ import { PrintButton } from "./print-button";
 import { ListGroups } from "@/components/lists/list-groups";
 import { ListFilters } from "@/components/lists/list-filters";
 import { getCampContext } from "@/lib/data/camp";
+import { occupiedPlaces } from "@/lib/data/occupied";
 
 export const metadata = { title: "Lists" };
 
@@ -23,15 +24,17 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   if (!session) return <p className="text-muted-foreground">No active session.</p>;
   const supabase = await createClient();
-  const [camp, presets, { data: divisions }, { data: bunks }, { data: fv }] = await Promise.all([
+  const [camp, presets, { data: divisions }, { data: bunks }, { data: fv }, places] = await Promise.all([
     getCampContext(),
     getPresetsFor(supabase, user),
     supabase.from("divisions").select("id, name").eq("session_id", session.id).order("sort_order"),
     supabase.from("bunks").select("id, division_id, name, divisions!inner(session_id)").eq("divisions.session_id", session.id).order("sort_order"),
     supabase.from("field_visibility").select("field_group, roles"),
+    occupiedPlaces(session.id),
   ]);
   const allowed = visibleDivisionIds(user);
-  const divs = (divisions ?? []).filter((d) => (!allowed || allowed.includes(d.id)) && (!camp.divisionIds || camp.divisionIds.includes(d.id)));
+  // only divisions and bunks that have campers (an emptied bunk isn't offered)
+  const divs = (divisions ?? []).filter((d) => places.divisions.has(d.id) && (!allowed || allowed.includes(d.id)) && (!camp.divisionIds || camp.divisionIds.includes(d.id)));
   // someone with exactly one place (e.g. a counselor's bunk) gets it preselected
   const only = !allowed ? null : user.coverage.length === 1 ? user.coverage[0] : null;
   const asked = divs.some((d) => d.id === sp.division) ? sp.division : undefined;
@@ -105,7 +108,7 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
           <Select name="bunk" defaultValue={bunkId ?? ""}>
           <option value="">All bunks</option>
           {(bunks ?? [])
-            .filter((b) => !divisionId || b.division_id === divisionId)
+            .filter((b) => places.bunks.has(b.id) && (!divisionId || b.division_id === divisionId))
             .filter((b) => !allowed || user.coverage.some((s) => s.division_id === b.division_id && (s.bunk_id === null || s.bunk_id === b.id)))
             .map((b) => (
               <option key={b.id} value={b.id}>
