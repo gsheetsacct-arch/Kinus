@@ -29,25 +29,29 @@ describe("camper print order", () => {
 });
 
 describe("sorted by the names the tag prints", () => {
-  it("finds the last and first name fields the template uses", async () => {
+  it("finds the English and Hebrew name fields the template uses", async () => {
     const { printedNameKeys } = await import("../merge");
     const fields = [
       { key: "FIRST", label: "First name" },
       { key: "LAST", label: "Last name" },
       { key: "FAMILY", label: "Family name (registration)" },
+      { key: "HEB_FIRST", label: "Hebrew name" },
       { key: "HEB_LAST", label: "Hebrew last name" },
       { key: "MOTHER_FIRST", label: "Mother first name" },
     ];
     const tag = (text: string) => ({ layers: [{ type: "text", id: "n", text, x: 0, y: 0, w: 1, h: 1, size: 10 }] }) as never;
-    expect(printedNameKeys(tag("{{FIRST}} {{LAST}}"), fields)).toEqual({ last: "LAST", first: "FIRST" });
+    expect(printedNameKeys(tag("{{FIRST}} {{LAST}}"), fields)).toEqual({ last: "LAST", first: "FIRST", hebLast: "HEB_LAST", hebFirst: "HEB_FIRST" });
     // the template prints another column as the last name: that one
-    expect(printedNameKeys(tag("{{FIRST}} {{FAMILY}} {{HEB_LAST}}"), fields)).toEqual({ last: "FAMILY", first: "FIRST" });
-    // no name on the tag: the usual ones
-    expect(printedNameKeys(tag("{{MOTHER_FIRST}}"), fields)).toEqual({ last: "LAST", first: "FIRST" });
-    // a Hebrew tag: the Hebrew last name; with both, the one printed larger
-    const heb = [...fields, { key: "HEB_FIRST", label: "Hebrew first name" }];
-    expect(printedNameKeys(tag("{{HEB_FIRST}} {{HEB_LAST}}"), heb)).toEqual({ last: "HEB_LAST", first: "HEB_FIRST" });
-    const both = { layers: [{ type: "text", id: "e", text: "{{FIRST}} {{LAST}}", x: 0, y: 0, w: 1, h: 1, size: 9 }, { type: "text", id: "h", text: "{{HEB_FIRST}} {{HEB_LAST}}", x: 0, y: 0, w: 1, h: 1, size: 20 }] } as never;
-    expect(printedNameKeys(both, heb)).toEqual({ last: "HEB_LAST", first: "HEB_FIRST" });
+    expect(printedNameKeys(tag("{{FIRST}} {{FAMILY}}"), fields).last).toBe("FAMILY");
+    // a packing label with both: each kept, for the division's language to choose
+    expect(printedNameKeys(tag("{{HEB_FIRST}} {{HEB_LAST}} {{LAST}}, {{FIRST}}"), fields)).toEqual({ last: "LAST", first: "FIRST", hebLast: "HEB_LAST", hebFirst: "HEB_FIRST" });
+    expect(printedNameKeys(tag("{{MOTHER_FIRST}}"), fields)).toEqual({ last: "LAST", first: "FIRST", hebLast: "HEB_LAST", hebFirst: "HEB_FIRST" });
+  });
+
+  it("Hebrew names first in a Hebrew division, then the rest", async () => {
+    const { byBunkThenName } = await import("../data");
+    const c = (last_name: string, heb: boolean) => ({ first_name: "", last_name, division_name: "Hebrew Division", bunk_name: "Bunk א", heb }) as never;
+    const rows = [c("שוורץ", true), c("Aaron", false), c("אברהמי", true)];
+    expect([...rows].sort(byBunkThenName).map((x: { last_name: string }) => x.last_name)).toEqual(["אברהמי", "שוורץ", "Aaron"]);
   });
 });

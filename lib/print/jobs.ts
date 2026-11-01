@@ -162,13 +162,16 @@ function itemsOf(set: PrintSet, opts: SetOpts) {
   const order = opts.order ?? set.order;
   const values = new Map(picked.map((c) => [c.id, mergeValues(c, set.setup.fields, set.setup.maps)]));
   // sorted by the names the tags print (a template's last name may read another export column
-  // than the camper's last name in Kinus), falling back to Kinus' own
+  // than the camper's last name in Kinus), falling back to Kinus' own: in a Hebrew or French
+  // division (its language) the Hebrew name, elsewhere (and by last name across camp) the English
   const keys = printedNameKeys(set.spec, set.setup.fields);
   // a stray space, quote or invisible mark before a name doesn't move it ("'Ohana" sorts with the O's)
   const clean = (v: string | undefined) => (v ?? "").replace(/^[^\p{L}\p{N}]+/u, "");
   const printed = (c: (typeof picked)[number]) => {
     const v = values.get(c.id)!;
-    return { ...c, last_name: clean(keys.last ? v[keys.last] : "") || clean(c.last_name), first_name: clean(keys.first ? v[keys.first] : "") || clean(c.first_name) };
+    const hebLast = order !== "name" && (c.division_language === "he" || c.division_language === "fr") && keys.hebLast ? clean(v[keys.hebLast]) : "";
+    if (hebLast) return { ...c, last_name: hebLast, first_name: clean(keys.hebFirst ? v[keys.hebFirst] : "") || clean(c.first_name), heb: true };
+    return { ...c, last_name: clean(keys.last ? v[keys.last] : "") || clean(c.last_name), first_name: clean(keys.first ? v[keys.first] : "") || clean(c.first_name), heb: false };
   };
   const cmp = sortFor(order);
   const campers = picked.map((c) => ({ c, s: printed(c) })).sort((a, b) => cmp(a.s, b.s)).map((x) => x.c);

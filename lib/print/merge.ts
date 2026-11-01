@@ -150,12 +150,13 @@ const NOT_CAMPER = /mother|father|parent|contact|emergency|guardian|counsel|staf
 const HEBREW = /heb|hebrew|עברית/i;
 
 /**
- * The merge fields a template prints as the camper's last and first name, English or Hebrew
- * (LAST, "Last name", HEB_LAST, "Hebrew last name"…): prints are sorted by these, so the order
- * follows what the tags say. A tag with both the English and the Hebrew name sorts by the one
- * printed larger (the English one when the same); a tag with neither by LAST / FIRST.
+ * The merge fields a template prints as the camper's last and first name, in English (LAST,
+ * "Last name"…) and in Hebrew (HEB_LAST, "Hebrew last name"…): of each, the one the tag's text
+ * uses (the larger, when it uses more than one), else LAST / FIRST and any Hebrew name field.
+ * Prints sort by these (lib/print/jobs): the Hebrew name in Hebrew and French divisions, the
+ * English one elsewhere.
  */
-export function printedNameKeys(spec: Pick<TemplateSpec, "layers">, fields: Pick<MergeField, "key" | "label">[]): { last?: string; first?: string } {
+export function printedNameKeys(spec: Pick<TemplateSpec, "layers">, fields: Pick<MergeField, "key" | "label">[]): { last?: string; first?: string; hebLast?: string; hebFirst?: string } {
   // each field the tag's text uses, with the largest size it prints at
   const size = new Map<string, number>();
   for (const l of spec.layers) {
@@ -163,12 +164,12 @@ export function printedNameKeys(spec: Pick<TemplateSpec, "layers">, fields: Pick
     for (const m of l.text.matchAll(/\{\{([^{}]+)\}\}/g))
       for (const k of m[1].split("|").map((x: string) => x.trim())) size.set(k, Math.max(size.get(k) ?? 0, l.size ?? 0));
   }
-  const pick = (re: RegExp, plain: string) => {
-    const names = fields.filter((f) => !NOT_CAMPER.test(`${f.key} ${f.label}`) && (f.key === plain || re.test(f.key) || re.test(f.label)));
-    const onTag = names
-      .filter((f) => size.has(f.key))
-      .sort((a, b) => size.get(b.key)! - size.get(a.key)! || Number(HEBREW.test(`${a.key} ${a.label}`)) - Number(HEBREW.test(`${b.key} ${b.label}`)) || Number(b.key === plain) - Number(a.key === plain));
-    return (onTag[0] ?? names.find((f) => f.key === plain))?.key;
+  const isHebrew = (f: Pick<MergeField, "key" | "label">) => HEBREW.test(`${f.key} ${f.label}`);
+  const pick = (re: RegExp, plain: string, hebrew: boolean, not?: RegExp) => {
+    const names = fields.filter((f) => !NOT_CAMPER.test(`${f.key} ${f.label}`) && isHebrew(f) === hebrew && (f.key === plain || ((re.test(f.key) || re.test(f.label)) && !(not && (not.test(f.key) || not.test(f.label))))));
+    const onTag = names.filter((f) => size.has(f.key)).sort((a, b) => size.get(b.key)! - size.get(a.key)! || Number(b.key === plain) - Number(a.key === plain));
+    return (onTag[0] ?? names.find((f) => f.key === plain) ?? (hebrew ? names[0] : undefined))?.key;
   };
-  return { last: pick(word("(last|surname|family)"), "LAST"), first: pick(word("first"), "FIRST") };
+  const last = word("(last|surname|family)");
+  return { last: pick(last, "LAST", false), first: pick(word("first"), "FIRST", false, last), hebLast: pick(last, "HEB_LAST", true), hebFirst: pick(word("(first|name)"), "HEB_FIRST", true, last) };
 }
