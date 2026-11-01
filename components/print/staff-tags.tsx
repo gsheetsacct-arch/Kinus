@@ -11,12 +11,13 @@ import { STAFF_ROLES } from "@/lib/labels";
 import { normalizeName } from "@/lib/import/normalize";
 import type { StaffRole } from "@/lib/auth/permissions";
 
-type Person = { id: string; name: string; role: string; title: string | null; divisionIds: string[] };
+/** label: the division their name tag says ("Division 2", "Ohel Rally"): who's printed together with one template */
+type Person = { id: string; name: string; role: string; title: string | null; label: string };
 type Template = { id: string; name: string; copies: number; sheet: boolean };
 const NONE = "none";
 
-/** Pick a staff template and who (by division, role, name, or ticking), then print them. */
-export function StaffTags({ templates, people, divisions }: { templates: Template[]; people: Person[]; divisions: { id: string; name: string; color: string | null }[] }) {
+/** Pick a staff template and who (by name-tag division, role, name, or ticking), then print them. */
+export function StaffTags({ templates, people }: { templates: Template[]; people: Person[] }) {
   const [templateId, setTemplateId] = React.useState(templates[0]?.id ?? "");
   const template = templates.find((t) => t.id === templateId);
   const [copies, setCopies] = React.useState(template?.copies ?? 1);
@@ -29,7 +30,7 @@ export function StaffTags({ templates, people, divisions }: { templates: Templat
   const needle = normalizeName(q);
   const shown = people.filter(
     (p) =>
-      (!division || (division === NONE ? !p.divisionIds.length : p.divisionIds.includes(division))) &&
+      (!division || (division === NONE ? !p.label : p.label === division)) &&
       (!role || p.role === role) &&
       (!needle || normalizeName(`${p.name} ${p.title ?? ""}`).includes(needle)),
   );
@@ -45,7 +46,7 @@ export function StaffTags({ templates, people, divisions }: { templates: Templat
       return next;
     });
   const roleLabel = (r: string) => STAFF_ROLES[r as StaffRole]?.label ?? r;
-  const divisionName = new Map(divisions.map((d) => [d.id, d.name]));
+  const labels = [...new Set(people.map((p) => p.label).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
   return (
     // the page opens in a new tab and prints itself once every name has been fitted
@@ -87,12 +88,12 @@ export function StaffTags({ templates, people, divisions }: { templates: Templat
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or position" className="pl-9" dir="auto" aria-label="Find staff" />
           </div>
-          {divisions.length > 0 && (
+          {labels.length > 0 && (
             <Select value={division} onChange={(e) => setDivision(e.target.value)} className="w-auto" aria-label="Division">
               <option value="">Every division</option>
-              {divisions.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
+              {labels.map((l) => (
+                <option key={l} value={l}>
+                  {l}
                 </option>
               ))}
               <option value={NONE}>No division</option>
@@ -136,7 +137,7 @@ export function StaffTags({ templates, people, divisions }: { templates: Templat
                     {p.name}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground" dir="auto">
-                    {[p.title, roleLabel(p.role), p.divisionIds.map((d) => divisionName.get(d)).filter(Boolean).join(", ") || "no division"].filter(Boolean).join(" · ")}
+                    {[p.title, roleLabel(p.role), p.label || "no division"].filter(Boolean).join(" · ")}
                   </span>
                 </span>
               </label>

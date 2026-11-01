@@ -87,7 +87,8 @@ export function staffValues(p: StaffPerson, roleLabel: (role: string) => string)
     HEBREW_LAST: detail(p.details, "Last name (Hebrew)", "Hebrew last name"),
     POSITION: p.title ?? "",
     ROLE: roleLabel(p.role),
-    DIVISION: divisions.join(", "),
+    // the division on the office's staff sheet ("Ohel Rally", "All Access"), else where they work in Kinus
+    DIVISION: detail(p.details, "Division (name tag)") || divisions.join(", "),
     BUNK: unique(p.places.map((x) => x.bunk)).join(", "),
     CAMP: unique(p.places.map((x) => x.camp)).join(", "),
     DIVISION_COLOR: p.places.find((x) => x.color)?.color ?? "#64748b",

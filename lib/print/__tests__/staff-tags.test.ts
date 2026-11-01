@@ -21,6 +21,11 @@ const levi: StaffPerson = {
 };
 
 describe("staff tags", () => {
+  it("the division on the tag is the office's, teams included, else where they work", () => {
+    expect(staffValues({ ...levi, details: { "Division (name tag)": "Ohel Rally" } }, label).DIVISION).toBe("Ohel Rally");
+    expect(staffValues({ ...levi, details: {} }, label).DIVISION).toBe("Division 2, Division 3");
+  });
+
   it("reads registration answers by the export's column name too, as camper tags write them", () => {
     const v = staffValues(levi, label);
     expect(fill("{{source.ppa.full_hebrew_name}}", (k) => v[k] ?? "")).toBe("לוי יצחק");

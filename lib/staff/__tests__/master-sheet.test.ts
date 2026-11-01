@@ -29,7 +29,7 @@ describe("the office's staff workbook (MASTER tab)", () => {
     expect(r.skipped.map((s) => s.status).sort()).toEqual(["Accepted – pending confirmation", "Withdrew"]);
     expect(r.rows[0]).toMatchObject({ sourceId: "3391", name: "Levi Cohen", phone: "7185550100", where: "Division 2", bunk: "Bunk כו", signs: "no" });
     // the person's answers, not the office's bookkeeping
-    expect(r.rows[0].details).toEqual({ "Hebrew Name": "לוי" });
+    expect(r.rows[0].details).toEqual({ "Hebrew Name": "לוי", "Division (name tag)": "Division 2" });
   });
 
   it("reads the role from the badge position, keeping titles that say more", () => {
@@ -49,7 +49,8 @@ describe("the office's staff workbook (MASTER tab)", () => {
     const grid = findStaffTable(workbook([{ ...base, Division: "Finale Team" }, { ...base, Division: "All Access" }]))!;
     const [team, all] = readMasterSheet(grid, divisions).rows;
     expect(team).toMatchObject({ where: "", bunk: "" });
-    expect(team.details["Staff group"]).toBe("Finale Team");
+    expect(team.details["Division (name tag)"]).toBe("Finale Team");
+    expect(all.details["Division (name tag)"]).toBe("All Access");
     expect(all.where).toBe("All");
   });
 

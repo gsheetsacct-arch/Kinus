@@ -68,6 +68,8 @@ export function divisionFor(value: string, divisions: string[]): string | null {
 }
 
 const PLAIN_ROLE = /^(counselor|counsellor|kloli|head counselor|division head|director)$/i;
+/** The detail a staff tag's {{DIVISION}} reads first (lib/print/staff-values). */
+export const NAME_TAG_DIVISION = "Division (name tag)";
 const looksLikePhone = (s: string) => s.replace(/\D/g, "").length >= 7;
 
 /** The confirmed staff on a MASTER tab, as rows for the bulk add; everyone else is counted by status. */
@@ -106,7 +108,9 @@ export function readMasterSheet(grid: string[][], divisions: string[]): ExportRe
     // "All Access": every division
     const everywhere = /^all( access)?$/i.test(group.trim());
     const division = everywhere ? null : divisionFor(group, divisions);
-    if (group && !division && !everywhere) details["Staff group"] = group;
+    // what their name tag says, as the office wrote it ("Ohel Rally", "All Access", "Division 2"):
+    // teams that aren't divisions here have tags (and templates) of their own
+    if (group) details[NAME_TAG_DIVISION] = group;
     const position = at(r, COLUMNS.position);
     const address = { street: at(r, COLUMNS.street), city: at(r, COLUMNS.city), state: at(r, COLUMNS.state), zip: at(r, COLUMNS.zip), country: at(r, COLUMNS.country) };
     out.push({
