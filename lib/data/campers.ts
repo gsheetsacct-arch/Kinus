@@ -4,6 +4,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import type { ContactLike } from "@/lib/fields";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { camperFlags, FLAG_COLUMNS, type CamperFlag } from "@/lib/camper-flags";
+import { sleepingAtKinus } from "@/lib/data/sleeping";
 
 type DB = SupabaseClient<Database>;
 export type CamperVisible = Database["public"]["Views"]["campers_visible"]["Row"];
@@ -62,9 +63,10 @@ export async function listCampers(supabase: DB, f: CamperFilter): Promise<Camper
     return query.order("last_name").order("first_name").order("id").range(from, to);
   });
   const later = only.includes("later") ? await comingLater(supabase, f.sessionId) : null;
+  const sleeping = only.includes("staying") || only.includes("going_home") ? await sleepingAtKinus(f.sessionId, rows.map((c) => c.id!)) : null;
   if (only.length) {
     const keep = rows.filter((c) => {
-      const has = camperFlags(c, Boolean(later?.has(c.id!)));
+      const has = camperFlags({ ...c, sleeping: sleeping?.get(c.id!) ?? null }, Boolean(later?.has(c.id!)));
       return only.every((k) => has.has(k));
     });
     rows.splice(0, rows.length, ...keep);
@@ -141,7 +143,7 @@ export async function listCamperIndex(
   f: { sessionId: string; divisionIds: string[] | null; includeArchived?: boolean; withPhones: boolean },
 ): Promise<CamperIndexRow[]> {
   if (f.divisionIds && !f.divisionIds.length) return [];
-  const [rows, phones, later] = await Promise.all([
+  const [rows, phones, later, sleeping] = await Promise.all([
     fetchAll((from, to) => {
       let q = supabase
         .from("campers_visible")
@@ -160,6 +162,7 @@ export async function listCamperIndex(
         })
       : Promise.resolve([]),
     comingLater(supabase, f.sessionId),
+    sleepingAtKinus(f.sessionId),
   ]);
   const byCamper = new Map<string, string[]>();
   for (const k of phones) {
@@ -169,7 +172,7 @@ export async function listCamperIndex(
   }
   return rows.map((c) => {
     const r: CamperIndexRow = { i: c.id!, n: c.display_name ?? "", l: c.last_name ?? "", c: c.camper_code ?? "", d: c.division_id, b: c.bunk_id, g: c.grade, s: c.status! };
-    const flags = camperFlags(c, later.has(c.id!));
+    const flags = camperFlags({ ...c, sleeping: sleeping.get(c.id!) ?? null }, later.has(c.id!));
     if (flags.has("medical")) r.m = 1;
     flags.delete("medical");
     if (flags.size) r.f = [...flags];
