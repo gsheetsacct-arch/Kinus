@@ -170,7 +170,8 @@ function itemsOf(set: PrintSet, opts: SetOpts) {
   const printed = (c: (typeof picked)[number]) => {
     const v = values.get(c.id)!;
     const hebLast = order !== "name" && (c.division_language === "he" || c.division_language === "fr") && keys.hebLast ? clean(v[keys.hebLast]) : "";
-    if (hebLast) return { ...c, last_name: hebLast, first_name: clean(keys.hebFirst ? v[keys.hebFirst] : "") || clean(c.first_name), heb: true };
+    // a "Hebrew" last name typed in English letters ("Djian") sorts with the English ones, after
+    if (hebLast && /[\u05D0-\u05EA]/.test(hebLast)) return { ...c, last_name: hebLast, first_name: clean(keys.hebFirst ? v[keys.hebFirst] : "") || clean(c.first_name), heb: true };
     return { ...c, last_name: clean(keys.last ? v[keys.last] : "") || clean(c.last_name), first_name: clean(keys.first ? v[keys.first] : "") || clean(c.first_name), heb: false };
   };
   const cmp = sortFor(order);
