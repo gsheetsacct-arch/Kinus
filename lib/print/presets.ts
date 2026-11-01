@@ -106,6 +106,9 @@ export const LABEL_PRESETS: LabelPreset[] = [
   // 1½″ circles, 4 across and 5 down: ¾″ top and bottom, ½″ sides, 2″ from one to the next
   { ...letter("8293", ["94506"], "Round labels 1½″, 20 per sheet", "small", 1.5, 1.5, 4, 5, 0.5, 0.75, 2, 2), shape: "round" },
   // OnlineLabels 1½″ circles, 5 across and 6 down: ¼″ sides, 11⁄16″ top and bottom, ⅛″ between
+  // OnlineLabels 2⅝″ × 1″ (cut 2.5935″ wide), 3 across and 10 down: 0.21975″ sides, ½″ top and bottom,
+  // 0.14″ between columns: like Avery 5160, but narrower labels a little further apart
+  { ...letter("OL875", ["OL875TY", "OL875WX", "OL875WJ", "OL875WG", "OL875CX", "OL875LP", "OL875BK", "OL875FG", "OL875TR", "OL875TP"], "Address labels 1″ × 2⅝″, 30 per sheet (OnlineLabels)", "small", 2.5935, 1, 3, 10, 0.21975, 0.5, 2.7335, 1), id: "onlinelabels-ol875", brand: "OnlineLabels" },
   { ...letter("OL2088", ["OL2088WX", "OL2088WJ", "OL2088CK", "OL2088GY"], "Round labels 1½″, 30 per sheet", "small", 1.5, 1.5, 5, 6, 0.25, 0.6875, 1.625, 1.625), id: "onlinelabels-ol2088", brand: "OnlineLabels", shape: "round" },
 
   // ---- Large labels and half sheets (US Letter)
