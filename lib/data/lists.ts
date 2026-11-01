@@ -49,7 +49,7 @@ export async function buildList(
   supabase: DB,
   user: CurrentUser,
   preset: ListPreset,
-  scope: { sessionId: string; divisionId?: string; bunkId?: string; divisionIds?: string[] | null; campName?: string; /** Also only these, chosen on the page. */ only?: CamperFlag[] },
+  scope: { sessionId: string; divisionId?: string; bunkId?: string; divisionIds?: string[] | null; campName?: string; /** Also only these, chosen on the page. */ only?: CamperFlag[]; /** Each bunk's counselors (and phones) under its title: a switch on the page, off by default. */ counselors?: boolean },
   fv: FieldVisibilityRow[],
 ): Promise<BuiltList> {
   // sensitive columns only appear for roles allowed to see them (the data is masked anyway)
@@ -99,8 +99,8 @@ export async function buildList(
       }),
     });
   }
-  // each bunk's counselors, with their numbers (most counselors don't sign in; they're listed)
-  if (bunkOfGroup.size) {
+  // each bunk's counselors, with their numbers (most counselors don't sign in; they're listed), when asked for
+  if (scope.counselors && bunkOfGroup.size) {
     const { createAdminClient } = await import("@/lib/supabase/admin");
     const { data: staff } = await createAdminClient()
       .from("staff_scopes")
