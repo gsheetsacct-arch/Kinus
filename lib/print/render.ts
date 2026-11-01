@@ -142,6 +142,7 @@ export function renderDocument(
   }
   tags.push(...printed);
   let pageCss: string;
+  let bodyAttrs = "";
   let body: string;
   if (sheet && sheet.cols > 0 && sheet.rows > 0) {
     const [pw, ph] = PAPER[sheet.paper] ?? PAPER.letter;
@@ -185,6 +186,8 @@ export function renderDocument(
     const [w, h] = [t.page_width_mm, t.page_height_mm];
     pageCss = `@page{size:${h}mm ${w}mm;margin:0}.pg{position:relative;width:${h}mm;height:${w}mm;overflow:hidden;break-after:page}.pg>.tag{position:absolute;left:0;top:0;transform-origin:0 0;transform:translateX(${h}mm) rotate(90deg)}`;
     const page = (html: string) => `<div class="pg">${html}</div>`;
+    // the server's PDFs lay these out unturned and turn the PDF's pages instead (lib/print/pdf)
+    bodyAttrs = ` data-turn="${w}x${h}"`;
     body = tags.map((v) => (v ? page(front(v)) + (back ? page(tagHtml(t, v, null, "back")) : "") : "")).join("");
   } else {
     pageCss = `@page{size:${t.page_width_mm}mm ${t.page_height_mm}mm;margin:0}.tag{break-after:page}`;
@@ -213,7 +216,7 @@ body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-w
 .used{background:repeating-linear-gradient(45deg,#f1f5f9 0 2mm,#fff 2mm 4mm);outline:0.3mm dashed #94a3b8}
 @media screen{.sheet.back,.tag.back:not(.sheet>.tag){outline:0.6mm dashed #94a3b8}.sheet.back::before,body>.tag.back::after{content:"Back";position:absolute;top:1mm;right:1mm;z-index:5;font:600 8pt sans-serif;color:#475569;background:#f1f5f9;padding:0.3mm 1.5mm;border-radius:1mm}}
 @media print{body{display:block}.used{display:none}}
-</style></head><body>${body}<script>
+</style></head><body${bodyAttrs}>${body}<script>
 (function(){${CURVE_SCRIPT}function fit(){document.querySelectorAll("[data-fit]:not(.tc)").forEach(function(el){var span=el.firstElementChild;var min=parseFloat(el.getAttribute("data-min"))||8;var floor=parseFloat(el.getAttribute("data-floor"))||min;var s=parseFloat(getComputedStyle(el).fontSize);var over=function(){return span.scrollWidth>el.clientWidth+0.5||span.offsetHeight>el.clientHeight+0.5};if(!over())return;var r=Math.min(el.clientWidth/Math.max(span.scrollWidth,1),el.clientHeight/Math.max(span.offsetHeight,1));/* text on more lines steps down from its size: a jump would skip the sizes where it fits on fewer lines */if(getComputedStyle(el).whiteSpace!=="nowrap")r=1;s=Math.max(min,Math.floor(s*Math.min(1,r)*2)/2);el.style.fontSize=s+"px";var guard=80;while(guard-->0&&s>min&&over()){s=Math.max(min,s-0.5);el.style.fontSize=s+"px";}
 /* a name too long even at the smallest size goes smaller, so it prints whole: marked for the office */
 guard=400;while(guard-->0&&s>floor&&over()){s=Math.max(floor,s-0.5);el.style.fontSize=s+"px";}if(s<min)el.setAttribute("data-small",(Math.round(s*0.75*2)/2).toString());if(over())el.setAttribute("data-cut","1");});fitCurves();document.body.setAttribute("data-fitted","1");}

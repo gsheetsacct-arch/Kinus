@@ -42,13 +42,20 @@ export async function htmlToPdf(html: string, onFit?: (notes: FitNotes) => void,
           cut: [...document.querySelectorAll("[data-cut]")].map((el) => (el.textContent ?? "").trim()),
         })),
       );
+    // a 6″ × 4″ design on 4″ × 6″ labels: laid out as designed, each PDF page then turned a
+    // quarter (the server's Chromium shrinks a page whose tag is turned with CSS to about 3/4)
+    const turn = await page.$eval("body", (b) => b.getAttribute("data-turn")).catch(() => null);
+    if (turn) {
+      const [w, h] = turn.split("x").map(Number);
+      await page.addStyleTag({ content: `@page{size:${w}mm ${h}mm;margin:0}.pg{width:${w}mm!important;height:${h}mm!important}.pg>.tag{transform:none!important}` });
+    }
     // picture parts made from an uploaded PDF: that PDF goes underneath, as it is (sharp)
     if (art && Object.keys(art).length && (await page.$("[data-pdf]"))) {
       const vector = await withPdfArt(page, art);
-      if (vector) return vector;
+      if (vector) return turn ? await turnPages(vector) : vector;
     }
-    const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true, timeout: 15000 });
-    return Buffer.from(pdf);
+    const pdf = Buffer.from(await page.pdf({ preferCSSPageSize: true, printBackground: true, timeout: 15000 }));
+    return turn ? await turnPages(pdf) : pdf;
   } finally {
     await browser.close();
   }
@@ -218,4 +225,12 @@ export async function pdfPictures(bytes: Uint8Array, boxes: Box[]): Promise<Buff
   } finally {
     await browser.close();
   }
+}
+
+/** Every page turned a quarter clockwise (shown and printed 4″ × 6″, the design's top to the right). */
+async function turnPages(pdf: Buffer): Promise<Buffer> {
+  const { PDFDocument, degrees } = await import("pdf-lib");
+  const doc = await PDFDocument.load(pdf);
+  for (const p of doc.getPages()) p.setRotation(degrees((p.getRotation().angle + 90) % 360));
+  return Buffer.from(await doc.save());
 }
