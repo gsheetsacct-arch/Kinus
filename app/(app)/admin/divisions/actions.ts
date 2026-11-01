@@ -206,7 +206,8 @@ export async function removeEmpty(): Promise<ActionResult> {
   const supabase = await createClient();
   const [{ data: divisions }, campers, { data: scopes }] = await Promise.all([
     supabase.from("divisions").select("id, bunks(id)").eq("session_id", session.id),
-    fetchAll((from, to) => supabase.from("campers").select("division_id, bunk_id").eq("session_id", session.id).order("id").range(from, to)),
+    // archived campers (withdrawn, gone from the export) don't keep a bunk: theirs is cleared
+    fetchAll((from, to) => supabase.from("campers").select("division_id, bunk_id").eq("session_id", session.id).is("archived_at", null).order("id").range(from, to)),
     supabase.from("staff_scopes").select("division_id, bunk_id"),
   ]);
   const usedBunks = new Set([...campers.map((c) => c.bunk_id), ...(scopes ?? []).map((s) => s.bunk_id)].filter(Boolean));
@@ -221,7 +222,14 @@ export async function removeEmpty(): Promise<ActionResult> {
     const { error } = await supabase.from("divisions").delete().in("id", divIds);
     if (error) return fail(error.message);
   }
-  return done(`Removed ${divIds.length} empty ${divIds.length === 1 ? "division" : "divisions"} and ${bunkIds.length} empty ${bunkIds.length === 1 ? "bunk" : "bunks"}.`, "/admin/divisions");
+  const camperBunks = new Set(campers.map((c) => c.bunk_id).filter(Boolean));
+  const allBunks = (divisions ?? []).flatMap((d) => (d.bunks as { id: string }[]).map((b) => b.id));
+  const keptForStaff = allBunks.filter((id) => !camperBunks.has(id) && !bunkIds.includes(id)).length;
+  return done(
+    `Removed ${divIds.length} empty ${divIds.length === 1 ? "division" : "divisions"} and ${bunkIds.length} empty ${bunkIds.length === 1 ? "bunk" : "bunks"}.` +
+      (keptForStaff ? ` Kept ${keptForStaff} with no campers that staff are given (take them off the staff first to remove them).` : ""),
+    "/admin/divisions",
+  );
 }
 
 const groupSchema = z.object({ id: z.guid().optional().or(z.literal("")), name: z.string().trim().min(1, "Give the camp a name.") });

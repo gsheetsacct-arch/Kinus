@@ -47,20 +47,8 @@ export function BatchForm({ templates, divisions, campLabel, officeTo }: { templ
           ))}
         </Select>
       </Field>
-      <Field label="For whom" htmlFor="where">
-        <Select id="where" name="where" value={where} onChange={(e) => setWhere(e.target.value)}>
-          <option value="">{campLabel}</option>
-          {divisions.map((d) => (
-            <optgroup key={d.id} label={d.name}>
-              <option value={`d:${d.id}`}>All of {d.name}</option>
-              {d.bunks.map((b) => (
-                <option key={b.id} value={`b:${b.id}`}>
-                  {b.name}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </Select>
+      <Field label="For whom">
+        <WherePicker divisions={divisions} campLabel={campLabel} value={where} onChange={setWhere} />
       </Field>
       <Field label="Which campers" hint={BATCH_WHICH_LABELS[which].long}>
         <Segmented name="which" value={which} onChange={setWhich} options={(Object.keys(BATCH_WHICH_LABELS) as BatchWhichKey[]).map((k) => ({ value: k, label: BATCH_WHICH_LABELS[k].short }))} />
@@ -104,5 +92,28 @@ export function BatchForm({ templates, divisions, campLabel, officeTo }: { templ
         One row per camper with every merge field (FIRST, TSHIRT, DIV…) already converted: for Publisher&apos;s Mailings → Use an existing list, or to work with in Excel.
       </p>
     </ActionForm>
+  );
+}
+
+/**
+ * Everyone, a division, or one of its bunks, as bars of choices (like "Which campers"): the
+ * division first, then its bunks. Sends "where": "", "d:<id>" or "b:<id>".
+ */
+function WherePicker({ divisions, campLabel, value, onChange }: { divisions: Division[]; campLabel: string; value: string; onChange: (v: string) => void }) {
+  const [kind, id] = value.split(":") as ["d" | "b" | "", string | undefined];
+  const division = kind === "d" ? divisions.find((d) => d.id === id) : kind === "b" ? divisions.find((d) => d.bunks.some((b) => b.id === id)) : undefined;
+  return (
+    <div className="space-y-2">
+      <input type="hidden" name="where" value={value} />
+      <Segmented value={division?.id ?? ""} onChange={(d) => onChange(d ? `d:${d}` : "")} options={[{ value: "", label: campLabel }, ...divisions.map((d) => ({ value: d.id, label: d.name }))]} />
+      {division && division.bunks.length > 0 && (
+        <Segmented
+          value={kind === "b" ? (id ?? "") : ""}
+          onChange={(b) => onChange(b ? `b:${b}` : `d:${division.id}`)}
+          options={[{ value: "", label: `All of ${division.name}` }, ...division.bunks.map((b) => ({ value: b.id, label: b.name }))]}
+          className="bg-muted/60"
+        />
+      )}
+    </div>
   );
 }
