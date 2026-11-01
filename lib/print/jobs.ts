@@ -7,7 +7,7 @@ import { mergeValues } from "./merge";
 import type { FitNotes } from "./pdf";
 import { renderPdf } from "./chromium";
 import { sendEmail } from "./email";
-import { backgroundDataUrl, byBunkThenName, imageDataUrls, loadMergeSetup, loadPrintCampers, loadPrintCampersBrief, toSpec } from "./data";
+import { backgroundDataUrl, byBunkThenName, imageDataUrls, loadMergeSetup, loadPrintCampers, loadPrintCampersBrief, sortFor, toSpec, type PrintOrder } from "./data";
 import { contentHash, labelValues, sameContent, templateKeys } from "./content";
 import type { TemplateSpec } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
@@ -146,14 +146,16 @@ async function loadPrintSet(jobIds: string[]) {
 
 const divisionOf = (c: { division_id?: string | null }) => c.division_id ?? null;
 
-type SetOpts = { start?: number; used?: number[]; divisionId?: string | null; copies?: number; /** each tag on a page of its own (not on the template's label sheet) */ single?: boolean };
+type SetOpts = { /** by bunk (default), division or last name */ order?: PrintOrder; start?: number; used?: number[]; divisionId?: string | null; copies?: number; /** each tag on a page of its own (not on the template's label sheet) */ single?: boolean };
 
 /** The template as printed: on its label sheet, or one tag a page (pages the tag's size). */
 const specFor = (set: PrintSet, opts: SetOpts): TemplateSpec => (opts.single ? { ...set.spec, sheet_layout: null } : set.spec);
 
 /** The campers printed (all, or one division) and how many of each. */
 function itemsOf(set: PrintSet, opts: SetOpts) {
-  const campers = opts.divisionId === undefined ? set.campers : set.campers.filter((c) => divisionOf(c as never) === opts.divisionId);
+  const picked = opts.divisionId === undefined ? set.campers : set.campers.filter((c) => divisionOf(c as never) === opts.divisionId);
+  // loaded by bunk; another order when asked
+  const campers = opts.order && opts.order !== "bunk" ? [...picked].sort(sortFor(opts.order)) : picked;
   // copies: as asked, or the same number of each chosen when printing
   const copiesOf = (id: string) => (opts.copies ? Math.min(10, Math.max(1, Math.round(opts.copies))) : (set.copiesOf.get(id) ?? 1));
   return { campers, items: campers.map((c) => ({ values: mergeValues(c, set.setup.fields, set.setup.maps), copies: copiesOf(c.id) })) };

@@ -8,13 +8,19 @@ import { isAccepted, isStaffExport } from "./export";
  * A workbook has many tabs and titles above the headers: the table is found wherever it is.
  */
 
-const norm = (s: unknown) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+// "first_name" is "First Name"
+const norm = (s: unknown) => String(s ?? "").trim().toLowerCase().replace(/[\s_]+/g, " ");
 
-/** A MASTER-style header row: names, a phone and the office's status. */
+/**
+ * A MASTER-style header row: names, a phone and the office's status; or the workbook's Badge
+ * Export tab (names, position, division and bunk: everyone on it is confirmed).
+ */
 export const isMasterHeader = (row: unknown[]) => {
   const h = row.map(norm);
-  return h.includes("first name") && h.includes("last name") && h.includes("status") && (h.includes("phone") || h.includes("email"));
+  if (!h.includes("first name") || !h.includes("last name")) return false;
+  return (h.includes("status") && (h.includes("phone") || h.includes("email"))) || isBadgeHeader(h);
 };
+const isBadgeHeader = (h: string[]) => !h.includes("status") && h.includes("position") && h.includes("division");
 
 /**
  * The staff table in a workbook: the MASTER tab (the office's decisions) before the raw
@@ -22,10 +28,12 @@ export const isMasterHeader = (row: unknown[]) => {
  */
 export function findStaffTable(sheets: { name: string; grid: string[][] }[]): string[][] | null {
   const headerAt = (grid: string[][], test: (row: string[]) => boolean) => grid.slice(0, 10).findIndex(test);
-  for (const s of sheets) {
-    const i = headerAt(s.grid, isMasterHeader);
-    if (i >= 0) return s.grid.slice(i);
-  }
+  // the MASTER tab (with every column) before its Badge Export tab
+  for (const test of [(row: string[]) => isMasterHeader(row) && !isBadgeHeader(row.map(norm)), isMasterHeader])
+    for (const s of sheets) {
+      const i = headerAt(s.grid, test);
+      if (i >= 0) return s.grid.slice(i);
+    }
   for (const s of sheets) {
     const i = headerAt(s.grid, (row) => isStaffExport([row]));
     if (i >= 0) return s.grid.slice(i);
@@ -51,7 +59,7 @@ const COLUMNS = {
 };
 const USED = new Set(Object.values(COLUMNS).flat());
 // the office's bookkeeping, not about the person
-const NOT_DETAILS = new Set(["source", "flag", "reviewed by", "office notes", "acceptance sent", "confirmed on", "badge printed", "yeshiva release list", "boldrr status", "boldrr bunk", "boldrr updated", "boldrr division", "agreed to terms", "applied for"]);
+const NOT_DETAILS = new Set(["source", "flag", "reviewed by", "office notes", "acceptance sent", "confirmed on", "badge printed", "yeshiva release list", "boldrr status", "boldrr bunk", "boldrr updated", "boldrr division", "agreed to terms", "applied for", "kinus id"]);
 
 const letters = (s: string) => s.toLowerCase().replace(/[^a-z0-9֐-׿]/g, "");
 function distance(a: string, b: string) {
@@ -86,6 +94,8 @@ export function readMasterSheet(grid: string[][], divisions: string[]): ExportRe
     }
     return "";
   };
+  // the Badge Export has no status: it lists only the confirmed
+  const confirmedOnly = isBadgeHeader(lower);
   const skipped = new Map<string, number>();
   const out: ExportRow[] = [];
   rows.forEach((r, n) => {
@@ -93,7 +103,7 @@ export function readMasterSheet(grid: string[][], divisions: string[]): ExportRe
     const last = at(r, COLUMNS.last);
     if (!first && !last) return;
     const status = at(r, COLUMNS.status);
-    if (!isAccepted(status)) {
+    if (!confirmedOnly && !isAccepted(status)) {
       const s = status || "No status";
       skipped.set(s, (skipped.get(s) ?? 0) + 1);
       return;

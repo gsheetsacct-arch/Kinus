@@ -10,6 +10,7 @@ import { Section } from "@/components/section";
 import { STAFF_ROLES } from "@/lib/labels";
 import { normalizeName } from "@/lib/import/normalize";
 import type { StaffRole } from "@/lib/auth/permissions";
+import { PRINT_ORDERS, parseOrder, type PrintOrder } from "@/lib/print/order";
 
 /** label: the division their name tag says ("Division 2", "Ohel Rally"): who's printed together with one template */
 type Person = { id: string; name: string; role: string; title: string | null; label: string };
@@ -22,6 +23,7 @@ export function StaffTags({ templates, people }: { templates: Template[]; people
   const template = templates.find((t) => t.id === templateId);
   const [copies, setCopies] = React.useState(template?.copies ?? 1);
   const [single, setSingle] = React.useState(false);
+  const [order, setOrder] = React.useState<PrintOrder>("division");
   const [division, setDivision] = React.useState("");
   const [role, setRole] = React.useState("");
   const [q, setQ] = React.useState("");
@@ -52,7 +54,7 @@ export function StaffTags({ templates, people }: { templates: Template[]; people
     // the page opens in a new tab and prints itself once every name has been fitted
     <form method="post" action="/print/staff/sheet" target="_blank" className="space-y-4">
       <Section>
-        <div className="grid gap-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+        <div className="grid gap-4 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end">
           <Field label="Template" htmlFor="template">
             <Select
               id="template"
@@ -66,6 +68,15 @@ export function StaffTags({ templates, people }: { templates: Template[]; people
               {templates.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Order" htmlFor="order">
+            <Select id="order" name="order" value={order} onChange={(e) => setOrder(parseOrder(e.target.value))} className="w-auto">
+              {PRINT_ORDERS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}, then last name
                 </option>
               ))}
             </Select>

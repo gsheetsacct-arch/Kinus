@@ -1,3 +1,4 @@
+import { parseOrder } from "@/lib/print/data";
 import { NextResponse, type NextRequest } from "next/server";
 import { printSetHtml } from "@/lib/print/jobs";
 import { visibleJobs } from "@/lib/print/access";
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
       divisionId: division === null ? undefined : division === "none" ? null : division,
       copies: Number(sp.get("copies")) || undefined,
       single: sp.get("single") === "1",
+      order: parseOrder(sp.get("order")),
     });
     const auto = sp.get("print") === "1";
     const script = auto ? `<script>(function w(){document.body.getAttribute("data-fitted")?setTimeout(function(){window.print()},200):setTimeout(w,100)})()</script>` : "";

@@ -63,3 +63,30 @@ describe("the office's staff workbook (MASTER tab)", () => {
     expect(b.warnings[0]).toMatch(/Same email/);
   });
 });
+
+describe("the Badge Export tab", () => {
+  const grid = [
+    ["Badge Export — the seven columns the badge system expects", "", ""],
+    ["Everyone whose STATUS is Confirmed appears here automatically.", "", ""],
+    [""],
+    ["kinus_id", "staff_id", "first_name", "last_name", "position", "division", "bunk"],
+    ["29", "KTH87-028", "Ezriel", "Traurig", "Counselor", "Division 2", "Bunk כו"],
+    ["29", "KTH87-100", "Shmuel", "Katz", "Logistics Coordinator", "Logistics", ""],
+  ];
+  it("is found and read: everyone on it is confirmed", () => {
+    const table = findStaffTable([{ name: "Badge Export", grid }]);
+    expect(table?.[0][0]).toBe("kinus_id");
+    const { rows, skipped } = readMasterSheet(table!, ["Division 1", "Division 2"]);
+    expect(skipped).toEqual([]);
+    expect(rows.map((r) => [r.sourceId, r.name, r.role, r.where, r.bunk])).toEqual([
+      ["KTH87-028", "Ezriel Traurig", "Counselor", "Division 2", "Bunk כו"],
+      ["KTH87-100", "Shmuel Katz", "Logistics Coordinator", "", ""],
+    ]);
+    expect(rows[1].title).toBe("Logistics Coordinator");
+    expect(rows[1].details).toEqual({ "Division (name tag)": "Logistics" });
+  });
+  it("comes after the MASTER tab in the same workbook", () => {
+    const master = [["First Name", "Last Name", "Phone", "STATUS"], ["A", "B", "5551234567", "Confirmed"]];
+    expect(findStaffTable([{ name: "Badge Export", grid }, { name: "MASTER", grid: master }])?.[0][0]).toBe("First Name");
+  });
+});

@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canUsePrintArea } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { toSpec } from "@/lib/print/data";
+import { parseOrder, sortStaff } from "@/lib/print/order";
 import { forCampers } from "@/lib/print/staff-values";
 import { staffInView, staffSheetHtml } from "@/lib/print/staff";
 
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
   if (!/^[0-9a-f-]{36}$/i.test(templateId) || !ids.size) return new NextResponse("Pick a template and who to print for.", { status: 400 });
   const { data: t } = await createAdminClient().from("print_templates").select("*").eq("id", templateId).maybeSingle();
   if (!t || forCampers(t)) return new NextResponse("That isn't a staff template.", { status: 404 });
-  const people = (await staffInView(user)).filter((p) => ids.has(p.id));
+  const people = sortStaff((await staffInView(user)).filter((p) => ids.has(p.id)), parseOrder(String(form.get("order") ?? "")));
   if (!people.length) return new NextResponse("None of those people are yours to print for.", { status: 404 });
   const spec = toSpec(t);
   const html = await staffSheetHtml(form.get("single") === "1" ? { ...spec, sheet_layout: null } : spec, people.map((p) => ({ values: p.values, copies })));
