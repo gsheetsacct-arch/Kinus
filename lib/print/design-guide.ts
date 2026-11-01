@@ -111,4 +111,5 @@ uploads keep it. Only fix what you're sure of; leave the rest for the office.
 queue_print_job asks for tags of a camper template, as Print a batch does: everyone, a division,
 a bunk or some campers (camper codes); which (new only, new + changed, everyone, here now,
 arrived today); the order (by bunk, division or last name); "queue" (waits in Print → Queue)
-or "email" (the PDF is emailed). Run it with dry_run first and say how many before asking.`;
+or "email" (the PDF is emailed). Run it with dry_run first and say how many before asking. list_print_jobs lists the latest requests;
+get_print_pdf gives a download link to one's PDF (a big one in parts).`;

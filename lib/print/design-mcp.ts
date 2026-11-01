@@ -599,5 +599,83 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     },
   );
 
+  server.registerTool(
+    "list_print_jobs",
+    {
+      title: "Print jobs",
+      description: "The latest print requests (newest first) this person may open: id, tag, how many, status, note, and whether a PDF was made. get_print_pdf gives a download link.",
+      inputSchema: { limit: z.number().int().min(1).max(50).default(15), status: z.enum(["any", "open", "printed"]).default("any").describe('"open": not printed yet') },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ limit, status }) => {
+      try {
+        const session = await activeSession();
+        if (!session) return problem("No active session.");
+        const admin = createAdminClient();
+        let q = admin.from("print_jobs").select("id, status, item_count, note, requested_at, pdf_path, requested_by, print_order, print_templates(name), profiles:requested_by(full_name)").eq("session_id", session.id).order("requested_at", { ascending: false }).limit(limit * 3);
+        if (status === "open") q = q.not("status", "in", "(printed,cancelled)");
+        if (status === "printed") q = q.eq("status", "printed");
+        const { data } = await q;
+        const { jobsVisibleTo } = await import("./access");
+        const mine: unknown[] = [];
+        for (const j of data ?? []) {
+          if (mine.length >= limit) break;
+          if (!(await jobsVisibleTo(user, [j.id]))) continue;
+          mine.push({
+            id: j.id,
+            tag: (j.print_templates as { name: string } | null)?.name ?? "(deleted template)",
+            campers: j.item_count,
+            status: j.status,
+            order: j.print_order,
+            note: j.note,
+            asked: j.requested_at,
+            by: (j.profiles as { full_name: string } | null)?.full_name ?? null,
+            pdf_made: Boolean(j.pdf_path),
+          });
+        }
+        return text(mine.length ? json(mine) : "No print requests yet.");
+      } catch (e) {
+        return problem(e instanceof Error ? e.message : String(e));
+      }
+    },
+  );
+
+  server.registerTool(
+    "get_print_pdf",
+    {
+      title: "Download a print job's PDF",
+      description:
+        "A download link (valid 24 hours) to a print request's PDF, in the order it was asked for. An emailed request's PDF as it was sent; otherwise it's made now. A big request is made in parts (about 200 tags each): the answer says how many; ask for each with part 0, 1, ….",
+      inputSchema: { job_id: z.guid(), part: z.number().int().min(0).optional().describe("For a big request: which part (from 0)") },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ job_id, part }) => {
+      try {
+        const { jobsVisibleTo } = await import("./access");
+        if (!(await jobsVisibleTo(user, [job_id]))) return problem("No print request with that id that you may open (list_print_jobs).");
+        const admin = createAdminClient();
+        const out = admin.storage.from("print-output");
+        const { data: job } = await admin.from("print_jobs").select("pdf_path, print_templates(name)").eq("id", job_id).maybeSingle();
+        const name = ((job?.print_templates as { name: string } | null)?.name ?? "Tags").replace(/[\\/:*?"<>|]+/g, "-");
+        if (job?.pdf_path && part === undefined) {
+          const { data, error } = await out.createSignedUrl(job.pdf_path, 86400, { download: `${name}.pdf` });
+          if (error) throw error;
+          return text(`The PDF as it was emailed: ${data.signedUrl}\n(link valid 24 hours)`);
+        }
+        const { printSetPdf } = await import("./jobs");
+        const r = await printSetPdf([job_id], { part: part ?? 0 });
+        const path = `claude/${job_id}-${part ?? 0}.pdf`;
+        const { error: up } = await out.upload(path, r.pdf, { contentType: "application/pdf", upsert: true });
+        if (up) throw up;
+        const file = r.parts > 1 ? r.fileName.replace(/\.pdf$/, ` (part ${(part ?? 0) + 1} of ${r.parts}).pdf`) : r.fileName;
+        const { data, error } = await out.createSignedUrl(path, 86400, { download: file });
+        if (error) throw error;
+        return text(`${file}: ${data.signedUrl}\n(link valid 24 hours)${r.parts > 1 ? `\nThis request is in ${r.parts} parts: ask for part ${(part ?? 0) + 1 < r.parts ? (part ?? 0) + 1 : 0}… up to ${r.parts - 1}. Or print it whole from Kinus: ${appUrl}/print/jobs/${job_id}` : ""}`);
+      } catch (e) {
+        return problem(e instanceof Error ? e.message : String(e));
+      }
+    },
+  );
+
   return server;
 }

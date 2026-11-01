@@ -39,3 +39,26 @@ export async function visibleJob(id: string) {
   const { data } = await supabase.from("print_jobs").select("id, pdf_path, template_id, item_count").eq("id", id).maybeSingle();
   return data;
 }
+
+/**
+ * The same check for someone known (the design connector, which has no sign-in cookie): the
+ * print area, or their own requests; and every camper on others' requests in their part of camp.
+ */
+export async function jobsVisibleTo(user: import("@/lib/auth/permissions").CurrentUser, ids: string[]): Promise<boolean> {
+  const unique = [...new Set(ids)];
+  if (!unique.length || unique.some((id) => !UUID.test(id))) return false;
+  const admin = createAdminClient();
+  const { data: jobs } = await admin.from("print_jobs").select("id, requested_by").in("id", unique);
+  if (!jobs || jobs.length !== unique.length) return false;
+  const others = jobs.filter((j) => j.requested_by !== user.id).map((j) => j.id);
+  if (!others.length) return true;
+  const { canUsePrintArea } = await import("@/lib/auth/permissions");
+  if (!canUsePrintArea(user)) return false;
+  if (seesAllCamp(user)) return true;
+  const { fetchAll } = await import("@/lib/supabase/fetch-all");
+  const items = await fetchAll((from, to) => admin.from("print_job_items").select("job_id, camper_id, campers(division_id, bunk_id)").in("job_id", others).order("job_id").order("camper_id").range(from, to));
+  return items.every((i) => {
+    const c = i.campers as { division_id: string | null; bunk_id: string | null } | null;
+    return c ? canPrintFor(user, c) : true;
+  });
+}
