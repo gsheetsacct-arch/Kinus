@@ -13,7 +13,7 @@ export type ExportRead = { rows: ExportRow[]; skipped: { status: string; count: 
  */
 export function isAccepted(status: string): boolean {
   const s = status.trim().toLowerCase();
-  if (/^(accepted|approved|hired)$/.test(s)) return true;
+  if (/^(accepted|approved|hired|confirmed)$/.test(s)) return true;
   return /\baccepted\b/.test(s) && /\bconfirmed\b/.test(s) && !/pending|unconfirmed|not (accepted|confirmed)/.test(s);
 }
 

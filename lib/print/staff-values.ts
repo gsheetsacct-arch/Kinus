@@ -17,6 +17,7 @@ export const STAFF_FIELDS: { key: string; label: string }[] = [
   { key: "LAST", label: "Last name" },
   { key: "FULL", label: "Full name" },
   { key: "HEBREW_NAME", label: "Hebrew name (registration)" },
+  { key: "HEBREW_LAST", label: "Hebrew last name (registration)" },
   { key: "POSITION", label: "Position (Learning head, Waterfront…)" },
   { key: "ROLE", label: "Role in Kinus (Counselor, Head counselor…)" },
   { key: "DIVISION", label: "Division" },
@@ -83,6 +84,7 @@ export function staffValues(p: StaffPerson, roleLabel: (role: string) => string)
     LAST: last,
     FULL: words.join(" "),
     HEBREW_NAME: detail(p.details, "Full hebrew name", "Hebrew name"),
+    HEBREW_LAST: detail(p.details, "Last name (Hebrew)", "Hebrew last name"),
     POSITION: p.title ?? "",
     ROLE: roleLabel(p.role),
     DIVISION: divisions.join(", "),
@@ -91,7 +93,7 @@ export function staffValues(p: StaffPerson, roleLabel: (role: string) => string)
     DIVISION_COLOR: p.places.find((x) => x.color)?.color ?? "#64748b",
     PHONE: p.phone ?? "",
     EMAIL: p.email ?? "",
-    TSHIRT: detail(p.details, "T-shirt size", "Tshirt size"),
+    TSHIRT: detail(p.details, "T-shirt size", "Tshirt size", "Shirt size"),
     // states and countries the same way on every tag: NY, USA (lib/address-codes)
     ADDRESS: p.address?.street ?? "",
     CITY: p.address?.city ?? "",
@@ -112,7 +114,7 @@ export const SAMPLE_STAFF: StaffPerson = {
   phone: "(718) 555-0123",
   email: "mendel@example.org",
   sourceId: "1234",
-  details: { "Full hebrew name": "מנחם מענדל", "T-shirt size": "L" },
+  details: { "Full hebrew name": "מנחם מענדל", "Last name (Hebrew)": "כהן", "T-shirt size": "L" },
   address: { street: "770 Eastern Parkway", city: "Brooklyn", state: "New York", zip: "11213", country: "United States" },
   places: [{ division: "Division 2", color: "#2563eb", camp: "American", bunk: "Bunk Lamed" }],
 };
