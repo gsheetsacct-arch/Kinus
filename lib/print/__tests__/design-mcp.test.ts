@@ -36,7 +36,7 @@ describe("Hebrew names on the connector", () => {
     const { designServer } = await import("../design-mcp");
     const server = designServer({ id: "u", fullName: "Test", role: "director", coverage: [] } as never, "https://kinus.test");
     const tools = Object.keys((server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools);
-    expect(tools).toEqual(expect.arrayContaining(["list_hebrew_names", "fix_hebrew_names"]));
+    expect(tools).toEqual(expect.arrayContaining(["list_hebrew_names", "fix_hebrew_names", "queue_print_job"]));
     expect(DESIGN_GUIDE).toContain("fix_hebrew_names");
   });
 });
