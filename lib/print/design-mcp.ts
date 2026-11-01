@@ -8,7 +8,7 @@ import { addCustomFont, loadCustomFonts } from "./custom-fonts";
 import { findPresets, presetById } from "./presets";
 import { loadMergeSetup, toSpec } from "./data";
 import { copyTemplate, storeTemplate, templateSchema } from "./template-store";
-import { allCamperValues, camperValues, longestPerField, previewDocument, sampleValues, worstCaseValues } from "./preview-data";
+import { activeSession, allCamperValues, camperValues, longestPerField, previewDocument, sampleValues, worstCaseValues } from "./preview-data";
 import type { PartFit } from "./pdf";
 import { renderPng } from "./chromium";
 import { renderDocument } from "./render";
@@ -17,6 +17,9 @@ import type { Layer, TemplateSpec } from "./types";
 import { DESIGN_GUIDE } from "./design-guide";
 import { audienceOf, STAFF_FIELDS, type Audience } from "./staff-values";
 import { sampleStaffValues, staffInView, staffLongest, staffPreview } from "./staff";
+import { canFixNames } from "./name-columns";
+import { hebrewNameReview, saveHebrewNameFixes } from "@/lib/hebrew-name-review";
+import { isHebrew } from "@/lib/hebrew-names";
 
 /**
  * The design connector: Claude reads, designs and previews Kinus templates directly (MCP,
@@ -433,6 +436,84 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
       try {
         const font = await addCustomFont({ name, fileName: file_name, bytes: new Uint8Array(Buffer.from(data_base64, "base64")), weight, italic }, user.id);
         return text(`${font.name} is ready: use "font": "custom:${font.id}".`);
+      } catch (e) {
+        return problem(e instanceof Error ? e.message : String(e));
+      }
+    },
+  );
+
+  server.registerTool(
+    "list_hebrew_names",
+    {
+      title: "Hebrew names to fix",
+      description:
+        'The campers\' Hebrew names (the export columns Hebrew-name fields read) that aren\'t right yet: typed in English or spelled out ("english"), or empty; with the English name and Kinus\' suggestion. show "fixed" lists the fixes already made, "all" everyone (to check names already in Hebrew). Fix them with fix_hebrew_names.',
+      inputSchema: {
+        show: z.enum(["needs_fixing", "english", "empty", "fixed", "all"]).default("needs_fixing"),
+        division: z.string().optional().describe("Only this division (its name)"),
+        limit: z.number().int().min(1).max(1000).default(300),
+        offset: z.number().int().min(0).default(0),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ show, division, limit, offset }) => {
+      try {
+        if (!canFixNames(user)) return problem(`${user.fullName} can't fix names (it takes edit access to printing).`);
+        const session = await activeSession();
+        if (!session) return problem("No active session.");
+        const { columns, rows, migrated } = await hebrewNameReview(user, session.id, { everyone: show === "all" });
+        if (!columns.length) return text("No label field reads a Hebrew name from the export yet (Fields & conversions: e.g. Hebrew name → the export's hebrew_name column).");
+        const wanted = rows.filter((r) => r.canFix && (!division || (r.divisionName ?? "").toLowerCase() === division.trim().toLowerCase()) && (show === "all" || (show === "needs_fixing" ? r.state === "english" || r.state === "empty" : r.state === show)));
+        const count = (st: string | null) => rows.filter((r) => r.canFix && r.state === st).length;
+        const page = wanted.slice(offset, offset + limit).map((r) => ({
+          camper_id: r.camperId,
+          name: r.name,
+          where: r.where,
+          column: r.column,
+          field: r.columnLabel,
+          kind: r.kind,
+          registration: r.registration,
+          state: r.state ?? "hebrew",
+          ...(r.fix ? { fixed_to: r.fix.value } : {}),
+          ...(r.suggestion ? { suggestion: r.suggestion.value, how: r.suggestion.how } : {}),
+        }));
+        return text(
+          json({
+            session: session.name,
+            columns: columns.map((c) => ({ column: c.column, field: c.label, kind: c.kind })),
+            totals: { english: count("english"), empty: count("empty"), fixed: count("fixed") },
+            showing: `${page.length ? offset + 1 : 0}–${offset + page.length} of ${wanted.length}`,
+            ...(migrated ? {} : { warning: "Fixes can't be saved until migration 0034 has run." }),
+            rows: page,
+          }),
+        );
+      } catch (e) {
+        return problem(e instanceof Error ? e.message : String(e));
+      }
+    },
+  );
+
+  server.registerTool(
+    "fix_hebrew_names",
+    {
+      title: "Fix Hebrew names",
+      description:
+        'Saves campers\' Hebrew names (camper_id and column from list_hebrew_names): Hebrew letters only, final letters at the ends of words. value "" takes a fix back (the registration\'s text prints again). Tags print the fix at once and new uploads keep it, the same as fixing on Print → Hebrew names.',
+      inputSchema: {
+        fixes: z
+          .array(z.object({ camper_id: z.guid(), column: z.string().trim().min(1).max(200), value: z.string().trim().max(200) }))
+          .min(1)
+          .max(1000),
+      },
+      annotations: { destructiveHint: true },
+    },
+    async ({ fixes }) => {
+      try {
+        if (!canFixNames(user)) return problem(`${user.fullName} can't fix names (it takes edit access to printing).`);
+        const notHebrew = fixes.filter((f) => f.value && !isHebrew(f.value));
+        if (notHebrew.length) return problem(`Hebrew letters only (nothing saved). Not Hebrew: ${notHebrew.slice(0, 5).map((f) => `${f.camper_id} "${f.value}"`).join(", ")}`);
+        const message = await saveHebrewNameFixes(user, fixes.map((f) => ({ camperId: f.camper_id, column: f.column, value: f.value })));
+        return text(message);
       } catch (e) {
         return problem(e instanceof Error ? e.message : String(e));
       }

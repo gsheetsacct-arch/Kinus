@@ -17,7 +17,7 @@ import { worstValues, type PartText } from "./worst-case";
  */
 
 /** The active session, read with the server's key (the design connector has no sign-in cookie). */
-async function getActiveSession() {
+export async function activeSession() {
   const { data } = await createAdminClient().from("sessions").select("id, name").eq("is_active", true).maybeSingle();
   return data;
 }
@@ -30,7 +30,7 @@ export async function sampleValues(): Promise<Record<string, string>> {
   // a field from an export column the made-up camper doesn't have (one added to the export
   // since: family.city) shows a real camper's value, rather than looking like it doesn't work
   const blank = setup.fields.filter((f) => !values[f.key] && f.source_field.includes("."));
-  const session = blank.length ? await getActiveSession() : null;
+  const session = blank.length ? await activeSession() : null;
   if (session) {
     const { data } = await admin.from("campers").select("source_data").eq("session_id", session.id).is("archived_at", null).not("source_data", "is", null).limit(300);
     for (const f of blank)
@@ -48,7 +48,7 @@ export async function sampleValues(): Promise<Record<string, string>> {
 
 /** Campers of the active session the person can see. */
 export async function camperIdsInView(divisionIds: string[] | null): Promise<string[]> {
-  const session = await getActiveSession();
+  const session = await activeSession();
   if (!session || (divisionIds && !divisionIds.length)) return [];
   const rows = await fetchAll((from, to) => {
     let q = createAdminClient().from("campers").select("id").eq("session_id", session.id).is("archived_at", null);
@@ -67,7 +67,7 @@ export async function camperValues(
   divisionIds: string[] | null,
 ): Promise<{ values: Record<string, string>; label: string } | { error: string }> {
   const admin = createAdminClient();
-  const session = await getActiveSession();
+  const session = await activeSession();
   if (!session) return { error: "No active session." };
   let id: string | null = null;
   if (who.kind === "code") {

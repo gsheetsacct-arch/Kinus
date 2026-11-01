@@ -11,23 +11,10 @@ import { useLiftToasts } from "@/components/ui/sonner";
 import { saveNameFixes } from "@/app/(app)/print/names/actions";
 import { convertTyped, hasEnglish, isHebrew, lettersSpelledOut, type SuggestionSource } from "@/lib/hebrew-names";
 import { cn, plural } from "@/lib/utils";
+import type { NameRow as ReviewRow } from "@/lib/hebrew-name-review";
 
-export type NameRow = {
-  camperId: string;
-  name: string;
-  where: string;
-  divisionName: string | null;
-  divisionColor: string | null;
-  column: string;
-  columnLabel: string;
-  kind: "first" | "last" | "full";
-  /** What the registration says. */
-  registration: string;
-  fix: { value: string; was: string } | null;
-  state: "english" | "empty" | "fixed";
-  suggestion: { value: string; how: string; source: SuggestionSource } | null;
-  canFix: boolean;
-};
+/** A name to fix (lib/hebrew-name-review): already in Hebrew isn't one. */
+export type NameRow = Omit<ReviewRow, "state"> & { state: "english" | "empty" | "fixed" };
 
 type Draft = { value: string; use: boolean };
 const keyOf = (r: NameRow) => `${r.camperId}|${r.column}`;
