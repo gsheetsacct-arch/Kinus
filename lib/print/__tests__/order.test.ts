@@ -28,12 +28,26 @@ describe("camper print order", () => {
   });
 });
 
-describe("Hebrew and French divisions", () => {
-  it("sort by the Hebrew last name within the bunk, those without one after", async () => {
-    const { byBunkThenName, sortFor } = await import("../data");
-    const c = (last_name: string, heb_last: string | null, bunk_name = "Bunk א") => ({ first_name: "X", last_name, division_name: "Hebrew Division", bunk_name, heb_last }) as never;
-    const rows = [c("Aaron", "שוורץ"), c("Zeitlin", "אברהמי"), c("Mendel", null), c("Berg", "גולד")];
-    expect([...rows].sort(byBunkThenName).map((x: { last_name: string }) => x.last_name)).toEqual(["Zeitlin", "Berg", "Aaron", "Mendel"]);
-    expect([...rows].sort(sortFor("division")).map((x: { last_name: string }) => x.last_name)).toEqual(["Zeitlin", "Berg", "Aaron", "Mendel"]);
+describe("sorted by the names the tag prints", () => {
+  it("finds the last and first name fields the template uses", async () => {
+    const { printedNameKeys } = await import("../merge");
+    const fields = [
+      { key: "FIRST", label: "First name" },
+      { key: "LAST", label: "Last name" },
+      { key: "FAMILY", label: "Family name (registration)" },
+      { key: "HEB_LAST", label: "Hebrew last name" },
+      { key: "MOTHER_FIRST", label: "Mother first name" },
+    ];
+    const tag = (text: string) => ({ layers: [{ type: "text", id: "n", text, x: 0, y: 0, w: 1, h: 1, size: 10 }] }) as never;
+    expect(printedNameKeys(tag("{{FIRST}} {{LAST}}"), fields)).toEqual({ last: "LAST", first: "FIRST" });
+    // the template prints another column as the last name: that one
+    expect(printedNameKeys(tag("{{FIRST}} {{FAMILY}} {{HEB_LAST}}"), fields)).toEqual({ last: "FAMILY", first: "FIRST" });
+    // no name on the tag: the usual ones
+    expect(printedNameKeys(tag("{{MOTHER_FIRST}}"), fields)).toEqual({ last: "LAST", first: "FIRST" });
+    // a Hebrew tag: the Hebrew last name; with both, the one printed larger
+    const heb = [...fields, { key: "HEB_FIRST", label: "Hebrew first name" }];
+    expect(printedNameKeys(tag("{{HEB_FIRST}} {{HEB_LAST}}"), heb)).toEqual({ last: "HEB_LAST", first: "HEB_FIRST" });
+    const both = { layers: [{ type: "text", id: "e", text: "{{FIRST}} {{LAST}}", x: 0, y: 0, w: 1, h: 1, size: 9 }, { type: "text", id: "h", text: "{{HEB_FIRST}} {{HEB_LAST}}", x: 0, y: 0, w: 1, h: 1, size: 20 }] } as never;
+    expect(printedNameKeys(both, heb)).toEqual({ last: "HEB_LAST", first: "HEB_FIRST" });
   });
 });

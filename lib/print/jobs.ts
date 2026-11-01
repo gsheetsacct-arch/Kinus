@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { canAccessBunk, seesAllCamp, type CurrentUser } from "@/lib/auth/permissions";
 import { renderDocument } from "./render";
-import { mergeValues } from "./merge";
+import { mergeValues, printedNameKeys } from "./merge";
 import type { FitNotes } from "./pdf";
 import { renderPdf } from "./chromium";
 import { sendEmail } from "./email";
@@ -158,12 +158,23 @@ const specFor = (set: PrintSet, opts: SetOpts): TemplateSpec => (opts.single ? {
 /** The campers printed (all, or one division) and how many of each. */
 function itemsOf(set: PrintSet, opts: SetOpts) {
   const picked = opts.divisionId === undefined ? set.campers : set.campers.filter((c) => divisionOf(c as never) === opts.divisionId);
-  // loaded by bunk; another order when asked (on the print page), else the one the request was made with
+  // another order when asked (on the print page), else the one the request was made with
   const order = opts.order ?? set.order;
-  const campers = order !== "bunk" ? [...picked].sort(sortFor(order)) : picked;
+  const values = new Map(picked.map((c) => [c.id, mergeValues(c, set.setup.fields, set.setup.maps)]));
+  // sorted by the names the tags print (a template's last name may read another export column
+  // than the camper's last name in Kinus), falling back to Kinus' own
+  const keys = printedNameKeys(set.spec, set.setup.fields);
+  // a stray space, quote or invisible mark before a name doesn't move it ("'Ohana" sorts with the O's)
+  const clean = (v: string | undefined) => (v ?? "").replace(/^[^\p{L}\p{N}]+/u, "");
+  const printed = (c: (typeof picked)[number]) => {
+    const v = values.get(c.id)!;
+    return { ...c, last_name: clean(keys.last ? v[keys.last] : "") || clean(c.last_name), first_name: clean(keys.first ? v[keys.first] : "") || clean(c.first_name) };
+  };
+  const cmp = sortFor(order);
+  const campers = picked.map((c) => ({ c, s: printed(c) })).sort((a, b) => cmp(a.s, b.s)).map((x) => x.c);
   // copies: as asked, or the same number of each chosen when printing
   const copiesOf = (id: string) => (opts.copies ? Math.min(10, Math.max(1, Math.round(opts.copies))) : (set.copiesOf.get(id) ?? 1));
-  return { campers, items: campers.map((c) => ({ values: mergeValues(c, set.setup.fields, set.setup.maps), copies: copiesOf(c.id) })) };
+  return { campers, items: campers.map((c) => ({ values: values.get(c.id)!, copies: copiesOf(c.id) })) };
 }
 
 function setHtml(set: PrintSet, opts: SetOpts & { tags?: [number, number] }) {

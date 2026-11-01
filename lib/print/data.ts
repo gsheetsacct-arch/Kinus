@@ -4,14 +4,10 @@ import type { Database } from "@/lib/supabase/database.types";
 import type { ContactLike, CamperLike } from "@/lib/fields";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { compareBunkNames, compareDivisionNames } from "@/lib/bunk-order";
-import { hebrewNameColumns } from "./name-columns";
-import { withFixes } from "@/lib/source-fixes";
-import { extraValue } from "@/lib/import/extra-fields";
-import { isHebrew } from "@/lib/hebrew-names";
 import { picturesOf, type BackSide, type MergeField, type Transform, type ValueMap, type TemplateSpec, type Layer, type SheetLayout } from "./types";
 
 type DB = SupabaseClient<Database>;
-export type PrintCamper = CamperLike & { id: string; division_color: string | null; division_name: string | null; bunk_name: string | null; last_name: string; first_name: string; /** the Hebrew last name, in Hebrew and French divisions (sorting) */ heb_last?: string | null };
+export type PrintCamper = CamperLike & { id: string; division_color: string | null; division_name: string | null; bunk_name: string | null; last_name: string; first_name: string };
 
 export async function loadMergeSetup(db: DB): Promise<{ fields: MergeField[]; maps: Map<string, ValueMap> }> {
   const [{ data: fields }, { data: maps }, { data: entries }] = await Promise.all([
@@ -65,12 +61,10 @@ export async function loadPrintCampers(admin: DB, ids: string[]): Promise<PrintC
   const chunks: string[][] = [];
   for (let i = 0; i < unique.length; i += 150) chunks.push(unique.slice(i, i + 150));
   // all chunks at once: a 1,000-tag batch is 7 requests side by side, not one after another
-  // Hebrew and French divisions sort by the Hebrew last name (the export column the Hebrew last-name field reads)
-  const hebrewLast = hebrewNameColumns(admin).then((cols) => cols.filter((c) => c.kind === "last").map((c) => c.column));
   const parts = await Promise.all(
     chunks.map(async (chunk) => {
       const [{ data: cs, error }, { data: ks, error: ke }] = await Promise.all([
-        admin.from("campers").select("*, divisions(name, color, language), bunks(name)").in("id", chunk),
+        admin.from("campers").select("*, divisions(name, color), bunks(name)").in("id", chunk),
         admin.from("camper_contacts").select("camper_id, role, slot, name, phone, phone_e164, email").in("camper_id", chunk),
       ]);
       if (error) throw error;
@@ -80,15 +74,9 @@ export async function loadPrintCampers(admin: DB, ids: string[]): Promise<PrintC
   );
   const contacts = new Map<string, ContactLike[]>();
   for (const k of parts.flatMap((p) => p.ks)) contacts.set(k.camper_id, [...(contacts.get(k.camper_id) ?? []), k]);
-  const lastColumns = await hebrewLast.catch(() => [] as string[]);
-  const hebLastOf = (c: { source_data: unknown; source_fixes?: unknown }) => {
-    const row = withFixes(c.source_data, c.source_fixes);
-    const v = lastColumns.map((col) => extraValue(row, col)).find((x) => x && isHebrew(x));
-    return v?.trim() || null;
-  };
   return parts.flatMap((p) =>
     p.cs.map((c) => {
-      const d = c.divisions as { name: string; color: string | null; language?: string } | null;
+      const d = c.divisions as { name: string; color: string | null } | null;
       const b = c.bunks as { name: string } | null;
       return {
         ...(c as unknown as CamperLike),
@@ -98,7 +86,6 @@ export async function loadPrintCampers(admin: DB, ids: string[]): Promise<PrintC
         division_name: d?.name ?? null,
         division_color: d?.color ?? null,
         bunk_name: b?.name ?? null,
-        heb_last: d?.language === "he" || d?.language === "fr" ? hebLastOf(c as never) : null,
         contacts: contacts.get(c.id) ?? [],
       };
     }),
@@ -141,17 +128,9 @@ export { parseOrder, type PrintOrder } from "./order";
 import type { PrintOrder } from "./order";
 
 /** Printing order: division (1, 2, 3, then the rest), bunk (Alef-Beis), name; no division or bunk yet comes last. */
-/** heb_last: the Hebrew last name, for campers of Hebrew and French divisions (lib/print/data loadPrintCampers). */
-type Sortable = { division_name: string | null; bunk_name: string | null; last_name: string; first_name: string; heb_last?: string | null };
-/**
- * Last name, then first: in a Hebrew or French division by the Hebrew last name (א–ת), those
- * without one after them by the English name.
- */
-const byNameInPlace = (a: Sortable, b: Sortable) =>
-  Number(!a.heb_last) - Number(!b.heb_last) ||
-  (a.heb_last && b.heb_last ? a.heb_last.localeCompare(b.heb_last, "he") : 0) ||
-  a.last_name.localeCompare(b.last_name) ||
-  a.first_name.localeCompare(b.first_name);
+type Sortable = { division_name: string | null; bunk_name: string | null; last_name: string; first_name: string };
+/** Last name, then first (prints pass the names the tag prints: English or Hebrew, lib/print/merge printedNameKeys). */
+const byNameInPlace = (a: Sortable, b: Sortable) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name);
 export const byBunkThenName = (a: Sortable, b: Sortable) =>
   Number(!a.division_name) - Number(!b.division_name) ||
   compareDivisionNames(a.division_name ?? "", b.division_name ?? "") ||
