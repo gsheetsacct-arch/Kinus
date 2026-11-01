@@ -56,7 +56,9 @@ describe("planRows", () => {
       { role: "counselor", level: "role" },
     );
     expect(plan[0]).toMatchObject({ role: "counselor", errors: [], areaText: "Division 1 · Bunk Beis" });
-    expect(plan[1].errors).toContain("This email is listed twice.");
+    // listed only (a counselor): the repeated email is dropped, not an error
+    expect(plan[1].errors).toEqual([]);
+    expect(plan[1].warnings.some((w) => /Same email/.test(w))).toBe(true);
     expect(plan[2].errors[0]).toMatch(/Say where they work/);
     expect(plan[3]).toMatchObject({ role: "office", allAreas: true, level: "view", errors: [] });
   });
@@ -108,5 +110,14 @@ describe("the Staff role", () => {
     expect(matchRole("Kitchen staff")).toBe("staff");
     expect(matchRole("Head staff")).toBe("head_counselor");
     expect(matchRole("Counselor")).toBe("counselor");
+  });
+});
+
+describe("a repeated email for people who sign in", () => {
+  it("is still an error", async () => {
+    const { planRows } = await import("../bulk");
+    const row = (line: number, name: string) => ({ line, name, email: "same@x.com", role: "Head counselor", where: "Division 1", bunk: "", level: "", title: "", phone: "", signs: "yes" });
+    const plan = planRows([row(2, "A"), row(3, "B")], tree, { role: "counselor", level: "role" });
+    expect(plan[1].errors).toContain("This email is listed twice.");
   });
 });

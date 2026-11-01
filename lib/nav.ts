@@ -1,7 +1,7 @@
 import type { CurrentUser } from "@/lib/auth/permissions";
 import { LEVEL_RANK, canFinalCheckout, canTextStaff, canUsePhoneBook, canUsePrintArea, effectiveLevel, isAdmin, isStaffManager } from "@/lib/auth/permissions";
 
-export type NavIcon = "DoorOpen" | "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser" | "ShieldCheck" | "MessageSquare";
+export type NavIcon = "DoorOpen" | "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser" | "ShieldCheck" | "MessageSquare" | "ClipboardCheck";
 export type NavItem = { href: string; label: string; icon: NavIcon; description: string; section: "main" | "admin"; mobile?: boolean };
 
 export function buildNav(user: CurrentUser, opts: { designs?: boolean } = {}): NavItem[] {
@@ -12,6 +12,7 @@ export function buildNav(user: CurrentUser, opts: { designs?: boolean } = {}): N
       { href: "/scan", label: "Check in", icon: "ScanLine", description: "Scan or search to check campers in and out", section: "main", mobile: true },
       ...(user.finalCheckout ? [{ href: "/checkout", label: "Final check-out", icon: "DoorOpen" as const, description: "Going home: every division of the camp", section: "main" as const, mobile: true }] : []),
       { href: "/status", label: "Who's here", icon: "Activity", description: "Who's here and who isn't yet, live", section: "main", mobile: true },
+      { href: "/counts", label: "Head counts", icon: "ClipboardCheck", description: "Count who's on a bus or trip", section: "main", mobile: true },
       { href: "/campers", label: "Campers", icon: "Users", description: "Find any camper", section: "main", mobile: true },
       { href: "/phone-book", label: "Phone book", icon: "BookUser", description: "Call or text the staff you work with", section: "main" },
     ];
@@ -22,6 +23,7 @@ export function buildNav(user: CurrentUser, opts: { designs?: boolean } = {}): N
       : { href: "/scan", label: "Look up", icon: "ScanLine", description: "Scan a tag or search to open a camper", section: "main", mobile: true },
     ...(canFinalCheckout(user) ? [{ href: "/checkout", label: "Final check-out", icon: "DoorOpen" as const, description: "Going home: every division of the camp", section: "main" as const }] : []),
     { href: "/status", label: "Who's here", icon: "Activity", description: "Who's here and who isn't yet, live", section: "main", mobile: true },
+    ...(canScan ? [{ href: "/counts", label: "Head counts", icon: "ClipboardCheck" as const, description: "Count who's on a bus or trip", section: "main" as const }] : []),
     { href: "/campers", label: "Campers", icon: "Users", description: "Find any camper", section: "main", mobile: true },
     { href: "/lists", label: "Lists", icon: "ListChecks", description: "Bunk and division lists to print", section: "main" },
   ];

@@ -10,6 +10,7 @@ import { STAFF_ROLES } from "@/lib/labels";
 import { decodeArea, grantableTree, loadAreaTree, type AreaValue } from "@/lib/data/areas";
 import { errorsFor, planRows, readRows, type BulkPlanRow } from "@/lib/staff/bulk";
 import { isStaffExport, readStaffExport, type StaffAddress } from "@/lib/staff/export";
+import { findStaffTable, isMasterHeader, readMasterSheet } from "@/lib/staff/master-sheet";
 import type { Json } from "@/lib/supabase/database.types";
 import { decodeText } from "@/lib/import/decode";
 import { normalizeName } from "@/lib/import/normalize";
@@ -199,15 +200,19 @@ export async function previewBulkAdd(fd: FormData): Promise<ActionResult & { pre
     if (file instanceof File && file.size > 0) {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const wb = /\.(csv|tsv|txt)$/i.test(file.name) ? XLSX.read(decodeText(bytes).text, { type: "string", raw: true }) : XLSX.read(bytes, { type: "array" });
-      grid = XLSX.utils.sheet_to_json<string[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: false });
+      const sheets = wb.SheetNames.map((name) => ({ name, grid: XLSX.utils.sheet_to_json<string[]>(wb.Sheets[name], { header: 1, defval: "", raw: false }) }));
+      // a workbook with many tabs (the office's staff sheet): its MASTER table, wherever it is
+      grid = findStaffTable(sheets) ?? sheets[0]?.grid ?? [];
     } else if (text.trim()) {
       const wb = XLSX.read(text.trim(), { type: "string", raw: true, FS: text.includes("\t") ? "\t" : "," });
-      grid = XLSX.utils.sheet_to_json<string[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: false });
+      const pasted = XLSX.utils.sheet_to_json<string[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: false });
+      grid = findStaffTable([{ name: "pasted", grid: pasted }]) ?? pasted;
     } else return fail("Paste the list or choose a file.");
     const defaultRole = z.enum(ROLES).catch("staff").parse(fd.get("default_role"));
     // someone over one division (most head counselors) can leave the division column empty
     // the registration export: accepted staff only, with their id, address and the rest of their form
-    const exported = isStaffExport(grid) ? readStaffExport(grid) : null;
+    // or the office's own staff sheet (MASTER): confirmed staff, with their position, division and bunk
+    const exported = isStaffExport(grid) ? readStaffExport(grid) : isMasterHeader(grid[0] ?? []) ? readMasterSheet(grid, tree.divisions.map((d) => d.name)) : null;
     const input = exported ? exported.rows : readRows(grid);
     const rows = planRows(input, tree, { role: defaultRole, level: "role", where: tree.divisions.length === 1 ? tree.divisions[0].name : undefined });
     if (!rows.length) return fail(exported?.skipped.length ? `Nobody in this export is accepted yet (${exported.skipped.map((x) => `${x.count} ${x.status}`).join(", ")}).` : "No rows found.");

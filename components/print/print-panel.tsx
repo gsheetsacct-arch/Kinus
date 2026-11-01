@@ -1,4 +1,5 @@
 "use client";
+import { parseOrder, PRINT_ORDERS, type PrintOrder } from "@/lib/print/order";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -55,6 +56,19 @@ export function PrintPanel({
   const router = useRouter();
   // one tag a page (pages the tag's size) instead of on the template's label sheet
   const [single, setSingle] = React.useState(false);
+  // the order tags print in, remembered on this device
+  const [order, setOrderRaw] = React.useState<PrintOrder>("bunk");
+  React.useEffect(() => {
+    try {
+      setOrderRaw(parseOrder(localStorage.getItem("kinus:print-order")));
+    } catch {}
+  }, []);
+  const setOrder = (o: PrintOrder) => {
+    setOrderRaw(o);
+    try {
+      localStorage.setItem("kinus:print-order", o);
+    } catch {}
+  };
   const stock = single ? null : sheetStock;
   const per = sheetStock?.perSheet ?? 1;
   const [used, setUsed] = React.useState<number[]>(sheetStock ? cleanUsed(remembered, per) : []);
@@ -82,6 +96,7 @@ export function PrintPanel({
   if (current) params.set("division", partKey(current));
   if (each) params.set("copies", String(each));
   if (single) params.set("single", "1");
+  if (order !== "bunk") params.set("order", order);
   const src = `/print/sheet?${params}`;
 
   // names longer than the template was made for: printed smaller (whole), or cut off even so
@@ -254,6 +269,24 @@ export function PrintPanel({
           {single && <span className="text-xs text-muted-foreground">Each page is the tag&apos;s size: for a label printer, or paper cut to size.</span>}
         </div>
       )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium">Order</span>
+        <div className="inline-flex flex-wrap gap-1 rounded-lg bg-muted p-1">
+          {PRINT_ORDERS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => setOrder(o.value)}
+              aria-pressed={order === o.value}
+              className={cn("rounded-md px-2.5 py-1 text-sm", order === o.value ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-muted-foreground">then last name</span>
+      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium">How many of each</span>

@@ -93,7 +93,10 @@ export function CampersBrowser({
     return out.map((x) => x.r);
   }, [index, q, f.division, f.bunk, f.status, f.only, f.sort, bOrder]);
 
-  const bunks = f.division ? (divisions.find((d) => d.id === f.division)?.bunks ?? []) : divisions.flatMap((d) => d.bunks);
+  // only bunks with campers in the list (an emptied bunk isn't offered)
+  const hasBunk = React.useMemo(() => new Set(rows.map((r) => r.b)), [rows]);
+  const hasDivision = React.useMemo(() => new Set(rows.map((r) => r.d)), [rows]);
+  const bunks = (f.division ? (divisions.find((d) => d.id === f.division)?.bunks ?? []) : divisions.flatMap((d) => d.bunks)).filter((b) => hasBunk.has(b.id) || b.id === f.bunk);
   const filtering = Boolean(f.q || f.division || f.bunk || f.status || f.only);
 
   return (
@@ -118,7 +121,7 @@ export function CampersBrowser({
         </div>
         <Select value={f.division} onChange={(e) => set({ division: e.target.value })} aria-label="Division">
           <option value="">All divisions</option>
-          {divisions.map((d) => (
+          {divisions.filter((d) => hasDivision.has(d.id) || d.id === f.division).map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
             </option>

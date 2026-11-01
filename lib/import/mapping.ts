@@ -94,6 +94,12 @@ export function splitList(v: string | null): string[] {
   return [...new Set(v.split(",").map((x) => x.replace(/\s+/g, " ").trim()).filter(Boolean))];
 }
 
+/**
+ * A bunk as the registration export writes it, without the note after it:
+ * "Bunk סה - Online School Only" is Bunk סה (the original stays in the camper's source data).
+ */
+export const cleanBunkName = (v: string) => v.replace(/\s*[-–—]\s*online school( only)?\s*$/i, "").trim();
+
 const CONTACT_RE = /^contact\[(\w+)(?:,(\d+))?\]\.(name|first_name|last_name|phone|email)$/;
 const PREF_RE = /^bunk_preferences\[(\d+)\]$/;
 
@@ -153,7 +159,7 @@ export function applyMapping(row: Record<string, string>, map: ColumnMap, opts: 
   for (const col of bunkCols) {
     const v = normText(row[col]);
     if (v) {
-      out.bunk_candidates = splitList(v);
+      out.bunk_candidates = [...new Set(splitList(v).map(cleanBunkName).filter(Boolean))];
       out.bunk_name = out.bunk_candidates[0] ?? null;
       break;
     }

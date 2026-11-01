@@ -1,6 +1,7 @@
 import type { AccessLevel, StaffRole } from "@/lib/auth/permissions";
 import type { AreaTree, AreaValue } from "@/lib/data/areas";
 import { normalizeName } from "@/lib/import/normalize";
+import { divisionNumber as bunkNumber } from "@/lib/bunk-order";
 
 export type BulkInputRow = {
   line: number;
@@ -157,7 +158,9 @@ export function matchAreas(where: string, bunk: string, tree: AreaTree): { allAr
   }
   for (const b of bunks) {
     const pool = divisionsHere.length ? divisionsHere : tree.divisions;
-    const hits = pool.flatMap((d) => d.bunks.filter((x) => normalizeName(x.name) === normalizeName(b)).map((x) => ({ d, x })));
+    let hits = pool.flatMap((d) => d.bunks.filter((x) => normalizeName(x.name) === normalizeName(b)).map((x) => ({ d, x })));
+    // by number when the names differ ("26", "Bunk כו", "Bunk Chof Vov" are one bunk)
+    if (!hits.length && bunkNumber(b) !== null) hits = pool.flatMap((d) => d.bunks.filter((x) => bunkNumber(x.name) === bunkNumber(b)).map((x) => ({ d, x })));
     if (hits.length === 1) {
       areas.push({ group_id: null, division_id: hits[0].d.id, bunk_id: hits[0].x.id });
       names.push(`${hits[0].d.name} · ${hits[0].x.name}`);
@@ -196,10 +199,17 @@ export function planRows(rows: BulkInputRow[], tree: AreaTree, defaults: { role:
     // counselors are listed (phone book, bunk) without signing in, unless the sheet says they sign in
     const said = (r.signs ?? "").trim().toLowerCase();
     const login: "personal" | "none" = /^(y|yes|true|1|x|✓)$/.test(said) ? "personal" : /^(n|no|false|0|-)$/.test(said) ? "none" : role === "counselor" || role === "staff" ? "none" : "personal";
-    if (r.email && !EMAIL.test(r.email)) errors.push(`“${r.email}” isn't an email address.`);
-    else if (!r.email && login === "personal") errors.push(MISSING_EMAIL);
-    else if (r.email && seen.has(r.email)) errors.push("This email is listed twice.");
-    if (r.email) seen.add(r.email);
+    let email = r.email;
+    if (email && !EMAIL.test(email)) errors.push(`“${email}” isn't an email address.`);
+    else if (!email && login === "personal") errors.push(MISSING_EMAIL);
+    else if (email && seen.has(email)) {
+      // two people listed with one email (a parent's): someone who doesn't sign in doesn't need it
+      if (login === "none") {
+        warnings.push(`Same email as someone above (${email}): added without it.`);
+        email = "";
+      } else errors.push("This email is listed twice.");
+    }
+    if (email) seen.add(email);
     const lvl = r.level ? matchLevel(r.level) : null;
     // a Level column from older sheets is read but not used: the role decides (Staff → Roles)
     const a = matchAreas(r.where || defaults.where || "", r.bunk, tree);
@@ -210,6 +220,6 @@ export function planRows(rows: BulkInputRow[], tree: AreaTree, defaults: { role:
     }
     const level = lvl ?? (defaults.level !== "role" ? defaults.level : null);
     const everywhere = a.allAreas || (!a.areas.length && !a.errors.length && (role === "office" || role === "logistics"));
-    return { line: r.line, name: r.name, email: r.email, role, level, allAreas: everywhere, areas: a.areas, areaText: everywhere ? "All of camp" : a.areas.length ? a.text : "—", title, phone: r.phone, login, errors, warnings };
+    return { line: r.line, name: r.name, email, role, level, allAreas: everywhere, areas: a.areas, areaText: everywhere ? "All of camp" : a.areas.length ? a.text : "—", title, phone: r.phone, login, errors, warnings };
   });
 }

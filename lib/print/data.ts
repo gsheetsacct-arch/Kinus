@@ -124,6 +124,9 @@ export async function campersInScope(db: DB, sessionId: string, scope: { divisio
   return rows.map((r) => r.id);
 }
 
+export { parseOrder, type PrintOrder } from "./order";
+import type { PrintOrder } from "./order";
+
 /** Printing order: division (1, 2, 3, then the rest), bunk (Alef-Beis), name; no division or bunk yet comes last. */
 type Sortable = { division_name: string | null; bunk_name: string | null; last_name: string; first_name: string };
 export const byBunkThenName = (a: Sortable, b: Sortable) =>
@@ -133,3 +136,8 @@ export const byBunkThenName = (a: Sortable, b: Sortable) =>
   compareBunkNames(a.bunk_name ?? "", b.bunk_name ?? "") ||
   a.last_name.localeCompare(b.last_name) ||
   a.first_name.localeCompare(b.first_name);
+
+const byName = (a: Sortable, b: Sortable) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name);
+const byDivision = (a: Sortable, b: Sortable) => Number(!a.division_name) - Number(!b.division_name) || compareDivisionNames(a.division_name ?? "", b.division_name ?? "");
+/** The comparer for a print order. */
+export const sortFor = (order: PrintOrder) => (order === "name" ? byName : order === "division" ? (a: Sortable, b: Sortable) => byDivision(a, b) || byName(a, b) : byBunkThenName);

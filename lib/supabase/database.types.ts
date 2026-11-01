@@ -666,6 +666,30 @@ isOneToOne: false
                     "id"?: string,"broadcast_id"?: string | null,"profile_id"?: string | null,"name"?: string | null,"phone_e164"?: string,"body"?: string,"twilio_sid"?: string | null,"received_at"?: string
                   }
                   Relationships: []
+                },"head_counts": {
+                  Row: {
+                    "id": string,"session_id": string | null,"name": string,"division_ids": string[],"groups": string[],"created_by": string | null,"created_by_name": string,"created_at": string,"closed_at": string | null,"closed_by_name": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "id"?: string,"session_id"?: string | null,"name": string,"division_ids": string[],"groups"?: string[],"created_by"?: string | null,"created_by_name": string,"created_at"?: string,"closed_at"?: string | null,"closed_by_name"?: string | null
+                  }
+                  Update: {
+                    "id"?: string,"session_id"?: string | null,"name"?: string,"division_ids"?: string[],"groups"?: string[],"created_by"?: string | null,"created_by_name"?: string,"created_at"?: string,"closed_at"?: string | null,"closed_by_name"?: string | null
+                  }
+                  Relationships: []
+                },"head_count_marks": {
+                  Row: {
+                    "head_count_id": string,"camper_id": string,"group_name": string | null,"method": string,"marked_by": string | null,"marked_by_name": string | null,"marked_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "head_count_id": string,"camper_id": string,"group_name"?: string | null,"method"?: string,"marked_by"?: string | null,"marked_by_name"?: string | null,"marked_at"?: string
+                  }
+                  Update: {
+                    "head_count_id"?: string,"camper_id"?: string,"group_name"?: string | null,"method"?: string,"marked_by"?: string | null,"marked_by_name"?: string | null,"marked_at"?: string
+                  }
+                  Relationships: []
                 },"update_signups": {
                   Row: {
                     "id": string,"full_name": string,"phone": string,"phone_e164": string,"consent_text": string,"consented_at": string,"ip": string | null,"user_agent": string | null,"created_at": string,"updated_at": string

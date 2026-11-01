@@ -4,6 +4,7 @@ import { BatchForm } from "@/components/print/batch-form";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { loadAreaTree } from "@/lib/data/areas";
+import { occupiedPlaces, withCampers } from "@/lib/data/occupied";
 import { getCampContext } from "@/lib/data/camp";
 import { officeEmail } from "@/lib/print/jobs";
 import { canUsePrintArea, isAdmin, visibleDivisionIds } from "@/lib/auth/permissions";
@@ -20,15 +21,20 @@ export default async function BatchPage() {
   if (!canUsePrintArea(user)) redirect("/print/templates");
   if (!session) return <p className="text-muted-foreground">No active session.</p>;
   const supabase = await createClient();
-  const [tree, { data: templates }, office, buzzers] = await Promise.all([
+  const [tree, { data: templates }, office, buzzers, places] = await Promise.all([
     loadAreaTree(supabase, session.id),
     // whole rows: works before migration 0028 (copies), when every tag is one each
     supabase.from("print_templates").select("*").not("name", "like", "(retired)%").order("sort_order").order("name"),
     officeEmail(),
     isAdmin(user) ? buzzerCounts(session.id) : Promise.resolve(null),
+    occupiedPlaces(session.id),
   ]);
   const allowed = visibleDivisionIds(user);
-  const divisions = tree.divisions.filter((d) => (!camp.divisionIds || camp.divisionIds.includes(d.id)) && (!allowed || allowed.includes(d.id)));
+  // only the divisions and bunks that have campers (an emptied bunk isn't offered)
+  const divisions = withCampers(
+    tree.divisions.filter((d) => (!camp.divisionIds || camp.divisionIds.includes(d.id)) && (!allowed || allowed.includes(d.id))),
+    places,
+  );
   return (
     <div>
       <PageHeader title="Print a batch" description="Name tags or luggage tags for a whole camp, division or bunk, sorted by bunk." />
