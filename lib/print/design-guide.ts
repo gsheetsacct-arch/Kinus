@@ -97,4 +97,12 @@ ordinary value and "minSize" for the smallest you'd accept. Then check:
   made-up mix). If it fits, every camper fits.
 - preview_template camper "longest": the real camper whose text is longest on this tag.
 - check_fit: every camper; lists who went under minSize or didn't fit at all. A background picture (a full-tag design from InDesign, exported as PNG at
-300 dpi, without the names) goes in with upload_picture use "background".`;
+300 dpi, without the names) goes in with upload_picture use "background".
+
+## Hebrew names
+Registration often has Hebrew names typed in English ("Menachem") or spelled out ("mem nun
+ches mem"). list_hebrew_names lists them (and the empty ones), with each camper's English name
+and Kinus' suggestion; show "all" also lists the ones already in Hebrew, to check them.
+fix_hebrew_names saves the Hebrew (Hebrew letters only, final letters at word ends; "" takes a
+fix back). A fix is the same as one made on Print → Hebrew names: tags print it, and new
+uploads keep it. Only fix what you're sure of; leave the rest for the office.`;

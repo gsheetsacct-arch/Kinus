@@ -29,3 +29,14 @@ describe("which value needs the most room", () => {
     expect(widthEstimate("שניאור זלמן")).toBeGreaterThan(widthEstimate("לוי"));
   });
 });
+
+describe("Hebrew names on the connector", () => {
+  it("lists and fixes Hebrew names, and the guide says how", async () => {
+    Object.assign(process.env, { NEXT_PUBLIC_SUPABASE_URL: "https://x.supabase.co", NEXT_PUBLIC_SUPABASE_ANON_KEY: "x".repeat(16), SUPABASE_SERVICE_ROLE_KEY: "x".repeat(16) });
+    const { designServer } = await import("../design-mcp");
+    const server = designServer({ id: "u", fullName: "Test", role: "director", coverage: [] } as never, "https://kinus.test");
+    const tools = Object.keys((server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools);
+    expect(tools).toEqual(expect.arrayContaining(["list_hebrew_names", "fix_hebrew_names"]));
+    expect(DESIGN_GUIDE).toContain("fix_hebrew_names");
+  });
+});
