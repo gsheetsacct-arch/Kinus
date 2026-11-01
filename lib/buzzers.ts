@@ -1,24 +1,21 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { compareBunkNames } from "@/lib/bunk-order";
+import { byBunkThenName } from "@/lib/print/data";
 import { formatBuzzer } from "@/lib/buzzer-format";
 
 export { formatBuzzer };
 
-type Place = { name: string; sort_order: number | null } | null;
+type Place = { name: string } | null;
 
-/** Printing order: division, bunk (Alef, Beis… / 1, 2… 10), last name, first name. */
+/**
+ * Numbering order, the same as printing by bunk (lib/print/data byBunkThenName): division by
+ * name (Division 1, 2, 3 … then the rest A–Z: Bar Mitzvah, French, Hebrew), bunk in Alef-Beis /
+ * number order, then last name, first name; no division or bunk last. Not the order set by
+ * hand on Divisions & bunks, so the numbers follow the names whatever that order is.
+ */
 export function byPlaceThenName(a: { first_name: string; last_name: string; divisions: unknown; bunks: unknown }, b: typeof a): number {
-  const [da, db] = [a.divisions as Place, b.divisions as Place];
-  const [ba, bb] = [a.bunks as Place, b.bunks as Place];
-  return (
-    (da?.sort_order ?? 9999) - (db?.sort_order ?? 9999) ||
-    (da?.name ?? "").localeCompare(db?.name ?? "") ||
-    (ba?.sort_order ?? 9999) - (bb?.sort_order ?? 9999) ||
-    compareBunkNames(ba?.name ?? "", bb?.name ?? "") ||
-    a.last_name.localeCompare(b.last_name) ||
-    a.first_name.localeCompare(b.first_name)
-  );
+  const place = (c: typeof a) => ({ first_name: c.first_name, last_name: c.last_name, division_name: (c.divisions as Place)?.name ?? null, bunk_name: (c.bunks as Place)?.name ?? null });
+  return byBunkThenName(place(a), place(b));
 }
 
 /**
@@ -35,7 +32,7 @@ export async function assignBuzzers(sessionId: string, camperIds?: string[], opt
   const rows = await fetchAll((from, to) =>
     admin
       .from("campers")
-      .select("id, first_name, last_name, current_buzzer_number, divisions(name, sort_order), bunks(name, sort_order)")
+      .select("id, first_name, last_name, current_buzzer_number, divisions(name), bunks(name)")
       .eq("session_id", sessionId)
       .is("archived_at", null)
       .order("id")
