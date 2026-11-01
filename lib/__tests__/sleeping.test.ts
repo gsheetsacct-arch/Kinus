@@ -19,3 +19,10 @@ describe("sleeping at the Kinus", () => {
     expect(unknown.has("staying") || unknown.has("going_home")).toBe(false);
   });
 });
+
+describe("the list column", () => {
+  it("says sleeping here or going home", async () => {
+    const { sleepingText } = await import("../sleeping");
+    expect([sleepingText(true), sleepingText(false), sleepingText(null)]).toEqual(["Sleeping here", "Going home", null]);
+  });
+});

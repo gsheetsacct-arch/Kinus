@@ -22,3 +22,8 @@ export function sleepingOf(sourceData: unknown, fixes: unknown): boolean | null 
   return null;
 }
 
+
+/** The list column (Lists, list layouts): "Sleeping here" or "Going home", from the same answer. */
+export const SLEEPING_COLUMN = "sleeping";
+export const SLEEPING_COLUMN_LABEL = "Sleeping at the Kinus";
+export const sleepingText = (v: boolean | null | undefined) => (v === true ? "Sleeping here" : v === false ? "Going home" : null);

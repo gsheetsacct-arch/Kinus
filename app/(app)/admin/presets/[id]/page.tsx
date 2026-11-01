@@ -15,6 +15,7 @@ import { FIELDS, UNGATED_GROUPS, type FieldGroup } from "@/lib/fields";
 import { AUDIENCES, FIELD_GROUPS } from "@/lib/labels";
 import { copyPreset, deletePreset, savePreset } from "../actions";
 import { CAMPER_FLAGS, FLAG_KEYS, parseFlags } from "@/lib/camper-flags";
+import { SLEEPING_COLUMN, SLEEPING_COLUMN_LABEL } from "@/lib/sleeping";
 
 export const metadata = { title: "List layout" };
 
@@ -132,6 +133,13 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                 </fieldset>
               );
             })}
+            <fieldset className="space-y-2">
+              <legend className="mb-2 text-sm font-semibold">Sleeping</legend>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm hover:bg-muted/40 has-[:checked]:border-primary/50 has-[:checked]:bg-primary-soft/40 sm:w-fit">
+                <input type="checkbox" name="columns" value={SLEEPING_COLUMN} defaultChecked={columns.has(SLEEPING_COLUMN)} className="size-4 accent-[var(--primary)]" />
+                {SLEEPING_COLUMN_LABEL} <span className="text-muted-foreground">(Sleeping here / Going home)</span>
+              </label>
+            </fieldset>
             {extraFields.length > 0 && (
               <fieldset className="space-y-2">
                 <legend className="mb-2 text-sm font-semibold">From the registration export</legend>

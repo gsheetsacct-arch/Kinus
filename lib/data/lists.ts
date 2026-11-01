@@ -6,6 +6,7 @@ import { presetAudiencesFor, visibleFieldGroups, type CurrentUser, type FieldVis
 import { listCampers } from "./campers";
 import { STATUS_LABEL } from "@/lib/attendance/machine";
 import { CAMPER_FLAGS, parseFlags, type CamperFlag } from "@/lib/camper-flags";
+import { SLEEPING_COLUMN, SLEEPING_COLUMN_LABEL, sleepingText } from "@/lib/sleeping";
 
 type DB = SupabaseClient<Database>;
 
@@ -59,7 +60,7 @@ export async function buildList(
   const extraDefs = preset.columns.some((k) => k.startsWith("source."))
     ? await import("./extra-fields").then(async (m) => (await m.loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: f.label, group: groupOfKey(`source.${f.column}`), kind: "text" as const, answers: f.answers })))
     : [];
-  const defOf = (k: string) => FIELD_BY_KEY[k] ?? extraDefs.find((f) => f.key === k);
+  const defOf = (k: string) => FIELD_BY_KEY[k] ?? extraDefs.find((f) => f.key === k) ?? (k === SLEEPING_COLUMN ? { key: k, label: SLEEPING_COLUMN_LABEL, group: "basic" as const, kind: "text" as const } : undefined);
   const shownColumns = preset.columns
     .map(defOf)
     .filter((f): f is NonNullable<typeof f> => Boolean(f))
@@ -72,6 +73,8 @@ export async function buildList(
   ]);
   const columns = shownColumns.map((f) => ({ key: f.key, label: f.label }));
   const extraCols = columns.filter((c) => c.key.startsWith("source.")).map((c) => ({ column: c.key.slice(7), label: c.label, answers: extraDefs.find((f) => f.key === c.key)?.answers }));
+  // "Sleeping here" / "Going home", from the registration's Sleeping At The Kinus
+  const sleeping = columns.some((c) => c.key === SLEEPING_COLUMN) ? await import("./sleeping").then((m) => m.sleepingAtKinus(scope.sessionId, campers.map((c) => String(c.id)))) : null;
   const extraValues = extraCols.length ? await import("./extra-fields").then((m) => m.extraValuesFor(campers.map((c) => String(c.id)), extraCols)) : new Map<string, Record<string, string>>();
 
   const sorted = [...campers].sort((a, b) => {
@@ -92,6 +95,7 @@ export async function buildList(
       id: c.id!,
       cells: columns.map((col) => {
         if (col.key.startsWith("source.")) return extraValues.get(String(c.id))?.[col.key.slice(7)] || null;
+        if (col.key === SLEEPING_COLUMN) return sleepingText(sleeping?.get(String(c.id)));
         const v = getFieldValue(c, col.key);
         if (col.key === "status" && typeof v === "string") return STATUS_LABEL[v as keyof typeof STATUS_LABEL] ?? v;
         if (col.key.endsWith(".phone") && typeof v === "string") return formatPhone(v);
