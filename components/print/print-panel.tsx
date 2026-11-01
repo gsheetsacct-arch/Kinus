@@ -1,5 +1,5 @@
 "use client";
-import { parseOrder, PRINT_ORDERS, type PrintOrder } from "@/lib/print/order";
+import { PRINT_ORDERS, type PrintOrder } from "@/lib/print/order";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -32,6 +32,7 @@ export function PrintPanel({
   autoPrint,
   canSplit,
   twoSided,
+  order: savedOrder = "bunk",
 }: {
   jobIds: string[];
   stock: SheetStock | null;
@@ -52,23 +53,14 @@ export function PrintPanel({
   canSplit?: boolean;
   /** Printed on both sides: which edge the paper turns on. */
   twoSided?: { flip: "long" | "short" } | null;
+  /** The order the request was made with (Print a batch → Order): where the choice starts. */
+  order?: PrintOrder;
 }) {
   const router = useRouter();
   // one tag a page (pages the tag's size) instead of on the template's label sheet
   const [single, setSingle] = React.useState(false);
-  // the order tags print in, remembered on this device
-  const [order, setOrderRaw] = React.useState<PrintOrder>("bunk");
-  React.useEffect(() => {
-    try {
-      setOrderRaw(parseOrder(localStorage.getItem("kinus:print-order")));
-    } catch {}
-  }, []);
-  const setOrder = (o: PrintOrder) => {
-    setOrderRaw(o);
-    try {
-      localStorage.setItem("kinus:print-order", o);
-    } catch {}
-  };
+  // the order tags print in: as the request was made, changeable here before printing
+  const [order, setOrder] = React.useState<PrintOrder>(savedOrder);
   const stock = single ? null : sheetStock;
   const per = sheetStock?.perSheet ?? 1;
   const [used, setUsed] = React.useState<number[]>(sheetStock ? cleanUsed(remembered, per) : []);
@@ -96,7 +88,7 @@ export function PrintPanel({
   if (current) params.set("division", partKey(current));
   if (each) params.set("copies", String(each));
   if (single) params.set("single", "1");
-  if (order !== "bunk") params.set("order", order);
+  params.set("order", order);
   const src = `/print/sheet?${params}`;
 
   // names longer than the template was made for: printed smaller (whole), or cut off even so

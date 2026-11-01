@@ -50,6 +50,7 @@ export default async function PrintTogetherPage({ searchParams }: { searchParams
       parts={summary.parts}
         tags={summary.tags}
       campers={summary.campers}
+      order={summary.order}
         open={open}
         canSplit
       />

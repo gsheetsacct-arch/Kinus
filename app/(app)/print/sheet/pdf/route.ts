@@ -23,7 +23,8 @@ export async function GET(request: NextRequest) {
       divisionId: division === null ? undefined : division === "none" ? null : division,
       copies: Number(sp.get("copies")) || undefined,
       single: sp.get("single") === "1",
-      order: parseOrder(sp.get("order")),
+      // the page's choice, else the order the request was made with
+      order: sp.get("order") ? parseOrder(sp.get("order")) : undefined,
       part: Number(sp.get("part")) || 0,
     });
     const ascii = r.fileName.replace(/[^\x20-\x7e]+/g, "_").replace(/"/g, "");

@@ -10,6 +10,7 @@ import { RadioCards } from "@/components/ui/radio-cards";
 import { Segmented } from "@/components/ui/segmented";
 import { BATCH_WHICH_LABELS, type BatchWhichKey } from "@/lib/print/batch-labels";
 import { countBatch, createBatch } from "@/app/(app)/print/actions";
+import { PRINT_ORDERS, type PrintOrder } from "@/lib/print/order";
 
 type Division = { id: string; name: string; bunks: { id: string; name: string }[] };
 
@@ -19,6 +20,7 @@ export function BatchForm({ templates, divisions, campLabel, officeTo }: { templ
   const [copies, setCopies] = React.useState(templates[0]?.copies ?? 1);
   const [where, setWhere] = React.useState("");
   const [which, setWhich] = React.useState<BatchWhichKey>("not_printed");
+  const [order, setOrder] = React.useState<PrintOrder>("bunk");
   const [deliver, setDeliver] = React.useState<"here" | "email">("here");
   const [count, setCount] = React.useState<number | null>(null);
   React.useEffect(() => {
@@ -52,6 +54,9 @@ export function BatchForm({ templates, divisions, campLabel, officeTo }: { templ
       </Field>
       <Field label="Which campers" hint={BATCH_WHICH_LABELS[which].long}>
         <Segmented name="which" value={which} onChange={setWhich} options={(Object.keys(BATCH_WHICH_LABELS) as BatchWhichKey[]).map((k) => ({ value: k, label: BATCH_WHICH_LABELS[k].short }))} />
+      </Field>
+      <Field label="Order" hint={order === "bunk" ? "Division, then bunk, then last name." : order === "division" ? "Division, then last name (bunks mixed)." : "Last name, everyone together."}>
+        <Segmented name="order" value={order} onChange={setOrder} options={PRINT_ORDERS.map((o) => ({ value: o.value, label: o.label }))} />
       </Field>
       <Field label="What it is and what it's for (optional)" htmlFor="purpose" hint="Shows in the print queue and the office's email, so they know what this batch is.">
         <Input id="purpose" name="purpose" maxLength={200} placeholder="e.g. Luggage tags for the Shabbaton trip, Sunday" />
