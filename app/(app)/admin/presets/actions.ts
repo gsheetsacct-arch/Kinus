@@ -31,7 +31,7 @@ export async function savePreset(fd: FormData): Promise<ActionResult> {
       group_by: d.group_by || null,
       sort: [...(d.group_by ? [{ field: d.group_by, dir: "asc" }] : []), { field: d.sort_field, dir: "asc" }],
       is_default: d.is_default === "on",
-      filters: { only: parseFlags(fd.getAll("only").map(String).join(",")) },
+      filters: { only: parseFlags(fd.getAll("only").map(String).join(",")), match: fd.get("match") === "all" ? "all" : "any" },
     };
     const { error } = d.id ? await supabase.from("list_presets").update(row).eq("id", d.id) : await supabase.from("list_presets").insert({ ...row, created_by: me.id });
     if (error) throw error;

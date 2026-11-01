@@ -23,6 +23,8 @@ export type CamperFilter = {
   includeArchived?: boolean;
   /** Only campers with every one of these (lib/camper-flags). */
   only?: CamperFlag[];
+  /** And at least one of these (a list layout matching any of its ticked filters). */
+  anyOf?: CamperFlag[];
 };
 
 const ALWAYS = ["id", "display_name", "first_name", "last_name", "division_id", "bunk_id", "status", "archived_at"];
@@ -49,7 +51,9 @@ export async function listCampers(supabase: DB, f: CamperFilter): Promise<Camper
   }
   if (f.divisionIds && !f.divisionIds.length) return [];
   const only = f.only ?? [];
-  const columns = f.fields ? selectFor(only.length ? [...f.fields, ...FLAG_COLUMNS] : f.fields) : "*";
+  const anyOf = f.anyOf ?? [];
+  const flagged = [...only, ...anyOf];
+  const columns = f.fields ? selectFor(flagged.length ? [...f.fields, ...FLAG_COLUMNS] : f.fields) : "*";
   const withContacts = !f.fields || f.fields.some((k) => k.startsWith("contact."));
   const rows = await fetchAll<CamperVisible>((from, to) => {
     // typed as "*": rows carry only the asked-for columns, and the code only reads those
@@ -62,12 +66,12 @@ export async function listCampers(supabase: DB, f: CamperFilter): Promise<Camper
     if (ids) query = query.in("id", ids);
     return query.order("last_name").order("first_name").order("id").range(from, to);
   });
-  const later = only.includes("later") ? await comingLater(supabase, f.sessionId) : null;
-  const sleeping = only.includes("staying") || only.includes("going_home") ? await sleepingAtKinus(f.sessionId, rows.map((c) => c.id!)) : null;
-  if (only.length) {
+  const later = flagged.includes("later") ? await comingLater(supabase, f.sessionId) : null;
+  const sleeping = flagged.includes("staying") || flagged.includes("going_home") ? await sleepingAtKinus(f.sessionId, rows.map((c) => c.id!)) : null;
+  if (flagged.length) {
     const keep = rows.filter((c) => {
       const has = camperFlags({ ...c, sleeping: sleeping?.get(c.id!) ?? null }, Boolean(later?.has(c.id!)));
-      return only.every((k) => has.has(k));
+      return only.every((k) => has.has(k)) && (!anyOf.length || anyOf.some((k) => has.has(k)));
     });
     rows.splice(0, rows.length, ...keep);
   }
