@@ -1,3 +1,4 @@
+import { cleanBunkName } from "@/lib/import/mapping";
 import type { BulkInputRow } from "./bulk";
 import { matchRole } from "./bulk";
 import { countryName, stateCode } from "@/lib/address-codes";
@@ -106,7 +107,7 @@ export function readStaffExport(grid: string[][]): ExportRead {
       title: at(r, FIELDS.position),
       phone: at(r, FIELDS.phone, looksLikePhone),
       where: at(r, FIELDS.division),
-      bunk: at(r, FIELDS.bunk),
+      bunk: cleanBunkName(at(r, FIELDS.bunk)),
       level: "",
       // from registration everyone new is listed (phone book, lists, texts); sign-in is turned on per person
       signs: "no",

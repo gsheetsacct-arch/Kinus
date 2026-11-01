@@ -1,4 +1,5 @@
 import { matchRole } from "./bulk";
+import { cleanBunkName } from "@/lib/import/mapping";
 import type { ExportRead, ExportRow } from "./export";
 import { isAccepted, isStaffExport } from "./export";
 
@@ -134,7 +135,7 @@ export function readMasterSheet(grid: string[][], divisions: string[]): ExportRe
       title: PLAIN_ROLE.test(position) ? "" : position,
       phone: at(r, COLUMNS.phone, looksLikePhone),
       where: everywhere ? "All" : (division ?? ""),
-      bunk: division ? at(r, COLUMNS.bunk) : "",
+      bunk: division ? cleanBunkName(at(r, COLUMNS.bunk)) : "",
       level: "",
       signs: "no",
       address: Object.values(address).some(Boolean) ? address : null,

@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { cleanBunkName } from "../mapping";
+import { compareBunkNames, hebrewLetterNumber } from "@/lib/bunk-order";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import iconv from "iconv-lite";
@@ -274,5 +276,19 @@ describe("staff-locked placement", () => {
     const archived = { ...base, id: "a1", source_id: "9999", archived: true };
     const r = matchAndDiff([{ rowNumber: 2, parsed: parsedFor() }], [base, walkIn, archived], known, opts);
     expect(r.summary.missing).toEqual([]);
+  });
+});
+
+describe("bunks as the registration export writes them", () => {
+  const all = ["Bunk לב", "Bunk סה - Online School Only", "Bunk נו - Online School Only", "Bunk ל - Online School Only", "Bunk טז - Online School Only", "Bunk טו - Online School Only", "Bunk יד - Online School Only", "Bunk מג - Online School Only", "Bunk יט", "Bunk א", "Bunk ס", "Bunk כ", "Bunk סד", "Bunk נט"];
+  it("reads the bunk without the Online School note", () => {
+    const c = applyMapping({ "group_types.bunks": "Bunk סה - Online School Only" }, { "group_types.bunks": "bunk" }, {});
+    expect(c.bunk_name).toBe("Bunk סה");
+    expect(applyMapping({ "group_types.bunks": "" }, { "group_types.bunks": "bunk" }, {}).bunk_name).toBeNull();
+  });
+  it("puts them in Alef-Beis order by number", () => {
+    const names = [...new Set(all.map(cleanBunkName))];
+    expect(names.map(hebrewLetterNumber)).toEqual([32, 65, 56, 30, 16, 15, 14, 43, 19, 1, 60, 20, 64, 59]);
+    expect([...names].sort(compareBunkNames)).toEqual(["Bunk א", "Bunk יד", "Bunk טו", "Bunk טז", "Bunk יט", "Bunk כ", "Bunk ל", "Bunk לב", "Bunk מג", "Bunk נו", "Bunk נט", "Bunk ס", "Bunk סד", "Bunk סה"]);
   });
 });
