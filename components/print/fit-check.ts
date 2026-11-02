@@ -31,7 +31,7 @@ const S = 4; // px per mm while measuring
  */
 export function checkFit(l: TextLayer, people: FitPerson[]): FitResult {
   if (l.curve) return checkCurve(l, people);
-  const turned = Boolean(l.rotate);
+  const turned = l.rotate === 90 || l.rotate === -90;
   const w = (turned ? l.h : l.w) * S;
   const h = (turned ? l.w : l.h) * S;
   const host = document.createElement("div");
@@ -144,6 +144,6 @@ function checkCurve(l: TextLayer, people: FitPerson[]): FitResult {
 
 /** The biggest text size (pt) one line can have in a box this tall, with every letter whole. */
 export function boxCapPt(l: TextLayer): number {
-  const tall = l.rotate ? l.w : l.h;
+  const tall = l.rotate === 90 || l.rotate === -90 ? l.w : l.h;
   return Math.max(3, Math.floor(tall / lineHeightOf(l.font) / MM_PER_PT));
 }

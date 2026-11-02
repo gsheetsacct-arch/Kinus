@@ -110,7 +110,7 @@ function scaleLayers(layers: Layer[], sx: number, sy: number): Layer[] {
  */
 function turnDesign(layers: Layer[], W: number, H: number): Layer[] | null {
   const turned = layers.map((l) => ("rotate" in l ? (l.rotate ?? 0) : 0));
-  if (turned.includes(90) && turned.includes(-90)) return null;
+  if ((turned.includes(90) && turned.includes(-90)) || turned.includes(180)) return null;
   const back = turned.includes(90); // turned clockwise before: turn back
   return layers.map((l) => {
     const box = back ? { x: l.y, y: tidy(W - (l.x + l.w)), w: l.h, h: l.w } : { x: tidy(H - (l.y + l.h)), y: l.x, w: l.h, h: l.w };
@@ -222,8 +222,9 @@ function BarcodeCheck({ l, values }: { l: Extract<Layer, { type: "barcode" }>; v
   const text = fill(l.text, (k) => values[k] ?? "") || l.text;
   const code = useCode("barcode", text);
   if (!code?.modules) return null;
-  const length = l.rotate ? l.h : l.w;
-  const tall = (l.rotate ? l.w : l.h) - (l.showText !== false ? 3 : 0);
+  const side = l.rotate === 90 || l.rotate === -90;
+  const length = side ? l.h : l.w;
+  const tall = (side ? l.w : l.h) - (l.showText !== false ? 3 : 0);
   const bar = length / code.modules;
   const need = Math.ceil(code.modules * MIN_BAR_MM);
   const problem = bar < MIN_BAR_MM ? `The bars are too thin to scan reliably (${bar.toFixed(2)} mm). Make the barcode at least ${need} mm long.` : tall < 6 ? "The bars are very short. Make the barcode at least 6 mm tall so it scans easily." : null;
@@ -1513,8 +1514,9 @@ export function TemplateEditor({
                 {(sel.type === "text" || sel.type === "barcode") && (
                   <label className="block space-y-1">
                     <span className="block text-xs text-muted-foreground">Direction</span>
-                    <Select value={String(sel.rotate ?? 0)} onChange={(e) => setLayer(sel.id, { rotate: Number(e.target.value) as 0 | 90 | -90 })} className="h-9">
+                    <Select value={String(sel.rotate ?? 0)} onChange={(e) => setLayer(sel.id, { rotate: Number(e.target.value) as 0 | 90 | -90 | 180 })} className="h-9">
                       <option value="0">Across</option>
+                      <option value="180">Upside down (folds over)</option>
                       <option value="-90">Up the side (bottom to top)</option>
                       <option value="90">Down the side (top to bottom)</option>
                     </Select>

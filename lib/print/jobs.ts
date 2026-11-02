@@ -2,7 +2,7 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { canAccessBunk, seesAllCamp, type CurrentUser } from "@/lib/auth/permissions";
-import { renderDocument } from "./render";
+import { renderCombined, renderDocument } from "./render";
 import { mergeValues, printedNameKeys } from "./merge";
 import type { FitNotes } from "./pdf";
 import { renderPdf } from "./chromium";
@@ -530,4 +530,53 @@ export async function retryStuckJobs(sessionId: string, appUrl: string, schedule
     schedule(() => processPrintJob(j.id, appUrl, { retry: true }));
   }
   return n;
+}
+
+/**
+ * Requests for different label-printer templates (a name tag and a bag label, each camper's
+ * asked for at check-in) printed as sets: each camper's labels one after another, in the
+ * order asked for (by bunk unless chosen), the templates in their usual order.
+ */
+async function combinedSet(jobIds: string[], opts: { order?: PrintOrder } = {}) {
+  const admin = createAdminClient();
+  const ids = [...new Set(jobIds)];
+  const { data: jobs, error } = await admin.from("print_jobs").select("id, template_id, print_templates(sort_order, name)").in("id", ids);
+  if (error) throw error;
+  if (!jobs || jobs.length !== ids.length) throw new Error("Some of these requests are gone. Go back to the print queue.");
+  const byTemplate = new Map<string, { ids: string[]; sort: number; name: string }>();
+  for (const j of jobs) {
+    if (!j.template_id) throw new Error("The template of one of these requests was deleted.");
+    const t = j.print_templates as { sort_order: number | null; name: string } | null;
+    const g = byTemplate.get(j.template_id) ?? { ids: [], sort: t?.sort_order ?? 0, name: t?.name ?? "" };
+    g.ids.push(j.id);
+    byTemplate.set(j.template_id, g);
+  }
+  const groups = [...byTemplate.values()].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
+  const sets = await Promise.all(groups.map((g) => loadPrintSet(g.ids)));
+  const made = sets.map((set) => itemsOf(set, { order: opts.order }));
+  // the campers in the first template's order, then anyone only in the others
+  const campers: string[] = [];
+  for (const m of made) for (const c of m.campers) if (!campers.includes(c.id)) campers.push(c.id);
+  const order = campers.flatMap((id) =>
+    made.flatMap((m, part) => {
+      const i = m.campers.findIndex((c) => c.id === id);
+      return i < 0 ? [] : [{ part, values: m.items[i].values, copies: m.items[i].copies }];
+    }),
+  );
+  const parts = sets.map((set) => ({ spec: set.spec, background: set.background, images: set.images, fontCss: set.fontCss }));
+  return { parts, order, art: sets.flatMap((s) => s.art), tags: order.reduce((n, o) => n + o.copies, 0), campers: campers.length, templates: groups.map((g) => g.name) };
+}
+
+/** The printable page for a combined set (see combinedSet). */
+export async function combinedSetHtml(jobIds: string[], opts: { order?: PrintOrder } = {}): Promise<string> {
+  const c = await combinedSet(jobIds, opts);
+  return renderCombined(c.parts, c.order);
+}
+
+/** A combined set as one PDF (up to a few hundred labels: bigger sets print from the page). */
+export async function combinedSetPdf(jobIds: string[], opts: { order?: PrintOrder } = {}): Promise<{ pdf: Buffer; fileName: string }> {
+  const c = await combinedSet(jobIds, opts);
+  if (c.tags > 400) throw new Error(`${c.tags} labels is too many for one PDF: print from the page, or choose fewer requests.`);
+  const { pdf } = await renderPdf(renderCombined(c.parts, c.order), { art: c.art });
+  return { pdf, fileName: `${c.templates.join(" + ").replace(/[\\/:*?"<>|×]+/g, "-")} - ${c.campers} campers.pdf` };
 }

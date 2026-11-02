@@ -480,8 +480,9 @@ function Part({
   const turned =
     (l.type === "text" || l.type === "barcode") && l.rotate ? l.rotate : 0;
   // inside a turned part, content is laid out across the turned box
-  const innerW = (turned ? l.h : l.w) * scale;
-  const innerH = (turned ? l.w : l.h) * scale;
+  const side = turned === 90 || turned === -90;
+  const innerW = (side ? l.h : l.w) * scale;
+  const innerH = (side ? l.w : l.h) * scale;
   const inner: React.CSSProperties = turned
     ? {
         position: "absolute",
