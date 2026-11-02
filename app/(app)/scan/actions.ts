@@ -225,7 +225,7 @@ export async function setCamperBuzzer(camperId: string, number: number | null): 
 }
 
 /** One-tap print request from a camper card (name tag, luggage tag, …). */
-export async function requestTag(camperId: string, templateId: string, opts: { copies?: number; deliverTo?: string; note?: string } = {}): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+export async function requestTag(camperId: string, templateId: string, opts: { copies?: number; deliverTo?: string; note?: string; /** email the PDF (to deliverTo, else the office); off: it waits in the print queue */ email?: boolean } = {}): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
   const user = await requireUser();
   const session = await getActiveSession();
   if (!session) return { ok: false, error: "No active session." };
@@ -241,7 +241,12 @@ export async function requestTag(camperId: string, templateId: string, opts: { c
   try {
     // what it's for, in the person's words (shows in the queue and the office's email)
     const note = opts.note?.trim().slice(0, 200) || null;
-    const job = await createPrintJob(user, { sessionId: session.id, templateId, camperIds: [camperId], copies, deliverTo, note });
+    const job = await createPrintJob(user, { sessionId: session.id, templateId, camperIds: [camperId], copies, deliverTo: opts.email ? deliverTo : user.email, note });
+    // not emailed (the usual): it waits in the print queue, ready to print
+    if (!opts.email) {
+      await createAdminClient().from("print_jobs").update({ status: "ready" }).eq("id", job.id).eq("status", "queued");
+      return { ok: true, message: job.copies > 1 ? `${job.copies} added to the print queue.` : "Added to the print queue." };
+    }
     const base = await appUrl();
     after(() => processPrintJob(job.id, base));
     return { ok: true, message: `${job.copies > 1 ? `${job.copies} sent` : "Sent"} to ${deliverTo ?? "the office"}.` };
