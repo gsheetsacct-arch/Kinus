@@ -10,7 +10,7 @@ import { SLEEPING_COLUMN, SLEEPING_COLUMN_LABEL, sleepingText } from "@/lib/slee
 
 type DB = SupabaseClient<Database>;
 
-export type ListPreset = { id: string; name: string; audience: string; columns: string[]; sort: { field: string; dir: string }[]; group_by: string | null; is_default: boolean; /** Only campers with all of these (lib/camper-flags). */ only: CamperFlag[] };
+export type ListPreset = { id: string; name: string; audience: string; columns: string[]; sort: { field: string; dir: string }[]; group_by: string | null; is_default: boolean; /** Only campers with these (lib/camper-flags): any one of them, or all of them. */ only: CamperFlag[]; match: "any" | "all" };
 
 export type BuiltList = {
   preset: ListPreset;
@@ -28,6 +28,7 @@ export async function getPresetsFor(supabase: DB, user: CurrentUser): Promise<Li
     columns: p.columns as string[],
     sort: p.sort as { field: string; dir: string }[],
     only: parseFlags(((filters as { only?: string[] } | null)?.only ?? []).join(",")),
+    match: (filters as { match?: string } | null)?.match === "all" ? ("all" as const) : ("any" as const),
   }));
 }
 
@@ -66,9 +67,11 @@ export async function buildList(
     .filter((f): f is NonNullable<typeof f> => Boolean(f))
     .filter((f) => UNGATED_GROUPS.includes(f.group) || groupsAnywhere.has(f.group));
   const fields = [...new Set([...shownColumns.map((f) => f.key), ...sortKeys.map((s) => s.field), ...(preset.group_by ? [preset.group_by] : [])])].filter((k) => FIELD_BY_KEY[k]);
-  const only = [...new Set([...preset.only, ...(scope.only ?? [])])];
+  // the layout's filters: all of them, or (by default) any one of them; the page's choice narrows it further
+  const anyOf = preset.match === "any" && preset.only.length > 1 ? preset.only : [];
+  const only = [...new Set([...(anyOf.length ? [] : preset.only), ...(scope.only ?? [])])];
   const [campers, { data: divisions }] = await Promise.all([
-    listCampers(supabase, { sessionId: scope.sessionId, divisionId: scope.divisionId, bunkId: scope.bunkId, divisionIds: scope.divisionIds, fields, only }),
+    listCampers(supabase, { sessionId: scope.sessionId, divisionId: scope.divisionId, bunkId: scope.bunkId, divisionIds: scope.divisionIds, fields, only, anyOf }),
     supabase.from("divisions").select("id, name").eq("session_id", scope.sessionId),
   ]);
   const columns = shownColumns.map((f) => ({ key: f.key, label: f.label }));
@@ -127,6 +130,6 @@ export async function buildList(
     preset,
     columns,
     groups: await inCampOrder(supabase, scope.sessionId, groupKey, [...groupsMap.values()]),
-    scopeLabel: [[divName, bunkName].filter(Boolean).join(" · ") || (scope.campName ? `All of ${scope.campName}` : "All divisions"), ...only.map((k) => CAMPER_FLAGS[k].label)].join(" · "),
+    scopeLabel: [[divName, bunkName].filter(Boolean).join(" · ") || (scope.campName ? `All of ${scope.campName}` : "All divisions"), ...(anyOf.length ? [anyOf.map((k) => CAMPER_FLAGS[k].label).join(" or ")] : []), ...only.map((k) => CAMPER_FLAGS[k].label)].join(" · "),
   };
 }

@@ -174,17 +174,18 @@ const ROLE_LABEL: Record<string, string> = { mother: "Mother", father: "Father",
 export async function loadCard(camperId: string): Promise<CardData | null> {
   const user = await requireUser();
   const supabase = await createClient();
-  const [{ data: c }, { data: fv }, { data: contacts }, { data: prints }] = await Promise.all([
+  // all at once: the division and bunk names too (not a second round trip after the camper)
+  const [{ data: c }, { data: fv }, { data: contacts }, { data: prints }, { data: place }] = await Promise.all([
     supabase.from("campers_board").select("*").eq("id", camperId).maybeSingle(),
     supabase.from("field_visibility").select("field_group, roles"),
     supabase.from("camper_contacts").select("role, slot, name, phone, phone_e164").eq("camper_id", camperId).order("role").order("slot"),
     supabase.rpc("camper_print_status", { p_camper_id: camperId }),
+    supabase.from("campers_visible").select("division:divisions(name), bunk:bunks(name)").eq("id", camperId).maybeSingle(),
   ]);
   if (!c?.id) return null;
-  const [{ data: d }, { data: b }] = await Promise.all([
-    c.division_id ? supabase.from("divisions").select("name").eq("id", c.division_id).maybeSingle() : Promise.resolve({ data: null }),
-    c.bunk_id ? supabase.from("bunks").select("name").eq("id", c.bunk_id).maybeSingle() : Promise.resolve({ data: null }),
-  ]);
+  const names = place as { division: { name: string } | null; bunk: { name: string } | null } | null;
+  const d = names?.division ?? null;
+  const b = names?.bunk ?? null;
   const seeContacts = visibleFieldGroups(user, fv ?? []).has("contacts");
   return {
     id: c.id,

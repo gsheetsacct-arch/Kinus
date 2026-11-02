@@ -14,7 +14,8 @@ export type TemplateButton = { id: string; name: string; copies: number; divisio
  */
 export async function loadCardTemplates(db: SupabaseClient<Database>): Promise<TemplateButton[]> {
   const [{ data }, session] = await Promise.all([
-    db.from("print_templates").select("*").eq("show_on_card", true).not("name", "like", "(retired)%").order("sort_order").order("name"),
+    // just what the buttons need (not every template's parts)
+    db.from("print_templates").select("id, name, copies, camps, audience").eq("show_on_card", true).not("name", "like", "(retired)%").order("sort_order").order("name"),
     getActiveSession(),
   ]);
   const camps = session && (data ?? []).some((t) => (t as { camps?: string[] }).camps?.length) ? await campDivisions(db, session.id) : [];

@@ -39,6 +39,7 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
   const extraFields = await loadExtraFields();
   const sort = (preset?.sort as { field: string; dir: string }[] | undefined) ?? [];
   const only = new Set(parseFlags(((preset?.filters as { only?: string[] } | null)?.only ?? []).join(",")));
+  const match = (preset?.filters as { match?: string } | null)?.match === "all" ? "all" : "any";
   const sortField = sort.find((s) => s.field !== preset?.group_by)?.field ?? "last_name";
 
   return (
@@ -96,7 +97,18 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                   {CAMPER_FLAGS[k].label}
                 </label>
               ))}
-              <p className="text-xs text-muted-foreground">None ticked: every camper. Ticked: only those with all of them (e.g. a nurse&apos;s list of campers with a medical flag).</p>
+              <div className="flex flex-wrap items-center gap-3 pt-1 text-sm">
+                <span className="text-muted-foreground">With more than one ticked:</span>
+                <label className="flex items-center gap-1.5">
+                  <input type="radio" name="match" value="any" defaultChecked={match === "any"} className="size-4 accent-[var(--primary)]" />
+                  any of them
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <input type="radio" name="match" value="all" defaultChecked={match === "all"} className="size-4 accent-[var(--primary)]" />
+                  all of them
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">None ticked: every camper. Any of them: campers with at least one (medical flag or notes). All of them: only campers with every one ticked.</p>
             </fieldset>
             <label className="flex items-start gap-2 text-sm">
               <input type="checkbox" name="is_default" defaultChecked={preset?.is_default ?? false} className="mt-0.5 size-4" />

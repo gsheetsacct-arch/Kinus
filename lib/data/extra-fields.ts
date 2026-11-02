@@ -1,7 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { groupOfKey, UNGATED_GROUPS } from "@/lib/fields";
-import { extraValue, parseExtraFields, shortAnswer, type ExtraField } from "@/lib/import/extra-fields";
+import { columnKey, extraValue, parseExtraFields, shortAnswer, type ExtraField } from "@/lib/import/extra-fields";
 import { withFixes } from "@/lib/source-fixes";
 
 /** The export columns chosen to show (Import → column step → "Show on the camper page"). */
@@ -34,6 +34,23 @@ export async function extraValuesFor(camperIds: string[], fields: (Pick<ExtraFie
   const ids = [...new Set(camperIds)];
   const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += 150) chunks.push(ids.slice(i, i + 150));
+  // just these columns' answers, from the database (migration 0050), not the whole export rows
+  const keys = [...new Set(fields.map((f) => columnKey(f.column)))];
+  const rpc = admin.rpc as unknown as (f: string, a: object) => PromiseLike<{ data: { camper_id: string; key: string; value: string | null }[] | null; error: unknown }>;
+  const fast = await Promise.all(chunks.map((chunk) => rpc("camper_source_values", { p_ids: chunk, p_keys: keys })));
+  if (fast.every((r) => !r.error)) {
+    const got = new Map<string, Map<string, string>>();
+    for (const r of fast.flatMap((x) => x.data ?? [])) {
+      if (!got.has(r.camper_id)) got.set(r.camper_id, new Map());
+      got.get(r.camper_id)!.set(r.key, r.value ?? "");
+    }
+    for (const id of ids) {
+      const row = got.get(id);
+      if (row) out.set(id, Object.fromEntries(fields.map((f) => [f.column, shortAnswer(f, (row.get(columnKey(f.column)) ?? "").trim())])));
+    }
+    return out;
+  }
+  // before migration 0050: the whole rows
   // "*": the staff fixes too (source_fixes, migration 0034), and still works before it
   const parts = await Promise.all(chunks.map((chunk) => admin.from("campers").select("*").in("id", chunk)));
   for (const { data, error } of parts) {
