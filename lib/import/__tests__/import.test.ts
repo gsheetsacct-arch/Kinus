@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { keepProtectedColumns } from "../protected";
 import { cleanBunkName } from "../mapping";
 import { compareBunkNames, hebrewLetterNumber } from "@/lib/bunk-order";
 import { readFileSync } from "node:fs";
@@ -264,6 +265,20 @@ describe("staff-locked placement", () => {
     const r = matchAndDiff([{ rowNumber: 2, parsed: parsedFor({ has_allergies: false, allergies: null, grade: "5" }) }], [nurse], known, { ...opts, emptyMeansUnknown: false });
     expect(r.rows[0].changes).toEqual([{ field: "grade", old: "4", new: "5" }]);
     expect(r.rows[0].warnings.join(" ")).toMatch(/kept the has allergies staff entered in Kinus \(Yes\); the file says No/);
+  });
+  it("a regular upload keeps protected details; the corrected copy changes them", () => {
+    const cleaned = { ...base, medical_notes: "Asthma (inhaler)", grade: "4" };
+    const raw = parsedFor({ medical_notes: "Asthma, full history from the form", grade: "5" });
+    const regular = matchAndDiff([{ rowNumber: 2, parsed: raw }], [cleaned], known, { ...opts, protectedFields: ["medical_notes"] });
+    expect(regular.rows[0].changes).toEqual([{ field: "grade", old: "4", new: "5" }]);
+    const corrected = matchAndDiff([{ rowNumber: 2, parsed: raw }], [cleaned], known, { ...opts, protectedFields: [] });
+    expect(corrected.rows[0].changes.map((c) => c.field).sort()).toEqual(["grade", "medical_notes"]);
+  });
+  it("keeps protected export columns, also ones the export doesn't have", () => {
+    const rows = [{ matchedCamperId: "c1", action: "update", parsed: { source_data: { "ppa.medical": "full form text", "PPA.City": "Paris" } as Record<string, string> } }];
+    const before = new Map([["c1", { "ppa.medical": "cleaned", "Medical for counselors": "inhaler in bag", "ppa.city": "Lyon" }]]);
+    expect(keepProtectedColumns(rows, before, ["ppa.medical", "medical for counselors"])).toBe(1);
+    expect(rows[0].parsed.source_data).toEqual({ "PPA.City": "Paris", "ppa.medical": "cleaned", "Medical for counselors": "inhaler in bag" });
   });
   it("matches an archived camper by registration id instead of adding them again", () => {
     const r = matchAndDiff([{ rowNumber: 2, parsed: parsedFor() }], [{ ...base, archived: true }], known, opts);

@@ -187,3 +187,23 @@ export async function resetAttendance(fd: FormData): Promise<ActionResult> {
     return fail(errorMessage(e));
   }
 }
+
+/** Which details are protected: regular uploads keep them; only "our corrected copy" changes them. */
+export async function saveProtectedColumns(fd: FormData): Promise<ActionResult> {
+  const me = await requireAdmin();
+  try {
+    const { parseProtected } = await import("@/lib/import/protected");
+    const extra = String(fd.get("more") ?? "")
+      .split(/\n/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+    const value = parseProtected({ fields: fd.getAll("field").map(String), columns: [...fd.getAll("column").map(String), ...extra] });
+    const supabase = await createClient();
+    const { error } = await supabase.from("settings").upsert({ key: "protected_columns", value, updated_by: me.id, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    revalidatePath("/admin/settings");
+    return ok(`Saved: ${value.fields.length + value.columns.length} protected.`);
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}

@@ -13,6 +13,7 @@ import type { Json } from "@/lib/supabase/database.types";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { bunkOrders, divisionOrder, slotNewBunks, slotNewDivisions } from "@/lib/data/bunk-sort";
 import { columnKey, humanLabel, parseExtraFields } from "@/lib/import/extra-fields";
+import { keepProtectedColumns, parseProtected, protectedFromFile } from "@/lib/import/protected";
 import { campersForImport, intoProgram, layoutFit, LAYOUT_FIT } from "@/lib/import/programs";
 
 /** The column step's choice "show it on the camper page" (an extra field). */
@@ -182,6 +183,8 @@ const previewSchema = z.object({
   fixedDivision: z.string().trim().max(100).default(""),
   takeBunksFromFile: z.enum(["on"]).optional(),
   emptyMeansUnknown: z.enum(["on"]).optional(),
+  // our corrected copy: the protected columns (Settings) update from this file
+  correctedCopy: z.enum(["on"]).optional(),
   phoneDefaultRegion: z.string().trim().length(2).default("US"),
 });
 
@@ -286,7 +289,19 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     const others = (await programDivisions()).filter((x) => !fixedDivision || x.toLowerCase() !== fixedDivision.toLowerCase());
     const existing = campersForImport(loaded.existing, fixedDivision, fixedDivision ? [] : others);
     resolveMultiValues(parsedRows, known);
-    const result = matchAndDiff(parsedRows, existing, known, { takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on" });
+    // protected columns (Settings): a regular upload keeps what Kinus has; our corrected copy updates them
+    const corrected = d.correctedCopy === "on";
+    const { data: protectedRow } = await admin.from("settings").select("value").eq("key", "protected_columns").maybeSingle();
+    const guarded = parseProtected(protectedRow?.value);
+    const result = matchAndDiff(parsedRows, existing, known, { takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on", protectedFields: corrected ? [] : guarded.fields });
+    const protectedKept = corrected ? 0 : keepProtectedColumns(result.rows, sourceData, guarded.columns);
+    // a new camper's protected details come from this file: worth checking
+    if (!corrected && (guarded.fields.length || guarded.columns.length))
+      for (const r of result.rows) {
+        if (r.action !== "add") continue;
+        const from = protectedFromFile(r.parsed as unknown as Record<string, unknown> & { source_data?: Record<string, string> }, guarded);
+        if (from.length) r.warnings.push(`new camper: check the protected ${from.join(", ")} (from this file, not cleaned yet)`);
+      }
     // the export's other columns (labels, extra fields): applying refreshes them for every camper
     // in the file, so the preview says so, rather than "unchanged"
     const columns = columnRefresh(result.rows, sourceData);
@@ -320,8 +335,8 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
       .from("imports")
       .update({
         status: "previewed",
-        options: { ...(imp.options as object), columnMap, mappingOptions, fixedDivision, takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on", divisionsInFile: result.summary.divisionsInFile, partialWarning },
-        summary: { ...result.summary, missing: result.summary.missing.length, missingList: result.summary.missing, columns } as unknown as J,
+        options: { ...(imp.options as object), columnMap, mappingOptions, fixedDivision, takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on", correctedCopy: corrected, protectedFields: corrected ? [] : guarded.fields, protectedColumns: corrected ? [] : guarded.columns, divisionsInFile: result.summary.divisionsInFile, partialWarning },
+        summary: { ...result.summary, missing: result.summary.missing.length, missingList: result.summary.missing, columns, protectedKept, correctedCopy: corrected } as unknown as J,
       })
       .eq("id", imp.id);
     if (e4) throw e4;
@@ -340,20 +355,23 @@ export async function resolveConflict(fd: FormData): Promise<ActionResult> {
     const admin = createAdminClient();
     const { data: row, error } = await admin.from("import_rows").select("id, import_id, row_number, parsed, imports!inner(session_id, options, status)").eq("id", rowId).single();
     if (error) throw error;
-    const imp = row.imports as unknown as { session_id: string; options: { takeBunksFromFile?: boolean; emptyMeansUnknown?: boolean }; status: string };
+    const imp = row.imports as unknown as { session_id: string; options: { takeBunksFromFile?: boolean; emptyMeansUnknown?: boolean; protectedFields?: string[]; protectedColumns?: string[] }; status: string };
     if (imp.status !== "previewed") return fail("Import is not in preview.");
-    let update: { action: "add" | "skip" | "update" | "unchanged"; matched_camper_id: string | null; changes: J; match_method: string | null };
+    let update: { action: "add" | "skip" | "update" | "unchanged"; matched_camper_id: string | null; changes: J; match_method: string | null; parsed?: J };
     if (choice === "add") update = { action: "add", matched_camper_id: null, changes: [], match_method: null };
     else if (choice === "skip") update = { action: "skip", matched_camper_id: null, changes: [], match_method: null };
     else {
-      const { existing, known } = await loadExisting(imp.session_id);
+      const { existing, known, sourceData } = await loadExisting(imp.session_id);
       const target = existing.find((e) => e.id === choice);
       if (!target) return fail("Camper not found.");
       const r = matchAndDiff([{ rowNumber: row.row_number, parsed: { ...(row.parsed as unknown as ParsedCamper), source_id: null } }], [target], known, {
         takeBunksFromFile: imp.options.takeBunksFromFile ?? false,
         emptyMeansUnknown: imp.options.emptyMeansUnknown ?? true,
+        protectedFields: imp.options.protectedFields ?? [],
       }).rows[0];
-      update = { action: r.action === "update" ? "update" : "unchanged", matched_camper_id: target.id, changes: r.changes as unknown as J, match_method: "manual" };
+      // matched to a camper already in Kinus: their protected columns stay as they are
+      keepProtectedColumns([{ matchedCamperId: target.id, action: "update", parsed: r.parsed as unknown as { source_data: Record<string, string> } }], sourceData, imp.options.protectedColumns ?? []);
+      update = { action: r.action === "update" ? "update" : "unchanged", matched_camper_id: target.id, changes: r.changes as unknown as J, match_method: "manual", parsed: r.parsed as unknown as J };
     }
     const { error: e2 } = await admin.from("import_rows").update({ ...update, warnings: [] }).eq("id", rowId);
     if (e2) throw e2;

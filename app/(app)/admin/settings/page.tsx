@@ -12,7 +12,8 @@ import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
 import { extraAnswers } from "@/lib/data/extra-fields";
 import type { ExtraField } from "@/lib/import/extra-fields";
 import Link from "next/link";
-import { resetAttendance, saveExtraFields, saveImportSettings, saveMissingRules, saveOfficeEmail, sendTestEmail } from "./actions";
+import { resetAttendance, saveExtraFields, saveImportSettings, saveMissingRules, saveOfficeEmail, saveProtectedColumns, sendTestEmail } from "./actions";
+import { parseProtected, PROTECTABLE_FIELDS } from "@/lib/import/protected";
 import { FormDialog } from "@/components/form-dialog";
 import { isOwner } from "@/lib/auth/permissions";
 import { emailSetup } from "@/lib/print/email";
@@ -33,6 +34,12 @@ export default async function SettingsPage() {
   const officeEmail = setting("office_email");
   const email = emailSetup();
   const imp = setting("import");
+  const guarded = parseProtected(settings?.find((x) => x.key === "protected_columns")?.value);
+  // the export's columns, from the latest upload, to choose from
+  const { data: lastImport } = await supabase.from("imports").select("options").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const exportColumns = ((lastImport?.options as { headers?: string[] } | null)?.headers ?? []).filter((h) => h.trim());
+  const listed = new Set(exportColumns.map((h) => h.trim().toLowerCase()));
+  const otherGuarded = guarded.columns.filter((c) => !listed.has(c.toLowerCase()));
   const extraFields = parseExtraFields(settings?.find((x) => x.key === "extra_fields")?.value);
   const session = await getActiveSession();
   const answers = session ? await extraAnswers(session.id, extraFields) : new Map();
@@ -131,6 +138,44 @@ export default async function SettingsPage() {
             </ActionForm>
             <p className="text-xs text-muted-foreground">Sends a sample tag as a PDF to the address above, the same way a real request is sent, and tells you if anything is wrong.</p>
           </div>
+        </Section>
+        <Section
+          title="Protected columns"
+          description="Details the office cleaned by hand (medical notes kept for division heads, a version for counselors). A regular upload of the export never changes these for campers already in Kinus, and never drops a column the export doesn't have. Only an upload marked “This is our corrected copy” updates them."
+        >
+          <ActionForm action={saveProtectedColumns} warnUnsaved className="group space-y-4">
+            <fieldset className="space-y-2">
+              <legend className="mb-1 text-sm font-medium">Camper details</legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {PROTECTABLE_FIELDS.map((f) => (
+                  <label key={f.field} className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="field" value={f.field} defaultChecked={guarded.fields.includes(f.field)} className="size-4 accent-[var(--primary)]" />
+                    {f.label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            {exportColumns.length > 0 && (
+              <details open={guarded.columns.length > 0}>
+                <summary className="cursor-pointer text-sm font-medium">Columns of the export ({guarded.columns.length} protected)</summary>
+                <div className="mt-2 grid max-h-72 gap-1.5 overflow-y-auto rounded-lg border p-3 sm:grid-cols-2">
+                  {exportColumns.map((h) => (
+                    <label key={h} className="flex items-center gap-2 text-sm" dir="auto">
+                      <input type="checkbox" name="column" value={h} defaultChecked={guarded.columns.some((c) => c.toLowerCase() === h.trim().toLowerCase())} className="size-4 accent-[var(--primary)]" />
+                      <span className="truncate">{h}</span>
+                    </label>
+                  ))}
+                </div>
+              </details>
+            )}
+            <Field label="Columns only in your corrected copy (one a line)" htmlFor="more" hint="A column you add by hand (e.g. “Medical for counselors”): it's kept even though the regular export doesn't have it.">
+              <textarea id="more" name="more" rows={2} defaultValue={otherGuarded.join("\n")} className="w-full rounded-lg border bg-background px-3 py-2 text-sm" dir="auto" />
+            </Field>
+            <span className="flex items-center gap-3">
+              <Button type="submit">Save</Button>
+              <span className="hidden text-sm font-medium text-amber-700 group-data-[dirty=true]:inline dark:text-amber-300">Unsaved changes</span>
+            </span>
+          </ActionForm>
         </Section>
         <Section title="Imports" description="Get a clear warning when an uploaded export looks incomplete.">
           <ActionForm action={saveImportSettings} warnUnsaved className="group space-y-4">

@@ -52,7 +52,7 @@ export type RowResult = {
   candidates?: Candidate[];
 };
 
-export type DiffOptions = { takeBunksFromFile: boolean; emptyMeansUnknown: boolean };
+export type DiffOptions = { takeBunksFromFile: boolean; emptyMeansUnknown: boolean; /** protected fields (lib/import/protected): a regular upload keeps what Kinus has */ protectedFields?: string[] };
 
 export type DiffSummary = {
   added: number;
@@ -101,7 +101,10 @@ function diffOne(parsed: ParsedCamper, ex: ExistingCamper, opts: DiffOptions): {
   const warnings: string[] = [];
   const skipEmpty = opts.emptyMeansUnknown;
   const staff = new Set(ex.staff_edited ?? []);
+  const kept = new Set(opts.protectedFields ?? []);
   const change = (field: string, old: string | null, nv: string | null) => {
+    // a protected detail (cleaned by the office): only the corrected copy changes it
+    if (kept.has(field) && !staff.has(field)) return;
     if (staff.has(field)) warnings.push(`kept the ${LABEL[field] ?? field} staff entered in Kinus (${shown(old)}); the file says ${shown(nv)}`);
     else changes.push({ field, old, new: nv });
   };
