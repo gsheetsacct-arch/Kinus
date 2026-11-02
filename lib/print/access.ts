@@ -101,9 +101,10 @@ export async function myAreaJobIds(user: import("@/lib/auth/permissions").Curren
   return mine;
 }
 
-/** The requests of this session whose campers are all in this division (one check-in location). */
-export async function jobIdsInDivision(sessionId: string, divisionId: string): Promise<Set<string>> {
+/** The requests of this session whose campers are all in these divisions (a check-in location, or a camp). */
+export async function jobIdsInDivisions(sessionId: string, divisionIds: string[]): Promise<Set<string>> {
   const { fetchAll } = await import("@/lib/supabase/fetch-all");
+  const wanted = new Set(divisionIds);
   const items = await fetchAll((from, to) =>
     createAdminClient()
       .from("print_job_items")
@@ -115,7 +116,7 @@ export async function jobIdsInDivision(sessionId: string, divisionId: string): P
   );
   const inside = new Set<string>();
   const outside = new Set<string>();
-  for (const i of items) ((i.campers as { division_id: string | null } | null)?.division_id === divisionId ? inside : outside).add(i.job_id);
+  for (const i of items) (wanted.has((i.campers as { division_id: string | null } | null)?.division_id ?? "") ? inside : outside).add(i.job_id);
   for (const id of outside) inside.delete(id);
   return inside;
 }
