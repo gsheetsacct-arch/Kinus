@@ -65,7 +65,7 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
   const { data: imp } = await supabase.from("imports").select("id, file_name, status, mapping_id, options").eq("id", id).maybeSingle();
   if (!imp) notFound();
   if (imp.status !== "uploaded" && imp.status !== "previewed") redirect(`/admin/imports/${id}`);
-  const opts = imp.options as { headers?: string[]; columnMap?: ColumnMap; mappingOptions?: MappingOptions; takeBunksFromFile?: boolean; emptyMeansUnknown?: boolean; fixedDivision?: string | null };
+  const opts = imp.options as { headers?: string[]; columnMap?: ColumnMap; mappingOptions?: MappingOptions; takeBunksFromFile?: boolean; emptyMeansUnknown?: boolean; correctedCopy?: boolean; fixedDivision?: string | null };
   const headers = opts.headers ?? [];
   let presetMap: ColumnMap = opts.columnMap ?? {};
   let presetOptions: MappingOptions = opts.mappingOptions ?? {};
@@ -210,6 +210,15 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
               <span>
                 <span className="font-medium">Keep what Kinus has when a cell is empty</span>
                 <span className="block text-muted-foreground">Recommended. An empty cell in the file never erases a phone number or detail already saved.</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3">
+              <input type="checkbox" name="correctedCopy" defaultChecked={opts.correctedCopy ?? false} className="mt-0.5 size-4" />
+              <span>
+                <span className="font-medium">This is our corrected copy</span>
+                <span className="block text-muted-foreground">
+                  The file you cleaned by hand. Whatever it changes or removes in the protected columns (Settings → Protected columns) is locked for that camper: later exports keep it as you left it. Campers you didn&apos;t touch keep updating from the export.
+                </span>
               </span>
             </label>
             <label className="flex items-start gap-3">
