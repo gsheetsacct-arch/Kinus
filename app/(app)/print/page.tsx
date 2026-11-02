@@ -8,9 +8,7 @@ import { LabelUpdates } from "@/components/print/label-updates";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { canUsePrintArea } from "@/lib/auth/permissions";
-import { jobIdsInDivision, myAreaJobIds, scopedQueue } from "@/lib/print/access";
-import { ListFilters } from "@/components/lists/list-filters";
-import { Select } from "@/components/ui/select";
+import { jobIdsInDivisions, myAreaJobIds, scopedQueue } from "@/lib/print/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { officeEmail, retryStuckJobs } from "@/lib/print/jobs";
 import { shownJobError } from "@/lib/print/labels";
@@ -30,7 +28,7 @@ const SHOW = {
   all: { label: "Everything", statuses: null },
 } as const;
 
-export default async function PrintQueuePage({ searchParams }: { searchParams: Promise<{ show?: string; division?: string }> }) {
+export default async function PrintQueuePage({ searchParams }: { searchParams: Promise<{ show?: string; camp?: string; division?: string }> }) {
   const [user, session, sp] = await Promise.all([requireUser(), getActiveSession(), searchParams]);
   // staff who only design templates start there
   if (!canUsePrintArea(user)) redirect("/print/templates");
@@ -56,11 +54,23 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
     officeEmail(),
     supabase.from("print_jobs").select("id").eq("session_id", session.id).eq("status", "failed"),
   ]);
-  // one division's requests (its check-in location), when picked
-  const { data: divisionRows } = await createAdminClient().from("divisions").select("id, name").eq("session_id", session.id).order("sort_order");
+  // one camp's, or one division's (its check-in location), requests, when picked
+  const admin = createAdminClient();
+  const [{ data: divisionRows }, { data: groupRows }] = await Promise.all([
+    admin.from("divisions").select("id, name, group_id").eq("session_id", session.id).order("sort_order"),
+    admin.from("division_groups").select("id, name").eq("session_id", session.id).order("sort_order").order("name"),
+  ]);
   const divisions = (divisionRows ?? []).filter((d) => !scoped || user.coverage.some((c) => c.division_id === d.id));
+  const firstCamp = groupRows?.[0]?.id ?? null;
+  const campOf = (d: { group_id: string | null }) => d.group_id ?? firstCamp;
+  const camps = (groupRows ?? []).filter((g) => divisions.some((d) => campOf(d) === g.id));
   const division = divisions.find((d) => d.id === sp.division) ?? null;
-  const inDivision = division ? await jobIdsInDivision(session.id, division.id) : null;
+  const camp = camps.find((g) => g.id === (division ? campOf(division) : sp.camp)) ?? null;
+  const campDivisions = camp ? divisions.filter((d) => campOf(d) === camp.id) : divisions;
+  const only = division ? [division.id] : camp && camps.length > 1 ? campDivisions.map((d) => d.id) : null;
+  const inDivision = only ? await jobIdsInDivisions(session.id, only) : null;
+  const queueHref = (o: { show?: string; camp?: string | null; division?: string | null }) =>
+    `/print?${new URLSearchParams({ ...(o.show && o.show !== "todo" ? { show: o.show } : {}), ...(o.camp ? { camp: o.camp } : {}), ...(o.division ? { division: o.division } : {}) })}`;
   const data = (all ?? []).filter((j) => (!mine || mine.has(j.id)) && (!inDivision || inDivision.has(j.id))).slice(0, 150);
   const problems = (failed ?? []).filter((j) => !mine || mine.has(j.id)).length;
   // a request for one camper (or a few) names them; a batch says what it covered (its note)
@@ -100,24 +110,25 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
         title="Print queue"
         description={office.to ? `Tag requests are emailed to ${office.to} as a PDF, and wait here until marked printed.` : "No office email is set, so requests wait here. Set one in Settings."}
       />
-      {divisions.length > 1 && (
-        <ListFilters className="mb-3">
-          {show !== "todo" && <input type="hidden" name="show" value={show} />}
-          <Select name="division" defaultValue={division?.id ?? ""} className="w-auto" aria-label="Division">
-            <option value="">{scoped ? "All my divisions" : "All divisions"}</option>
-            {divisions.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </Select>
-        </ListFilters>
+      {/* camp, then division: one check-in location's labels */}
+      {camps.length > 1 && (
+        <Bar
+          items={[{ href: queueHref({ show }), label: scoped ? "All mine" : "All camps", on: !camp }, ...camps.map((g) => ({ href: queueHref({ show, camp: g.id }), label: g.name, on: camp?.id === g.id }))]}
+        />
+      )}
+      {campDivisions.length > 1 && (
+        <Bar
+          items={[
+            { href: queueHref({ show, camp: camp?.id }), label: camp && camps.length > 1 ? `All of ${camp.name}` : scoped ? "All my divisions" : "All divisions", on: !division },
+            ...campDivisions.map((d) => ({ href: queueHref({ show, camp: camp?.id, division: d.id }), label: d.name, on: division?.id === d.id })),
+          ]}
+        />
       )}
       <div className="mb-4 flex flex-wrap gap-2">
         {(Object.keys(SHOW) as (keyof typeof SHOW)[]).map((k) => (
           <Link
             key={k}
-            href={`/print?${new URLSearchParams({ ...(k === "todo" ? {} : { show: k }), ...(division ? { division: division.id } : {}) })}`}
+            href={queueHref({ show: k, camp: camp?.id, division: division?.id })}
             className={cn("rounded-full border px-3 py-1 text-sm", show === k ? "border-primary bg-primary-soft text-primary" : "text-muted-foreground hover:bg-muted")}
           >
             {SHOW[k].label}
@@ -132,5 +143,26 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
       )}
       <PrintQueue jobs={jobs} show={show} />
     </div>
+  );
+}
+
+/** A bar of choices, one on (like "Which campers" on Print a batch), as links. */
+function Bar({ items }: { items: { href: string; label: string; on: boolean }[] }) {
+  return (
+    <nav className="mb-3 flex flex-wrap gap-1 rounded-lg bg-muted p-1">
+      {items.map((i) => (
+        <Link
+          key={i.href}
+          href={i.href}
+          aria-current={i.on ? "page" : undefined}
+          className={cn(
+            "min-h-9 flex-1 rounded-md px-3 py-1.5 text-center text-sm font-medium whitespace-nowrap transition-colors",
+            i.on ? "bg-background text-foreground shadow-sm ring-1 ring-primary" : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
+          )}
+        >
+          {i.label}
+        </Link>
+      ))}
+    </nav>
   );
 }
