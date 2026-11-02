@@ -36,7 +36,7 @@ export default async function SettingsPage() {
   const imp = setting("import");
   const guarded = parseProtected(settings?.find((x) => x.key === "protected_columns")?.value);
   // the export's columns, from the latest upload, to choose from
-  const { data: lastImport } = await supabase.from("imports").select("options").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const { data: lastImport } = await supabase.from("imports").select("options").order("uploaded_at", { ascending: false }).limit(1).maybeSingle();
   const exportColumns = ((lastImport?.options as { headers?: string[] } | null)?.headers ?? []).filter((h) => h.trim());
   const listed = new Set(exportColumns.map((h) => h.trim().toLowerCase()));
   const otherGuarded = guarded.columns.filter((c) => !listed.has(c.toLowerCase()));
@@ -141,7 +141,7 @@ export default async function SettingsPage() {
         </Section>
         <Section
           title="Protected columns"
-          description="Details the office cleaned by hand (medical notes kept for division heads, a version for counselors). A regular upload of the export never changes these for campers already in Kinus, and never drops a column the export doesn't have. Only an upload marked “This is our corrected copy” updates them."
+          description="Details the office cleans by hand in a copy of the export (medical notes kept for division heads, a version for counselors). Upload that copy with “This is our corrected copy”: whatever it changed or removed in these columns is locked for that camper, and later exports keep it as you left it (also a column only your copy has). Anything you didn't change keeps updating from the export, including information that arrives later."
         >
           <ActionForm action={saveProtectedColumns} warnUnsaved className="group space-y-4">
             <fieldset className="space-y-2">

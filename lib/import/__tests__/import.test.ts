@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { keepProtectedColumns } from "../protected";
+import { locksFor } from "../protected";
 import { cleanBunkName } from "../mapping";
 import { compareBunkNames, hebrewLetterNumber } from "@/lib/bunk-order";
 import { readFileSync } from "node:fs";
@@ -266,19 +266,21 @@ describe("staff-locked placement", () => {
     expect(r.rows[0].changes).toEqual([{ field: "grade", old: "4", new: "5" }]);
     expect(r.rows[0].warnings.join(" ")).toMatch(/kept the has allergies staff entered in Kinus \(Yes\); the file says No/);
   });
-  it("a regular upload keeps protected details; the corrected copy changes them", () => {
-    const cleaned = { ...base, medical_notes: "Asthma (inhaler)", grade: "4" };
-    const raw = parsedFor({ medical_notes: "Asthma, full history from the form", grade: "5" });
-    const regular = matchAndDiff([{ rowNumber: 2, parsed: raw }], [cleaned], known, { ...opts, protectedFields: ["medical_notes"] });
-    expect(regular.rows[0].changes).toEqual([{ field: "grade", old: "4", new: "5" }]);
-    const corrected = matchAndDiff([{ rowNumber: 2, parsed: raw }], [cleaned], known, { ...opts, protectedFields: [] });
-    expect(corrected.rows[0].changes.map((c) => c.field).sort()).toEqual(["grade", "medical_notes"]);
+  it("a corrected copy can erase a protected detail even when empty cells mean unknown", () => {
+    const raw = { ...base, medical_notes: "Asthma, full history from the form" };
+    const r = matchAndDiff([{ rowNumber: 2, parsed: parsedFor({ medical_notes: null }) }], [raw], known, { ...opts, emptyMeansUnknown: true, clearable: ["medical_notes"] });
+    expect(r.rows[0].changes).toEqual([{ field: "medical_notes", old: "Asthma, full history from the form", new: null }]);
+    const regular = matchAndDiff([{ rowNumber: 2, parsed: parsedFor({ medical_notes: null }) }], [raw], known, { ...opts, emptyMeansUnknown: true });
+    expect(regular.rows[0].changes).toEqual([]);
   });
-  it("keeps protected export columns, also ones the export doesn't have", () => {
-    const rows = [{ matchedCamperId: "c1", action: "update", parsed: { source_data: { "ppa.medical": "full form text", "PPA.City": "Paris" } as Record<string, string> } }];
-    const before = new Map([["c1", { "ppa.medical": "cleaned", "Medical for counselors": "inhaler in bag", "ppa.city": "Lyon" }]]);
-    expect(keepProtectedColumns(rows, before, ["ppa.medical", "medical for counselors"])).toBe(1);
-    expect(rows[0].parsed.source_data).toEqual({ "PPA.City": "Paris", "ppa.medical": "cleaned", "Medical for counselors": "inhaler in bag" });
+  it("locks only what the corrected copy changed, camper by camper", () => {
+    const p = { fields: ["medical_notes", "allergies"], columns: ["ppa.medical", "Medical for counselors"] };
+    const registration = { "ppa.medical": "full form text", "ppa.city": "Lyon" };
+    // changed medical notes, a cleaned column, a column added by hand; allergies left alone
+    const locks = locksFor([{ field: "medical_notes" }, { field: "grade" }], { "ppa.medical": "cleaned", "Medical for counselors": "inhaler in bag", "ppa.city": "Lyon" }, registration, registration, p);
+    expect(locks).toEqual({ fields: ["medical_notes"], columns: [{ column: "ppa.medical", value: "cleaned", was: "full form text" }, { column: "Medical for counselors", value: "inhaler in bag", was: "" }] });
+    // a camper the office didn't touch: nothing locked, the export keeps updating them
+    expect(locksFor([], registration, registration, registration, p)).toEqual({ fields: [], columns: [] });
   });
   it("matches an archived camper by registration id instead of adding them again", () => {
     const r = matchAndDiff([{ rowNumber: 2, parsed: parsedFor() }], [{ ...base, archived: true }], known, opts);

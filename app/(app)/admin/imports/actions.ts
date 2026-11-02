@@ -13,7 +13,8 @@ import type { Json } from "@/lib/supabase/database.types";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { bunkOrders, divisionOrder, slotNewBunks, slotNewDivisions } from "@/lib/data/bunk-sort";
 import { columnKey, humanLabel, parseExtraFields } from "@/lib/import/extra-fields";
-import { keepProtectedColumns, parseProtected, protectedFromFile } from "@/lib/import/protected";
+import { locksFor, parseProtected, type Locks } from "@/lib/import/protected";
+import { fixKey, parseFixes, withFixes } from "@/lib/source-fixes";
 import { campersForImport, intoProgram, layoutFit, LAYOUT_FIT } from "@/lib/import/programs";
 
 /** The column step's choice "show it on the camper page" (an extra field). */
@@ -103,7 +104,7 @@ async function programDivisions(): Promise<string[]> {
   return (data ?? []).map((m) => ((m.options ?? {}) as MappingOptions).fixedDivision).filter((d): d is string => Boolean(d));
 }
 
-async function loadExisting(sessionId: string): Promise<{ existing: ExistingCamper[]; known: { name: string; bunks: string[] }[]; sourceData: Map<string, Record<string, string>> }> {
+async function loadExisting(sessionId: string): Promise<{ existing: ExistingCamper[]; known: { name: string; bunks: string[] }[]; sourceData: Map<string, Record<string, string>>; fixes: Map<string, unknown> }> {
   const admin = createAdminClient();
   const [campers, { data: divisions }, { data: bunks }, contacts] = await Promise.all([
     // archived campers too: their registration id is taken, so the file must match them, not add them again
@@ -152,7 +153,8 @@ async function loadExisting(sessionId: string): Promise<{ existing: ExistingCamp
   }));
   const known = (divisions ?? []).map((d) => ({ name: d.name, bunks: (bunks ?? []).filter((b) => b.division_id === d.id).map((b) => b.name) }));
   const sourceData = new Map(campers.map((c) => [c.id, (c.source_data ?? {}) as Record<string, string>]));
-  return { existing, known, sourceData };
+  const fixes = new Map(campers.map((c) => [c.id, (c as { source_fixes?: unknown }).source_fixes]));
+  return { existing, known, sourceData, fixes };
 }
 
 /**
@@ -289,18 +291,22 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     const others = (await programDivisions()).filter((x) => !fixedDivision || x.toLowerCase() !== fixedDivision.toLowerCase());
     const existing = campersForImport(loaded.existing, fixedDivision, fixedDivision ? [] : others);
     resolveMultiValues(parsedRows, known);
-    // protected columns (Settings): a regular upload keeps what Kinus has; our corrected copy updates them
+    // our corrected copy (Settings → Protected columns): what it changes in the protected
+    // details is locked camper by camper (applied with the import); a regular upload as ever
     const corrected = d.correctedCopy === "on";
     const { data: protectedRow } = await admin.from("settings").select("value").eq("key", "protected_columns").maybeSingle();
     const guarded = parseProtected(protectedRow?.value);
-    const result = matchAndDiff(parsedRows, existing, known, { takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on", protectedFields: corrected ? [] : guarded.fields });
-    const protectedKept = corrected ? 0 : keepProtectedColumns(result.rows, sourceData, guarded.columns);
-    // a new camper's protected details come from this file: worth checking
-    if (!corrected && (guarded.fields.length || guarded.columns.length))
+    const result = matchAndDiff(parsedRows, existing, known, { takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on", clearable: corrected ? guarded.fields : [] });
+    let locked = 0;
+    if (corrected)
       for (const r of result.rows) {
-        if (r.action !== "add") continue;
-        const from = protectedFromFile(r.parsed as unknown as Record<string, unknown> & { source_data?: Record<string, string> }, guarded);
-        if (from.length) r.warnings.push(`new camper: check the protected ${from.join(", ")} (from this file, not cleaned yet)`);
+        if (!r.matchedCamperId || (r.action !== "update" && r.action !== "unchanged")) continue;
+        const reg = sourceData.get(r.matchedCamperId) ?? {};
+        const locks = locksFor(r.changes, r.parsed.source_data ?? {}, withFixes(reg, loaded.fixes.get(r.matchedCamperId)), reg, guarded);
+        if (locks.fields.length || locks.columns.length) {
+          (r.parsed as unknown as { locks?: Locks }).locks = locks;
+          locked++;
+        }
       }
     // the export's other columns (labels, extra fields): applying refreshes them for every camper
     // in the file, so the preview says so, rather than "unchanged"
@@ -335,8 +341,8 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
       .from("imports")
       .update({
         status: "previewed",
-        options: { ...(imp.options as object), columnMap, mappingOptions, fixedDivision, takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on", correctedCopy: corrected, protectedFields: corrected ? [] : guarded.fields, protectedColumns: corrected ? [] : guarded.columns, divisionsInFile: result.summary.divisionsInFile, partialWarning },
-        summary: { ...result.summary, missing: result.summary.missing.length, missingList: result.summary.missing, columns, protectedKept, correctedCopy: corrected } as unknown as J,
+        options: { ...(imp.options as object), columnMap, mappingOptions, fixedDivision, takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on", correctedCopy: corrected, protected: corrected ? guarded : null, divisionsInFile: result.summary.divisionsInFile, partialWarning },
+        summary: { ...result.summary, missing: result.summary.missing.length, missingList: result.summary.missing, columns, locked, correctedCopy: corrected } as unknown as J,
       })
       .eq("id", imp.id);
     if (e4) throw e4;
@@ -355,22 +361,27 @@ export async function resolveConflict(fd: FormData): Promise<ActionResult> {
     const admin = createAdminClient();
     const { data: row, error } = await admin.from("import_rows").select("id, import_id, row_number, parsed, imports!inner(session_id, options, status)").eq("id", rowId).single();
     if (error) throw error;
-    const imp = row.imports as unknown as { session_id: string; options: { takeBunksFromFile?: boolean; emptyMeansUnknown?: boolean; protectedFields?: string[]; protectedColumns?: string[] }; status: string };
+    const imp = row.imports as unknown as { session_id: string; options: { takeBunksFromFile?: boolean; emptyMeansUnknown?: boolean; correctedCopy?: boolean; protected?: { fields: string[]; columns: string[] } | null }; status: string };
     if (imp.status !== "previewed") return fail("Import is not in preview.");
     let update: { action: "add" | "skip" | "update" | "unchanged"; matched_camper_id: string | null; changes: J; match_method: string | null; parsed?: J };
     if (choice === "add") update = { action: "add", matched_camper_id: null, changes: [], match_method: null };
     else if (choice === "skip") update = { action: "skip", matched_camper_id: null, changes: [], match_method: null };
     else {
-      const { existing, known, sourceData } = await loadExisting(imp.session_id);
+      const { existing, known, sourceData, fixes } = await loadExisting(imp.session_id);
       const target = existing.find((e) => e.id === choice);
       if (!target) return fail("Camper not found.");
+      const guarded = imp.options.correctedCopy ? (imp.options.protected ?? null) : null;
       const r = matchAndDiff([{ rowNumber: row.row_number, parsed: { ...(row.parsed as unknown as ParsedCamper), source_id: null } }], [target], known, {
         takeBunksFromFile: imp.options.takeBunksFromFile ?? false,
         emptyMeansUnknown: imp.options.emptyMeansUnknown ?? true,
-        protectedFields: imp.options.protectedFields ?? [],
+        clearable: guarded?.fields ?? [],
       }).rows[0];
-      // matched to a camper already in Kinus: their protected columns stay as they are
-      keepProtectedColumns([{ matchedCamperId: target.id, action: "update", parsed: r.parsed as unknown as { source_data: Record<string, string> } }], sourceData, imp.options.protectedColumns ?? []);
+      // our corrected copy, matched by hand: what it changes in the protected details is locked too
+      if (guarded) {
+        const reg = sourceData.get(target.id) ?? {};
+        const locks = locksFor(r.changes, r.parsed.source_data ?? {}, withFixes(reg, fixes.get(target.id)), reg, guarded);
+        if (locks.fields.length || locks.columns.length) (r.parsed as unknown as { locks?: Locks }).locks = locks;
+      }
       update = { action: r.action === "update" ? "update" : "unchanged", matched_camper_id: target.id, changes: r.changes as unknown as J, match_method: "manual", parsed: r.parsed as unknown as J };
     }
     const { error: e2 } = await admin.from("import_rows").update({ ...update, warnings: [] }).eq("id", rowId);
@@ -400,6 +411,8 @@ export async function applyImportAction(fd: FormData): Promise<ActionResult> {
   const before = await bunkOrders(supabase, imp.session_id);
   const divisionsBefore = await divisionOrder(supabase, imp.session_id);
   const { data, error } = await supabase.rpc("apply_import", { p_import_id: id });
+  // our corrected copy: lock what it changed in the protected details (after it's applied)
+  if (!error) await applyLocks(id).catch((e) => console.error("Locking the corrected copy's changes failed", e));
   if (error) return fail(errorMessage(error));
   await discardDrafts(imp.session_id, id);
   // new bunks from the file go into their Alef-Beis place (not the order they appeared in)
@@ -467,4 +480,33 @@ export async function archiveMissing(fd: FormData): Promise<ActionResult> {
   const n = Number(data ?? 0);
   // back to the same page, loaded fresh, so the list shows them as archived straight away
   return ok(`${n} ${n === 1 ? "camper" : "campers"} archived.`, `/admin/imports/${String(fd.get("import_id") ?? "")}`);
+}
+
+/**
+ * After a corrected copy is applied: each camper's protected details it changed stay as the
+ * office left them. Camper details are marked as staff-entered (imports keep them); export
+ * columns become fixes (imports keep them, also when the export doesn't have the column).
+ */
+async function applyLocks(importId: string) {
+  const admin = createAdminClient();
+  const { data: imp } = await admin.from("imports").select("options, applied_by").eq("id", importId).maybeSingle();
+  if (!(imp?.options as { correctedCopy?: boolean } | null)?.correctedCopy) return;
+  const rows = await fetchAll((from, to) => admin.from("import_rows").select("id, matched_camper_id, parsed").eq("import_id", importId).not("matched_camper_id", "is", null).order("id").range(from, to));
+  const todo = rows.map((r) => ({ camperId: r.matched_camper_id!, locks: (r.parsed as { locks?: Locks } | null)?.locks })).filter((r): r is { camperId: string; locks: Locks } => Boolean(r.locks));
+  const at = new Date().toISOString();
+  const by = imp?.applied_by ?? undefined;
+  for (let i = 0; i < todo.length; i += 25) {
+    const chunk = todo.slice(i, i + 25);
+    const { data: campers } = await admin.from("campers").select("*").in("id", chunk.map((t) => t.camperId));
+    await Promise.all(
+      chunk.map(async ({ camperId, locks }) => {
+        const c = (campers ?? []).find((x) => x.id === camperId) as { staff_edited?: string[]; source_fixes?: unknown } | undefined;
+        if (!c) return;
+        const fixes = parseFixes(c.source_fixes);
+        for (const l of locks.columns) fixes[fixKey(l.column)] = { value: l.value, was: l.was, by, at };
+        const staff = [...new Set([...(c.staff_edited ?? []), ...locks.fields])];
+        await admin.from("campers").update({ staff_edited: staff, ...("source_fixes" in c ? { source_fixes: fixes } : {}) } as never).eq("id", camperId);
+      }),
+    );
+  }
 }

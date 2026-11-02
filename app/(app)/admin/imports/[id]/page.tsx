@@ -94,6 +94,9 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
     revertedAt?: string;
     /** Export columns that change: how many campers, and the columns new to them. */
     columns?: { campers: number; added: { column: string; count: number }[] };
+    /** our corrected copy: campers whose protected details it changed (locked when applied) */
+    locked?: number;
+    correctedCopy?: boolean;
   };
   const options = (imp.options ?? {}) as { partialWarning?: string[]; divisionsInFile?: string[]; lostTextOverride?: boolean; lostTextCells?: number; repeatedColumns?: string[]; fixedDivision?: string | null };
   const columnsChange = summary.columns?.campers ?? 0;
@@ -186,6 +189,11 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
             missing.length > 0 ? (
               <span key="m">
                 mark <strong>{missing.length}</strong> as no longer in the export
+              </span>
+            ) : null,
+            summary.correctedCopy && (summary.locked ?? 0) > 0 ? (
+              <span key="l">
+                lock the cleaned protected details of <strong>{n(summary.locked ?? 0, "camper", "campers")}</strong> (later exports keep them)
               </span>
             ) : null,
             columnsChange > 0 ? (

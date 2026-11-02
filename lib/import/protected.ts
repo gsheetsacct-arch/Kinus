@@ -1,8 +1,12 @@
 /**
- * Protected columns (Settings → Protected columns): details the office cleaned by hand, like
- * medical notes kept for division heads and a counselor-safe version. A regular upload of the
- * registration export never changes them for campers already in Kinus (nor drops a column
- * the export doesn't have); only an upload marked "our corrected copy" does.
+ * Protected columns (Settings → Protected columns): details the office cleans by hand in a
+ * copy of the export (medical notes kept for division heads, a counselor-safe version) and
+ * uploads as "our corrected copy". Only what that copy actually changed is locked, camper by
+ * camper: a value removed or changed there (and a column added there) stays as the office
+ * left it, whatever later exports say. Anything the office left alone keeps updating from the
+ * export, also information that arrives later where there was none.
+ *   * camper details (medical notes…): locked like a change made in Kinus (staff_edited);
+ *   * export columns: locked as a fix (campers.source_fixes), like a Hebrew-name fix.
  */
 import { columnKey } from "./extra-fields";
 
@@ -27,36 +31,31 @@ export function parseProtected(v: unknown): Protected {
   return { fields: list(o.fields).filter((f) => known.has(f)), columns: [...new Set(list(o.columns))] };
 }
 
-/**
- * A regular upload: each matched camper keeps their protected export columns as they are in
- * Kinus (also a column the export doesn't have, like one added in the corrected copy).
- */
-export function keepProtectedColumns(
-  rows: { matchedCamperId: string | null; action: string; parsed: { source_data: Record<string, string> } }[],
-  before: Map<string, Record<string, string>>,
-  columns: string[],
-): number {
-  if (!columns.length) return 0;
-  const keys = new Set(columns.map(columnKey));
-  let kept = 0;
-  for (const r of rows) {
-    if (!r.matchedCamperId || r.action === "add" || r.action === "skip") continue;
-    const old = before.get(r.matchedCamperId) ?? {};
-    const next: Record<string, string> = {};
-    for (const [k, v] of Object.entries(r.parsed.source_data ?? {})) if (!keys.has(columnKey(k))) next[k] = v;
-    for (const [k, v] of Object.entries(old)) if (keys.has(columnKey(k))) next[k] = v;
-    if (JSON.stringify(next) !== JSON.stringify(r.parsed.source_data ?? {})) kept++;
-    r.parsed.source_data = next;
-  }
-  return kept;
-}
+/** What a corrected copy locks for one camper: their protected details it changed, and export columns it changed. */
+export type Locks = { fields: string[]; columns: { column: string; value: string; was: string }[] };
 
-/** A new camper whose protected details came straight from the export: worth a look. */
-export function protectedFromFile(parsed: Record<string, unknown> & { source_data?: Record<string, string> }, p: Protected): string[] {
-  const keys = new Set(p.columns.map(columnKey));
-  const fields = p.fields.filter((f) => parsed[f] !== null && parsed[f] !== undefined && parsed[f] !== "").map((f) => PROTECTABLE_FIELDS.find((x) => x.field === f)?.label ?? f);
-  const columns = Object.entries(parsed.source_data ?? {})
-    .filter(([k, v]) => keys.has(columnKey(k)) && String(v).trim() !== "")
-    .map(([k]) => k);
-  return [...fields, ...columns];
+/**
+ * The locks for one camper in a corrected copy: the protected camper details among its changes,
+ * and each protected export column whose value differs from what Kinus shows now (`shown`:
+ * the export row with earlier fixes; `registration`: the export row as it came in).
+ */
+export function locksFor(
+  changes: { field: string }[],
+  file: Record<string, string>,
+  shown: Record<string, unknown>,
+  registration: Record<string, unknown>,
+  p: Protected,
+): Locks {
+  const fields = changes.map((c) => c.field).filter((f) => p.fields.includes(f));
+  const valueOf = (row: Record<string, unknown>, column: string) => {
+    const k = columnKey(column);
+    for (const [key, v] of Object.entries(row)) if (columnKey(key) === k) return v === null || v === undefined ? "" : String(v).trim();
+    return "";
+  };
+  const columns: Locks["columns"] = [];
+  for (const column of p.columns) {
+    const value = valueOf(file, column);
+    if (value !== valueOf(shown, column)) columns.push({ column, value, was: valueOf(registration, column) });
+  }
+  return { fields: [...new Set(fields)], columns };
 }

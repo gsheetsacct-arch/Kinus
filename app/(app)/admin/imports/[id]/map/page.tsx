@@ -217,7 +217,7 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
               <span>
                 <span className="font-medium">This is our corrected copy</span>
                 <span className="block text-muted-foreground">
-                  Update the protected columns (Settings → Protected columns) from this file. Leave off for a regular export: it never changes them for campers already in Kinus.
+                  The file you cleaned by hand. Whatever it changes or removes in the protected columns (Settings → Protected columns) is locked for that camper: later exports keep it as you left it. Campers you didn&apos;t touch keep updating from the export.
                 </span>
               </span>
             </label>

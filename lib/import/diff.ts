@@ -52,7 +52,7 @@ export type RowResult = {
   candidates?: Candidate[];
 };
 
-export type DiffOptions = { takeBunksFromFile: boolean; emptyMeansUnknown: boolean; /** protected fields (lib/import/protected): a regular upload keeps what Kinus has */ protectedFields?: string[] };
+export type DiffOptions = { takeBunksFromFile: boolean; emptyMeansUnknown: boolean; /** fields an empty cell erases even when empty means unknown (a corrected copy's removals) */ clearable?: string[] };
 
 export type DiffSummary = {
   added: number;
@@ -101,10 +101,8 @@ function diffOne(parsed: ParsedCamper, ex: ExistingCamper, opts: DiffOptions): {
   const warnings: string[] = [];
   const skipEmpty = opts.emptyMeansUnknown;
   const staff = new Set(ex.staff_edited ?? []);
-  const kept = new Set(opts.protectedFields ?? []);
+  const clear = new Set(opts.clearable ?? []);
   const change = (field: string, old: string | null, nv: string | null) => {
-    // a protected detail (cleaned by the office): only the corrected copy changes it
-    if (kept.has(field) && !staff.has(field)) return;
     if (staff.has(field)) warnings.push(`kept the ${LABEL[field] ?? field} staff entered in Kinus (${shown(old)}); the file says ${shown(nv)}`);
     else changes.push({ field, old, new: nv });
   };
@@ -112,12 +110,12 @@ function diffOne(parsed: ParsedCamper, ex: ExistingCamper, opts: DiffOptions): {
   for (const f of TEXT_FIELDS) {
     const nv = normText(parsed[f]);
     const ov = normText(ex[f]);
-    if (nv === null && skipEmpty) continue;
+    if (nv === null && skipEmpty && !clear.has(f)) continue;
     if (nv !== ov) change(f, ov, nv);
   }
   for (const f of BOOL_FIELDS) {
     const nv = parsed[f];
-    if (nv === null && skipEmpty) continue;
+    if (nv === null && skipEmpty && !clear.has(f)) continue;
     if (nv !== ex[f]) change(f, boolStr(ex[f]), boolStr(nv));
   }
 
