@@ -20,7 +20,8 @@ import { feedback } from "./feedback";
 export type RosterEntry = { id: string; code: string; name: string; first: string; last: string; where: string; status: CamperStatus; div: string | null; buzzer?: number | null };
 type Line = { id: string; name: string; color: string | null };
 const ANY = "any";
-type Flash = { tone: "in" | "out" | "home" | "already" | "error"; title: string; detail: string };
+/** ask: an already checked-in camper scanned at check-in, offered a check-out */
+type Flash = { tone: "in" | "out" | "home" | "already" | "error"; title: string; detail: string; ask?: RosterEntry };
 type Recent = { key: number; camperId: string; name: string; verb: string; tone: Flash["tone"]; eventId?: string; at: number; undone?: boolean };
 
 const FLASH: Record<Flash["tone"], string> = {
@@ -128,7 +129,8 @@ export function Scanner({
 
   const show = React.useCallback((f: Flash) => {
     setFlash(f);
-    setTimeout(() => setFlash((cur) => (cur === f ? null : cur)), f.tone === "error" ? 6000 : 4000);
+    // a question stays up long enough to answer it
+    setTimeout(() => setFlash((cur) => (cur === f ? null : cur)), f.ask ? 12000 : f.tone === "error" ? 6000 : 4000);
   }, []);
 
   const act = React.useCallback(
@@ -162,12 +164,36 @@ export function Scanner({
         feedback("already");
         // "Already checked in · 9:42 by Sarah" helps; for "hasn't checked in yet" the last event would mislead
         const detail = `${o.message}${o.kind === "already" && o.since ? ` · ${formatTime(o.since)}${o.by ? ` by ${o.by}` : ""}` : ""}`;
-        show({ tone: "already", title: o.name, detail });
+        // already here, scanned at check-in: maybe they're on their way out, so offer it
+        const ask = !final && mode === "in" && o.kind === "already" && o.status === "present" ? r : undefined;
+        show({ tone: "already", title: o.name, detail, ask });
         setRecent((x) => [{ key: now, camperId: o.camperId, name: o.name, verb: o.message, tone: "already" as const, at: now }, ...x].slice(0, 8));
       }
       focusBox();
     },
     [mode, show, focusBox, multi, line, final],
+  );
+
+  // the check-out offered for a camper scanned again at check-in
+  const checkOutNow = React.useCallback(
+    async (r: RosterEntry) => {
+      setFlash(null);
+      const now = Date.now();
+      const o = await scanCamper(r.id, "out", "back", "manual");
+      if (!o.ok) {
+        feedback("error");
+        show({ tone: "error", title: r.name, detail: o.error });
+        return;
+      }
+      setStatuses((st) => ({ ...st, [o.camperId]: o.status }));
+      if (o.kind === "act") {
+        feedback("ok");
+        show({ tone: o.tone, title: o.name, detail: o.verb });
+        setRecent((x) => [{ key: now, camperId: o.camperId, name: o.name, verb: o.verb, tone: o.tone, eventId: o.eventId, at: now }, ...x].slice(0, 8));
+      } else show({ tone: "already", title: o.name, detail: o.message });
+      focusBox();
+    },
+    [show, focusBox],
   );
 
   const unreadable = React.useCallback(
@@ -271,6 +297,36 @@ export function Scanner({
     toast.success(`Undone: ${r.name}`);
   };
 
+  // the last scan's result: above the box, and over the camera's picture (where you're looking)
+  const flashView = flash ? (
+    flash.ask ? (
+      <div className={cn("flex h-full w-full flex-col justify-center gap-1.5 rounded-xl px-4 py-2 text-left shadow-lg", FLASH[flash.tone])}>
+        <span className="truncate text-lg font-bold leading-tight" dir="auto">
+          {flash.title}
+        </span>
+        <span className="truncate text-sm font-medium opacity-90" dir="auto">
+          {flash.detail}. Check them out?
+        </span>
+        <span className="flex gap-2">
+          <Button size="sm" className="bg-status-out text-amber-950 hover:bg-status-out/90" onClick={() => void checkOutNow(flash.ask!)}>
+            Check out · coming back
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => (setFlash(null), focusBox())}>
+            No
+          </Button>
+        </span>
+      </div>
+    ) : (
+      <button type="button" onClick={() => (setFlash(null), focusBox())} className={cn("flex h-full w-full flex-col justify-center rounded-xl px-4 py-2 text-left shadow-lg", FLASH[flash.tone])}>
+        <span className="truncate text-xl font-bold leading-tight" dir="auto">
+          {flash.title}
+        </span>
+        <span className="truncate text-sm font-medium opacity-90" dir="auto">
+          {flash.detail}
+        </span>
+      </button>
+    )
+  ) : null;
   const tint = flash ? FLASH_RING[flash.tone] : final ? "ring-status-departed/40" : mode === "in" ? "ring-status-present/40" : mode === "out" ? "ring-status-out/50" : "ring-border";
 
   return (
@@ -321,16 +377,9 @@ export function Scanner({
           ))}
         </div>
         {/* the last scan's result, in place: the box and camera below stay in view and still for the next tag */}
-        <div aria-live="assertive" className="h-16">
+        <div aria-live="assertive" className={flash?.ask ? "min-h-16" : "h-16"}>
           {flash ? (
-            <button type="button" onClick={() => (setFlash(null), focusBox())} className={cn("flex h-full w-full flex-col justify-center rounded-xl px-4 text-left", FLASH[flash.tone])}>
-              <span className="truncate text-xl font-bold leading-tight" dir="auto">
-                {flash.title}
-              </span>
-              <span className="truncate text-sm font-medium opacity-90" dir="auto">
-                {flash.detail}
-              </span>
-            </button>
+            flashView
           ) : (
             <div className="flex h-full items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">{mode === "lookup" ? "Ready to look up" : "Ready for the next tag"}</div>
           )}
@@ -408,7 +457,7 @@ export function Scanner({
         </div>
         {camera && (
           <div className={cn(q.trim() && "hidden")}>
-            <Camera onCode={onCameraCode} onTurnOff={neverCamera} />
+            <Camera onCode={onCameraCode} onTurnOff={neverCamera} overlay={flashView} />
           </div>
         )}
       </div>

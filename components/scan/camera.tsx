@@ -30,7 +30,8 @@ function explain(e: unknown): string {
  * sideways. A tag held
  * in view counts once until it has been out of view for a moment.
  */
-export function Camera({ onCode, onTurnOff }: { onCode: (text: string) => void; onTurnOff?: () => void }) {
+/** overlay: the last scan's result, shown over the picture (where the person scanning is looking). */
+export function Camera({ onCode, onTurnOff, overlay }: { onCode: (text: string) => void; onTurnOff?: () => void; overlay?: React.ReactNode }) {
   const video = React.useRef<HTMLVideoElement>(null);
   const onCodeRef = React.useRef(onCode);
   onCodeRef.current = onCode;
@@ -230,6 +231,7 @@ export function Camera({ onCode, onTurnOff }: { onCode: (text: string) => void; 
           </Button>
         )}
         {state.kind === "starting" && <div className="absolute inset-0 flex items-center justify-center text-sm text-white/80">Starting the camera…</div>}
+        {overlay && <div className="absolute inset-x-2 top-2 z-10">{overlay}</div>}
         {state.kind === "on" && devices.length > 1 && (
           <Button size="sm" variant="secondary" className="absolute right-2 top-2 opacity-90" onClick={next} aria-label="Use another camera">
             <SwitchCamera /> Switch camera

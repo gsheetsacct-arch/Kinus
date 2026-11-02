@@ -36,7 +36,8 @@ export async function extraValuesFor(camperIds: string[], fields: (Pick<ExtraFie
   for (let i = 0; i < ids.length; i += 150) chunks.push(ids.slice(i, i + 150));
   // just these columns' answers, from the database (migration 0050), not the whole export rows
   const keys = [...new Set(fields.map((f) => columnKey(f.column)))];
-  const rpc = admin.rpc as unknown as (f: string, a: object) => PromiseLike<{ data: { camper_id: string; key: string; value: string | null }[] | null; error: unknown }>;
+  // bound: the client's rpc reads its own settings (a bare reference to it throws)
+  const rpc = admin.rpc.bind(admin) as unknown as (f: string, a: object) => PromiseLike<{ data: { camper_id: string; key: string; value: string | null }[] | null; error: unknown }>;
   const fast = await Promise.all(chunks.map((chunk) => rpc("camper_source_values", { p_ids: chunk, p_keys: keys })));
   if (fast.every((r) => !r.error)) {
     const got = new Map<string, Map<string, string>>();

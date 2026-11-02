@@ -8,7 +8,7 @@ export async function sleepingAtKinus(sessionId: string, ids?: string[]): Promis
   const admin = createAdminClient();
   // just the answers, from the database (migration 0050), not every camper's whole export row
   const fast = await fetchAll((from, to) =>
-    (admin.rpc as unknown as (f: string, a: object) => { order: (c: string) => { range: (a: number, b: number) => PromiseLike<{ data: { camper_id: string; answer: string | null }[] | null; error: unknown }> } })("camper_sleeping_answers", { p_session_id: sessionId })
+    (admin.rpc.bind(admin) as unknown as (f: string, a: object) => { order: (c: string) => { range: (a: number, b: number) => PromiseLike<{ data: { camper_id: string; answer: string | null }[] | null; error: unknown }> } })("camper_sleeping_answers", { p_session_id: sessionId })
       .order("camper_id")
       .range(from, to),
   ).catch(() => null);
