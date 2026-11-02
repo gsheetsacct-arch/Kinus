@@ -19,10 +19,12 @@ export async function GET(request: NextRequest) {
   const preset = presets.find((p) => p.id === sp.get("preset")) ?? presets[0];
   if (!preset) return new NextResponse("No preset", { status: 404 });
   const [{ data: fv }, camp] = await Promise.all([supabase.from("field_visibility").select("field_group, roles"), getCampContext()]);
-  const list = await buildList(supabase, user, preset, { sessionId: session.id, divisionId: sp.get("division") || undefined, bunkId: sp.get("bunk") || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name, only: parseFlags(sp.get("only")) }, fv ?? []);
+  const list = await buildList(supabase, user, preset, { sessionId: session.id, divisionId: sp.get("division") || undefined, bunkId: sp.get("bunk") || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name, only: parseFlags(sp.get("only")), counselors: sp.get("counselors") === "1" }, fv ?? []);
   // the group (bunk/division) as its own first column, unless the list already shows it
   const withGroup = Boolean(preset.group_by) && !list.columns.some((c) => c.key === preset.group_by);
-  const rows: (string | boolean | null)[][] = [[...(withGroup ? [FIELD_BY_KEY[preset.group_by!]?.label ?? "Group"] : []), ...list.columns.map((c) => c.label)]];
-  for (const g of list.groups) for (const r of g.rows) rows.push([...(withGroup ? [g.title] : []), ...r.cells]);
+  // "Show counselors": each bunk's counselors (and phones) on its campers' rows
+  const withStaff = list.groups.some((g) => g.staff?.length);
+  const rows: (string | boolean | null)[][] = [[...(withGroup ? [FIELD_BY_KEY[preset.group_by!]?.label ?? "Group"] : []), ...list.columns.map((c) => c.label), ...(withStaff ? ["Counselors"] : [])]];
+  for (const g of list.groups) for (const r of g.rows) rows.push([...(withGroup ? [g.title] : []), ...r.cells, ...(withStaff ? [g.staff?.join(" · ") ?? ""] : [])]);
   return tableDownload(`${preset.name} - ${list.scopeLabel}`, rows, exportFormat(sp.get("format")));
 }
