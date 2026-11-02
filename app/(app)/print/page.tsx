@@ -8,6 +8,10 @@ import { LabelUpdates } from "@/components/print/label-updates";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { canUsePrintArea } from "@/lib/auth/permissions";
+import { jobIdsInDivision, myAreaJobIds, scopedQueue } from "@/lib/print/access";
+import { ListFilters } from "@/components/lists/list-filters";
+import { Select } from "@/components/ui/select";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { officeEmail, retryStuckJobs } from "@/lib/print/jobs";
 import { shownJobError } from "@/lib/print/labels";
 import { after } from "next/server";
@@ -26,7 +30,7 @@ const SHOW = {
   all: { label: "Everything", statuses: null },
 } as const;
 
-export default async function PrintQueuePage({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
+export default async function PrintQueuePage({ searchParams }: { searchParams: Promise<{ show?: string; division?: string }> }) {
   const [user, session, sp] = await Promise.all([requireUser(), getActiveSession(), searchParams]);
   // staff who only design templates start there
   if (!canUsePrintArea(user)) redirect("/print/templates");
@@ -35,20 +39,30 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
   // requests cut off while making their PDF get one more try (after the page is sent)
   const base = await appUrl();
   await retryStuckJobs(session.id, base, (fn) => after(fn)).catch((e) => console.error("Retrying stuck print jobs failed", e));
-  const supabase = await createClient();
+  // division heads: only their divisions' requests (and their own), read with the server's key
+  const scoped = scopedQueue(user);
+  const mine = scoped ? await myAreaJobIds(user, session.id) : null;
+  const supabase = scoped ? createAdminClient() : await createClient();
   let q = supabase
     .from("print_jobs")
     .select("id, status, item_count, requested_at, deliver_to, error, pdf_path, printed_at, note, template_id, print_templates(name), requester:requested_by(full_name), printer:printed_by(full_name)")
     .eq("session_id", session.id)
     .order("requested_at", { ascending: false })
-    .limit(150);
+    .limit(mine ? 1000 : 150);
   const statuses = SHOW[show].statuses;
   if (statuses) q = q.in("status", [...statuses]);
-  const [{ data }, office, { count: problems }] = await Promise.all([
+  const [{ data: all }, office, { data: failed }] = await Promise.all([
     q,
     officeEmail(),
-    supabase.from("print_jobs").select("id", { count: "exact", head: true }).eq("session_id", session.id).eq("status", "failed"),
+    supabase.from("print_jobs").select("id").eq("session_id", session.id).eq("status", "failed"),
   ]);
+  // one division's requests (its check-in location), when picked
+  const { data: divisionRows } = await createAdminClient().from("divisions").select("id, name").eq("session_id", session.id).order("sort_order");
+  const divisions = (divisionRows ?? []).filter((d) => !scoped || user.coverage.some((c) => c.division_id === d.id));
+  const division = divisions.find((d) => d.id === sp.division) ?? null;
+  const inDivision = division ? await jobIdsInDivision(session.id, division.id) : null;
+  const data = (all ?? []).filter((j) => (!mine || mine.has(j.id)) && (!inDivision || inDivision.has(j.id))).slice(0, 150);
+  const problems = (failed ?? []).filter((j) => !mine || mine.has(j.id)).length;
   // a request for one camper (or a few) names them; a batch says what it covered (its note)
   const few = (data ?? []).filter((j) => j.item_count <= 3).map((j) => j.id);
   const { data: items } = few.length
@@ -86,11 +100,24 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
         title="Print queue"
         description={office.to ? `Tag requests are emailed to ${office.to} as a PDF, and wait here until marked printed.` : "No office email is set, so requests wait here. Set one in Settings."}
       />
+      {divisions.length > 1 && (
+        <ListFilters className="mb-3">
+          {show !== "todo" && <input type="hidden" name="show" value={show} />}
+          <Select name="division" defaultValue={division?.id ?? ""} className="w-auto" aria-label="Division">
+            <option value="">{scoped ? "All my divisions" : "All divisions"}</option>
+            {divisions.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </Select>
+        </ListFilters>
+      )}
       <div className="mb-4 flex flex-wrap gap-2">
         {(Object.keys(SHOW) as (keyof typeof SHOW)[]).map((k) => (
           <Link
             key={k}
-            href={k === "todo" ? "/print" : `/print?show=${k}`}
+            href={`/print?${new URLSearchParams({ ...(k === "todo" ? {} : { show: k }), ...(division ? { division: division.id } : {}) })}`}
             className={cn("rounded-full border px-3 py-1 text-sm", show === k ? "border-primary bg-primary-soft text-primary" : "text-muted-foreground hover:bg-muted")}
           >
             {SHOW[k].label}
