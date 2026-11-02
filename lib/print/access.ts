@@ -17,7 +17,9 @@ export async function visibleJobs(ids: string[]): Promise<boolean> {
   const user = await getCurrentUser();
   const unique = [...new Set(ids)];
   if (!user || !unique.length || unique.some((id) => !UUID.test(id))) return false;
-  const supabase = await createClient();
+  // division heads open their divisions' requests (their check-in's labels, whoever scanned):
+  // read with the server's key, then checked camper by camper below
+  const supabase = scopedQueue(user) ? createAdminClient() : await createClient();
   const { data: jobs } = await supabase.from("print_jobs").select("id, requested_by").in("id", unique);
   if (!jobs || jobs.length !== unique.length) return false;
   if (seesAllCamp(user)) return true;
@@ -61,4 +63,59 @@ export async function jobsVisibleTo(user: import("@/lib/auth/permissions").Curre
     const c = i.campers as { division_id: string | null; bunk_id: string | null } | null;
     return c ? canPrintFor(user, c) : true;
   });
+}
+
+/** Division heads: the print queue is their divisions' requests, and their own; no one else's. */
+export const scopedQueue = (user: import("@/lib/auth/permissions").CurrentUser) => user.role === "division_head";
+
+/**
+ * The requests of this session a division head sees: their own, and those whose campers are
+ * all in their divisions (the labels from their division's check-in, whoever scanned them).
+ */
+export async function myAreaJobIds(user: import("@/lib/auth/permissions").CurrentUser, sessionId: string): Promise<Set<string>> {
+  const { fetchAll } = await import("@/lib/supabase/fetch-all");
+  const admin = createAdminClient();
+  const items = await fetchAll((from, to) =>
+    admin
+      .from("print_job_items")
+      .select("job_id, camper_id, campers(division_id, bunk_id), print_jobs!inner(session_id, requested_by)")
+      .eq("print_jobs.session_id", sessionId)
+      .order("job_id")
+      .order("camper_id")
+      .range(from, to),
+  );
+  const mine = new Set<string>();
+  const outside = new Set<string>();
+  for (const i of items) {
+    const j = i.print_jobs as unknown as { requested_by: string | null };
+    if (j?.requested_by === user.id) {
+      mine.add(i.job_id);
+      continue;
+    }
+    const c = i.campers as { division_id: string | null; bunk_id: string | null } | null;
+    if (c && canPrintFor(user, c)) mine.add(i.job_id);
+    else outside.add(i.job_id);
+  }
+  // a request with any camper outside their divisions isn't theirs (unless they asked for it)
+  for (const i of items) if (outside.has(i.job_id) && (i.print_jobs as unknown as { requested_by: string | null })?.requested_by !== user.id) mine.delete(i.job_id);
+  return mine;
+}
+
+/** The requests of this session whose campers are all in this division (one check-in location). */
+export async function jobIdsInDivision(sessionId: string, divisionId: string): Promise<Set<string>> {
+  const { fetchAll } = await import("@/lib/supabase/fetch-all");
+  const items = await fetchAll((from, to) =>
+    createAdminClient()
+      .from("print_job_items")
+      .select("job_id, camper_id, campers(division_id), print_jobs!inner(session_id)")
+      .eq("print_jobs.session_id", sessionId)
+      .order("job_id")
+      .order("camper_id")
+      .range(from, to),
+  );
+  const inside = new Set<string>();
+  const outside = new Set<string>();
+  for (const i of items) ((i.campers as { division_id: string | null } | null)?.division_id === divisionId ? inside : outside).add(i.job_id);
+  for (const id of outside) inside.delete(id);
+  return inside;
 }

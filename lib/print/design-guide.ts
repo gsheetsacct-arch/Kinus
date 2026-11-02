@@ -40,7 +40,7 @@ Positions are millimetres from the tag's top-left: x, y, w (width), h (height).
   arc: for round stickers make the box the sticker's size), "arc": degrees of the circle it may
   take (default 180), "letterSpacing": em (extra space between letters, × the size; e.g. 0.05
   for airy capitals, negative to tighten), "wordSpacing": em (extra space between words),
-  "rotate": 0|90|-90}
+  "rotate": 0|90|-90|180 (180: upside down, e.g. the bottom half of a label folded over a card)}
   A name that should wrap only when it's very long: "wrap": true, "valign": "bottom", and a box
   tall enough for two lines that ends where one line ends. A short name sits where it always
   did; a name that fits on one line by shrinking a little stays on one line, and only a long

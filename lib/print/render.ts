@@ -27,8 +27,11 @@ const safeColor = (c: string | undefined, fallback: string) => (c && /^#[0-9a-f]
 function layerHtml(l: Layer, values: Record<string, string>, at?: string): string {
   const get = (k: string) => values[k] ?? "";
   if ((l.type === "text" || l.type === "barcode") && l.rotate && !(l.type === "text" && l.curve)) {
-    const inner = `left:50%;top:50%;width:${l.h}mm;height:${l.w}mm;transform:translate(-50%,-50%) rotate(${l.rotate}deg);`;
-    return `<div class="l" style="left:${l.x}mm;top:${l.y}mm;width:${l.w}mm;height:${l.h}mm;overflow:visible">${layerHtml({ ...l, rotate: 0, w: l.h, h: l.w }, values, inner)}</div>`;
+    // upside down keeps the box's shape; a quarter turn lays the content across its height
+    const side = l.rotate !== 180;
+    const [iw, ih] = side ? [l.h, l.w] : [l.w, l.h];
+    const inner = `left:50%;top:50%;width:${iw}mm;height:${ih}mm;transform:translate(-50%,-50%) rotate(${l.rotate}deg);`;
+    return `<div class="l" style="left:${l.x}mm;top:${l.y}mm;width:${l.w}mm;height:${l.h}mm;overflow:visible">${layerHtml({ ...l, rotate: 0, w: iw, h: ih }, values, inner)}</div>`;
   }
   const pos = at ?? `left:${l.x}mm;top:${l.y}mm;width:${l.w}mm;height:${l.h}mm;`;
   switch (l.type) {
@@ -194,14 +197,46 @@ export function renderDocument(
     // one tag a page: front, then its back on the next page (the back of the same label)
     body = tags.map((v) => (v ? front(v) + (back ? tagHtml(t, v, null, "back") : "") : "")).join("");
   }
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(t.name)}</title><style>
-${embeddedFontCss(t.layers.flatMap((l) => (l.type === "text" && l.font && !l.hidden && !isCustomFont(l.font) ? [FONTS[l.font as FontKey]?.family ?? "Kinus Sans"] : [])))}${opts.fontCss ?? ""}
-${pageCss}
+  return wrapDocument({
+    title: t.name,
+    layers: t.layers,
+    fontCss: opts.fontCss ?? "",
+    pageCss,
+    outlines: opts.outlines,
+    round: isRoundLabel(t.page_width_mm, t.page_height_mm, t.sheet_layout),
+    backgrounds: [{ selector: ".bg", url: opts.background }],
+    images: opts.images ?? {},
+    thermal: Boolean(t.thermal),
+    bodyAttrs,
+    body,
+  });
+}
+
+type DocParts = {
+  title: string;
+  layers: Layer[];
+  fontCss: string;
+  pageCss: string;
+  outlines?: boolean;
+  round: boolean;
+  /** the background picture per template (.bg, or .bgN when several templates share the page) */
+  backgrounds: { selector: string; url: string | null | undefined }[];
+  images: Record<string, string>;
+  thermal: boolean;
+  bodyAttrs: string;
+  body: string;
+};
+
+/** The page around the tags: fonts, the page size, the parts' styles and the fitting script. */
+function wrapDocument(d: DocParts): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(d.title)}</title><style>
+${embeddedFontCss(d.layers.flatMap((l) => (l.type === "text" && l.font && !l.hidden && !isCustomFont(l.font) ? [FONTS[l.font as FontKey]?.family ?? "Kinus Sans"] : [])))}${d.fontCss}
+${d.pageCss}
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}
 body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.tag{position:relative;overflow:hidden;background:#fff${opts.outlines ? ";outline:0.2mm dashed #cbd5e1" : ""}}${isRoundLabel(t.page_width_mm, t.page_height_mm, t.sheet_layout) ? ".tag{border-radius:50%}" : ""}
-.bg{position:absolute;inset:0;background-size:cover;background-position:center}${opts.background ? `.bg{background-image:url("${opts.background.replace(/"/g, "%22")}")}` : ""}
-.im{background-repeat:no-repeat;background-position:center}${Object.entries(opts.images ?? {})
+.tag{position:relative;overflow:hidden;background:#fff${d.outlines ? ";outline:0.2mm dashed #cbd5e1" : ""}}${d.round ? ".tag{border-radius:50%}" : ""}
+.bg{position:absolute;inset:0;background-size:cover;background-position:center}${d.backgrounds.map((b) => (b.url ? `${b.selector}{background-image:url("${b.url.replace(/"/g, "%22")}")}` : "")).join("")}
+.im{background-repeat:no-repeat;background-position:center}${Object.entries(d.images)
     .map(([path, url]) => `.${imageClass(path)}{background-image:url("${url.replace(/"/g, "%22")}")}`)
     .join("")}
 .l{position:absolute;overflow:hidden}
@@ -212,11 +247,11 @@ body{font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;-w
 .bc{display:flex;flex-direction:column;background:#fff}.bc .bars{flex:1;min-height:0}.bc svg{width:100%;height:100%;display:block}
 .bc-text{font-size:7pt;text-align:center;letter-spacing:0.5pt;line-height:1.2;padding-top:0.4mm}
 .qr svg{width:100%;height:100%;display:block}
-@media screen{body{background:#e2e8f0;padding:8mm;display:flex;flex-wrap:wrap;gap:6mm;align-items:flex-start}.tag,.sheet,.pg{flex-shrink:0;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}.pg>.tag{box-shadow:none}}${t.thermal ? `\n${THERMAL_PICTURE_CSS}` : ""}
+@media screen{body{background:#e2e8f0;padding:8mm;display:flex;flex-wrap:wrap;gap:6mm;align-items:flex-start}.tag,.sheet,.pg{flex-shrink:0;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}.pg>.tag{box-shadow:none}}${d.thermal ? `\n${THERMAL_PICTURE_CSS}` : ""}
 .used{background:repeating-linear-gradient(45deg,#f1f5f9 0 2mm,#fff 2mm 4mm);outline:0.3mm dashed #94a3b8}
 @media screen{.sheet.back,.tag.back:not(.sheet>.tag){outline:0.6mm dashed #94a3b8}.sheet.back::before,body>.tag.back::after{content:"Back";position:absolute;top:1mm;right:1mm;z-index:5;font:600 8pt sans-serif;color:#475569;background:#f1f5f9;padding:0.3mm 1.5mm;border-radius:1mm}}
 @media print{body{display:block}.used{display:none}}
-</style></head><body${bodyAttrs}>${body}<script>
+</style></head><body${d.bodyAttrs}>${d.body}<script>
 (function(){${CURVE_SCRIPT}function fit(){document.querySelectorAll("[data-fit]:not(.tc)").forEach(function(el){var span=el.firstElementChild;var min=parseFloat(el.getAttribute("data-min"))||8;var floor=parseFloat(el.getAttribute("data-floor"))||min;var s=parseFloat(getComputedStyle(el).fontSize);var over=function(){return span.scrollWidth>el.clientWidth+0.5||span.offsetHeight>el.clientHeight+0.5};if(!over())return;var r=Math.min(el.clientWidth/Math.max(span.scrollWidth,1),el.clientHeight/Math.max(span.offsetHeight,1));/* text on more lines steps down from its size: a jump would skip the sizes where it fits on fewer lines */if(getComputedStyle(el).whiteSpace!=="nowrap")r=1;s=Math.max(min,Math.floor(s*Math.min(1,r)*2)/2);el.style.fontSize=s+"px";var guard=80;while(guard-->0&&s>min&&over()){s=Math.max(min,s-0.5);el.style.fontSize=s+"px";}
 /* a name too long even at the smallest size goes smaller, so it prints whole: marked for the office */
 guard=400;while(guard-->0&&s>floor&&over()){s=Math.max(floor,s-0.5);el.style.fontSize=s+"px";}if(s<min)el.setAttribute("data-small",(Math.round(s*0.75*2)/2).toString());if(over())el.setAttribute("data-cut","1");});fitCurves();document.body.setAttribute("data-fitted","1");}
@@ -229,3 +264,50 @@ if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fit)}else{win
  * Shrinks each curved text until it fits its arc; marks the ones under their smallest size.
  */
 const CURVE_SCRIPT = `var curvePath=(${curvePath.toString()});function fitCurves(){document.querySelectorAll(".tc[data-fit]").forEach(function(el){var t=el.querySelector("text"),p=el.querySelector("path");if(!t||!p)return;var d=el.dataset,w=+d.w,h=+d.h,arc=+d.arc,s=+d.size,min=+d.minmm,floor=+d.floormm,len=0;function set(v){var g=curvePath(w,h,d.curve,arc,v);p.setAttribute("d",g.d);t.setAttribute("font-size",(v*${CURVE_SCALE}).toFixed(1));len=g.length}function over(){return t.getComputedTextLength()>len+1}set(s);for(var i=0;i<200&&s>min&&over();i++){s=Math.max(min,s*0.97);set(s)}for(i=0;i<200&&s>floor&&over();i++){s=Math.max(floor,s*0.97);set(s)}el.style.fontSize=(s/${MM_PER_PT})+"pt";if(s<min-1e-6)el.setAttribute("data-small",(Math.round(s/${MM_PER_PT}*2)/2).toString());if(over())el.setAttribute("data-cut","1")})}`;
+
+/** One template's part in a combined print (renderCombined). */
+export type CombinedPart = { spec: TemplateSpec; background?: string | null; images?: Record<string, string>; fontCss?: string };
+
+/**
+ * Several templates' labels in one document, in the order given: each camper's name tag, then
+ * their bag label, then the next camper's… For label printers (one label a page), all the same
+ * size. `order` names the template (by its place in `parts`) and the camper's values per label.
+ */
+export function renderCombined(parts: CombinedPart[], order: { part: number; values: Record<string, string>; copies: number }[]): string {
+  if (!parts.length) throw new Error("Nothing to print.");
+  const [w, h] = [parts[0].spec.page_width_mm, parts[0].spec.page_height_mm];
+  if (parts.some((p) => p.spec.sheet_layout)) throw new Error("Only label-printer templates (one label a page) can print as a set: a sheet template prints on its own.");
+  if (parts.some((p) => Math.abs(p.spec.page_width_mm - w) > 0.5 || Math.abs(p.spec.page_height_mm - h) > 0.5)) throw new Error("These templates are different sizes, so they can't print in one set on one printer.");
+  const specs = parts.map((p) => (p.spec.thermal ? { ...p.spec, layers: thermalLayers(p.spec.layers) } : p.spec));
+  const turn = turnsOnPage(specs[0]);
+  if (specs.some((t) => turnsOnPage(t) !== turn)) throw new Error("These templates go through the printer different ways, so they can't print in one set.");
+  // each template's background picture under its own name (the first keeps .bg)
+  const tagOf = (i: number, values: Record<string, string>, side: "front" | "back") => {
+    const html = tagHtml(specs[i], values, side === "front" ? (parts[i].background ?? null) : null, side);
+    return i ? html.replace('<div class="bg"></div>', `<div class="bg bg${i}"></div>`) : html;
+  };
+  const pageCss = turn
+    ? `@page{size:${h}mm ${w}mm;margin:0}.pg{position:relative;width:${h}mm;height:${w}mm;overflow:hidden;break-after:page}.pg>.tag{position:absolute;left:0;top:0;transform-origin:0 0;transform:translateX(${h}mm) rotate(90deg)}`
+    : `@page{size:${w}mm ${h}mm;margin:0}.tag{break-after:page}`;
+  const page = (html: string) => (turn ? `<div class="pg">${html}</div>` : html);
+  const body = order
+    .flatMap((o) => {
+      const t = specs[o.part];
+      const values = parts[o.part].spec.thermal ? thermalValues([{ values: o.values, copies: 1 }])[0].values : o.values;
+      const one = page(tagOf(o.part, values, "front")) + (t.back ? page(tagOf(o.part, values, "back")) : "");
+      return Array.from({ length: Math.max(1, o.copies) }, () => one);
+    })
+    .join("");
+  return wrapDocument({
+    title: specs.map((t) => t.name).join(" + "),
+    layers: specs.flatMap((t) => t.layers),
+    fontCss: parts.map((p) => p.fontCss ?? "").join(""),
+    pageCss,
+    round: false,
+    backgrounds: parts.map((p, i) => ({ selector: i ? `.bg${i}` : ".bg:not([class*=' bg'])", url: p.background })),
+    images: Object.assign({}, ...parts.map((p) => p.images ?? {})),
+    thermal: specs.some((t) => t.thermal),
+    bodyAttrs: turn ? ` data-turn="${w}x${h}"` : "",
+    body,
+  });
+}

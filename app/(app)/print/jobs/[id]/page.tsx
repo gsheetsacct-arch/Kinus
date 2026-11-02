@@ -10,7 +10,7 @@ import { campStock, printSetSummary, sheetPositions } from "@/lib/print/jobs";
 import { getCampContext } from "@/lib/data/camp";
 import { JOB_STATUS, shownJobError } from "@/lib/print/labels";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/auth/current-user";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { formatDateTime } from "@/lib/utils";
@@ -21,7 +21,8 @@ export const maxDuration = 60;
 export default async function JobPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ print?: string }> }) {
   const [, { id }, sp] = await Promise.all([requireUser(), params, searchParams]);
   if (!(await visibleJobs([id]))) notFound();
-  const supabase = await createClient();
+  // checked just above (a division head opens their divisions' requests, whoever asked)
+  const supabase = createAdminClient();
   const { data: job } = await supabase
     .from("print_jobs")
     .select("id, status, item_count, requested_at, deliver_to, error, pdf_path, printed_at, note, print_templates(name), requester:requested_by(full_name), printer:printed_by(full_name)")

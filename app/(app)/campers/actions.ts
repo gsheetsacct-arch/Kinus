@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireAdmin, requireUser } from "@/lib/auth/current-user";
-import { canAccessBunk, canAddWalkIn, visibleFieldGroups } from "@/lib/auth/permissions";
+import { canAccessBunk, canAddWalkIn, isAdmin, visibleFieldGroups } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { parsePhone } from "@/lib/import/mapping";
@@ -78,6 +78,54 @@ export async function updateCamper(fd: FormData): Promise<ActionResult> {
     if (!saved?.length) return fail("You can't edit this camper.");
     revalidatePath(`/campers/${d.id}`);
     return ok("Saved.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+/**
+ * Corrections to a camper's registration columns (lib/data/camper-columns): kept as fixes, so
+ * new imports keep them. Back to what the registration says: the fix is taken away.
+ */
+export async function saveRegistrationDetails(fd: FormData): Promise<ActionResult> {
+  const user = await requireUser();
+  try {
+    const id = z.guid().parse(fd.get("id"));
+    const supabase = await createClient();
+    const [{ data: c }, { data: fv }] = await Promise.all([
+      supabase.from("campers_visible").select("id, division_id, bunk_id").eq("id", id).maybeSingle(),
+      supabase.from("field_visibility").select("field_group, roles"),
+    ]);
+    if (!c || !(c.division_id ? canAccessBunk(user, c.division_id, c.bunk_id, "edit") : isAdmin(user))) return fail("You can't edit this camper.");
+    const { editableColumns, visibleColumns } = await import("@/lib/data/camper-columns");
+    const { columnKey, extraValue } = await import("@/lib/import/extra-fields");
+    const { fixKey, parseFixes } = await import("@/lib/source-fixes");
+    const allowed = new Map(visibleColumns(await editableColumns(), visibleFieldGroups(user, fv ?? [])).map((col) => [columnKey(col.column), col.column]));
+    const admin = createAdminClient();
+    const { data: row, error: readError } = await admin.from("campers").select("*").eq("id", id).maybeSingle();
+    if (readError) throw readError;
+    if (!row) return fail("This camper is gone.");
+    if (!("source_fixes" in row)) return fail("Saving these needs the database update with migration 0034.");
+    const fixes = parseFixes((row as { source_fixes?: unknown }).source_fixes);
+    const at = new Date().toISOString();
+    let changed = 0;
+    for (const [name, raw] of fd.entries()) {
+      if (!name.startsWith("col:")) continue;
+      const column = allowed.get(columnKey(name.slice(4)));
+      if (!column) return fail("That detail can't be changed here.");
+      const value = String(raw).trim().slice(0, 500);
+      const registration = extraValue(row.source_data, column);
+      const key = fixKey(column);
+      if (value === (fixes[key]?.value ?? registration)) continue;
+      changed++;
+      if (value === registration) delete fixes[key];
+      else fixes[key] = { value, was: registration, by: user.id, at };
+    }
+    if (!changed) return ok("Nothing changed.");
+    const { error } = await admin.from("campers").update({ source_fixes: fixes } as never).eq("id", id);
+    if (error) throw error;
+    revalidatePath(`/campers/${id}`);
+    return ok(changed === 1 ? "Saved. New imports keep it." : `Saved ${changed} changes. New imports keep them.`);
   } catch (e) {
     return fail(errorMessage(e));
   }

@@ -10,7 +10,8 @@ export type MergeField = { key: string; label: string; source_field: string; tra
 export type ValueMap = { id: string; name: string; source_field: string; entries: { source_value: string; output_value: string }[] };
 
 /** Quarter turns: 90 reads top to bottom, -90 bottom to top. The box (x, y, w, h) is what you see on the tag. */
-export type Rotation = 0 | 90 | -90;
+/** Quarter turns, or upside down (180: the bottom half of a label folded over a card). */
+export type Rotation = 0 | 90 | -90 | 180;
 
 /** On every part: locked parts can't be moved or resized on the canvas; hidden ones don't show or print; "back": on the back of a two-sided tag. */
 export type PartFlags = { locked?: boolean; hidden?: boolean; side?: "back" };

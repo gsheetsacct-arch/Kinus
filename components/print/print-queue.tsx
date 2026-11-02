@@ -72,6 +72,11 @@ export function PrintQueue({ jobs, show }: { jobs: QueueJob[]; show: string }) {
   const byTag = new Map<string, QueueJob[]>();
   for (const j of jobs) if (printable(j) && j.templateId) byTag.set(j.templateId, [...(byTag.get(j.templateId) ?? []), j]);
   const groups = [...byTag.values()].filter((g) => g.length > 1);
+  // requests for different tags (a name tag and a bag label from check-in): printed as sets,
+  // each camper's labels one after another
+  const mixed = chosen.length > 1 && !sameTag && chosen.every((j) => printable(j) && j.templateId);
+  const waiting = jobs.filter((j) => printable(j) && j.templateId);
+  const waitingTags = new Set(waiting.map((j) => j.templateId)).size;
   return (
     <div className={cn("space-y-3", pending && "opacity-70")}>
       {show === "todo" && groups.length > 0 && (
@@ -92,9 +97,35 @@ export function PrintQueue({ jobs, show }: { jobs: QueueJob[]; show: string }) {
           ))}
         </div>
       )}
+      {show === "todo" && waitingTags > 1 && selected.size === 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3 text-sm">
+          <Layers className="size-5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1">
+            Labels for a label printer (name tag + bag label) can print as sets, each camper&apos;s labels one after another.
+            <span className="block text-xs text-muted-foreground">Select the requests, or all of them, then Print as sets.</span>
+          </span>
+          <Button size="sm" variant="outline" onClick={() => setSelected(new Set(waiting.map((j) => j.id)))}>
+            Select all waiting
+          </Button>
+        </div>
+      )}
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-2 pl-4 shadow-[var(--shadow-card)]">
           <span className="mr-auto text-sm font-medium">{selected.size} selected</span>
+          {mixed && (
+            <>
+              <Button size="sm" asChild title="Each camper's labels one after another (name tag, bag label, next camper…)">
+                <a href={`/print/combined?jobs=${ids.join(",")}`} target="_blank" rel="noreferrer">
+                  <Printer /> Print as sets
+                </a>
+              </Button>
+              <Button size="sm" variant="outline" asChild>
+                <a href={`/print/combined/pdf?jobs=${ids.join(",")}`}>
+                  <FileDown /> PDF
+                </a>
+              </Button>
+            </>
+          )}
           {chosen.length > 1 && (
             <Button size="sm" variant="outline" asChild={sameTag} disabled={!sameTag} title={sameTag ? undefined : "Choose requests for the same tag that are ready to print"}>
               {sameTag ? (
