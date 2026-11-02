@@ -52,7 +52,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
   const supabase = await createClient();
   // everything at once: one round trip to the database instead of three
   const divisionsFor = (sessionId: string) => supabase.from("divisions").select("id, name, bunks(id, name, sort_order)").eq("session_id", sessionId).order("sort_order");
-  const [c, { data: fv }, { data: events }, { data: history }, activeBunks, { data: templates }, card] = await Promise.all([
+  const [c, { data: fv }, { data: events }, { data: history }, activeBunks, { data: templates }, card, extraAll] = await Promise.all([
     getCamper(supabase, id),
     supabase.from("field_visibility").select("field_group, roles"),
     supabase.from("attendance_events").select("id, event_type, method, occurred_at, note, resulting_status, profiles:recorded_by(full_name)").eq("camper_id", id).order("occurred_at", { ascending: false }).limit(100),
@@ -60,6 +60,9 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
     session ? divisionsFor(session.id) : Promise.resolve({ data: [] }),
     loadCardTemplates(supabase).then((data) => ({ data })),
     loadCard(id),
+    // extra columns from the registration export (sleeping at the Kinus, yarmulka size…), read
+    // alongside the rest; only the ones this person may see are shown
+    loadExtraFields().then(async (fields) => ({ fields, values: (await extraValuesFor([id], fields)).get(id) ?? {} })),
   ]);
   if (!c) notFound();
   // a camper from another year: offer that year's bunks
@@ -84,9 +87,8 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
     .filter((d) => canAccessBunk(user, d.id, null, "edit") || d.id === c.division_id)
     .map((d) => ({ ...d, bunks: [...(d.bunks as { id: string; name: string; sort_order: number }[])].sort((a, b) => a.sort_order - b.sort_order || compareBunkNames(a.name, b.name)) }));
   const groups = visibleFieldGroups(user, fv ?? []);
-  // extra columns from the registration export (sleeping at the Kinus, yarmulka size…)
-  const extraFields = visibleExtraFields(await loadExtraFields(), groups);
-  const extra = (await extraValuesFor([c.id!], extraFields)).get(c.id!) ?? {};
+  const extraFields = visibleExtraFields(extraAll.fields, groups);
+  const extra = extraAll.values;
   const canEdit = c.division_id ? canAccessBunk(user, c.division_id, c.bunk_id, "edit") : isAdmin(user);
 
   return (
