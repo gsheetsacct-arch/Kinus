@@ -25,7 +25,8 @@ import { getCamper } from "@/lib/data/campers";
 import { formatDateTime, formatPhone } from "@/lib/utils";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
 import { FIELD_BY_KEY } from "@/lib/fields";
-import { addContact, archiveCamper, removeContact, updateCamper } from "../actions";
+import { addContact, archiveCamper, removeContact, saveRegistrationDetails, updateCamper } from "../actions";
+import { editableColumns, visibleColumns } from "@/lib/data/camper-columns";
 import { loadCardTemplates } from "@/lib/print/card-templates";
 import { displaySourceId } from "@/lib/import/programs";
 
@@ -52,7 +53,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
   const supabase = await createClient();
   // everything at once: one round trip to the database instead of three
   const divisionsFor = (sessionId: string) => supabase.from("divisions").select("id, name, bunks(id, name, sort_order)").eq("session_id", sessionId).order("sort_order");
-  const [c, { data: fv }, { data: events }, { data: history }, activeBunks, { data: templates }, card, extraAll, { data: staffNames }] = await Promise.all([
+  const [c, { data: fv }, { data: events }, { data: history }, activeBunks, { data: templates }, card, extraAll, { data: staffNames }, registration] = await Promise.all([
     getCamper(supabase, id),
     supabase.from("field_visibility").select("field_group, roles"),
     supabase.from("attendance_events").select("id, event_type, method, occurred_at, note, resulting_status, profiles:recorded_by(full_name)").eq("camper_id", id).order("occurred_at", { ascending: false }).limit(100),
@@ -65,6 +66,8 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
     loadExtraFields().then(async (fields) => ({ fields, values: (await extraValuesFor([id], fields)).get(id) ?? {} })),
     // the Changes tab says who: staff names, read alongside (not after the history)
     supabase.from("profiles").select("id, full_name"),
+    // the registration columns staff can correct (Edit tab), with what they say now
+    editableColumns().then(async (columns) => ({ columns, values: (await extraValuesFor([id], columns)).get(id) ?? {} })),
   ]);
   if (!c) notFound();
   // a camper from another year: offer that year's bunks
@@ -88,6 +91,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
     .map((d) => ({ ...d, bunks: [...(d.bunks as { id: string; name: string; sort_order: number }[])].sort((a, b) => a.sort_order - b.sort_order || compareBunkNames(a.name, b.name)) }));
   const groups = visibleFieldGroups(user, fv ?? []);
   const extraFields = visibleExtraFields(extraAll.fields, groups);
+  const regColumns = visibleColumns(registration.columns, groups);
   const extra = extraAll.values;
   const canEdit = c.division_id ? canAccessBunk(user, c.division_id, c.bunk_id, "edit") : isAdmin(user);
 
@@ -399,6 +403,24 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
                 <Button type="submit">Save changes</Button>
               </div>
             </ActionForm>
+            {regColumns.length > 0 && (
+              <ActionForm action={saveRegistrationDetails} className="mt-4 grid max-w-3xl gap-4 rounded-xl border bg-card p-5 shadow-[var(--shadow-card)] sm:grid-cols-2">
+                <input type="hidden" name="id" value={c.id!} />
+                <div className="sm:col-span-2">
+                  <h3 className="font-semibold">Registration details</h3>
+                  <p className="text-sm text-muted-foreground">From the registration export. A correction here is kept when the registration is imported again; put back what the registration says to undo it.</p>
+                </div>
+                {regColumns.map((col) => (
+                  <div key={col.column} className="space-y-1.5">
+                    <Label htmlFor={`col-${col.column}`}>{col.label}</Label>
+                    <Input id={`col-${col.column}`} name={`col:${col.column}`} defaultValue={registration.values[col.column] ?? ""} dir="auto" />
+                  </div>
+                ))}
+                <div className="sm:col-span-2">
+                  <Button type="submit">Save registration details</Button>
+                </div>
+              </ActionForm>
+            )}
           </TabsContent>
         )}
       </Tabs>
