@@ -1,7 +1,7 @@
 import type { CurrentUser } from "@/lib/auth/permissions";
 import { LEVEL_RANK, canFinalCheckout, canTextStaff, canUsePhoneBook, canUsePrintArea, effectiveLevel, isAdmin, isDirector, isStaffManager } from "@/lib/auth/permissions";
 
-export type NavIcon = "DoorOpen" | "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser" | "ShieldCheck" | "MessageSquare" | "ClipboardCheck" | "History";
+export type NavIcon = "DoorOpen" | "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser" | "ShieldCheck" | "MessageSquare" | "ClipboardCheck" | "History" | "Search";
 export type NavItem = { href: string; label: string; icon: NavIcon; description: string; section: "main" | "admin"; mobile?: boolean };
 
 export function buildNav(user: CurrentUser, opts: { designs?: boolean } = {}): NavItem[] {
@@ -18,6 +18,7 @@ export function buildNav(user: CurrentUser, opts: { designs?: boolean } = {}): N
     ];
   const nav: NavItem[] = [
     { href: "/", label: "Home", icon: "LayoutGrid", description: "Overview and next steps", section: "main" },
+    { href: "/search", label: "Search", icon: "Search", description: "Search all of Kinus, or one part of it", section: "main" },
     canScan
       ? { href: "/scan", label: "Check in", icon: "ScanLine", description: "Scan or search to check campers in and out", section: "main", mobile: true }
       : { href: "/scan", label: "Look up", icon: "ScanLine", description: "Scan a tag or search to open a camper", section: "main", mobile: true },

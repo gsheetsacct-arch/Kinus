@@ -1,5 +1,5 @@
 import { loadExtraFields } from "@/lib/data/extra-fields";
-import { parseWhere } from "@/lib/data/lists";
+import { COMBO_SEPS, parseCombos, parseWhere } from "@/lib/data/lists";
 import { notFound } from "next/navigation";
 import { Copy, Lock } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -43,6 +43,15 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
   const match = (preset?.filters as { match?: string } | null)?.match === "all" ? "all" : "any";
   // column filters ("T-shirt size is M or L"): the saved ones, then empty rows to add more
   const where = parseWhere(preset?.filters);
+  // combined columns: the saved ones, then a blank one to make another
+  const combos = parseCombos(preset?.filters);
+  const comboRows = [...combos, { id: "", label: "", parts: [] as string[], sep: "dot" as const, labels: false }].slice(0, 6);
+  // what can go in one: Kinus' fields, Sleeping, and every export column
+  const partOptions = [
+    ...FIELDS.map((f) => ({ key: f.key, label: f.label })),
+    { key: SLEEPING_COLUMN, label: SLEEPING_COLUMN_LABEL },
+    ...extraFields.map((f) => ({ key: `source.${f.column}`, label: `${f.label} (export)` })),
+  ];
   const whereRows = [...where, ...Array.from({ length: Math.max(1, 3 - where.length) }, () => ({ column: "", values: [] as string[] }))].slice(0, 5);
   const sortField = sort.find((s) => s.field !== preset?.group_by)?.field ?? "last_name";
 
@@ -172,6 +181,51 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                 <input type="checkbox" name="columns" value={SLEEPING_COLUMN} defaultChecked={columns.has(SLEEPING_COLUMN)} className="size-4 accent-[var(--primary)]" />
                 {SLEEPING_COLUMN_LABEL} <span className="text-muted-foreground">(Sleeping here / Going home)</span>
               </label>
+            </fieldset>
+            <fieldset className="space-y-3">
+              <legend className="mb-1 text-sm font-semibold">Combined columns</legend>
+              <p className="text-xs text-muted-foreground">
+                Several fields in one column, to take less room on a printed list: e.g. T-shirt · Sleeping · Yarmulka. Empty ones are left out; a yes/no field shows its name when yes. Combined
+                columns come after the others.
+              </p>
+              {comboRows.map((c, i) => (
+                <div key={c.id || `new-${i}`} className="space-y-2 rounded-lg border bg-background p-3">
+                  <input type="hidden" name={`combo_id_${i}`} value={c.id} />
+                  <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                    <Input name={`combo_label_${i}`} defaultValue={c.label} placeholder={c.id ? "Column name" : "New combined column: its name"} aria-label="Column name" dir="auto" />
+                    <Select name={`combo_sep_${i}`} defaultValue={c.sep} aria-label="Between them">
+                      {Object.entries(COMBO_SEPS).map(([k, v]) => (
+                        <option key={k} value={k}>
+                          {v.label}
+                        </option>
+                      ))}
+                    </Select>
+                    <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+                      <input type="checkbox" name={`combo_labels_${i}`} defaultChecked={c.labels} className="size-4 accent-[var(--primary)]" /> Name each
+                    </label>
+                  </div>
+                  <details className="text-sm" open={!c.id ? false : undefined}>
+                    <summary className="cursor-pointer text-muted-foreground">
+                      {c.parts.length ? `In it: ${c.parts.map((k) => partOptions.find((o) => o.key === k)?.label ?? k).join(" · ")}` : "Choose what goes in it"}
+                    </summary>
+                    <div className="mt-2 grid max-h-72 gap-1 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
+                      {partOptions.map((o) => (
+                        <label key={o.key} className="flex items-center gap-2 text-sm">
+                          <input type="checkbox" name={`combo_part_${i}`} value={o.key} defaultChecked={c.parts.includes(o.key)} className="size-4 accent-[var(--primary)]" />
+                          <span className="truncate" dir="auto">
+                            {o.label}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </details>
+                  {c.id && (
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" name={`combo_show_${i}`} defaultChecked={columns.has(`combo:${c.id}`)} className="size-4 accent-[var(--primary)]" /> Show this column
+                    </label>
+                  )}
+                </div>
+              ))}
             </fieldset>
             {extraFields.length > 0 && (
               <fieldset className="space-y-2">

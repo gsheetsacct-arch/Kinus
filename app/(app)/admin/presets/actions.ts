@@ -22,6 +22,19 @@ export async function savePreset(fd: FormData): Promise<ActionResult> {
   try {
     const d = schema.parse(Object.fromEntries(fd));
     const columns = fd.getAll("columns").map(String).filter((k) => FIELD_BY_KEY[k] || k === SLEEPING_COLUMN || /^source\.[^\s{}|]{1,120}$/.test(k));
+    // combined columns: a name and at least one field each; a new one (no id yet) gets one and
+    // shows at once, an existing one shows when "Show this column" is ticked
+    const combos: { id: string; label: string; parts: string[]; sep: string; labels: boolean }[] = [];
+    for (let i = 0; i < 6; i++) {
+      const label = String(fd.get(`combo_label_${i}`) ?? "").trim().slice(0, 60);
+      const parts = fd.getAll(`combo_part_${i}`).map(String).filter((k) => FIELD_BY_KEY[k] || k === SLEEPING_COLUMN || /^source\.[^\s{}|]{1,120}$/.test(k)).slice(0, 12);
+      if (!label || !parts.length) continue;
+      const had = String(fd.get(`combo_id_${i}`) ?? "");
+      const id = /^[a-z0-9]{4,12}$/.test(had) ? had : Math.random().toString(36).slice(2, 10);
+      const sep = String(fd.get(`combo_sep_${i}`) ?? "dot");
+      combos.push({ id, label, parts, sep: ["dot", "comma", "slash", "line"].includes(sep) ? sep : "dot", labels: fd.get(`combo_labels_${i}`) === "on" });
+      if (!had || fd.get(`combo_show_${i}`) === "on") columns.push(`combo:${id}`);
+    }
     if (columns.length === 0) return fail("Tick at least one column.");
     const supabase = await createClient();
     const row = {
@@ -40,6 +53,7 @@ export async function savePreset(fd: FormData): Promise<ActionResult> {
           .map((c, i) => ({ column: String(c).slice(0, 200), values: String(fd.getAll("where_values")[i] ?? "").split(",").map((v) => v.trim().slice(0, 100)).filter(Boolean).slice(0, 20) }))
           .filter((w) => w.column && w.values.length)
           .slice(0, 5),
+        combos,
       },
     };
     const { error } = d.id ? await supabase.from("list_presets").update(row).eq("id", d.id) : await supabase.from("list_presets").insert({ ...row, created_by: me.id });
