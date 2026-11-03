@@ -51,7 +51,10 @@ export function ListGroups({ columns, groups }: Pick<BuiltList, "columns" | "gro
                           <a href={telHref(String(v))} className="-my-2 inline-block py-2">{String(v)}</a>
                         </td>
                       ) : (
-                        <td key={ci}>{typeof v === "boolean" ? (v ? "Yes" : "No") : String(v ?? "")}</td>
+                        // a combined column "one per line" keeps its lines
+                        <td key={ci} className="whitespace-pre-line">
+                          {typeof v === "boolean" ? (v ? "Yes" : "No") : String(v ?? "")}
+                        </td>
                       ),
                     )}
                   </tr>

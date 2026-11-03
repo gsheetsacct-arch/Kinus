@@ -1,7 +1,7 @@
 import { formatPhone } from "@/lib/utils";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { FIELD_BY_KEY, UNGATED_GROUPS, getFieldValue } from "@/lib/fields";
+import { FIELD_BY_KEY, UNGATED_GROUPS, getFieldValue, type FieldGroup } from "@/lib/fields";
 import { presetAudiencesFor, visibleFieldGroups, type CurrentUser, type FieldVisibilityRow } from "@/lib/auth/permissions";
 import { listCampers } from "./campers";
 import { STATUS_LABEL } from "@/lib/attendance/machine";
@@ -10,9 +10,32 @@ import { SLEEPING_COLUMN, SLEEPING_COLUMN_LABEL, sleepingText } from "@/lib/slee
 
 type DB = SupabaseClient<Database>;
 
-export type ListPreset = { id: string; name: string; audience: string; columns: string[]; sort: { field: string; dir: string }[]; group_by: string | null; is_default: boolean; /** Only campers with these (lib/camper-flags): any one of them, or all of them. */ only: CamperFlag[]; match: "any" | "all"; /** Only campers whose export column is one of these values ("(empty)": nothing in it). */ where: ColumnFilter[] };
+export type ListPreset = { id: string; name: string; audience: string; columns: string[]; sort: { field: string; dir: string }[]; group_by: string | null; is_default: boolean; /** Only campers with these (lib/camper-flags): any one of them, or all of them. */ only: CamperFlag[]; match: "any" | "all"; /** Only campers whose export column is one of these values ("(empty)": nothing in it). */ where: ColumnFilter[]; /** Combined columns ("combo:<id>" in columns). */ combos?: Combo[] };
 
 export type ColumnFilter = { column: string; values: string[] };
+
+/**
+ * A combined column: several fields in one cell ("M · Sleeping here · 6¾"), to save room on a
+ * printed list. In the layout's columns as "combo:<id>"; empty values are left out.
+ */
+export type Combo = { id: string; label: string; parts: string[]; sep: "dot" | "comma" | "slash" | "line"; labels: boolean };
+export const COMBO_SEPS: Record<Combo["sep"], { label: string; text: string }> = {
+  dot: { label: "·  (dot)", text: " · " },
+  comma: { label: ",  (comma)", text: ", " },
+  slash: { label: "/  (slash)", text: " / " },
+  line: { label: "One per line", text: "\n" },
+};
+
+/** The layout's combined columns, as saved ({ combos: [...] }). */
+export function parseCombos(filters: unknown): Combo[] {
+  const c = (filters as { combos?: unknown } | null)?.combos;
+  if (!Array.isArray(c)) return [];
+  return c
+    .filter((x): x is Combo => Boolean(x && typeof x.id === "string" && typeof x.label === "string" && Array.isArray(x.parts)))
+    .map((x) => ({ id: x.id, label: x.label, parts: x.parts.filter((p): p is string => typeof p === "string"), sep: x.sep in COMBO_SEPS ? x.sep : "dot", labels: Boolean(x.labels) }))
+    .filter((x) => x.parts.length)
+    .slice(0, 6);
+}
 
 /** The layout's column filters, as saved ({ where: [{ column, values }] }). */
 export function parseWhere(filters: unknown): ColumnFilter[] {
@@ -43,6 +66,7 @@ export async function getPresetsFor(supabase: DB, user: CurrentUser): Promise<Li
     only: parseFlags(((filters as { only?: string[] } | null)?.only ?? []).join(",")),
     match: (filters as { match?: string } | null)?.match === "all" ? ("all" as const) : ("any" as const),
     where: parseWhere(filters),
+    combos: parseCombos(filters),
   }));
 }
 
@@ -75,15 +99,24 @@ export async function buildList(
   const extraAll = (preset.where ?? []).length
     ? await import("./extra-fields").then(async (m) => (await m.loadExtraFields()).map((f) => ({ key: `source.${f.column}`, group: m.extraGroupOf(f) })))
     : [];
-  const extraDefs = preset.columns.some((k) => k.startsWith("source."))
+  // combined columns: their parts are loaded like columns of their own
+  const combos = new Map((preset.combos ?? []).map((c) => [`combo:${c.id}`, c]));
+  const allKeys = [...preset.columns, ...preset.columns.flatMap((k) => combos.get(k)?.parts ?? [])];
+  const extraDefs = allKeys.some((k) => k.startsWith("source."))
     ? await import("./extra-fields").then(async (m) => (await m.loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: f.label, group: m.extraGroupOf(f), kind: "text" as const, answers: f.answers })))
     : [];
   const defOf = (k: string) => FIELD_BY_KEY[k] ?? extraDefs.find((f) => f.key === k) ?? (k === SLEEPING_COLUMN ? { key: k, label: SLEEPING_COLUMN_LABEL, group: "basic" as const, kind: "text" as const } : undefined);
+  const allowed = (f: { group: FieldGroup }) => UNGATED_GROUPS.includes(f.group) || groupsAnywhere.has(f.group);
+  // a combined column's parts this person may see (none: the column isn't shown)
+  const comboParts = new Map(
+    [...combos.entries()].map(([k, c]) => [k, c.parts.map(defOf).filter((f): f is NonNullable<typeof f> => Boolean(f) && allowed(f!))] as const),
+  );
   const shownColumns = preset.columns
-    .map(defOf)
+    .map((k) => (combos.has(k) ? (comboParts.get(k)!.length ? { key: k, label: combos.get(k)!.label, group: "basic" as const, kind: "text" as const } : undefined) : defOf(k)))
     .filter((f): f is NonNullable<typeof f> => Boolean(f))
-    .filter((f) => UNGATED_GROUPS.includes(f.group) || groupsAnywhere.has(f.group));
-  const fields = [...new Set([...shownColumns.map((f) => f.key), ...sortKeys.map((s) => s.field), ...(preset.group_by ? [preset.group_by] : [])])].filter((k) => FIELD_BY_KEY[k]);
+    .filter(allowed);
+  const partKeys = shownColumns.flatMap((f) => (combos.has(f.key) ? comboParts.get(f.key)!.map((p) => p.key) : [f.key]));
+  const fields = [...new Set([...partKeys, ...sortKeys.map((s) => s.field), ...(preset.group_by ? [preset.group_by] : [])])].filter((k) => FIELD_BY_KEY[k]);
   // the layout's filters: all of them, or (by default) any one of them; the page's choice narrows it further
   const anyOf = preset.match === "any" && preset.only.length > 1 ? preset.only : [];
   const only = [...new Set([...(anyOf.length ? [] : preset.only), ...(scope.only ?? [])])];
@@ -113,11 +146,19 @@ export async function buildList(
   }
   const columnLabels = new Map(where.length ? (await import("./extra-fields").then((m) => m.loadExtraFields())).map((f) => [f.column, f.label] as const) : []);
   const columns = shownColumns.map((f) => ({ key: f.key, label: f.label }));
-  const extraCols = columns.filter((c) => c.key.startsWith("source.")).map((c) => ({ column: c.key.slice(7), label: c.label, answers: extraDefs.find((f) => f.key === c.key)?.answers }));
+  const extraCols = [...new Set(partKeys.filter((k) => k.startsWith("source.")))].map((k) => ({ column: k.slice(7), label: defOf(k)?.label, answers: extraDefs.find((f) => f.key === k)?.answers }));
   // "Sleeping here" / "Going home", from the registration's Sleeping At The Kinus
-  const sleeping = columns.some((c) => c.key === SLEEPING_COLUMN) ? await import("./sleeping").then((m) => m.sleepingAtKinus(scope.sessionId, campers.map((c) => String(c.id)))) : null;
+  const sleeping = partKeys.includes(SLEEPING_COLUMN) ? await import("./sleeping").then((m) => m.sleepingAtKinus(scope.sessionId, campers.map((c) => String(c.id)))) : null;
   const extraValues = extraCols.length ? await import("./extra-fields").then((m) => m.extraValuesFor(campers.map((c) => String(c.id)), extraCols)) : new Map<string, Record<string, string>>();
 
+  const cellOf = (c: (typeof campers)[number], key: string): string | boolean | null => {
+    if (key.startsWith("source.")) return extraValues.get(String(c.id))?.[key.slice(7)] || null;
+    if (key === SLEEPING_COLUMN) return sleepingText(sleeping?.get(String(c.id)));
+    const v = getFieldValue(c, key);
+    if (key === "status" && typeof v === "string") return STATUS_LABEL[v as keyof typeof STATUS_LABEL] ?? v;
+    if (key.endsWith(".phone") && typeof v === "string") return formatPhone(v);
+    return v;
+  };
   const sorted = [...campers].sort((a, b) => {
     for (const s of sortKeys) {
       const r = cmp(getFieldValue(a, s.field), getFieldValue(b, s.field));
@@ -135,12 +176,16 @@ export async function buildList(
     groupsMap.get(title)!.rows.push({
       id: c.id!,
       cells: columns.map((col) => {
-        if (col.key.startsWith("source.")) return extraValues.get(String(c.id))?.[col.key.slice(7)] || null;
-        if (col.key === SLEEPING_COLUMN) return sleepingText(sleeping?.get(String(c.id)));
-        const v = getFieldValue(c, col.key);
-        if (col.key === "status" && typeof v === "string") return STATUS_LABEL[v as keyof typeof STATUS_LABEL] ?? v;
-        if (col.key.endsWith(".phone") && typeof v === "string") return formatPhone(v);
-        return v;
+        const combo = combos.get(col.key);
+        if (!combo) return cellOf(c, col.key);
+        // the parts with something in them, joined: a yes/no part says its name when yes
+        const bits = comboParts.get(col.key)!.flatMap((p) => {
+          const v = cellOf(c, p.key);
+          if (v === null || v === undefined || v === "" || v === false) return [];
+          if (v === true) return [p.label];
+          return [combo.labels ? `${p.label}: ${v}` : String(v)];
+        });
+        return bits.length ? bits.join(COMBO_SEPS[combo.sep].text) : null;
       }),
     });
   }
