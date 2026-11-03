@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Copy, FolderMinus, FolderOpen, Plus, UserRound } from "lucide-react";
+import { Copy, FolderMinus, FolderOpen, Plus, Sparkles, UserRound } from "lucide-react";
 import { MoveToFolder, RenameFolder } from "@/components/print/template-folders";
 import { PageHeader } from "@/components/page-header";
 import { ActionForm } from "@/components/action-form";
@@ -14,9 +14,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { STAFF_ROLES } from "@/lib/labels";
 import { DesignersBox } from "@/components/print/designers-box";
 import { FontsBox } from "@/components/print/fonts-box";
-import { ClaudeBox } from "@/components/print/claude-box";
-import { appUrl } from "@/lib/auth/app-url";
-import { connectorsOf } from "@/lib/print/design-connectors";
 import { customFontLinks, loadCustomFonts } from "@/lib/print/custom-fonts";
 import { customFamily } from "@/lib/print/font-families";
 import { duplicateTemplate } from "../actions";
@@ -33,7 +30,7 @@ export default async function TemplatesPage({ searchParams }: { searchParams: Pr
   const user = await requireUser();
   if (!(await canDesign(user))) redirect("/print");
   const supabase = await createClient();
-  const [{ data }, designerIds, staffRows, fonts, links] = await Promise.all([
+  const [{ data }, designerIds, staffRows, fonts] = await Promise.all([
     supabase.from("print_templates").select("*").order("sort_order").order("name"),
     loadDesigners(),
     // who can be allowed to edit templates: people with their own sign-in (directors only see this)
@@ -41,7 +38,6 @@ export default async function TemplatesPage({ searchParams }: { searchParams: Pr
       ? createAdminClient().from("profiles").select("id, full_name, role, all_areas").eq("is_active", true).eq("login", "personal").order("full_name").then((r) => r.data ?? [])
       : Promise.resolve([]),
     loadCustomFonts(),
-    connectorsOf(user.id),
   ]);
   const roleName = (r: string) => STAFF_ROLES[r as keyof typeof STAFF_ROLES]?.label ?? r;
   const allowable = staffRows.filter((p) => !(p.role === "owner" || (p.role === "director" && p.all_areas))).map((p) => ({ id: p.id, name: p.full_name, role: roleName(p.role) }));
@@ -165,7 +161,14 @@ export default async function TemplatesPage({ searchParams }: { searchParams: Pr
       {!showRetired && (
         <div className="mt-8 space-y-6">
           <style dangerouslySetInnerHTML={{ __html: customFontLinks(fonts) }} />
-          <ClaudeBox links={links} connector={`${await appUrl()}/api/mcp`} />
+          {/* the connector is for everyone now: on its own page */}
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-4 text-sm shadow-[var(--shadow-card)]">
+            <Sparkles className="size-4 text-muted-foreground" />
+            <span className="min-w-0 flex-1">Design templates with Claude: it previews every change as it prints and checks that every name fits.</span>
+            <Link href="/connect" className="font-medium text-primary hover:underline">
+              Connect your AI
+            </Link>
+          </div>
           <FontsBox fonts={fonts.map((f) => ({ id: f.id, name: f.name, family: customFamily(f.id), files: f.files.map(({ weight, italic }) => ({ weight, italic })) }))} />
           {isAdmin(user) && <DesignersBox designers={designers} staff={allowable} />}
         </div>

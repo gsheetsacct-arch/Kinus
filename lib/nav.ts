@@ -1,7 +1,9 @@
 import type { CurrentUser } from "@/lib/auth/permissions";
+import { canSeeHelp } from "@/lib/help/access";
+import { canConnect } from "@/lib/ai/connect";
 import { LEVEL_RANK, canFinalCheckout, canTextStaff, canUsePhoneBook, canUsePrintArea, effectiveLevel, isAdmin, isDirector, isStaffManager } from "@/lib/auth/permissions";
 
-export type NavIcon = "DoorOpen" | "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser" | "ShieldCheck" | "MessageSquare" | "ClipboardCheck" | "History" | "Search";
+export type NavIcon = "DoorOpen" | "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser" | "ShieldCheck" | "MessageSquare" | "ClipboardCheck" | "History" | "Search" | "CircleHelp" | "Sparkles";
 export type NavItem = { href: string; label: string; icon: NavIcon; description: string; section: "main" | "admin"; mobile?: boolean };
 
 export function buildNav(user: CurrentUser, opts: { designs?: boolean } = {}): NavItem[] {
@@ -45,5 +47,8 @@ export function buildNav(user: CurrentUser, opts: { designs?: boolean } = {}): N
   }
   // the activity log: owners and directors
   if (isDirector(user)) nav.push({ href: "/admin/activity", label: "Activity", icon: "History", description: "Who changed what, and when", section: "admin" });
+  // the guide, and connecting an AI that has it
+  if (canSeeHelp(user)) nav.push({ href: "/help", label: "Help", icon: "CircleHelp", description: "How everything is set up, and how to do each job", section: "main" });
+  if (canConnect(user)) nav.push({ href: "/connect", label: "Connect your AI", icon: "Sparkles", description: "Use Kinus with Claude: it knows how everything here works", section: "main" });
   return nav;
 }

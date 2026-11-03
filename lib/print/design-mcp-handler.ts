@@ -6,12 +6,14 @@ import { actingAs } from "@/lib/audit/actor";
 import { loadUserById } from "@/lib/auth/user-by-id";
 import { canDesign } from "@/lib/print/designers";
 import { designServer } from "@/lib/print/design-mcp";
+import { canConnect } from "@/lib/ai/connect";
 
 export const baseUrl = (request: NextRequest) => (process.env.APP_URL || request.nextUrl.origin).replace(/\/+$/, "");
 
 /**
  * One request to the design connector (MCP over HTTP), for whoever `token` (a design link's
- * secret) stands for: it works only while that person may edit templates. Each request stands
+ * secret) stands for: anyone with their own sign-in (the template tools only for those who may
+ * edit templates). Each request stands
  * alone (no sessions to keep). `unauthorized`: the answer without a valid token.
  */
 export async function designRequest(request: NextRequest, token: string, unauthorized: (message: string) => NextResponse): Promise<Response> {
@@ -21,11 +23,13 @@ export async function designRequest(request: NextRequest, token: string, unautho
   if (request.method !== "POST") return new NextResponse(null, { status: 405, headers: { Allow: "POST" } });
   const userId = await connectorUser(token);
   const user = userId ? await loadUserById(userId) : null;
-  if (!user) return unauthorized("Not connected to Kinus, or the connection was removed. Connect again (Kinus: Print → Templates → Design with Claude).");
-  if (!(await canDesign(user))) return NextResponse.json({ error: `${user.fullName} can't edit templates any more, so this connection doesn't work.` }, { status: 403 });
+  if (!user) return unauthorized("Not connected to Kinus, or the connection was removed. Connect again (Kinus: Connect your AI).");
+  if (!canConnect(user)) return NextResponse.json({ error: `${user.fullName}'s account can't be connected (a check-in login).` }, { status: 403 });
+  // the template tools only for people who may edit templates
+  const designer = await canDesign(user);
   // what it changes is logged as this person's, from Claude
   return actingAs({ id: user.id, via: "Claude connector" }, async () => {
-    const server = designServer(user, baseUrl(request));
+    const server = designServer(user, baseUrl(request), { designer });
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await server.connect(transport);
     return transport.handleRequest(request);

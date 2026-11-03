@@ -40,3 +40,27 @@ describe("Hebrew names on the connector", () => {
     expect(DESIGN_GUIDE).toContain("fix_hebrew_names");
   });
 });
+
+describe("the Kinus connector for everyone", () => {
+  it("everyone gets the guide and their access; only template designers get the template tools", async () => {
+    Object.assign(process.env, { NEXT_PUBLIC_SUPABASE_URL: "https://x.supabase.co", NEXT_PUBLIC_SUPABASE_ANON_KEY: "x".repeat(16), SUPABASE_SERVICE_ROLE_KEY: "x".repeat(16) });
+    const { designServer } = await import("../design-mcp");
+    const tools = (designer: boolean) =>
+      Object.keys((designServer({ id: "u", fullName: "Test", role: "division_head", coverage: [] } as never, "https://kinus.test", { designer }) as unknown as { _registeredTools: Record<string, unknown> })._registeredTools);
+    expect(tools(false)).toEqual(expect.arrayContaining(["kinus_guide", "my_access", "queue_print_job", "list_hebrew_names"]));
+    expect(tools(false)).not.toContain("save_template");
+    expect(tools(false)).not.toContain("preview_template");
+    expect(tools(true)).toEqual(expect.arrayContaining(["kinus_guide", "save_template", "organize_templates", "design_guide"]));
+  });
+  it("the guide has every part, and a part by its id", async () => {
+    const { GUIDE, guideText, guideContents } = await import("@/lib/help/guide");
+    for (const id of ["start", "ai", "import", "add-info", "columns", "hebrew", "checkin", "printing", "templates", "lists", "staff"]) expect(GUIDE.some((s) => s.id === id)).toBe(true);
+    expect(guideText("templates")).toContain("OL875");
+    expect(guideText("nope")).toBeNull();
+    expect(guideContents()).toContain("add-info");
+    // the live settings are offered to those who may see them; settings are marked in the text
+    expect(guideContents(true)).toContain("**now**");
+    expect(guideContents()).not.toContain("**now**");
+    expect(guideText("start")).toContain("⚙ Setting");
+  });
+});
