@@ -26,7 +26,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   if (session) await carryAreasTo(session.id);
   const admin = createAdminClient();
   const [{ data: profiles }, { data: areas }, tree, info, setup] = await Promise.all([
-    admin.from("profiles").select("id, email, full_name, title, role, access_level, all_areas, is_active, login").order("full_name"),
+    admin.from("profiles").select("id, email, full_name, title, role, access_level, all_areas, is_active, login, phone").order("full_name"),
     admin.from("staff_scopes").select("user_id, group_id, division_id, bunk_id"),
     loadAreaTree(admin, session?.id),
     signInInfo(),
@@ -64,6 +64,17 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       manageable: p.id !== me.id && canManageRole(me, p.role),
     };
   });
+  // the same person twice (added by hand, then by the staff import): same name, or same phone
+  const people = (profiles ?? []).filter((p) => p.login !== "shared" && p.id !== me.id && rows.some((r) => r.id === p.id && r.manageable));
+  const nameKey = (n: string) => n.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z\u0590-\u05ff]+/g, " ").trim();
+  const phoneKey = (ph: string | null) => (ph ?? "").replace(/\D/g, "").slice(-10);
+  const seen = new Map<string, string[]>();
+  for (const p of people) {
+    for (const k of [`n:${nameKey(p.full_name)}`, ...(phoneKey(p.phone).length >= 7 ? [`p:${phoneKey(p.phone)}`] : [])]) seen.set(k, [...(seen.get(k) ?? []), p.id]);
+  }
+  const pairs = new Map<string, [string, string]>();
+  for (const ids of seen.values()) if (ids.length === 2) pairs.set([...ids].sort().join(), [ids[0], ids[1]]);
+  const personName = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
   const roles = rolesInUse(setup, ROLE_ORDER).filter((r) => canManageRole(me, r as StaffRole));
   // the check-in logins of each division this person looks after (any number per division)
   const grantable = grantableTree(me, tree);
@@ -121,6 +132,23 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       {rows.length <= 1 && (
         <Callout title="Adding your team">
           Use <strong>Add many at once</strong> to paste your staff list from a spreadsheet (name, email, role, division, bunk). Everyone gets an invitation email. To change many people later, tick them below.
+        </Callout>
+      )}
+      {pairs.size > 0 && (
+        <Callout title={`Possibly the same person twice (${pairs.size})`}>
+          <p className="mb-2">Added by hand and again by the staff import? Merge them: the one that signs in keeps the import&apos;s phone and details, and the copy is deleted.</p>
+          <ul className="space-y-1">
+            {[...pairs.values()].slice(0, 30).map(([x, y]) => (
+              <li key={`${x}${y}`} className="flex flex-wrap items-center gap-2">
+                <span dir="auto">
+                  {personName.get(x)} · {personName.get(y)}
+                </span>
+                <Link href={`/admin/users/merge?a=${x}&b=${y}`} className="font-medium text-primary hover:underline">
+                  Review and merge
+                </Link>
+              </li>
+            ))}
+          </ul>
         </Callout>
       )}
       {canManageRole(me, "scanner") && setup.inUse.scanner && <CheckinLogins logins={checkinLogins} />}

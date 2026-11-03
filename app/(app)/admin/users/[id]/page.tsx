@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { KeyRound, Mail, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { KeyRound, Mail, Merge, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/section";
 import { Callout } from "@/components/callout";
@@ -152,6 +153,13 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
               )}
             </Section>
           )}
+          <Section title="Same person twice?" description="Added by hand and again by the staff import: merge the two records into one, keeping the import's phone and details.">
+            <Button variant="outline" asChild>
+              <Link href={`/admin/users/merge?a=${p.id}`}>
+                <Merge /> Merge with another record
+              </Link>
+            </Button>
+          </Section>
           <Section tone="danger" title={p.is_active ? "Deactivate account" : "Account is deactivated"} description={p.is_active ? "They immediately lose access. You can reactivate them later." : "They can't see anything until reactivated."}>
             <ActionForm action={setActive} confirm={p.is_active ? `Deactivate ${p.full_name}?` : undefined} confirmDetail="They can't sign in until you turn their account back on. Nothing they recorded is lost." confirmLabel="Deactivate" danger>
               <input type="hidden" name="id" value={p.id} />

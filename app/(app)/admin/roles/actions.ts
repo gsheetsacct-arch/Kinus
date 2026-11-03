@@ -56,3 +56,26 @@ export async function setRoleInUse(fd: FormData): Promise<ActionResult> {
     return fail(errorMessage(e));
   }
 }
+
+/** Who sees each added column (Roles → "What each kind of detail covers"): its detail group, or everyone. */
+export async function saveColumnGroups(fd: FormData): Promise<ActionResult> {
+  const me = await requireAdmin();
+  try {
+    const { EXTRA_GROUPS, parseExtraFields } = await import("@/lib/import/extra-fields");
+    const supabase = await createClient();
+    const { data: current } = await supabase.from("settings").select("value").eq("key", "extra_fields").maybeSingle();
+    const fields = parseExtraFields(current?.value).map((f) => {
+      if (!fd.has(`group:${f.column}`)) return f;
+      const g = String(fd.get(`group:${f.column}`) ?? "");
+      const { group: _old, ...rest } = f;
+      void _old;
+      return (EXTRA_GROUPS as readonly string[]).includes(g) ? { ...rest, group: g as (typeof EXTRA_GROUPS)[number] } : rest;
+    });
+    const { error } = await supabase.from("settings").upsert({ key: "extra_fields", value: fields, updated_by: me.id, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    revalidatePath("/", "layout");
+    return ok("Saved. Each added column shows only to the roles that see its kind of detail.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}

@@ -39,3 +39,5 @@ npm-debug.log*
 supabase/.temp/
 yarn-debug.log*
 yarn-error.log*
+# GitHub Actions secrets, filled in (the .example next to it is the template)
+.github/actions-secrets.env

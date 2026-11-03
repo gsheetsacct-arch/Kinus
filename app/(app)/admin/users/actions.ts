@@ -573,3 +573,40 @@ export async function setFinalCheckout(id: string, on: boolean): Promise<ActionR
     return fail(errorMessage(e));
   }
 }
+
+/**
+ * Two records of the same person become one (someone added by hand, then again by the
+ * staff import): the one kept gets the other's areas, registration link, details and
+ * the phone chosen, and everything the other recorded; the other is deleted, with its
+ * sign-in if it had one (migration 0054).
+ */
+export async function mergePeople(fd: FormData): Promise<ActionResult> {
+  const me = await requireStaffManager();
+  try {
+    const keep = z.string().uuid().parse(fd.get("keep"));
+    // the pair on the page; whichever isn't kept goes
+    const pair = String(fd.get("pair") ?? "").split(",");
+    if (pair.length !== 2 || !pair.includes(keep)) return fail("Choose which record to keep.");
+    const drop = z.string().uuid().parse(pair.find((id) => id !== keep));
+    if (keep === drop) return fail("Choose two different people.");
+    if (drop === me.id) return fail("Keep your own account: merge the other record into it.");
+    const people = await assertCanManage(me, [keep, drop].filter((id) => id !== me.id));
+    if (keep !== me.id && people.length < 2) return fail("One of these people is gone. Reload the page.");
+    const phone = String(fd.get("phone") ?? "").trim().slice(0, 40) || null;
+    const admin = createAdminClient();
+    const { error } = await admin.rpc("merge_profiles" as never, { p_keep: keep, p_drop: drop, p_phone: phone } as never);
+    if (error) throw error;
+    const gone = await admin.auth.admin.deleteUser(drop);
+    if (gone.error && !/not found/i.test(gone.error.message)) throw gone.error;
+    if (gone.error) {
+      const del = await admin.from("profiles").delete().eq("id", drop);
+      if (del.error) throw del.error;
+    }
+    revalidatePath("/admin/users");
+    revalidatePath("/phone-book");
+    const kept = people.find((p) => p.id === keep)?.full_name ?? "They";
+    return ok(`Merged. ${kept} now has everything from both records.`, `/admin/users/${keep}`);
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
