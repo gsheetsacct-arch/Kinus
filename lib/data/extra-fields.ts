@@ -113,11 +113,14 @@ export async function extraAnswers(sessionId: string, fields: ExtraField[], max 
   const out = new Map<string, { value: string; count: number }[] | null>();
   if (!fields.length) return out;
   const { fetchAll } = await import("@/lib/supabase/fetch-all");
-  const rows = await fetchAll((from, to) => createAdminClient().from("campers").select("id, source_data").eq("session_id", sessionId).is("archived_at", null).order("id").range(from, to));
+  // "*": the fixes too (values corrected in Kinus, or added from a file of extra details)
+  const rows = (await fetchAll((from, to) => createAdminClient().from("campers").select("*").eq("session_id", sessionId).is("archived_at", null).order("id").range(from, to))).map((r) =>
+    withFixes(r.source_data, (r as { source_fixes?: unknown }).source_fixes),
+  );
   for (const f of fields) {
     const counts = new Map<string, number>();
     for (const r of rows) {
-      const v = extraValue(r.source_data, f.column);
+      const v = extraValue(r, f.column);
       if (v) counts.set(v, (counts.get(v) ?? 0) + 1);
     }
     out.set(f.column, counts.size > max ? null : [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([value, count]) => ({ value, count })));

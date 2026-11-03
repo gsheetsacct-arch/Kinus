@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileSpreadsheet, Upload, ChevronRight } from "lucide-react";
+import { FilePlus2, FileSpreadsheet, Upload, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Section } from "@/components/section";
 import { Callout } from "@/components/callout";
@@ -43,13 +43,27 @@ export default async function ImportsPage() {
       </Link>
     </Button>
   );
+  // a short file of extra details for some campers (registration ID + a few columns)
+  const addInfo = (
+    <Button asChild variant="outline">
+      <Link href="/admin/imports/supplement">
+        <FilePlus2 /> Add info to campers
+      </Link>
+    </Button>
+  );
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Import roster" description={`Into ${session.name}`} actions={imports?.length ? newButton : undefined} />
+      <PageHeader title="Import roster" description={`Into ${session.name}`} actions={
+          <>
+            {addInfo}
+            {imports?.length ? newButton : null}
+          </>
+        }
+      />
       <Callout title="How importing works">
         Upload the registration export whenever it changes. Kinus shows you exactly who will be added and what will change, and <strong>nothing is saved until you press Apply</strong>. If something looks
-        wrong afterwards, you can undo the latest import.
+        wrong afterwards, you can undo the latest import. For a short file with extra details for some campers (their registration ID and a few columns), use <strong>Add info to campers</strong>.
       </Callout>
 
       {drafts.map((d) => (
