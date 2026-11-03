@@ -55,7 +55,15 @@ export type BuiltList = {
   /** staff: a bunk's counselors with their phones ("Moshe Katz 718-555-0100"), for head staff. */
   groups: { title: string; rows: { id: string; cells: (string | boolean | null)[] }[]; staff?: string[] }[];
   scopeLabel: string;
+  /** What the page can filter by: the list's columns (a combined column whole, or a field in it). */
+  filterOptions: { key: string; label: string }[];
+  /** The answers of the column filtered by, with how many campers have each (before filtering). */
+  filterValues: { value: string; count: number }[];
 };
+
+/** "Has anything" and "Empty", for the page's column filter. */
+export const FILTER_ANY = "__any";
+export const FILTER_NONE = "__none";
 
 export async function getPresetsFor(supabase: DB, user: CurrentUser): Promise<ListPreset[]> {
   const audiences = presetAudiencesFor(user);
@@ -90,7 +98,7 @@ export async function buildList(
   supabase: DB,
   user: CurrentUser,
   preset: ListPreset,
-  scope: { sessionId: string; divisionId?: string; bunkId?: string; divisionIds?: string[] | null; campName?: string; /** Also only these, chosen on the page. */ only?: CamperFlag[]; /** Each bunk's counselors (and phones) under its title: a switch on the page, off by default. */ counselors?: boolean },
+  scope: { sessionId: string; divisionId?: string; bunkId?: string; divisionIds?: string[] | null; campName?: string; /** Also only these, chosen on the page. */ only?: CamperFlag[]; /** Each bunk's counselors (and phones) under its title: a switch on the page, off by default. */ counselors?: boolean; /** Only campers whose column (key) has this answer (or FILTER_ANY / FILTER_NONE). */ filter?: { key: string; value: string } },
   fv: FieldVisibilityRow[],
 ): Promise<BuiltList> {
   // sensitive columns only appear for roles allowed to see them (the data is masked anyway)
@@ -167,7 +175,39 @@ export async function buildList(
     if (key.endsWith(".phone") && typeof v === "string") return formatPhone(v);
     return v;
   };
-  const sorted = [...campers].sort((a, b) => {
+  // a combined column's text: its parts with something in them, joined (a yes/no part says its name when yes)
+  const comboText = (c: (typeof campers)[number], key: string): string | null => {
+    const combo = combos.get(key)!;
+    const bits = comboParts.get(key)!.flatMap((p) => {
+      const v = cellOf(c, p.key);
+      if (v === null || v === undefined || v === "" || v === false) return [];
+      if (v === true) return [p.label];
+      return [combo.labels ? `${p.label}: ${v}` : String(v)];
+    });
+    return bits.length ? bits.join(COMBO_SEPS[combo.sep].text) : null;
+  };
+  // the page's filter: any column of the list, or a field inside a combined column
+  const filterOptions = shownColumns.flatMap((f) =>
+    combos.has(f.key) ? [{ key: f.key, label: f.label }, ...comboParts.get(f.key)!.map((p) => ({ key: p.key, label: `${f.label} → ${p.label}` }))] : [{ key: f.key, label: f.label }],
+  );
+  const fKey = scope.filter && filterOptions.some((o) => o.key === scope.filter!.key) ? scope.filter.key : null;
+  const textOf = (c: (typeof campers)[number], key: string) => {
+    const v = combos.has(key) ? comboText(c, key) : cellOf(c, key);
+    return v === null || v === undefined || v === "" ? "" : typeof v === "boolean" ? (v ? "Yes" : "No") : Array.isArray(v) ? (v as string[]).join(", ") : String(v);
+  };
+  const counts = new Map<string, number>();
+  if (fKey) for (const c of campers) {
+    const t = textOf(c, fKey);
+    if (t) counts.set(t, (counts.get(t) ?? 0) + 1);
+  }
+  const filterValues = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], undefined, { numeric: true })).slice(0, 200).map(([value, count]) => ({ value, count }));
+  const shownCampers = fKey
+    ? campers.filter((c) => {
+        const t = textOf(c, fKey);
+        return scope.filter!.value === FILTER_ANY ? Boolean(t) : scope.filter!.value === FILTER_NONE ? !t : t === scope.filter!.value;
+      })
+    : campers;
+  const sorted = [...shownCampers].sort((a, b) => {
     for (const s of sortKeys) {
       const r = cmp(getFieldValue(a, s.field), getFieldValue(b, s.field));
       if (r !== 0) return s.dir === "desc" ? -r : r;
@@ -183,18 +223,7 @@ export async function buildList(
     if (!groupsMap.has(title)) groupsMap.set(title, { title, rows: [] });
     groupsMap.get(title)!.rows.push({
       id: c.id!,
-      cells: columns.map((col) => {
-        const combo = combos.get(col.key);
-        if (!combo) return cellOf(c, col.key);
-        // the parts with something in them, joined: a yes/no part says its name when yes
-        const bits = comboParts.get(col.key)!.flatMap((p) => {
-          const v = cellOf(c, p.key);
-          if (v === null || v === undefined || v === "" || v === false) return [];
-          if (v === true) return [p.label];
-          return [combo.labels ? `${p.label}: ${v}` : String(v)];
-        });
-        return bits.length ? bits.join(COMBO_SEPS[combo.sep].text) : null;
-      }),
+      cells: columns.map((col) => (combos.has(col.key) ? comboText(c, col.key) : cellOf(c, col.key))),
     });
   }
   // each bunk's counselors, with their numbers (most counselors don't sign in; they're listed), when asked for
@@ -225,6 +254,8 @@ export async function buildList(
       groupKey === "bunk" || groupKey === "division" || !groupKey
         ? await inCampOrder(supabase, scope.sessionId, groupKey, [...groupsMap.values()])
         : [...groupsMap.values()].sort((a, b) => Number(a.title.startsWith("No ")) - Number(b.title.startsWith("No ")) || a.title.localeCompare(b.title, undefined, { numeric: true })),
-    scopeLabel: [[divName, bunkName].filter(Boolean).join(" · ") || (scope.campName ? `All of ${scope.campName}` : "All divisions"), ...(anyOf.length ? [anyOf.map((k) => CAMPER_FLAGS[k].label).join(" or ")] : []), ...only.map((k) => CAMPER_FLAGS[k].label), ...where.map((w) => `${columnLabels.get(w.column) ?? w.column}: ${w.values.join(" or ")}`)].join(" · "),
+    scopeLabel: [[divName, bunkName].filter(Boolean).join(" · ") || (scope.campName ? `All of ${scope.campName}` : "All divisions"), ...(anyOf.length ? [anyOf.map((k) => CAMPER_FLAGS[k].label).join(" or ")] : []), ...only.map((k) => CAMPER_FLAGS[k].label), ...where.map((w) => `${columnLabels.get(w.column) ?? w.column}: ${w.values.join(" or ")}`), ...(fKey ? [`${filterOptions.find((o) => o.key === fKey)!.label}: ${scope.filter!.value === FILTER_ANY ? "has something" : scope.filter!.value === FILTER_NONE ? "empty" : scope.filter!.value}`] : [])].join(" · "),
+    filterOptions,
+    filterValues,
   };
 }

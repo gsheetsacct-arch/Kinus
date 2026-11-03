@@ -14,6 +14,16 @@ export function ListFilters({ children, className }: { children: React.ReactNode
           const bunk = form.elements.namedItem("bunk") as HTMLSelectElement | null;
           if (bunk) bunk.value = "";
         }
+        // another column (or another list) to filter by: its answers differ, so start from "has anything"
+        const name = (e.target as unknown as HTMLSelectElement).name;
+        if (name === "fcol" || name === "preset") {
+          const val = form.elements.namedItem("fval") as HTMLSelectElement | null;
+          if (val) val.disabled = true;
+          if (name === "preset") {
+            const col = form.elements.namedItem("fcol") as HTMLSelectElement | null;
+            if (col) col.value = "";
+          }
+        }
         form.requestSubmit();
       }}
     >

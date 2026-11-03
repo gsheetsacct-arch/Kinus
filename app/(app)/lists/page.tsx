@@ -8,10 +8,11 @@ import { Select } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { visibleDivisionIds, visibleFieldGroups } from "@/lib/auth/permissions";
-import { CAMPER_FLAGS, flagsFor, isFlag } from "@/lib/camper-flags";
+import { flagsFor, isFlag } from "@/lib/camper-flags";
 import { buildList, getPresetsFor } from "@/lib/data/lists";
 import { PrintButton } from "./print-button";
 import { ListGroups } from "@/components/lists/list-groups";
+import { FILTER_ANY, FILTER_NONE } from "@/lib/data/lists";
 import { ListFilters } from "@/components/lists/list-filters";
 import { getCampContext } from "@/lib/data/camp";
 import { occupiedPlaces } from "@/lib/data/occupied";
@@ -56,10 +57,12 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
   const onlyFlag = sp.only && isFlag(sp.only) && flags.includes(sp.only) ? sp.only : undefined;
   // each bunk's counselors and their phones under its title: only when asked for
   const counselors = sp.counselors === "1";
+  // the page's column filter (fcol: a column of the list; fval: an answer, has anything, or empty)
+  const filter = sp.fcol ? { key: String(sp.fcol).slice(0, 210), value: sp.fval ? String(sp.fval).slice(0, 300) : FILTER_ANY } : undefined;
   const list = preset
-    ? await buildList(supabase, user, preset, { sessionId: session.id, divisionId: divisionId || undefined, bunkId: bunkId || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name, only: onlyFlag ? [onlyFlag] : [], counselors }, fv ?? [])
+    ? await buildList(supabase, user, preset, { sessionId: session.id, divisionId: divisionId || undefined, bunkId: bunkId || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name, only: onlyFlag ? [onlyFlag] : [], counselors, filter }, fv ?? [])
     : null;
-  const qs = new URLSearchParams({ ...(preset ? { preset: preset.id } : {}), ...(divisionId ? { division: divisionId } : {}), ...(bunkId ? { bunk: bunkId } : {}), ...(onlyFlag ? { only: onlyFlag } : {}), ...(counselors ? { counselors: "1" } : {}) }).toString();
+  const qs = new URLSearchParams({ ...(preset ? { preset: preset.id } : {}), ...(divisionId ? { division: divisionId } : {}), ...(bunkId ? { bunk: bunkId } : {}), ...(onlyFlag ? { only: onlyFlag } : {}), ...(counselors ? { counselors: "1" } : {}), ...(filter ? { fcol: filter.key, fval: filter.value } : {}) }).toString();
 
   return (
     <div>
@@ -124,17 +127,34 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
             ))}
           </Select>
         </label>
-        <label className="space-y-1">
-          <span className="block text-xs font-medium text-muted-foreground">Only</span>
-          <Select name="only" defaultValue={onlyFlag ?? ""}>
-            <option value="">{preset?.only.length ? "As the layout says" : "Every camper"}</option>
-            {flags.map((k) => (
-              <option key={k} value={k}>
-                {CAMPER_FLAGS[k].label}
-              </option>
-            ))}
-          </Select>
-        </label>
+        {/* filter by the list's own columns (a combined column whole, or a field in it) */}
+        <div className="grid gap-2 sm:grid-cols-2 md:col-span-4 md:grid-cols-[1fr_1fr_3fr]">
+          <label className="space-y-1">
+            <span className="block text-xs font-medium text-muted-foreground">Filter by</span>
+            <Select name="fcol" defaultValue={filter?.key ?? ""}>
+              <option value="">Nothing: every camper</option>
+              {(list?.filterOptions ?? []).map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </label>
+          {filter && (
+            <label className="space-y-1">
+              <span className="block text-xs font-medium text-muted-foreground">Is</span>
+              <Select name="fval" defaultValue={filter.value}>
+                <option value={FILTER_ANY}>Has anything</option>
+                <option value={FILTER_NONE}>Empty</option>
+                {(list?.filterValues ?? []).map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.value.length > 60 ? `${v.value.slice(0, 60)}…` : v.value} ({v.count})
+                  </option>
+                ))}
+              </Select>
+            </label>
+          )}
+        </div>
         {preset?.group_by === "bunk" && (
           <label className="flex items-center gap-2 text-sm md:col-span-4">
             <input type="checkbox" name="counselors" value="1" defaultChecked={counselors} className="size-4 accent-[var(--primary)]" />
