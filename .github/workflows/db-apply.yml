@@ -23,7 +23,7 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           FILES: ${{ inputs.files }}
         run: |
-          if [ -z "$SUPABASE_DB_URL" ]; then echo "::error::Add the SUPABASE_DB_URL secret (Supabase → Connect → Direct connection URI, with the password)."; exit 1; fi
+          if [ -z "$SUPABASE_DB_URL" ]; then echo "::error::Add the SUPABASE_DB_URL secret (Supabase → Connect → Session pooler URI, with the password; see .github/actions-secrets.env.example)."; exit 1; fi
           for f in $FILES; do
             case "$f" in *[!A-Za-z0-9_.-]*) echo "::error::Not a migration file name: $f"; exit 1;; esac
             p="supabase/migrations/$f"
