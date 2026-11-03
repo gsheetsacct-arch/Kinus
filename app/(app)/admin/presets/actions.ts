@@ -31,7 +31,16 @@ export async function savePreset(fd: FormData): Promise<ActionResult> {
       group_by: d.group_by || null,
       sort: [...(d.group_by ? [{ field: d.group_by, dir: "asc" }] : []), { field: d.sort_field, dir: "asc" }],
       is_default: d.is_default === "on",
-      filters: { only: parseFlags(fd.getAll("only").map(String).join(",")), match: fd.get("match") === "all" ? "all" : "any" },
+      filters: {
+        only: parseFlags(fd.getAll("only").map(String).join(",")),
+        match: fd.get("match") === "all" ? "all" : "any",
+        // "only campers whose <column> is one of these"
+        where: fd
+          .getAll("where_column")
+          .map((c, i) => ({ column: String(c).slice(0, 200), values: String(fd.getAll("where_values")[i] ?? "").split(",").map((v) => v.trim().slice(0, 100)).filter(Boolean).slice(0, 20) }))
+          .filter((w) => w.column && w.values.length)
+          .slice(0, 5),
+      },
     };
     const { error } = d.id ? await supabase.from("list_presets").update(row).eq("id", d.id) : await supabase.from("list_presets").insert({ ...row, created_by: me.id });
     if (error) throw error;

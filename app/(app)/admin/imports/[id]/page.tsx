@@ -1,6 +1,7 @@
 import * as React from "react";
 import Link from "next/link";
-import { oneOfEachColumn } from "@/lib/import/extra-fields";
+import { humanLabel, oneOfEachColumn } from "@/lib/import/extra-fields";
+import { loadExtraFields } from "@/lib/data/extra-fields";
 import { notFound, redirect } from "next/navigation";
 import { CheckCircle2, Undo2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -94,12 +95,21 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
     revertedAt?: string;
     /** Export columns that change: how many campers, and the columns new to them. */
     columns?: { campers: number; added: { column: string; count: number }[] };
+    /** campers whose export columns changed (listed change by change on the Updated tab) */
+    exportChanged?: number;
     /** our corrected copy: campers whose protected details it changed (locked when applied) */
     locked?: number;
     correctedCopy?: boolean;
   };
   const options = (imp.options ?? {}) as { partialWarning?: string[]; divisionsInFile?: string[]; lostTextOverride?: boolean; lostTextCells?: number; repeatedColumns?: string[]; fixedDivision?: string | null };
-  const columnsChange = summary.columns?.campers ?? 0;
+  // drafts previewed before export columns were listed change by change still say "refreshed"
+  const columnsChange = summary.exportChanged === undefined ? (summary.columns?.campers ?? 0) : 0;
+  const extraLabels = new Map((await loadExtraFields()).map((f) => [f.column.trim().toLowerCase().replace(/#/g, "."), f.label]));
+  const label = (f: string) => {
+    if (!f.startsWith("source.")) return fieldLabel(f);
+    const col = f.slice(7);
+    return `${extraLabels.get(col.toLowerCase().replace(/#/g, ".")) ?? humanLabel(col)} (export)`;
+  };
   // one of each (an import from before repeated columns were combined lists "family.city (2)")
   const addedColumns = oneOfEachColumn(summary.columns?.added ?? [], (a) => a.column);
   const repeatedColumns = oneOfEachColumn(options.repeatedColumns ?? [], (c) => c);
@@ -330,7 +340,9 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
           {byField.map(([field, list]) => (
             <details key={field} className="group overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-card)]">
               <summary className="flex cursor-pointer select-none items-center gap-3 px-5 py-3.5 text-sm">
-                <span className="font-semibold">{fieldLabel(field)}</span>
+                <span className="font-semibold" dir="auto">
+                  {label(field)}
+                </span>
                 <span className="text-muted-foreground">
                   changes for {list.length} {list.length === 1 ? "camper" : "campers"}
                 </span>
