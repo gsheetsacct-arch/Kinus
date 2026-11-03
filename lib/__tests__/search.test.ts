@@ -100,3 +100,14 @@ describe("not too loose", () => {
     expect(matchScore(searchEntry("Mendy Gurary", "1"), "gurery")).toBeGreaterThan(0);
   });
 });
+
+describe("Hebrew names", () => {
+  it("finds a camper by their Hebrew name, with or without final letters", async () => {
+    const { matchScore, searchEntry } = await import("../search");
+    const e = searchEntry("Levi Cohen לוי כהן", "100180");
+    expect(matchScore(e, "כהן")).toBeGreaterThanOrEqual(2);
+    expect(matchScore(e, "לוי כה")).toBeGreaterThanOrEqual(2);
+    expect(matchScore(e, "levi")).toBeGreaterThanOrEqual(2);
+    expect(matchScore(searchEntry("Moshe Shalom משה שלום", "1"), "שלומ")).toBeGreaterThanOrEqual(2);
+  });
+});

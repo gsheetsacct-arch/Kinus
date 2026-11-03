@@ -139,6 +139,7 @@ export type CamperIndexRow = {
   a?: 1; // archived
   p?: string[]; // parent phone numbers, for search
   z?: number; // buzzer number, for search
+  h?: string; // Hebrew name (a Hebrew-language division), shown first and searched
 };
 
 /** Just what the campers page shows and searches, for a camp's divisions (null = all). */
@@ -168,6 +169,7 @@ export async function listCamperIndex(
     comingLater(supabase, f.sessionId),
     sleepingAtKinus(f.sessionId),
   ]);
+  const hebrew = await import("./hebrew-display").then((m) => m.hebrewNamesFor(rows.map((c) => ({ id: c.id!, division_id: c.division_id })))).catch(() => new Map<string, string>());
   const byCamper = new Map<string, string[]>();
   for (const k of phones) {
     const list = byCamper.get(k.camper_id) ?? [];
@@ -186,6 +188,8 @@ export async function listCamperIndex(
     if (c.current_buzzer_number !== null && c.current_buzzer_number !== undefined) r.z = c.current_buzzer_number;
     const p = byCamper.get(c.id!);
     if (p) r.p = p;
+    const h = hebrew.get(c.id!);
+    if (h) r.h = h;
     return r;
   });
 }

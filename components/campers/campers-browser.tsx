@@ -68,7 +68,7 @@ export function CampersBrowser({
   const dName = React.useMemo(() => new Map(divisions.map((d) => [d.id, d.name])), [divisions]);
   const bName = React.useMemo(() => new Map(divisions.flatMap((d) => d.bunks.map((b) => [b.id, b.name] as const))), [divisions]);
   const bOrder = React.useMemo(() => new Map(divisions.flatMap((d, di) => d.bunks.map((b, bi) => [b.id, di * 1000 + bi] as const))), [divisions]);
-  const index = React.useMemo(() => rows.map((r) => ({ r, e: searchEntry(r.n, r.c, r.p, r.z ?? null) })), [rows]);
+  const index = React.useMemo(() => rows.map((r) => ({ r, e: searchEntry(r.h ? `${r.n} ${r.h}` : r.n, r.c, r.p, r.z ?? null) })), [rows]);
 
   const matched = React.useMemo(() => {
     const out: { r: CamperIndexRow; score: number }[] = [];
@@ -223,8 +223,13 @@ export function CampersBrowser({
               >
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate font-medium" dir="auto">
-                    {r.n}
+                    {r.h ?? r.n}
                   </span>
+                  {r.h && (
+                    <span className="hidden truncate text-xs text-muted-foreground sm:inline" dir="auto">
+                      {r.n}
+                    </span>
+                  )}
                   {r.m && <Badge variant="warning">medical</Badge>}
                   {r.f?.includes("epipen") && <Badge variant="destructive">{CAMPER_FLAGS.epipen.badge}</Badge>}
                   {r.f?.includes("notes") && <Badge variant="outline">{CAMPER_FLAGS.notes.badge}</Badge>}

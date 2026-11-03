@@ -10,6 +10,7 @@ import { fetchAll } from "@/lib/supabase/fetch-all";
 import { loadAreaTree } from "@/lib/data/areas";
 import { getCampContext } from "@/lib/data/camp";
 import { loadCardTemplates } from "@/lib/print/card-templates";
+import { hebrewNamesFor } from "@/lib/data/hebrew-display";
 
 export const metadata = { title: "Check in" };
 export const maxDuration = 60;
@@ -27,10 +28,12 @@ export default async function ScanPage() {
     loadCardTemplates(supabase).then((data) => ({ data })),
   ]);
   const div = new Map(tree.divisions.map((d) => [d.id, d]));
+  // Hebrew-language divisions: their campers by their Hebrew names (shown, and searched too)
+  const hebrew = await hebrewNamesFor(rows.map((c) => ({ id: c.id, division_id: c.division_id }))).catch(() => new Map<string, string>());
   const roster: RosterEntry[] = rows.map((c) => {
     const d = c.division_id ? div.get(c.division_id) : undefined;
     const b = d?.bunks.find((x) => x.id === c.bunk_id);
-    return { id: c.id, code: c.camper_code, name: `${c.first_name} ${c.last_name}`, first: c.first_name, last: c.last_name, where: [d?.name, b?.name ?? "no bunk"].filter(Boolean).join(" · "), status: c.status, div: c.division_id, buzzer: c.current_buzzer_number };
+    return { id: c.id, code: c.camper_code, name: `${c.first_name} ${c.last_name}`, first: c.first_name, last: c.last_name, where: [d?.name, b?.name ?? "no bunk"].filter(Boolean).join(" · "), status: c.status, div: c.division_id, buzzer: c.current_buzzer_number, ...(hebrew.has(c.id) ? { heb: hebrew.get(c.id) } : {}) };
   });
   // the divisions this person checks in (more than one: they pick which line they're at)
   // (only the camp chosen at the top of the menu: American, Hebrew…)
