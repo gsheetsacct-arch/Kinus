@@ -18,7 +18,8 @@ import { CamperCard, type TemplateButton } from "./camper-card";
 import { Camera } from "./camera";
 import { feedback, unlockSound } from "./feedback";
 
-export type RosterEntry = { id: string; code: string; name: string; first: string; last: string; where: string; status: CamperStatus; div: string | null; buzzer?: number | null };
+/** heb: the Hebrew name, for a camper in a Hebrew-language division (shown first, searched too) */
+export type RosterEntry = { id: string; code: string; name: string; first: string; last: string; where: string; status: CamperStatus; div: string | null; buzzer?: number | null; heb?: string };
 type Line = { id: string; name: string; color: string | null };
 const ANY = "any";
 /** ask: an already checked-in camper scanned at check-in, offered a check-out */
@@ -90,7 +91,7 @@ export function Scanner({
   React.useEffect(focusBox, [focusBox]);
   const byCode = React.useMemo(() => new Map([...roster, ...extra].map((r) => [r.code, r])), [roster, extra]);
   // name in any order, code; similar names and misspellings too (lib/search)
-  const index = React.useMemo(() => [...roster, ...extra].map((r) => ({ r, e: searchEntry(`${r.first} ${r.last}`, r.code, [], r.buzzer ?? null) })), [roster, extra]);
+  const index = React.useMemo(() => [...roster, ...extra].map((r) => ({ r, e: searchEntry(r.heb ? `${r.first} ${r.last} ${r.heb}` : `${r.first} ${r.last}`, r.code, [], r.buzzer ?? null) })), [roster, extra]);
 
   // remember choices on this device
   React.useEffect(() => {
@@ -164,16 +165,16 @@ export function Scanner({
       setStatuses((s) => ({ ...s, [o.camperId]: o.status }));
       if (o.kind === "act") {
         feedback("ok");
-        show({ tone: o.tone, title: o.name, detail: o.verb + (multi ? ` · ${r.where}` : "") + (o.autoPrinted.length ? ` · ${o.autoPrinted.join(", ")} sent to print` : "") });
-        setRecent((x) => [{ key: o.eventId, camperId: o.camperId, name: o.name, verb: o.verb, tone: o.tone, eventId: o.eventId, at: now, undoable: true }, ...x].slice(0, RECENT_MAX));
+        show({ tone: o.tone, title: r.heb ?? o.name, detail: o.verb + (multi ? ` · ${r.where}` : "") + (o.autoPrinted.length ? ` · ${o.autoPrinted.join(", ")} sent to print` : "") });
+        setRecent((x) => [{ key: o.eventId, camperId: o.camperId, name: r.heb ?? o.name, verb: o.verb, tone: o.tone, eventId: o.eventId, at: now, undoable: true }, ...x].slice(0, RECENT_MAX));
       } else {
         feedback("already");
         // "Already checked in · 9:42 by Sarah" helps; for "hasn't checked in yet" the last event would mislead
         const detail = `${o.message}${o.kind === "already" && o.since ? ` · ${formatTime(o.since)}${o.by ? ` by ${o.by}` : ""}` : ""}`;
         // already here, scanned at check-in: maybe they're on their way out, so offer it
         const ask = !final && mode === "in" && o.kind === "already" && o.status === "present" ? r : undefined;
-        show({ tone: "already", title: o.name, detail, ask, labels: templates.length ? r : undefined });
-        setRecent((x) => [{ key: `a${now}`, camperId: o.camperId, name: o.name, verb: o.message, tone: "already" as const, at: now }, ...x].slice(0, RECENT_MAX));
+        show({ tone: "already", title: r.heb ?? o.name, detail, ask, labels: templates.length ? r : undefined });
+        setRecent((x) => [{ key: `a${now}`, camperId: o.camperId, name: r.heb ?? o.name, verb: o.message, tone: "already" as const, at: now }, ...x].slice(0, RECENT_MAX));
       }
       focusBox();
     },
@@ -194,9 +195,9 @@ export function Scanner({
       setStatuses((st) => ({ ...st, [o.camperId]: o.status }));
       if (o.kind === "act") {
         feedback("ok");
-        show({ tone: o.tone, title: o.name, detail: o.verb });
-        setRecent((x) => [{ key: o.eventId, camperId: o.camperId, name: o.name, verb: o.verb, tone: o.tone, eventId: o.eventId, at: now, undoable: true }, ...x].slice(0, RECENT_MAX));
-      } else show({ tone: "already", title: o.name, detail: o.message });
+        show({ tone: o.tone, title: r.heb ?? o.name, detail: o.verb });
+        setRecent((x) => [{ key: o.eventId, camperId: o.camperId, name: r.heb ?? o.name, verb: o.verb, tone: o.tone, eventId: o.eventId, at: now, undoable: true }, ...x].slice(0, RECENT_MAX));
+      } else show({ tone: "already", title: r.heb ?? o.name, detail: o.message });
       focusBox();
     },
     [show, focusBox],
@@ -303,6 +304,7 @@ export function Scanner({
     toast.success(`Undone: ${r.name}`);
   };
 
+  const hebOf = React.useMemo(() => new Map(roster.filter((r) => r.heb).map((r) => [r.id, r.heb!])), [roster]);
   // this person's check-ins today, kept across reloads (the newest first)
   React.useEffect(() => {
     if (final) return;
@@ -310,11 +312,12 @@ export function Scanner({
       .then((list) =>
         setRecent((cur) => {
           const have = new Set(cur.map((r) => r.eventId).filter(Boolean));
-          const loaded: Recent[] = list.filter((r) => !have.has(r.eventId)).map((r) => ({ key: r.eventId, camperId: r.camperId, name: r.name, verb: r.verb, tone: r.tone, eventId: r.eventId, at: Date.parse(r.at), undone: r.undone, undoable: r.undoable }));
+          const loaded: Recent[] = list.filter((r) => !have.has(r.eventId)).map((r) => ({ key: r.eventId, camperId: r.camperId, name: hebOf.get(r.camperId) ?? r.name, verb: r.verb, tone: r.tone, eventId: r.eventId, at: Date.parse(r.at), undone: r.undone, undoable: r.undoable }));
           return [...cur, ...loaded].sort((x, y) => y.at - x.at).slice(0, RECENT_MAX);
         }),
       )
       .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [final]);
 
   // the page is the camera: it fills the space between the app's bars and doesn't scroll
@@ -474,9 +477,10 @@ export function Scanner({
                     <button onClick={() => act(r, "manual")} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/50">
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-medium" dir="auto">
-                          {r.name}
+                          {r.heb ?? r.name}
                         </span>
                         <span className="block truncate text-xs text-muted-foreground" dir="auto">
+                          {r.heb && <span className="mr-1">{r.name} ·</span>}
                           {similar.has(r.id) && <span className="mr-1 rounded bg-muted px-1.5 py-0.5 font-medium">Similar name</span>}
                           {multi && line && line !== ANY && r.div !== line && <span className="mr-1 rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">Other line</span>}
                           {r.where} · {r.code}
@@ -605,7 +609,7 @@ export function Scanner({
             <div className="space-y-4">
               <p className="text-lg">
                 <span className="font-semibold" dir="auto">
-                  {wrong.r.name}
+                  {wrong.r.heb ?? wrong.r.name}
                 </span>{" "}
                 is in <span className="font-semibold" dir="auto">{wrong.r.where}</span>.
               </p>

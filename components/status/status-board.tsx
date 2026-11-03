@@ -202,7 +202,7 @@ export function StatusBoard({
       router.refresh();
     });
 
-  const index = React.useMemo(() => new Map(rows.map((r) => [r.id, searchEntry(r.name, r.code, r.phones.map((p) => p.tel), r.buzzer)])), [rows]);
+  const index = React.useMemo(() => new Map(rows.map((r) => [r.id, searchEntry(r.heb ? `${r.name} ${r.heb}` : r.name, r.code, r.phones.map((p) => p.tel), r.buzzer)])), [rows]);
   const scoped = React.useMemo(() => rows.filter((r) => inScope(r, scope, tree)), [rows, scope, tree]);
   const counts = countStatuses(scoped);
   // who should be checked up on, recomputed as check-ins arrive
@@ -358,8 +358,13 @@ export function StatusBoard({
                     <button type="button" onClick={() => setOpen(r.id)} className="min-w-0 flex-1 basis-48 text-left">
                       <span className="flex items-center gap-1.5">
                         <span className="truncate font-medium hover:underline" dir="auto">
-                          {r.name}
+                          {r.heb ?? r.name}
                         </span>
+                        {r.heb && (
+                          <span className="truncate text-xs text-muted-foreground" dir="auto">
+                            {r.name}
+                          </span>
+                        )}
                         {r.medical && <AlertTriangle className="size-3.5 shrink-0 text-amber-500" aria-label="Medical flag" />}
                         {st?.kind === "check" && <span className="shrink-0 rounded-full bg-amber-100 px-1.5 text-[11px] font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">check up</span>}
                         {st?.kind === "later" && <span className="shrink-0 rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground">coming {ready ? formatWhen(st.until, now) : "later"}</span>}

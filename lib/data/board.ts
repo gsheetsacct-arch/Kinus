@@ -23,6 +23,8 @@ export type BoardRow = {
   phones: BoardPhone[];
   /** Buzzer number, for search. */
   buzzer: number | null;
+  /** The Hebrew name, for a camper in a Hebrew-language division: shown first and searched. */
+  heb?: string;
 };
 
 const PARENT_LABEL: Record<string, string> = { mother: "Mom", father: "Dad", guardian: "Guardian" };
@@ -52,6 +54,7 @@ export async function loadBoard(supabase: DB, sessionId: string, withPhones: boo
         })
       : Promise.resolve([]),
   ]);
+  const hebrew = await import("./hebrew-display").then((m) => m.hebrewNamesFor(rows.map((c) => ({ id: c.id!, division_id: c.division_id })))).catch(() => new Map<string, string>());
   const phones = new Map<string, (BoardPhone & { order: number })[]>();
   for (const k of contacts) {
     if (!k.phone) continue;
@@ -75,5 +78,6 @@ export async function loadBoard(supabase: DB, sessionId: string, withPhones: boo
     medical: Boolean(c.has_medical_flag),
     phones: (phones.get(c.id!) ?? []).sort((a, b) => a.order - b.order).map(({ label, phone, tel }) => ({ label, phone, tel })),
     buzzer: c.current_buzzer_number ?? null,
+    ...(hebrew.has(c.id!) ? { heb: hebrew.get(c.id!) } : {}),
   }));
 }

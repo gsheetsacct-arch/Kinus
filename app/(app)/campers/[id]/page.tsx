@@ -4,6 +4,7 @@ import { extraValuesFor, loadExtraFields, visibleExtraFields } from "@/lib/data/
 import { notFound } from "next/navigation";
 import { Phone, Mail } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { hebrewNamesFor } from "@/lib/data/hebrew-display";
 import { StatusBadge } from "@/components/status-badge";
 import { ActionForm } from "@/components/action-form";
 import { Badge } from "@/components/ui/badge";
@@ -94,13 +95,15 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
   const regColumns = visibleColumns(registration.columns, groups);
   const extra = extraAll.values;
   const canEdit = c.division_id ? canAccessBunk(user, c.division_id, c.bunk_id, "edit") : isAdmin(user);
+  // a Hebrew-language division: the Hebrew name is the title, the English one under it
+  const heb = c.id ? (await hebrewNamesFor([{ id: c.id, division_id: c.division_id }]).catch(() => new Map<string, string>())).get(c.id) : undefined;
 
   return (
     <div>
       <PageHeader
         back={{ href: "/campers", label: "Campers" }}
-        title={c.display_name ?? ""}
-        description={[c.division_name, c.bunk_name ?? "unassigned", c.grade ? `Grade ${c.grade}` : null].filter(Boolean).join(" · ")}
+        title={heb ?? c.display_name ?? ""}
+        description={[heb ? c.display_name : null, c.division_name, c.bunk_name ?? "unassigned", c.grade ? `Grade ${c.grade}` : null].filter(Boolean).join(" · ")}
         actions={
           <>
             <span className="font-mono text-sm text-muted-foreground" title="Kinus code: on the camper's tag barcode, and what you type to find them at check-in">
