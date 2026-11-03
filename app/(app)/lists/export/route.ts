@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   const preset = presets.find((p) => p.id === sp.get("preset")) ?? presets[0];
   if (!preset) return new NextResponse("No preset", { status: 404 });
   const [{ data: fv }, camp] = await Promise.all([supabase.from("field_visibility").select("field_group, roles"), getCampContext()]);
-  const list = await buildList(supabase, user, preset, { sessionId: session.id, divisionId: sp.get("division") || undefined, bunkId: sp.get("bunk") || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name, only: parseFlags(sp.get("only")), counselors: sp.get("counselors") === "1" }, fv ?? []);
+  const list = await buildList(supabase, user, preset, { sessionId: session.id, divisionId: sp.get("division") || undefined, bunkId: sp.get("bunk") || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name, only: parseFlags(sp.get("only")), counselors: sp.get("counselors") === "1", filter: sp.get("fcol") ? { key: sp.get("fcol")!.slice(0, 210), value: (sp.get("fval") ?? "__any").slice(0, 300) } : undefined }, fv ?? []);
   // the group (bunk/division) as its own first column, unless the list already shows it
   const withGroup = Boolean(preset.group_by) && !list.columns.some((c) => c.key === preset.group_by);
   // "Show counselors": each bunk's counselors (and phones) on its campers' rows

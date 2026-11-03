@@ -68,7 +68,7 @@ export const visibleExtraFields = (fields: ExtraField[], groups: Set<string>) =>
  * Extra field values for campers the person can already see (the raw export row isn't
  * readable to staff, so it's read here, for these campers and columns only).
  */
-export async function extraValuesFor(camperIds: string[], fields: (Pick<ExtraField, "column" | "answers"> & { label?: string })[]): Promise<Map<string, Record<string, string>>> {
+export async function extraValuesFor(camperIds: string[], fields: (Pick<ExtraField, "column" | "answers" | "hide"> & { label?: string })[]): Promise<Map<string, Record<string, string>>> {
   const out = new Map<string, Record<string, string>>();
   if (!fields.length || !camperIds.length) return out;
   const admin = createAdminClient();
