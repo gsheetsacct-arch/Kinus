@@ -1,11 +1,20 @@
 "use client";
 import * as React from "react";
-import { Combine, Plus, Split, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Combine, Plus, Split, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 type Sep = "dot" | "comma" | "slash" | "line";
 type Combo = { key: string; id: string; label: string; parts: string[]; sep: Sep; labels: boolean; show: boolean };
+/** The list with the item at `from` moved to `to`. */
+const moveItem = <T,>(list: T[], from: number, to: number): T[] => {
+  if (to < 0 || to >= list.length || from === to) return list;
+  const out = [...list];
+  const [x] = out.splice(from, 1);
+  out.splice(to, 0, x);
+  return out;
+};
+
 /** A colour for each combined column: on its card and on its fields in Columns. */
 const COLORS = ["#0284c7", "#7c3aed", "#059669", "#e11d48", "#0d9488", "#c026d3"];
 const SEPS: Record<Sep, string> = { dot: "·  (dot)", comma: ",  (comma)", slash: "/  (slash)", line: "One per line" };
@@ -168,9 +177,34 @@ export function ComboBuilder({ initial, options }: { initial: { id: string; labe
             </select>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {c.parts.map((p) => (
-              <span key={p} className="inline-flex items-center gap-1 rounded-full border bg-muted/50 py-0.5 pl-2.5 pr-1 text-sm" dir="auto">
-                {labelOf(p)}
+            {/* the order they print in: drag a field, or use its arrows */}
+            {c.parts.map((p, j) => (
+              <span
+                key={p}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("text/kinus-part", JSON.stringify({ combo: c.key, from: j }));
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  try {
+                    const d = JSON.parse(e.dataTransfer.getData("text/kinus-part")) as { combo: string; from: number };
+                    if (d.combo === c.key) update(c.key, { parts: moveItem(c.parts, d.from, j) });
+                  } catch {}
+                }}
+                className="inline-flex cursor-grab items-center gap-0.5 rounded-full border bg-muted/50 py-0.5 pl-1 pr-1 text-sm active:cursor-grabbing"
+                dir="auto"
+                title="Drag to change the order"
+              >
+                <button type="button" disabled={j === 0} className="rounded-full p-0.5 text-muted-foreground hover:bg-muted disabled:opacity-25" onClick={() => update(c.key, { parts: moveItem(c.parts, j, j - 1) })} aria-label={`Move ${labelOf(p)} earlier`}>
+                  <ChevronLeft className="size-3.5" />
+                </button>
+                <span className="px-0.5">{labelOf(p)}</span>
+                <button type="button" disabled={j === c.parts.length - 1} className="rounded-full p-0.5 text-muted-foreground hover:bg-muted disabled:opacity-25" onClick={() => update(c.key, { parts: moveItem(c.parts, j, j + 1) })} aria-label={`Move ${labelOf(p)} later`}>
+                  <ChevronRight className="size-3.5" />
+                </button>
                 <button type="button" className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => update(c.key, { parts: c.parts.filter((x) => x !== p) })} aria-label={`Take ${labelOf(p)} out`}>
                   <X className="size-3.5" />
                 </button>
@@ -186,6 +220,13 @@ export function ComboBuilder({ initial, options }: { initial: { id: string; labe
               <input type="checkbox" checked={c.show} onChange={(e) => update(c.key, { show: e.target.checked })} className="size-4 accent-[var(--primary)]" /> Show this column
             </label>
             <span className="ml-auto flex flex-wrap gap-1">
+              {/* combined columns print in this order */}
+              <Button type="button" size="sm" variant="ghost" disabled={i === 0} onClick={() => setCombos((cur) => moveItem(cur, i, i - 1))} aria-label="Move this column earlier" title="Earlier in the list">
+                <ArrowUp />
+              </Button>
+              <Button type="button" size="sm" variant="ghost" disabled={i === combos.length - 1} onClick={() => setCombos((cur) => moveItem(cur, i, i + 1))} aria-label="Move this column later" title="Later in the list">
+                <ArrowDown />
+              </Button>
               <Button
                 type="button"
                 size="sm"
