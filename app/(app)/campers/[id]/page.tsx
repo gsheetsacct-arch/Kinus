@@ -104,7 +104,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
         const val = (x: unknown) => (x && typeof x === "object" && "value" in (x as object) ? (x as { value: unknown }).value : x);
         return [...new Set([...Object.keys(o), ...Object.keys(n)])]
           .filter((c) => seenColumns.has(colName(c)) && JSON.stringify(val(o[c]) ?? "") !== JSON.stringify(val(n[c]) ?? ""))
-          .map((c) => ({ key: `${k}.${c}`, label: `${seenColumns.get(colName(c))}${k === "source_fixes" ? " (corrected)" : ""}`, old: val(o[c]), new: val(n[c]) }));
+          .map((c) => ({ key: `${k}.${c}`, label: `${seenColumns.get(colName(c))}${k === "source_fixes" ? " (set in Kinus)" : ""}`, old: val(o[c]), new: val(n[c]) }));
       }
       if (["last_event_id", "updated_at", "staff_edited", "bunk_locked_by_staff", "name_normalized", "display_name"].includes(k)) return [];
       return [{ key: k, label: HISTORY_LABEL[k] ?? FIELD_BY_KEY[k]?.label ?? k, old: historyValue(k, v.old), new: historyValue(k, v.new) }];
