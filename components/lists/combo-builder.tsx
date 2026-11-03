@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 
 type Sep = "dot" | "comma" | "slash" | "line";
 type Combo = { key: string; id: string; label: string; parts: string[]; sep: Sep; labels: boolean; show: boolean };
+/** A colour for each combined column: on its card and on its fields in Columns. */
+const COLORS = ["#0284c7", "#7c3aed", "#059669", "#e11d48", "#0d9488", "#c026d3"];
 const SEPS: Record<Sep, string> = { dot: "·  (dot)", comma: ",  (comma)", slash: "/  (slash)", line: "One per line" };
 
 
@@ -22,9 +24,36 @@ export function ComboBuilder({ initial, options }: { initial: { id: string; labe
   // fields picked for grouping: Ctrl/⌘-click (or a long press) on a field in Columns; a plain
   // click still just ticks it
   const [picked, setPicked] = React.useState<string[]>([]);
+  // on the fields in Columns: picked for grouping (amber), or already in a combined column
+  // (that column's colour round it, and a tag with its name)
   React.useEffect(() => {
-    for (const el of document.querySelectorAll<HTMLElement>("label[data-field]")) el.dataset.grouping = picked.includes(el.dataset.field!) ? "on" : "";
-  }, [picked]);
+    for (const el of document.querySelectorAll<HTMLElement>("label[data-field]")) {
+      const key = el.dataset.field!;
+      const isPicked = picked.includes(key);
+      el.dataset.grouping = isPicked ? "on" : "";
+      const at = combos.findIndex((c) => c.parts.includes(key));
+      let tag = el.querySelector<HTMLElement>("[data-combo-tag]");
+      if (at < 0 || isPicked) {
+        el.style.removeProperty("border-color");
+        el.style.removeProperty("box-shadow");
+        el.style.removeProperty("background-color");
+        tag?.remove();
+        continue;
+      }
+      const color = COLORS[at % COLORS.length];
+      el.style.borderColor = color;
+      el.style.boxShadow = `inset 0 0 0 1px ${color}`;
+      el.style.backgroundColor = `color-mix(in srgb, ${color} 10%, transparent)`;
+      if (!tag) {
+        tag = document.createElement("span");
+        tag.dataset.comboTag = "";
+        tag.className = "ml-auto shrink-0 truncate rounded-full px-2 py-0.5 text-[11px] font-medium text-white max-w-32";
+        el.appendChild(tag);
+      }
+      tag.style.backgroundColor = color;
+      tag.textContent = `In: ${combos[at].label || "Combined"}`;
+    }
+  }, [picked, combos]);
   React.useEffect(() => {
     const toggle = (key: string) => setPicked((cur) => (cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key]));
     const fieldOf = (e: Event) => (e.target as HTMLElement | null)?.closest<HTMLElement>("label[data-field]");
@@ -117,7 +146,7 @@ export function ComboBuilder({ initial, options }: { initial: { id: string; labe
       )}
 
       {combos.map((c, i) => (
-        <div key={c.key} className="space-y-2 rounded-lg border bg-background p-3">
+        <div key={c.key} className="space-y-2 rounded-lg border border-l-4 bg-background p-3" style={{ borderLeftColor: COLORS[i % COLORS.length] }}>
           {/* what savePreset reads */}
           <input type="hidden" name={`combo_id_${i}`} value={c.id} />
           <input type="hidden" name={`combo_label_${i}`} value={c.label} />
