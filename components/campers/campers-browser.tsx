@@ -71,12 +71,11 @@ export function CampersBrowser({
   const bOrder = React.useMemo(() => new Map(divisions.flatMap((d, di) => d.bunks.map((b, bi) => [b.id, di * 1000 + bi] as const))), [divisions]);
   const index = React.useMemo(() => rows.map((r) => ({ r, e: searchEntry(r.n, r.c, r.p, r.z ?? null) })), [rows]);
 
-  const filtered = React.useMemo(() => {
+  const matched = React.useMemo(() => {
     const out: { r: CamperIndexRow; score: number }[] = [];
     for (const { r, e } of index) {
       if (f.division && r.d !== f.division) continue;
       if (f.bunk && r.b !== f.bunk) continue;
-      if (f.status && r.s !== f.status) continue;
       if (f.only && !has(r, f.only as CamperFlag)) continue;
       const score = matchScore(e, q);
       if (score > 0) out.push({ r, score });
@@ -91,59 +90,96 @@ export function CampersBrowser({
       return byName(a.r, b.r);
     });
     return out.map((x) => x.r);
-  }, [index, q, f.division, f.bunk, f.status, f.only, f.sort, bOrder]);
+  }, [index, q, f.division, f.bunk, f.only, f.sort, bOrder]);
+  // the status chips count what the other filters leave; a chip then narrows to its campers
+  const statusCount = React.useMemo(() => {
+    const n: Partial<Record<CamperStatus, number>> = {};
+    for (const r of matched) n[r.s] = (n[r.s] ?? 0) + 1;
+    return n;
+  }, [matched]);
+  const filtered = React.useMemo(() => (f.status ? matched.filter((r) => r.s === f.status) : matched), [matched, f.status]);
 
   // only bunks with campers in the list (an emptied bunk isn't offered)
   const hasBunk = React.useMemo(() => new Set(rows.map((r) => r.b)), [rows]);
   const hasDivision = React.useMemo(() => new Set(rows.map((r) => r.d)), [rows]);
-  const bunks = (f.division ? (divisions.find((d) => d.id === f.division)?.bunks ?? []) : divisions.flatMap((d) => d.bunks)).filter((b) => hasBunk.has(b.id) || b.id === f.bunk);
   const filtering = Boolean(f.q || f.division || f.bunk || f.status || f.only);
 
   return (
-    <div className="space-y-4">
-      <div className="no-print grid gap-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] md:grid-cols-2 lg:grid-cols-[1fr_170px_150px_140px_160px_170px]">
-        <div className="relative">
+    <div className="space-y-3">
+      {/* like Who's here: the place, then the statuses as counts, then search and sort, small */}
+      <div className="no-print flex flex-wrap items-center gap-x-3 gap-y-2">
+        <Select
+          value={f.bunk ? `b:${f.bunk}` : f.division ? `d:${f.division}` : ""}
+          onChange={(e) => {
+            const [k, id] = e.target.value.split(":");
+            const d = k === "b" ? divisions.find((x) => x.bunks.some((b) => b.id === id))?.id : k === "d" ? id : "";
+            set({ division: d ?? "", bunk: k === "b" ? id : "" });
+          }}
+          aria-label="Which campers"
+          className="h-9 w-auto min-w-48 max-w-full font-medium"
+        >
+          <option value="">All campers</option>
+          {divisions
+            .filter((d) => hasDivision.has(d.id) || d.id === f.division)
+            .map((d) => (
+              <optgroup key={d.id} label={d.name}>
+                <option value={`d:${d.id}`}>All of {d.name}</option>
+                {d.bunks
+                  .filter((b) => hasBunk.has(b.id) || b.id === f.bunk)
+                  .map((b) => (
+                    <option key={b.id} value={`b:${b.id}`}>
+                      {b.name}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+        </Select>
+        <span className="text-sm text-muted-foreground">
+          {filtered.length === rows.length ? `${rows.length} campers` : `${filtered.length} of ${rows.length}`}
+          {filtering && (
+            <button type="button" className="ml-2 text-primary hover:underline" onClick={() => set({ q: "", division: "", bunk: "", status: "", only: "" })}>
+              Clear
+            </button>
+          )}
+        </span>
+        {archivedHref && (
+          <Link href={archivedHref} className="ml-auto text-sm text-muted-foreground hover:underline">
+            {archivedHref.includes("archived=1") ? "Include archived" : "Hide archived"}
+          </Link>
+        )}
+      </div>
+
+      <div className="no-print -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none]" role="group" aria-label="Status">
+        {(["", ...(Object.keys(STATUS_LABEL) as CamperStatus[])] as const).map((st) => {
+          const n = st ? (statusCount[st] ?? 0) : matched.length;
+          if (st && !n && f.status !== st) return null;
+          const on = f.status === st;
+          return (
+            <button
+              key={st || "all"}
+              type="button"
+              onClick={() => set({ status: on && st ? "" : st })}
+              aria-pressed={on}
+              className={cn("inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border bg-card px-3 text-sm transition-colors hover:border-primary/40", on && "border-primary bg-primary text-primary-foreground hover:border-primary")}
+            >
+              {st ? STATUS_LABEL[st] : "Everyone"}
+              <span className={cn("font-semibold tabular-nums", !on && "text-muted-foreground")}>{n}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="no-print grid grid-cols-2 gap-2 sm:grid-cols-[1fr_auto_auto]">
+        <div className="relative col-span-2 sm:col-span-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={f.q}
-            onChange={(e) => set({ q: e.target.value })}
-            placeholder="Name, code or parent phone"
-            dir="auto"
-            className="pl-9 pr-9"
-            aria-label="Search campers"
-            autoFocus={!initial.q}
-          />
+          <Input value={f.q} onChange={(e) => set({ q: e.target.value })} placeholder="Name, code or parent phone" dir="auto" className="h-9 pl-9 pr-9" aria-label="Search campers" />
           {f.q && (
-            <button type="button" onClick={() => set({ q: "" })} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted" aria-label="Clear search">
+            <button type="button" onClick={() => set({ q: "" })} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Clear search">
               <X className="size-4" />
             </button>
           )}
         </div>
-        <Select value={f.division} onChange={(e) => set({ division: e.target.value })} aria-label="Division">
-          <option value="">All divisions</option>
-          {divisions.filter((d) => hasDivision.has(d.id) || d.id === f.division).map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </Select>
-        <Select value={f.bunk} onChange={(e) => set({ bunk: e.target.value })} aria-label="Bunk">
-          <option value="">All bunks</option>
-          {bunks.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </Select>
-        <Select value={f.status} onChange={(e) => set({ status: e.target.value })} aria-label="Status">
-          <option value="">Any status</option>
-          {(Object.keys(STATUS_LABEL) as CamperStatus[]).map((s) => (
-            <option key={s} value={s}>
-              {STATUS_LABEL[s]}
-            </option>
-          ))}
-        </Select>
-        <Select value={f.only} onChange={(e) => set({ only: e.target.value })} aria-label="Only campers who">
+        <Select value={f.only} onChange={(e) => set({ only: e.target.value })} className="h-9" aria-label="Only campers who">
           <option value="">Every camper</option>
           {flags.map((k) => (
             <option key={k} value={k}>
@@ -151,7 +187,7 @@ export function CampersBrowser({
             </option>
           ))}
         </Select>
-        <Select value={f.sort} onChange={(e) => set({ sort: e.target.value })} aria-label="Sort by">
+        <Select value={f.sort} onChange={(e) => set({ sort: e.target.value })} className="h-9" aria-label="Sort by">
           <option value="name">By last name</option>
           <option value="bunk">By bunk</option>
           <option value="status">By status</option>
@@ -161,21 +197,6 @@ export function CampersBrowser({
             </option>
           ))}
         </Select>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-        <span>
-          {filtered.length === rows.length ? `${rows.length} campers` : `${filtered.length} of ${rows.length} campers`}
-          {filtering && (
-            <button type="button" className="ml-2 text-primary hover:underline" onClick={() => set({ q: "", division: "", bunk: "", status: "", only: "" })}>
-              Clear filters
-            </button>
-          )}
-        </span>
-        {archivedHref && (
-          <Link href={archivedHref} className="hover:underline">
-            {archivedHref.includes("archived=1") ? "Include archived campers" : "Hide archived campers"}
-          </Link>
-        )}
       </div>
       <div className="overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-card)]">
         <div className="hidden grid-cols-[minmax(0,2fr)_80px_minmax(0,1fr)_minmax(0,1fr)_56px_minmax(0,150px)] gap-3 border-b bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground md:grid">
