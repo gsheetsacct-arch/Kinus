@@ -266,7 +266,7 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     const chosen = extra.map((h) => {
       const had = before.find((f) => columnKey(f.column) === columnKey(h));
       // short answers and who sees it, set in Settings, stay
-      return { column: h, label: String(fd.get(`name:${h}`) ?? "").trim().slice(0, 80) || had?.label || humanLabel(h), ...(had?.answers ? { answers: had.answers } : {}), ...(had?.group ? { group: had.group } : {}) };
+      return { column: h, label: String(fd.get(`name:${h}`) ?? "").trim().slice(0, 80) || had?.label || humanLabel(h), ...(had?.answers ? { answers: had.answers } : {}), ...(had?.group ? { group: had.group } : {}), ...(had?.hide ? { hide: had.hide } : {}) };
     });
     // two columns shown under one name ("City" from the form and from the family record) look
     // like the same thing twice: show one, or give them different names

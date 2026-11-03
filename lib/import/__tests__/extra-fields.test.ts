@@ -35,3 +35,14 @@ describe("who sees an added column", () => {
     expect(groupOfKey("source.ppa.diet", new Map([["ppa.diet", "basic"]]))).toBe("basic");
   });
 });
+
+describe("answers that say nothing", () => {
+  it("an answer set to Hide shows nothing; others as before", async () => {
+    const { shortAnswer, parseExtraFields } = await import("../extra-fields");
+    const [f] = parseExtraFields([{ column: "ppa.allergies_other", label: "Other allergies", answers: { "Yes, see notes": "See notes" }, hide: ["No", "None"] }]);
+    expect(shortAnswer(f, "no ")).toBe("");
+    expect(shortAnswer(f, "None")).toBe("");
+    expect(shortAnswer(f, "Yes, see notes")).toBe("See notes");
+    expect(shortAnswer(f, "Peanuts")).toBe("Peanuts");
+  });
+});

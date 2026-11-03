@@ -173,9 +173,12 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
               <Field label="Bunk preferences" value={(c.bunk_preferences ?? []).join(", ") || null} />
               <Field label="Kinus code (on the tag)" value={c.camper_code} />
               <Field label="Registration ID (from the export)" value={displaySourceId(c.source_id)} />
-              {extraFields.map((f) => (
-                <Field key={f.column} label={f.label} value={extra[f.column] || null} />
-              ))}
+              {/* only the ones with something to say (empty, or an answer set to Hide: nothing) */}
+              {extraFields
+                .filter((f) => extra[f.column])
+                .map((f) => (
+                  <Field key={f.column} label={f.label} value={extra[f.column]} />
+                ))}
               {groups.has("address") && <Field label="Local address" value={c.local_address} />}
               {groups.has("address") && <Field label="Cross streets" value={c.local_address_cross_streets} />}
               {groups.has("staff_notes") && <Field label="Staff notes" value={c.staff_notes} />}

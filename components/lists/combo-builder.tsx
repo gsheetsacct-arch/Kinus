@@ -8,55 +8,113 @@ type Sep = "dot" | "comma" | "slash" | "line";
 type Combo = { key: string; id: string; label: string; parts: string[]; sep: Sep; labels: boolean; show: boolean };
 const SEPS: Record<Sep, string> = { dot: "·  (dot)", comma: ",  (comma)", slash: "/  (slash)", line: "One per line" };
 
-const ticked = () => [...document.querySelectorAll<HTMLInputElement>('input[name="columns"]:checked')];
 
 /**
- * Combined columns on the list layout page: tick fields in Columns, then "Combine into one
- * column" (as many groups as wanted); each group is a card with its name, what goes between,
- * its fields (remove one, add the ticked ones), split back or remove. Saved with the layout
+ * Combined columns on the list layout page: Ctrl/⌘-click (or long-press) fields in Columns
+ * and a question pops up at the top: group them into a new column, or add them to one there
+ * is (as many groups as wanted). Each group is a card with its name, what goes between, its
+ * fields (take one out), split back or remove. Saved with the layout
  * through hidden fields (combo_*), as savePreset reads them.
  */
 export function ComboBuilder({ initial, options }: { initial: { id: string; label: string; parts: string[]; sep: Sep; labels: boolean; show: boolean }[]; options: { key: string; label: string }[] }) {
   const [combos, setCombos] = React.useState<Combo[]>(() => initial.map((c) => ({ ...c, key: c.id })));
-  const [count, setCount] = React.useState(0);
   const labelOf = (k: string) => options.find((o) => o.key === k)?.label ?? k;
-
-  // how many fields are ticked in Columns (the buttons say so)
+  // fields picked for grouping: Ctrl/⌘-click (or a long press) on a field in Columns; a plain
+  // click still just ticks it
+  const [picked, setPicked] = React.useState<string[]>([]);
   React.useEffect(() => {
-    const read = () => setCount(ticked().length);
-    read();
-    const onChange = (e: Event) => (e.target as HTMLInputElement | null)?.name === "columns" && read();
-    document.addEventListener("change", onChange);
-    return () => document.removeEventListener("change", onChange);
+    for (const el of document.querySelectorAll<HTMLElement>("label[data-field]")) el.dataset.grouping = picked.includes(el.dataset.field!) ? "on" : "";
+  }, [picked]);
+  React.useEffect(() => {
+    const toggle = (key: string) => setPicked((cur) => (cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key]));
+    const fieldOf = (e: Event) => (e.target as HTMLElement | null)?.closest<HTMLElement>("label[data-field]");
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let pressed: string | null = null;
+    const onClick = (e: MouseEvent) => {
+      const el = fieldOf(e);
+      if (!el) return;
+      if (pressed === el.dataset.field) {
+        // the click that ends a long press: it picked the field, it doesn't tick it
+        e.preventDefault();
+        pressed = null;
+        return;
+      }
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      toggle(el.dataset.field!);
+    };
+    const onDown = (e: PointerEvent) => {
+      const el = fieldOf(e);
+      if (!el || e.pointerType === "mouse") return;
+      timer = setTimeout(() => {
+        pressed = el.dataset.field!;
+        toggle(pressed);
+        if ("vibrate" in navigator) navigator.vibrate(30);
+      }, 450);
+    };
+    const cancel = () => clearTimeout(timer);
+    document.addEventListener("click", onClick, true);
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("pointerup", cancel);
+    document.addEventListener("pointercancel", cancel);
+    document.addEventListener("pointermove", cancel);
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("pointerup", cancel);
+      document.removeEventListener("pointercancel", cancel);
+      document.removeEventListener("pointermove", cancel);
+    };
   }, []);
-  // the ticked fields, taken out of Columns (they show inside the combined column instead)
-  const takeTicked = () => {
-    const boxes = ticked();
-    const keys = boxes.map((b) => b.value).filter((k) => !k.startsWith("combo:"));
-    for (const b of boxes) b.checked = false;
-    setCount(0);
-    return keys;
+  // a grouped field isn't also a column of its own
+  const untick = (keys: string[]) => {
+    for (const b of document.querySelectorAll<HTMLInputElement>('input[name="columns"]')) if (keys.includes(b.value)) b.checked = false;
   };
   const tick = (keys: string[]) => {
     for (const b of document.querySelectorAll<HTMLInputElement>('input[name="columns"]')) if (keys.includes(b.value)) b.checked = true;
-    setCount(ticked().length);
   };
   const update = (key: string, patch: Partial<Combo>) => setCombos((cur) => cur.map((c) => (c.key === key ? { ...c, ...patch } : c)));
-
-  const combine = () => {
-    const parts = takeTicked();
-    if (parts.length < 2) return;
-    setCombos((cur) => [...cur, { key: `new-${Date.now()}`, id: "", label: parts.slice(0, 3).map(labelOf).join(" / ").slice(0, 60), parts, sep: "dot", labels: false, show: true }]);
+  const group = () => {
+    if (!picked.length) return;
+    untick(picked);
+    setCombos((cur) => [...cur, { key: `new-${Date.now()}`, id: "", label: picked.slice(0, 3).map(labelOf).join(" / ").slice(0, 60), parts: picked, sep: "dot", labels: false, show: true }]);
+    setPicked([]);
+  };
+  const addTo = (key: string) => {
+    untick(picked);
+    setCombos((cur) => cur.map((c) => (c.key === key ? { ...c, parts: [...new Set([...c.parts, ...picked])] } : c)));
+    setPicked([]);
   };
 
   return (
     <div className="space-y-3">
-      <div className="sticky top-16 z-10 flex flex-wrap items-center gap-2 rounded-lg border bg-primary-soft/60 p-2.5 text-sm backdrop-blur md:top-2">
-        <span className="min-w-0 flex-1">{count ? `${count} ticked in Columns` : "Tick fields in Columns, then combine them into one column."}</span>
-        <Button type="button" size="sm" disabled={count < 2} onClick={combine}>
-          <Combine /> Combine into one column
-        </Button>
-      </div>
+      {/* fields picked for grouping: the question, at the top of the screen */}
+      {picked.length > 0 && (
+        <div className="fixed inset-x-3 top-3 z-50 mx-auto max-w-xl space-y-2 rounded-xl border-2 border-amber-400 bg-card p-3 shadow-2xl" role="dialog" aria-label="Group these fields">
+          <div className="flex items-start gap-2">
+            <p className="min-w-0 flex-1 text-sm">
+              <span className="font-semibold">Group {picked.length === 1 ? "this field" : `these ${picked.length} fields`} into one column?</span>
+              <span className="block truncate text-muted-foreground" dir="auto">
+                {picked.map(labelOf).join(" · ")}
+              </span>
+            </p>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setPicked([])} aria-label="Cancel">
+              <X />
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <Button type="button" size="sm" disabled={picked.length < 2} onClick={group} title={picked.length < 2 ? "Pick at least two (Ctrl-click another)" : undefined}>
+              <Combine /> Group into a new column
+            </Button>
+            {combos.map((c) => (
+              <Button key={c.key} type="button" size="sm" variant="outline" onClick={() => addTo(c.key)}>
+                <Plus /> Add to “{c.label || "Combined"}”
+              </Button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">Ctrl-click (⌘ on a Mac, long-press on a phone) more fields to add them; a plain click ticks as usual.</p>
+        </div>
+      )}
 
       {combos.map((c, i) => (
         <div key={c.key} className="space-y-2 rounded-lg border bg-background p-3">
@@ -99,9 +157,6 @@ export function ComboBuilder({ initial, options }: { initial: { id: string; labe
               <input type="checkbox" checked={c.show} onChange={(e) => update(c.key, { show: e.target.checked })} className="size-4 accent-[var(--primary)]" /> Show this column
             </label>
             <span className="ml-auto flex flex-wrap gap-1">
-              <Button type="button" size="sm" variant="outline" disabled={!count} onClick={() => update(c.key, { parts: [...new Set([...c.parts, ...takeTicked()])] })}>
-                <Plus /> Add ticked fields
-              </Button>
               <Button
                 type="button"
                 size="sm"
@@ -121,7 +176,7 @@ export function ComboBuilder({ initial, options }: { initial: { id: string; labe
           </div>
         </div>
       ))}
-      {!combos.length && <p className="text-sm text-muted-foreground">No combined columns yet.</p>}
+      {!combos.length && <p className="text-sm text-muted-foreground">None yet. In Columns, hold Ctrl (⌘ on a Mac) and click the fields to put together, or long-press them on a phone.</p>}
     </div>
   );
 }

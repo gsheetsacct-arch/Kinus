@@ -9,6 +9,8 @@ export type ExtraField = {
   label: string;
   /** Shorter wording for long answers, for the camper page and lists: { "Yes, at the Kinus (In the …)": "Sleeping here" }. */
   answers?: Record<string, string>;
+  /** Answers that say nothing special ("No", "None"): shown as nothing at all. */
+  hide?: string[];
   /**
    * Who sees it: a detail group (medical, contacts, family…, set per role on Staff → Roles), or
    * "basic" for everyone. Unset: guessed from the column's name (medical-looking is medical…).
@@ -43,6 +45,7 @@ export function parseExtraFields(value: unknown): ExtraField[] {
       column: f.column,
       label: f.label,
       ...(f.answers && typeof f.answers === "object" && !Array.isArray(f.answers) ? { answers: f.answers } : {}),
+      ...(Array.isArray(f.hide) && f.hide.length ? { hide: f.hide.filter((x): x is string => typeof x === "string") } : {}),
       ...(isExtraGroup(f.group) ? { group: f.group } : {}),
     }));
   return oneOfEachColumn(fields, (f) => f.column);
@@ -50,10 +53,12 @@ export function parseExtraFields(value: unknown): ExtraField[] {
 
 const same = (a: string) => a.replace(/\s+/g, " ").trim().toLowerCase();
 
-/** The short answer set for this value, else the value as it is. */
-export function shortAnswer(field: Pick<ExtraField, "answers">, value: string): string {
-  if (!value || !field.answers) return value;
+/** The short answer set for this value, else the value as it is; "" for an answer set to Hide. */
+export function shortAnswer(field: Pick<ExtraField, "answers" | "hide">, value: string): string {
+  if (!value) return value;
   const want = same(value);
+  if (field.hide?.some((h) => same(h) === want)) return "";
+  if (!field.answers) return value;
   for (const [long, short] of Object.entries(field.answers)) if (short.trim() && same(long) === want) return short.trim();
   return value;
 }
