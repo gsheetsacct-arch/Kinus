@@ -155,7 +155,7 @@ A division's language is a **⚙ Setting** on **Divisions & bunks** (English, He
     body: `
 **Setup → Divisions & bunks.**
 - Divisions belong to a **camp** (American, Hebrew, French…): the camp switcher at the top of the menu narrows every page to one camp.
-- Order: divisions and bunks are listed (and print) in the order set here; bunk numbers follow their order (Alef = 1, Beis = 2…), giving \`{{BUNK_NUMBER}}\`, \`{{BUNK_LETTERS}}\` (11 → יא) and \`{{BUNK_CONTINUED}}\` (numbers continuing from camp to camp).
+- Order: divisions and bunks are listed (and print) in the order set here; bunk numbers follow their order (Alef = 1, Beis = 2…), giving \`{{BUNK_NUMBER}}\`, \`{{BUNK_LETTERS}}\` (11 → יא) and \`{{BUNK_CONTINUED}}\` (numbers continuing from camp to camp; staff get one number per division after the last bunk).
 - **Colour**: used on Who's here, the check-in line and labels (\`{{DIVISION_COLOR}}\`).
 - **Language**: see Hebrew divisions.
 - Empty bunks fold into "N empty bunks"; **Remove empty ones** removes bunks with no campers (archived campers don't count).
@@ -233,7 +233,7 @@ Check-in logins can be given final check-out (Staff → check-in logins): every 
 | Staff | Name Tag/Badge – Staff, Luggage Tag – Staff | Badge; 1″ × 2⅝″ labels (2 per person) | Staff name, phone, division, "STAFF". Printed from Print → Staff tags. |
 
 ### Fields (what a tag can say)
-\`{{FIRST}}\`, \`{{LAST}}\`, \`{{FULL}}\`, \`{{CODE}}\` (4-digit camper code), \`{{BARCODE}}\` (KN + code, for QR/barcodes), \`{{DIVISION}}\`, \`{{DIV}}\` (division number), \`{{DIVISION_COLOR}}\`, \`{{BUNK}}\`, \`{{BUNK_SHORT}}\`, \`{{BUNK_NUMBER}}\`, \`{{BUNK_LETTERS}}\`, \`{{BUNK_CONTINUED}}\`, \`{{BUNK_HEBREW}}\`, \`{{BUNK_BIG}}\`, \`{{GRADE}}\`, \`{{TSHIRT}}\` (the T-shirt code, e.g. YS/130), \`{{HEB_FIRST}}\`, \`{{HEB_LAST}}\`, \`{{YARMULKA}}\`, \`{{FROM}}\` (city, state country), \`{{BUZZER}}\`, and any export column. \`{{A|B}}\` prints A, or B when A is empty. Staff tags have their own fields (name, position, role, division, bunk, phone…).
+\`{{FIRST}}\`, \`{{LAST}}\`, \`{{FULL}}\`, \`{{CODE}}\` (4-digit camper code), \`{{BARCODE}}\` (KN + code, for QR/barcodes), \`{{DIVISION}}\`, \`{{DIV}}\` (division number), \`{{DIVISION_COLOR}}\`, \`{{BUNK}}\`, \`{{BUNK_SHORT}}\`, \`{{BUNK_NUMBER}}\`, \`{{BUNK_LETTERS}}\`, \`{{BUNK_CONTINUED}}\`, \`{{BUNK_HEBREW}}\`, \`{{BUNK_BIG}}\`, \`{{GRADE}}\`, \`{{TSHIRT}}\` (the T-shirt code, e.g. YS/130), \`{{HEB_FIRST}}\`, \`{{HEB_LAST}}\`, \`{{YARMULKA}}\`, \`{{FROM}}\` (city, state country), \`{{BUZZER}}\`, and any export column. \`{{A|B}}\` prints A, or B when A is empty. Staff tags have their own fields (name, position, role, division, bunk, phone…); on a staff tag \`{{BUNK_CONTINUED}}\` is their division's number, carrying on after the last bunk number (if the bunks end at 140, the first division's staff are 141, the second's 142, and so on, divisions in camp order then their own order).
 
 Fields and their **conversions** (export answers turned into what prints: T-shirt sizes into codes, division names into numbers…) are made on **Print → Fields & conversions**.
 

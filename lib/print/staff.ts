@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { seesAllCamp, type CurrentUser } from "@/lib/auth/permissions";
 import { loadAreaTree } from "@/lib/data/areas";
+import { continuedDivisionNumbers } from "./bunk-continued";
 import { STAFF_ROLES } from "@/lib/labels";
 import { shownEmail } from "@/lib/staff/login-kinds";
 import { backgroundDataUrl, imageDataUrls } from "./data";
@@ -37,6 +38,9 @@ export async function staffInView(me: CurrentUser): Promise<StaffToPrint[]> {
   const division = new Map(tree.divisions.map((d) => [d.id, d]));
   const bunk = new Map(tree.divisions.flatMap((d) => d.bunks.map((b) => [b.id, b.name] as const)));
   const mine = new Set(me.coverage.map((c) => c.division_id));
+  // each division's staff number, after the last bunk number (camps in order; a division with no camp is in the first)
+  const firstCamp = tree.groups[0]?.id ?? null;
+  const number = continuedDivisionNumbers((tree.groups.length ? tree.groups.map((g) => g.id) : [null]).map((gid) => tree.divisions.filter((d) => (d.group_id ?? firstCamp) === gid)));
   const out: StaffToPrint[] = [];
   for (const p of people ?? []) {
     const places: StaffPerson["places"] = [];
@@ -45,7 +49,7 @@ export async function staffInView(me: CurrentUser): Promise<StaffToPrint[]> {
       const ds = s.group_id ? tree.divisions.filter((d) => d.group_id === s.group_id) : s.division_id && division.has(s.division_id) ? [division.get(s.division_id)!] : [];
       for (const d of ds) {
         divisionIds.push(d.id);
-        places.push({ division: d.name, color: d.color, camp: d.group_id ? (camp.get(d.group_id) ?? null) : null, bunk: s.bunk_id ? (bunk.get(s.bunk_id) ?? null) : null });
+        places.push({ division: d.name, color: d.color, camp: d.group_id ? (camp.get(d.group_id) ?? null) : null, bunk: s.bunk_id ? (bunk.get(s.bunk_id) ?? null) : null, number: number.get(d.id) ?? null });
       }
     }
     if (!seesAllCamp(me) && (p.all_areas || p.role === "owner" || !divisionIds.some((d) => mine.has(d)))) continue;
