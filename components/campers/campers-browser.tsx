@@ -3,7 +3,6 @@ import * as React from "react";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
@@ -102,101 +101,108 @@ export function CampersBrowser({
   // only bunks with campers in the list (an emptied bunk isn't offered)
   const hasBunk = React.useMemo(() => new Set(rows.map((r) => r.b)), [rows]);
   const hasDivision = React.useMemo(() => new Set(rows.map((r) => r.d)), [rows]);
+  const perDivision = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rows) if (r.d) m.set(r.d, (m.get(r.d) ?? 0) + 1);
+    return m;
+  }, [rows]);
+  const perBunk = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rows) if (r.b) m.set(r.b, (m.get(r.b) ?? 0) + 1);
+    return m;
+  }, [rows]);
+  const bunksHere = (divisions.find((d) => d.id === f.division)?.bunks ?? []).filter((b) => hasBunk.has(b.id) || b.id === f.bunk);
   const filtering = Boolean(f.q || f.division || f.bunk || f.status || f.only);
 
   return (
     <div className="space-y-3">
-      {/* like Who's here: the place, then the statuses as counts, then search and sort, small */}
-      <div className="no-print flex flex-wrap items-center gap-x-3 gap-y-2">
-        <Select
-          value={f.bunk ? `b:${f.bunk}` : f.division ? `d:${f.division}` : ""}
-          onChange={(e) => {
-            const [k, id] = e.target.value.split(":");
-            const d = k === "b" ? divisions.find((x) => x.bunks.some((b) => b.id === id))?.id : k === "d" ? id : "";
-            set({ division: d ?? "", bunk: k === "b" ? id : "" });
-          }}
-          aria-label="Which campers"
-          className="h-9 w-auto min-w-48 max-w-full font-medium"
-        >
-          <option value="">All campers</option>
-          {divisions
-            .filter((d) => hasDivision.has(d.id) || d.id === f.division)
-            .map((d) => (
-              <optgroup key={d.id} label={d.name}>
-                <option value={`d:${d.id}`}>All of {d.name}</option>
-                {d.bunks
-                  .filter((b) => hasBunk.has(b.id) || b.id === f.bunk)
-                  .map((b) => (
-                    <option key={b.id} value={`b:${b.id}`}>
-                      {b.name}
-                    </option>
-                  ))}
-              </optgroup>
-            ))}
-        </Select>
-        <span className="text-sm text-muted-foreground">
-          {filtered.length === rows.length ? `${rows.length} campers` : `${filtered.length} of ${rows.length}`}
+      {/* search, then every filter as a row of pills that scrolls sideways (like Who's here) */}
+      <div className="no-print relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input value={f.q} onChange={(e) => set({ q: e.target.value })} placeholder="Name, code or parent phone" dir="auto" className="h-9 pl-9 pr-9" aria-label="Search campers" />
+        {f.q && (
+          <button type="button" onClick={() => set({ q: "" })} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Clear search">
+            <X className="size-4" />
+          </button>
+        )}
+      </div>
+
+      {/* where: a division, then (once one is picked) its bunks */}
+      <Pills label="Division">
+        <Pill on={!f.division} onClick={() => set({ division: "", bunk: "" })}>
+          All divisions
+        </Pill>
+        {divisions
+          .filter((d) => hasDivision.has(d.id) || d.id === f.division)
+          .map((d) => (
+            <Pill key={d.id} on={f.division === d.id} onClick={() => set({ division: f.division === d.id ? "" : d.id, bunk: "" })} count={perDivision.get(d.id)}>
+              {d.name}
+            </Pill>
+          ))}
+      </Pills>
+      {f.division && bunksHere.length > 1 && (
+        <Pills label="Bunk">
+          <Pill on={!f.bunk} onClick={() => set({ bunk: "" })}>
+            All bunks
+          </Pill>
+          {bunksHere.map((b) => (
+            <Pill key={b.id} on={f.bunk === b.id} onClick={() => set({ bunk: f.bunk === b.id ? "" : b.id })} count={perBunk.get(b.id)}>
+              {b.name}
+            </Pill>
+          ))}
+        </Pills>
+      )}
+
+      {/* status, with how many each */}
+      <Pills label="Status">
+        {(["", ...(Object.keys(STATUS_LABEL) as CamperStatus[])] as const).map((st) => {
+          const n = st ? (statusCount[st] ?? 0) : matched.length;
+          if (st && !n && f.status !== st) return null;
+          return (
+            <Pill key={st || "all"} on={f.status === st} onClick={() => set({ status: f.status === st && st ? "" : st })} count={n}>
+              {st ? STATUS_LABEL[st] : "Everyone"}
+            </Pill>
+          );
+        })}
+      </Pills>
+
+      {/* only campers who…, then the order */}
+      <Pills label="Only and sort">
+        {flags.map((k) => (
+          <Pill key={k} on={f.only === k} onClick={() => set({ only: f.only === k ? "" : k })}>
+            {CAMPER_FLAGS[k].label}
+          </Pill>
+        ))}
+        {flags.length > 0 && <span className="mx-1 w-px shrink-0 self-stretch bg-border" aria-hidden />}
+        {[
+          { v: "name", l: "By last name" },
+          { v: "bunk", l: "By bunk" },
+          { v: "status", l: "By status" },
+          ...SORT_FLAGS.filter((x) => flags.includes(x.key)).map((x) => ({
+            v: `flag:${x.key}`,
+            l: x.label,
+          })),
+        ].map((o) => (
+          <Pill key={o.v} on={f.sort === o.v} onClick={() => set({ sort: o.v })} quiet>
+            {o.l}
+          </Pill>
+        ))}
+      </Pills>
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+        <span>
+          {filtered.length === rows.length ? `${rows.length} campers` : `${filtered.length} of ${rows.length} campers`}
           {filtering && (
             <button type="button" className="ml-2 text-primary hover:underline" onClick={() => set({ q: "", division: "", bunk: "", status: "", only: "" })}>
-              Clear
+              Clear filters
             </button>
           )}
         </span>
         {archivedHref && (
-          <Link href={archivedHref} className="ml-auto text-sm text-muted-foreground hover:underline">
+          <Link href={archivedHref} className="ml-auto hover:underline">
             {archivedHref.includes("archived=1") ? "Include archived" : "Hide archived"}
           </Link>
         )}
-      </div>
-
-      <div className="no-print -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none]" role="group" aria-label="Status">
-        {(["", ...(Object.keys(STATUS_LABEL) as CamperStatus[])] as const).map((st) => {
-          const n = st ? (statusCount[st] ?? 0) : matched.length;
-          if (st && !n && f.status !== st) return null;
-          const on = f.status === st;
-          return (
-            <button
-              key={st || "all"}
-              type="button"
-              onClick={() => set({ status: on && st ? "" : st })}
-              aria-pressed={on}
-              className={cn("inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border bg-card px-3 text-sm transition-colors hover:border-primary/40", on && "border-primary bg-primary text-primary-foreground hover:border-primary")}
-            >
-              {st ? STATUS_LABEL[st] : "Everyone"}
-              <span className={cn("font-semibold tabular-nums", !on && "text-muted-foreground")}>{n}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="no-print grid grid-cols-2 gap-2 sm:grid-cols-[1fr_auto_auto]">
-        <div className="relative col-span-2 sm:col-span-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={f.q} onChange={(e) => set({ q: e.target.value })} placeholder="Name, code or parent phone" dir="auto" className="h-9 pl-9 pr-9" aria-label="Search campers" />
-          {f.q && (
-            <button type="button" onClick={() => set({ q: "" })} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-2 text-muted-foreground hover:bg-muted" aria-label="Clear search">
-              <X className="size-4" />
-            </button>
-          )}
-        </div>
-        <Select value={f.only} onChange={(e) => set({ only: e.target.value })} className="h-9" aria-label="Only campers who">
-          <option value="">Every camper</option>
-          {flags.map((k) => (
-            <option key={k} value={k}>
-              {CAMPER_FLAGS[k].label}
-            </option>
-          ))}
-        </Select>
-        <Select value={f.sort} onChange={(e) => set({ sort: e.target.value })} className="h-9" aria-label="Sort by">
-          <option value="name">By last name</option>
-          <option value="bunk">By bunk</option>
-          <option value="status">By status</option>
-          {SORT_FLAGS.filter((s) => flags.includes(s.key)).map((s) => (
-            <option key={s.key} value={`flag:${s.key}`}>
-              {s.label}
-            </option>
-          ))}
-        </Select>
       </div>
       <div className="overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-card)]">
         <div className="hidden grid-cols-[minmax(0,2fr)_80px_minmax(0,1fr)_minmax(0,1fr)_56px_minmax(0,150px)] gap-3 border-b bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground md:grid">
@@ -257,5 +263,32 @@ export function CampersBrowser({
         </div>
       )}
     </div>
+  );
+}
+
+/** A row of pills that scrolls sideways on a phone (no wrapping onto more lines). */
+function Pills({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="no-print -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label={label}>
+      {children}
+    </div>
+  );
+}
+
+function Pill({ on, onClick, count, quiet, children }: { on: boolean; onClick: () => void; count?: number; quiet?: boolean; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={cn(
+        "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border bg-card px-3 text-sm whitespace-nowrap transition-colors hover:border-primary/40",
+        quiet && !on && "text-muted-foreground",
+        on && (quiet ? "border-foreground/60 bg-muted text-foreground" : "border-primary bg-primary text-primary-foreground hover:border-primary"),
+      )}
+    >
+      <span dir="auto">{children}</span>
+      {count !== undefined && <span className={cn("font-semibold tabular-nums", !on && "text-muted-foreground")}>{count}</span>}
+    </button>
   );
 }
