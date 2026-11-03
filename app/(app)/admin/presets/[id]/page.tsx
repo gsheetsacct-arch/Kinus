@@ -171,7 +171,10 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
           </div>
         </Section>
         <div className="space-y-6">
-        <Section title="Columns" description="Tick the columns to show, in this order. Each kind holds Kinus' own fields and the export's columns of that kind (Settings → who sees each).">
+        <Section
+          title="Columns"
+          description="Tick the columns to show. To put several in one column: hold Ctrl (⌘ on a Mac) and click them, or long-press on a phone, then choose Group at the top of the screen. Each kind holds Kinus' own fields and the export's columns of that kind (Settings → who sees each)."
+        >
           <div className="space-y-5">
             {GROUP_TITLES.map(({ group, title }) => {
               // Kinus' own fields, then the export's columns of the same kind (Settings → who sees each)
@@ -195,7 +198,11 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                   </legend>
                   <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                     {fields.map((f) => (
-                      <label key={f.key} className="flex cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm hover:bg-muted/40 has-[:checked]:border-primary/50 has-[:checked]:bg-primary-soft/40">
+                      <label
+                        key={f.key}
+                        data-field={f.key}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm select-none hover:bg-muted/40 has-[:checked]:border-primary/50 has-[:checked]:bg-primary-soft/40 data-[grouping=on]:border-amber-500 data-[grouping=on]:bg-amber-50 data-[grouping=on]:ring-2 data-[grouping=on]:ring-amber-400 dark:data-[grouping=on]:bg-amber-950/40"
+                      >
                         <input type="checkbox" name="columns" value={f.key} defaultChecked={columns.has(f.key)} className="size-4 accent-[var(--primary)]" />
                         <span className="min-w-0 truncate" dir="auto">
                           {f.label}

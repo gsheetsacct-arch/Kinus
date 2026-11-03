@@ -87,9 +87,14 @@ export async function saveExtraFields(fd: FormData): Promise<ActionResult> {
         const g = String(fd.get(`group:${column}`) ?? "");
         // left out of the form (an older page): keep the choice already made
         const group = fd.has(`group:${column}`) ? ((EXTRA_GROUPS as readonly string[]).includes(g) ? (g as ExtraGroup) : undefined) : before.find((f) => f.column === column)?.group;
-        return { column, label: (String(fd.getAll("label")[i] ?? "").trim() || column).slice(0, 80), keep: fd.get(`keep:${column}`) === "on", answers, group };
+        // answers set to Hide (nothing special): the ones ticked here, plus any not in this session
+        const had = before.find((f) => f.column === column)?.hide ?? [];
+        const hide = [...had.filter((h) => !orig.some((o) => o.trim().toLowerCase() === h.trim().toLowerCase())), ...fd.getAll(`hide:${column}`).map(String)];
+        return { column, label: (String(fd.getAll("label")[i] ?? "").trim() || column).slice(0, 80), keep: fd.get(`keep:${column}`) === "on", answers, group, hide };
     });
-    const fields = all.filter((f) => f.keep).map(({ column, label, answers, group }) => ({ column, label, ...(Object.keys(answers).length ? { answers } : {}), ...(group ? { group } : {}) }));
+    const fields = all
+      .filter((f) => f.keep)
+      .map(({ column, label, answers, group, hide }) => ({ column, label, ...(Object.keys(answers).length ? { answers } : {}), ...(group ? { group } : {}), ...(hide.length ? { hide } : {}) }));
     // every export column shows unless left out: unticked ones are left out (hidden_columns);
     // ticked "Show again" brings one back
     const { data: hiddenRow } = await supabase.from("settings").select("value").eq("key", "hidden_columns").maybeSingle();

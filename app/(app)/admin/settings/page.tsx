@@ -260,16 +260,16 @@ function ShortAnswers({ field, answers }: { field: ExtraField; answers: { value:
   if (answers === undefined) return null;
   if (answers === null) return <p className="text-xs text-muted-foreground">Answers here are written freely (too many different ones to shorten).</p>;
   if (!answers.length) return <p className="text-xs text-muted-foreground">No answers yet in this session.</p>;
-  const set = Object.keys(field.answers ?? {}).filter((k) => field.answers![k]).length;
+  const set = Object.keys(field.answers ?? {}).filter((k) => field.answers![k]).length + (field.hide?.length ?? 0);
   return (
     <details className="text-sm" open={answers.some((a) => a.value.length > 25) && !set}>
       <summary className="cursor-pointer text-xs text-muted-foreground">
         Short answers ({answers.length} different{set ? `, ${set} shortened` : ""})
       </summary>
       <div className="mt-2 space-y-1.5">
-        <p className="text-xs text-muted-foreground">How each answer shows on the camper page and in lists. Leave empty to show it as it is.</p>
+        <p className="text-xs text-muted-foreground">How each answer shows on the camper page and in lists. Leave empty to show it as it is; Hide for an answer that means nothing special (“No”, “None”): it shows nothing at all.</p>
         {answers.map((a) => (
-          <div key={a.value} className="grid items-center gap-2 sm:grid-cols-[1fr_220px]">
+          <div key={a.value} className="grid items-center gap-2 sm:grid-cols-[1fr_220px_auto]">
             <input type="hidden" name={`orig:${field.column}`} value={a.value} />
             <span className="text-xs" dir="auto">
               {a.value} <span className="text-muted-foreground">· {a.count}</span>
@@ -282,6 +282,9 @@ function ShortAnswers({ field, answers }: { field: ExtraField; answers: { value:
               className="h-8"
               dir="auto"
             />
+            <label className="flex items-center gap-1.5 text-xs whitespace-nowrap" title="Show nothing for this answer">
+              <input type="checkbox" name={`hide:${field.column}`} value={a.value} defaultChecked={(field.hide ?? []).some((h) => h.trim().toLowerCase() === a.value.trim().toLowerCase())} className="size-4" /> Hide
+            </label>
           </div>
         ))}
       </div>
