@@ -1,7 +1,7 @@
 import type { CurrentUser } from "@/lib/auth/permissions";
-import { LEVEL_RANK, canFinalCheckout, canTextStaff, canUsePhoneBook, canUsePrintArea, effectiveLevel, isAdmin, isStaffManager } from "@/lib/auth/permissions";
+import { LEVEL_RANK, canFinalCheckout, canTextStaff, canUsePhoneBook, canUsePrintArea, effectiveLevel, isAdmin, isDirector, isStaffManager } from "@/lib/auth/permissions";
 
-export type NavIcon = "DoorOpen" | "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser" | "ShieldCheck" | "MessageSquare" | "ClipboardCheck";
+export type NavIcon = "DoorOpen" | "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser" | "ShieldCheck" | "MessageSquare" | "ClipboardCheck" | "History";
 export type NavItem = { href: string; label: string; icon: NavIcon; description: string; section: "main" | "admin"; mobile?: boolean };
 
 export function buildNav(user: CurrentUser, opts: { designs?: boolean } = {}): NavItem[] {
@@ -42,5 +42,7 @@ export function buildNav(user: CurrentUser, opts: { designs?: boolean } = {}): N
       { href: "/admin/settings", label: "Settings", icon: "Settings", description: "Office email, imports, follow-ups", section: "admin" },
     );
   }
+  // the activity log: owners and directors
+  if (isDirector(user)) nav.push({ href: "/admin/activity", label: "Activity", icon: "History", description: "Who changed what, and when", section: "admin" });
   return nav;
 }

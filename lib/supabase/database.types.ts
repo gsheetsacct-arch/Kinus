@@ -51,14 +51,14 @@ isOneToOne: false
                   ]
                 },"audit_log": {
                   Row: {
-                    "action": string,"actor_id": string | null,"after": Json | null,"at": string,"before": Json | null,"diff": Json | null,"id": number,"row_id": string | null,"source": string,"table_name": string
+                    "action": string,"actor_id": string | null,"after": Json | null,"at": string,"before": Json | null,"diff": Json | null,"id": number,"row_id": string | null,"row_key": string | null,"source": string,"table_name": string,"via": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "action": string,"actor_id"?: string | null,"after"?: Json | null,"at"?: string,"before"?: Json | null,"diff"?: Json | null,"id"?: never,"row_id"?: string | null,"source"?: string,"table_name": string
+                    "action": string,"actor_id"?: string | null,"after"?: Json | null,"at"?: string,"before"?: Json | null,"diff"?: Json | null,"id"?: never,"row_id"?: string | null,"row_key"?: string | null,"source"?: string,"table_name": string,"via"?: string | null
                   }
                   Update: {
-                    "action"?: string,"actor_id"?: string | null,"after"?: Json | null,"at"?: string,"before"?: Json | null,"diff"?: Json | null,"id"?: never,"row_id"?: string | null,"source"?: string,"table_name"?: string
+                    "action"?: string,"actor_id"?: string | null,"after"?: Json | null,"at"?: string,"before"?: Json | null,"diff"?: Json | null,"id"?: never,"row_id"?: string | null,"row_key"?: string | null,"source"?: string,"table_name"?: string,"via"?: string | null
                   }
                   Relationships: [
                     

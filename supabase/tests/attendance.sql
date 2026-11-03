@@ -38,7 +38,7 @@ do $$ begin
   raise exception 'expected refusal';
 exception when insufficient_privilege then null; end $$;
 reset role;
-update attendance_events set created_at = now() - interval '2 minutes' where id = (select id from t);
+update attendance_events set created_at = now() - interval '20 minutes' where id = (select id from t);
 set role authenticated; set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000002';
 do $$ begin
   perform undo_attendance((select id from t));

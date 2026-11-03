@@ -1,3 +1,4 @@
+import { logActivity } from "@/lib/audit/log";
 import { parseOrder } from "@/lib/print/data";
 import { NextResponse, type NextRequest } from "next/server";
 import { printSetPdf } from "@/lib/print/jobs";
@@ -27,6 +28,7 @@ export async function GET(request: NextRequest) {
       order: sp.get("order") ? parseOrder(sp.get("order")) : undefined,
       part: Number(sp.get("part")) || 0,
     });
+    if (!Number(sp.get("part"))) await logActivity("download", { what: `Labels PDF: ${r.fileName}`, jobs: ids, parts: r.parts });
     const ascii = r.fileName.replace(/[^\x20-\x7e]+/g, "_").replace(/"/g, "");
     return new NextResponse(new Uint8Array(r.pdf), {
       headers: {

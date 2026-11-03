@@ -2,11 +2,11 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCheck, FileDown, Printer } from "lucide-react";
+import { CheckCheck, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { markPrinted } from "@/app/(app)/print/actions";
 import type { WaitingSet } from "@/lib/print/queue";
-import { SharePdf } from "./share-pdf";
+import { PdfButton } from "./pdf-button";
 
 /** Labels in one PDF (as COMBINED_PDF_PART in lib/print/jobs). */
 const PART = 400;
@@ -49,26 +49,10 @@ export function WaitingAll({ set, where, query }: { set: WaitingSet; where: stri
             </a>
           </Button>
           {parts <= 1 ? (
-            <>
-              <Button size="lg" variant="outline" asChild>
-                <a href={`/print/combined/pdf?${query}`} onClick={took}>
-                  <FileDown /> Merged PDF
-                </a>
-              </Button>
-              {/* on a phone: straight into the label printer's app */}
-              <SharePdf href={`/print/combined/pdf?${query}`} onShared={took} />
-            </>
+            // on a phone it turns into "Open NIIMBOT" once downloaded
+            <PdfButton href={`/print/combined/pdf?${query}`} label="Merged PDF" onDone={took} />
           ) : (
-            Array.from({ length: parts }, (_, i) => (
-              <span key={i} className="flex flex-wrap gap-2">
-                <Button variant="outline" asChild title={`Labels ${i * PART + 1}–${Math.min(set.tags, (i + 1) * PART)}`}>
-                  <a href={`/print/combined/pdf?${query}&part=${i + 1}`} onClick={took}>
-                    <FileDown /> PDF {i + 1} of {parts}
-                  </a>
-                </Button>
-                <SharePdf href={`/print/combined/pdf?${query}&part=${i + 1}`} label={`Open ${i + 1} of ${parts} in NIIMBOT`} onShared={took} />
-              </span>
-            ))
+            Array.from({ length: parts }, (_, i) => <PdfButton key={i} size="default" href={`/print/combined/pdf?${query}&part=${i + 1}`} label={`PDF ${i + 1} of ${parts}`} onDone={took} />)
           )}
         </div>
       </div>

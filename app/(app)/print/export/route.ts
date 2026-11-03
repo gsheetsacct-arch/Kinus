@@ -1,3 +1,4 @@
+import { logActivity } from "@/lib/audit/log";
 import { campToday } from "@/lib/time";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -49,5 +50,6 @@ export async function GET(request: NextRequest) {
     const v = mergeValues(c, setup.fields, setup.maps);
     rows.push(keys.map((k) => (hidden.has(k) ? "" : (v[k] ?? ""))));
   }
+  await logActivity("download", { what: "Mail-merge data", which, where: sp.get("where") || "all", format: exportFormat(sp.get("format")), rows: campers.length, columns: keys.filter((k) => !hidden.has(k)) });
   return tableDownload(`kinus-merge-${campToday()}`, rows, exportFormat(sp.get("format")));
 }

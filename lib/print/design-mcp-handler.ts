@@ -2,6 +2,7 @@ import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { connectorUser } from "@/lib/print/design-connectors";
+import { actingAs } from "@/lib/audit/actor";
 import { loadUserById } from "@/lib/auth/user-by-id";
 import { canDesign } from "@/lib/print/designers";
 import { designServer } from "@/lib/print/design-mcp";
@@ -22,8 +23,11 @@ export async function designRequest(request: NextRequest, token: string, unautho
   const user = userId ? await loadUserById(userId) : null;
   if (!user) return unauthorized("Not connected to Kinus, or the connection was removed. Connect again (Kinus: Print → Templates → Design with Claude).");
   if (!(await canDesign(user))) return NextResponse.json({ error: `${user.fullName} can't edit templates any more, so this connection doesn't work.` }, { status: 403 });
-  const server = designServer(user, baseUrl(request));
-  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-  await server.connect(transport);
-  return transport.handleRequest(request);
+  // what it changes is logged as this person's, from Claude
+  return actingAs({ id: user.id, via: "Claude connector" }, async () => {
+    const server = designServer(user, baseUrl(request));
+    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    await server.connect(transport);
+    return transport.handleRequest(request);
+  });
 }
