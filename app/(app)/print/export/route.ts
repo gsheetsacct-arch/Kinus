@@ -6,6 +6,8 @@ import { getActiveSession, getCurrentUser } from "@/lib/auth/current-user";
 import { canUsePrintArea, visibleFieldGroups } from "@/lib/auth/permissions";
 import { getCampContext } from "@/lib/data/camp";
 import { groupOfKey, UNGATED_GROUPS } from "@/lib/fields";
+import { chosenGroups } from "@/lib/import/extra-fields";
+import { loadExtraFields } from "@/lib/data/extra-fields";
 import { batchCamperIds, BATCH_WHICH, type BatchWhich } from "@/lib/print/batch";
 import { byBunkThenName, loadMergeSetup, loadPrintCampers } from "@/lib/print/data";
 import { mergeValues } from "@/lib/print/merge";
@@ -38,7 +40,8 @@ export async function GET(request: NextRequest) {
   campers.sort(byBunkThenName);
   // a spreadsheet travels: leave out details this person's role can't see
   const allowed = visibleFieldGroups(user, fv ?? []);
-  const hidden = new Set(setup.fields.filter((f) => sourcesOf(f.source_field).some((k) => { const g = groupOfKey(k); return !UNGATED_GROUPS.includes(g) && !allowed.has(g); })).map((f) => f.key));
+  const chosen = chosenGroups(await loadExtraFields());
+  const hidden = new Set(setup.fields.filter((f) => sourcesOf(f.source_field).some((k) => { const g = groupOfKey(k, chosen); return !UNGATED_GROUPS.includes(g) && !allowed.has(g); })).map((f) => f.key));
   // only fields on the merge list
   const keys = setup.fields.filter((f) => f.enabled !== false).map((f) => f.key);
   const rows = [keys];

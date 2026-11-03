@@ -4,7 +4,7 @@ import { displaySourceId } from "@/lib/import/programs";
  * Field catalog: every camper field the app can show in lists, cards and exports,
  * with the sensitivity group that `field_visibility` gates.
  */
-export type FieldGroup = "basic" | "status" | "contacts" | "medical" | "parent_notes" | "address" | "staff_notes";
+export type FieldGroup = "basic" | "status" | "contacts" | "medical" | "parent_notes" | "address" | "staff_notes" | "family";
 export type FieldKind = "text" | "bool" | "status" | "phone" | "email" | "list";
 
 export type FieldDef = { key: string; label: string; group: FieldGroup; kind: FieldKind };
@@ -53,11 +53,15 @@ export const UNGATED_GROUPS: FieldGroup[] = ["basic", "status"];
 /**
  * The sensitivity group a merge key reads from. Raw registration columns ("source.…") carry
  * no group of their own, so anything that looks medical, like an address or like parent
- * contact details is treated as that group; the rest is basic.
+ * contact details is treated as that group; the rest is basic. An added column can have its
+ * group chosen instead (`chosen`: column key → group, from chosenGroups).
  */
-export function groupOfKey(key: string): FieldGroup {
+export function groupOfKey(key: string, chosen?: ReadonlyMap<string, FieldGroup>): FieldGroup {
   if (key.startsWith("contact.")) return "contacts";
   if (!key.startsWith("source.")) return FIELD_BY_KEY[key]?.group ?? "basic";
+  // an added column's "Who sees this" (Settings → Added columns), when one was chosen
+  const picked = chosen?.get(key.slice(7).trim().toLowerCase().replace(/#/g, "."));
+  if (picked) return picked;
   const col = key.slice(7).toLowerCase();
   if (/medic|allerg|epi.?pen|diet|condition|diagnos|dosage|health|insur|trauma|doctor|physician|treatment/.test(col)) return "medical";
   if (/address|street|zip|postal/.test(col)) return "address";

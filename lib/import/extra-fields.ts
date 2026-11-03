@@ -9,7 +9,21 @@ export type ExtraField = {
   label: string;
   /** Shorter wording for long answers, for the camper page and lists: { "Yes, at the Kinus (In the …)": "Sleeping here" }. */
   answers?: Record<string, string>;
+  /**
+   * Who sees it: a detail group (medical, contacts, family…, set per role on Staff → Roles), or
+   * "basic" for everyone. Unset: guessed from the column's name (medical-looking is medical…).
+   */
+  group?: ExtraGroup;
 };
+
+/** The groups an added column can be put in ("basic": everyone who sees the camper). */
+export const EXTRA_GROUPS = ["basic", "medical", "contacts", "address", "parent_notes", "staff_notes", "family"] as const;
+export type ExtraGroup = (typeof EXTRA_GROUPS)[number];
+const isExtraGroup = (g: unknown): g is ExtraGroup => typeof g === "string" && (EXTRA_GROUPS as readonly string[]).includes(g);
+
+/** column key → the group chosen for it, for groupOfKey. */
+export const chosenGroups = (fields: Pick<ExtraField, "column" | "group">[]): Map<string, ExtraGroup> =>
+  new Map(fields.filter((f) => f.group).map((f) => [columnKey(f.column), f.group!]));
 
 /** "ppa#sleeping_at_the_kinus" and "ppa.sleeping_at_the_kinus" are the same column. */
 export const columnKey = (k: string) => k.trim().toLowerCase().replace(/#/g, ".");
@@ -25,7 +39,12 @@ export function parseExtraFields(value: unknown): ExtraField[] {
   if (!Array.isArray(value)) return [];
   const fields = value
     .filter((x): x is ExtraField => Boolean(x && typeof x.column === "string" && typeof x.label === "string"))
-    .map((f) => ({ column: f.column, label: f.label, ...(f.answers && typeof f.answers === "object" && !Array.isArray(f.answers) ? { answers: f.answers } : {}) }));
+    .map((f) => ({
+      column: f.column,
+      label: f.label,
+      ...(f.answers && typeof f.answers === "object" && !Array.isArray(f.answers) ? { answers: f.answers } : {}),
+      ...(isExtraGroup(f.group) ? { group: f.group } : {}),
+    }));
   return oneOfEachColumn(fields, (f) => f.column);
 }
 

@@ -16,10 +16,13 @@ export async function loadHiddenColumns(): Promise<string[]> {
   return Array.isArray(data?.value) ? (data.value as unknown[]).filter((x): x is string => typeof x === "string") : [];
 }
 
+/** Who sees an added column: the group chosen for it, else guessed from its name (medical-looking is medical…). */
+export const extraGroupOf = (f: Pick<ExtraField, "column" | "group">) => f.group ?? groupOfKey(`source.${f.column}`);
+
 /** Only the extra fields this person may see: a column that looks medical needs medical access, and so on. */
 export const visibleExtraFields = (fields: ExtraField[], groups: Set<string>) =>
   fields.filter((f) => {
-    const g = groupOfKey(`source.${f.column}`);
+    const g = extraGroupOf(f);
     return UNGATED_GROUPS.includes(g) || groups.has(g);
   });
 

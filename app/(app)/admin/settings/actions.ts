@@ -6,7 +6,7 @@ import { getActiveSession, requireAdmin, requireUser } from "@/lib/auth/current-
 import { isOwner } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
-import { parseExtraFields } from "@/lib/import/extra-fields";
+import { EXTRA_GROUPS, parseExtraFields, type ExtraGroup } from "@/lib/import/extra-fields";
 import { forCampers } from "@/lib/print/staff-values";
 
 const office = z.object({ to: z.string().trim().email("Enter a valid email address.").or(z.literal("")), cc: z.string().trim().optional() });
@@ -85,10 +85,13 @@ export async function saveExtraFields(fd: FormData): Promise<ActionResult> {
           if (short[j]) answers[o] = short[j];
           else delete answers[o];
         });
-        return { column, label: (String(fd.getAll("label")[i] ?? "").trim() || column).slice(0, 80), keep: fd.get(`keep:${column}`) === "on", answers };
+        const g = String(fd.get(`group:${column}`) ?? "");
+        // left out of the form (an older page): keep the choice already made
+        const group = fd.has(`group:${column}`) ? ((EXTRA_GROUPS as readonly string[]).includes(g) ? (g as ExtraGroup) : undefined) : before.find((f) => f.column === column)?.group;
+        return { column, label: (String(fd.getAll("label")[i] ?? "").trim() || column).slice(0, 80), keep: fd.get(`keep:${column}`) === "on", answers, group };
       })
       .filter((f) => f.keep)
-      .map(({ column, label, answers }) => ({ column, label, ...(Object.keys(answers).length ? { answers } : {}) }));
+      .map(({ column, label, answers, group }) => ({ column, label, ...(Object.keys(answers).length ? { answers } : {}), ...(group ? { group } : {}) }));
     const { error } = await supabase.from("settings").upsert({ key: "extra_fields", value: fields, updated_by: me.id, updated_at: new Date().toISOString() });
     if (error) throw error;
     revalidatePath("/", "layout");

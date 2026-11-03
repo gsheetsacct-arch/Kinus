@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Scanner, type RosterEntry } from "@/components/scan/scanner";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { LEVEL_RANK, effectiveLevel } from "@/lib/auth/permissions";
+import { LEVEL_RANK, canUsePrintArea, effectiveLevel } from "@/lib/auth/permissions";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { loadAreaTree } from "@/lib/data/areas";
 import { getCampContext } from "@/lib/data/camp";
@@ -37,5 +37,5 @@ export default async function ScanPage() {
   const camp = await getCampContext();
   const present = new Set(rows.map((c) => c.division_id));
   const divisions = tree.divisions.filter((d) => present.has(d.id) && (!camp.divisionIds || camp.divisionIds.includes(d.id))).map((d) => ({ id: d.id, name: d.name, color: d.color }));
-  return <Scanner roster={roster} templates={templates ?? []} canScan={LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan} divisions={divisions} />;
+  return <Scanner roster={roster} templates={templates ?? []} canScan={LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan} divisions={divisions} printQueue={canUsePrintArea(user)} />;
 }

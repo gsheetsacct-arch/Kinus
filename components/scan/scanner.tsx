@@ -1,7 +1,8 @@
 "use client";
 import * as React from "react";
 import { toast } from "sonner";
-import { Camera as CameraIcon, CameraOff, DoorOpen, LogIn, LogOut, Search, Undo2, Volume2, VolumeX } from "lucide-react";
+import Link from "next/link";
+import { Camera as CameraIcon, CameraOff, DoorOpen, LogIn, LogOut, Printer, Search, Undo2, Volume2, VolumeX } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -50,7 +51,10 @@ export function Scanner({
   canScan,
   divisions = [],
   final,
+  printQueue = false,
 }: {
+  /** This person uses the print queue: a quick way there (their line's labels). */
+  printQueue?: boolean;
   roster: RosterEntry[];
   templates: TemplateButton[];
   canScan: boolean;
@@ -331,6 +335,15 @@ export function Scanner({
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
+      {printQueue && (
+        <div className="flex justify-end">
+          <Button size="sm" variant="outline" asChild>
+            <Link href={lineDiv ? `/print?division=${lineDiv.id}` : "/print"}>
+              <Printer /> Print queue
+            </Link>
+          </Button>
+        </div>
+      )}
       {multi && canScan && mode !== "lookup" && (
         <LineBar divisions={divisions} line={line} lineDiv={lineDiv} onChoose={chooseLine} />
       )}

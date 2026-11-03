@@ -108,13 +108,12 @@ async function loadRequests(jobIds: string[]) {
   const admin = createAdminClient();
   const ids = [...new Set(jobIds)];
   if (!ids.length) throw new Error("Nothing to print.");
-  const [{ data: jobs, error }, items] = await Promise.all([
-    admin.from("print_jobs").select("*, print_templates(*), profiles:requested_by(full_name)").in("id", ids),
-    import("@/lib/supabase/fetch-all").then(({ fetchAll }) =>
-      fetchAll((from, to) => admin.from("print_job_items").select("camper_id, copies").in("job_id", ids).order("camper_id").range(from, to)),
-    ),
+  const { inChunks } = await import("@/lib/supabase/in-chunks");
+  const { fetchAll } = await import("@/lib/supabase/fetch-all");
+  const [jobs, items] = await Promise.all([
+    inChunks(ids, (c) => admin.from("print_jobs").select("*, print_templates(*), profiles:requested_by(full_name)").in("id", c)),
+    inChunks(ids, (c) => fetchAll((from, to) => admin.from("print_job_items").select("camper_id, copies, job_id").in("job_id", c).order("job_id").order("camper_id").range(from, to))),
   ]);
-  if (error) throw error;
   if (!jobs || jobs.length !== ids.length) throw new Error("Some of these requests are gone. Go back to the print queue.");
   const templateIds = new Set(jobs.map((j) => j.template_id));
   if (templateIds.size > 1) throw new Error("Only requests for the same tag can be printed together.");
@@ -540,8 +539,8 @@ export async function retryStuckJobs(sessionId: string, appUrl: string, schedule
 async function combinedSet(jobIds: string[], opts: { order?: PrintOrder } = {}) {
   const admin = createAdminClient();
   const ids = [...new Set(jobIds)];
-  const { data: jobs, error } = await admin.from("print_jobs").select("id, template_id, print_templates(sort_order, name)").in("id", ids);
-  if (error) throw error;
+  const { inChunks } = await import("@/lib/supabase/in-chunks");
+  const jobs = await inChunks(ids, (c) => admin.from("print_jobs").select("id, template_id, print_templates(sort_order, name)").in("id", c));
   if (!jobs || jobs.length !== ids.length) throw new Error("Some of these requests are gone. Go back to the print queue.");
   const byTemplate = new Map<string, { ids: string[]; sort: number; name: string }>();
   for (const j of jobs) {
@@ -574,9 +573,20 @@ export async function combinedSetHtml(jobIds: string[], opts: { order?: PrintOrd
 }
 
 /** A combined set as one PDF (up to a few hundred labels: bigger sets print from the page). */
-export async function combinedSetPdf(jobIds: string[], opts: { order?: PrintOrder } = {}): Promise<{ pdf: Buffer; fileName: string }> {
+export async function combinedSetPdf(jobIds: string[], opts: { order?: PrintOrder; /** 1, 2…: that part of a big set, COMBINED_PDF_PART labels each */ part?: number } = {}): Promise<{ pdf: Buffer; fileName: string }> {
   const c = await combinedSet(jobIds, opts);
-  if (c.tags > 400) throw new Error(`${c.tags} labels is too many for one PDF: print from the page, or choose fewer requests.`);
-  const { pdf } = await renderPdf(renderCombined(c.parts, c.order), { art: c.art });
-  return { pdf, fileName: `${c.templates.join(" + ").replace(/[\\/:*?"<>|×]+/g, "-")} - ${c.campers} campers.pdf` };
+  let order = c.order;
+  let suffix = "";
+  if (opts.part) {
+    // each copy on its own, so a part ends at a label (a camper's set may run into the next part)
+    const one = order.flatMap((o) => Array.from({ length: Math.max(1, o.copies) }, () => ({ ...o, copies: 1 })));
+    order = one.slice((opts.part - 1) * COMBINED_PDF_PART, opts.part * COMBINED_PDF_PART);
+    if (!order.length) throw new Error("That part is empty: the set is smaller now. Go back to the print queue.");
+    suffix = ` - part ${opts.part} of ${Math.ceil(one.length / COMBINED_PDF_PART)}`;
+  } else if (c.tags > COMBINED_PDF_PART) throw new Error(`${c.tags} labels is too many for one PDF: download it in parts, or print from the page.`);
+  const { pdf } = await renderPdf(renderCombined(c.parts, order), { art: c.art });
+  return { pdf, fileName: `${c.templates.join(" + ").replace(/[\\/:*?"<>|×]+/g, "-")} - ${c.campers} campers${suffix}.pdf` };
 }
+
+/** Labels in one PDF of a combined set (bigger sets download in parts). */
+export const COMBINED_PDF_PART = 400;

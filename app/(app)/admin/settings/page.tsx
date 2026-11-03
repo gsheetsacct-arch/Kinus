@@ -10,7 +10,7 @@ import { Field } from "@/components/ui/field";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
 import { extraAnswers } from "@/lib/data/extra-fields";
-import type { ExtraField } from "@/lib/import/extra-fields";
+import { EXTRA_GROUPS, type ExtraField } from "@/lib/import/extra-fields";
 import Link from "next/link";
 import { resetAttendance, saveExtraFields, saveImportSettings, saveMissingRules, saveOfficeEmail, saveProtectedColumns, sendTestEmail } from "./actions";
 import { parseProtected, PROTECTABLE_FIELDS } from "@/lib/import/protected";
@@ -18,6 +18,10 @@ import { FormDialog } from "@/components/form-dialog";
 import { isOwner } from "@/lib/auth/permissions";
 import { emailSetup } from "@/lib/print/email";
 import { parseExtraFields } from "@/lib/import/extra-fields";
+import { Select } from "@/components/ui/select";
+import { groupOfKey } from "@/lib/fields";
+import { FIELD_GROUPS, ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
+import { loadRoles } from "@/lib/data/roles";
 import { DEFAULT_RULES, type MissingRules } from "@/lib/attendance/missing";
 
 // tag requests (and the test email) make a PDF in the background
@@ -44,6 +48,13 @@ export default async function SettingsPage() {
   const session = await getActiveSession();
   const answers = session ? await extraAnswers(session.id, extraFields) : new Map();
   const missing = { ...DEFAULT_RULES, ...(setting("missing_rules") as Partial<MissingRules>) };
+  // who sees each detail group now (Staff → Roles), for "Who sees this"
+  const roles = await loadRoles(supabase);
+  const seenBy = (g: string) =>
+    ROLE_ORDER.filter((r) => r !== "owner" && roles.inUse[r] && roles.sees[r].includes(g))
+      .map((r) => STAFF_ROLES[r].label)
+      .join(", ") || "owners only";
+  const groupLabel = (g: string) => (g === "basic" ? "Everyone who sees the camper" : `${FIELD_GROUPS[g]?.label ?? g}: ${seenBy(g)}`);
 
   return (
     <div className="space-y-6">
@@ -80,7 +91,7 @@ export default async function SettingsPage() {
 
       <Section
         title="Extra fields from the export"
-        description="Columns of the registration export shown on the camper page, and offered for lists and labels. Choose them on the import's column step (“Show on the camper page”); rename or remove them here."
+        description="Columns of the registration export shown on the camper page, and offered for lists and labels. Choose them on the import's column step (“Show on the camper page”); rename or remove them here, and choose who sees each one. Which roles see each kind of detail is set on Roles."
       >
         {extraFields.length === 0 ? (
           <p className="text-sm text-muted-foreground">None yet.</p>
@@ -96,6 +107,18 @@ export default async function SettingsPage() {
                     <input type="checkbox" name={`keep:${f.column}`} defaultChecked className="size-4" /> Show
                   </label>
                 </div>
+                {/* who sees it: on the camper page, in lists and their downloads */}
+                <label className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Who sees this</span>
+                  <Select name={`group:${f.column}`} defaultValue={f.group ?? ""} className="h-9 min-w-0 flex-1 basis-64">
+                    <option value="">Guessed from the name · {groupLabel(groupOfKey(`source.${f.column}`))}</option>
+                    {EXTRA_GROUPS.map((g) => (
+                      <option key={g} value={g}>
+                        {groupLabel(g)}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
                 <ShortAnswers field={f} answers={answers.get(f.column)} />
               </div>
             ))}
