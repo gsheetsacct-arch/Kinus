@@ -27,6 +27,7 @@ export const FIELD_GROUPS: Record<string, { label: string; short: string; descri
   parent_notes: { label: "Notes from parents", short: "notes from parents", description: "The “anything else we should know” answer" },
   address: { label: "Local address", short: "address", description: "Where the camper stays, with cross streets" },
   staff_notes: { label: "Staff notes", short: "staff notes", description: "Notes staff wrote in Kinus" },
+  family: { label: "Family situations", short: "family situations", description: "Added columns marked as family situations (custody, a hard time at home)" },
 };
 
 /** What a role can do besides its level and details: fixed, shown on the Roles page. */

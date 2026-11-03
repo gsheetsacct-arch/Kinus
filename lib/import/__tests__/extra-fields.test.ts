@@ -15,3 +15,23 @@ describe("extra fields", () => {
     expect(shortAnswer(f, "No, he will be picked up to sleep")).toBe("No, he will be picked up to sleep");
   });
 });
+
+describe("who sees an added column", () => {
+  it("keeps a chosen group and drops an unknown one", async () => {
+    const { parseExtraFields, chosenGroups } = await import("../extra-fields");
+    const fields = parseExtraFields([
+      { column: "family.situation", label: "Family situation", group: "family" },
+      { column: "ppa.notes", label: "Notes", group: "nonsense" },
+    ]);
+    expect(fields[0].group).toBe("family");
+    expect(fields[1].group).toBeUndefined();
+    expect(chosenGroups(fields).get("family.situation")).toBe("family");
+  });
+  it("a chosen group wins over the guess from the name", async () => {
+    const { groupOfKey } = await import("@/lib/fields");
+    expect(groupOfKey("source.family.situation")).toBe("basic");
+    expect(groupOfKey("source.Family#Situation", new Map([["family.situation", "family"]]))).toBe("family");
+    // a medical-looking column can be opened to everyone
+    expect(groupOfKey("source.ppa.diet", new Map([["ppa.diet", "basic"]]))).toBe("basic");
+  });
+});

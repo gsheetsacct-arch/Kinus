@@ -21,6 +21,7 @@ import { getCampContext } from "@/lib/data/camp";
 import { createPrintJob, processPrintJob, rememberSheetPosition } from "@/lib/print/jobs";
 import { STARTED_MARK } from "@/lib/print/labels";
 import { visibleJobs } from "@/lib/print/access";
+import { inChunks } from "@/lib/supabase/in-chunks";
 import { batchCamperIds, BATCH_WHICH, type BatchWhich } from "@/lib/print/batch";
 import { dismissLabelUpdates, labelUpdates, refreshPrintedHashes, type LabelUpdate } from "@/lib/print/updates";
 import { loadMergeSetup, loadPrintCampers } from "@/lib/print/data";
@@ -69,11 +70,8 @@ export async function markPrinted(ids: string[], printed = true, sheet?: { stock
     const user = await requirePrinter();
     if (!(await visibleJobs(ids))) return fail(NOT_YOURS);
     if (sheet) await rememberSheetPosition(z.string().min(1).max(120).parse(sheet.stock), usedSchema.parse(sheet.used), user.id);
-    const { error } = await createAdminClient()
-      .from("print_jobs")
-      .update(printed ? { status: "printed", printed_at: new Date().toISOString(), printed_by: user.id } : { status: "ready", printed_at: null, printed_by: null })
-      .in("id", ids);
-    if (error) throw error;
+    const change = printed ? { status: "printed" as const, printed_at: new Date().toISOString(), printed_by: user.id } : { status: "ready" as const, printed_at: null, printed_by: null };
+    await inChunks(ids, (c) => createAdminClient().from("print_jobs").update(change).in("id", c).select("id"));
     // printed from Kinus just now: the labels show today's details, so "changed since printed" starts from these
     if (printed && printedNow) await refreshPrintedHashes(ids).catch((e) => console.error("Updating label fingerprints failed", e));
     revalidatePath("/print");
@@ -87,10 +85,9 @@ export async function cancelJobs(ids: string[]): Promise<ActionResult> {
   try {
     await requirePrinter();
     if (!(await visibleJobs(ids))) return fail(NOT_YOURS);
-    const { data, error } = await createAdminClient().from("print_jobs").update({ status: "cancelled" }).in("id", ids).neq("status", "printed").select("id");
-    if (error) throw error;
+    const data = await inChunks(ids, (c) => createAdminClient().from("print_jobs").update({ status: "cancelled" }).in("id", c).neq("status", "printed").select("id"));
     revalidatePath("/print");
-    const n = data?.length ?? 0;
+    const n = data.length;
     const kept = ids.length - n;
     return ok(`${n} cancelled.${kept ? ` ${kept} already printed ${kept === 1 ? "stays" : "stay"} printed.` : ""}`);
   } catch (e) {

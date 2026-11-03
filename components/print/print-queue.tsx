@@ -33,7 +33,7 @@ export type QueueJob = {
 const printable = (j: QueueJob) => j.status === "ready" || j.status === "sent";
 const togetherHref = (ids: string[]) => `/print/together?jobs=${ids.join(",")}`;
 
-export function PrintQueue({ jobs, show }: { jobs: QueueJob[]; show: string }) {
+export function PrintQueue({ jobs, show, together = [] }: { jobs: QueueJob[]; show: string; /** templates printed all together at the top (on-the-spot labels): no group of their own */ together?: string[] }) {
   const router = useRouter();
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [pending, start] = React.useTransition();
@@ -71,12 +71,10 @@ export function PrintQueue({ jobs, show }: { jobs: QueueJob[]; show: string }) {
   // waiting requests for the same tag, which the office can print in one go
   const byTag = new Map<string, QueueJob[]>();
   for (const j of jobs) if (printable(j) && j.templateId) byTag.set(j.templateId, [...(byTag.get(j.templateId) ?? []), j]);
-  const groups = [...byTag.values()].filter((g) => g.length > 1);
+  const groups = [...byTag.values()].filter((g) => g.length > 1 && !together.includes(g[0].templateId!));
   // requests for different tags (a name tag and a bag label from check-in): printed as sets,
   // each camper's labels one after another
   const mixed = chosen.length > 1 && !sameTag && chosen.every((j) => printable(j) && j.templateId);
-  const waiting = jobs.filter((j) => printable(j) && j.templateId);
-  const waitingTags = new Set(waiting.map((j) => j.templateId)).size;
   return (
     <div className={cn("space-y-3", pending && "opacity-70")}>
       {show === "todo" && groups.length > 0 && (
@@ -95,18 +93,6 @@ export function PrintQueue({ jobs, show }: { jobs: QueueJob[]; show: string }) {
               </Button>
             </div>
           ))}
-        </div>
-      )}
-      {show === "todo" && waitingTags > 1 && selected.size === 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3 text-sm">
-          <Layers className="size-5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1">
-            Labels for a label printer (name tag + bag label) can print as sets, each camper&apos;s labels one after another.
-            <span className="block text-xs text-muted-foreground">Select the requests, or all of them, then Print as sets.</span>
-          </span>
-          <Button size="sm" variant="outline" onClick={() => setSelected(new Set(waiting.map((j) => j.id)))}>
-            Select all waiting
-          </Button>
         </div>
       )}
       {selected.size > 0 && (

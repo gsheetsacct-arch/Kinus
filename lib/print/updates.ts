@@ -154,7 +154,8 @@ export async function dismissLabelUpdates(update: LabelUpdate, userId: string): 
  */
 export async function refreshPrintedHashes(jobIds: string[]): Promise<void> {
   const admin = createAdminClient();
-  const { data: jobs } = await admin.from("print_jobs").select("id, print_templates(*)").in("id", jobIds);
+  const { inChunks } = await import("@/lib/supabase/in-chunks");
+  const jobs = await inChunks(jobIds, (c) => admin.from("print_jobs").select("id, print_templates(*)").in("id", c));
   const { labelHashes } = await import("./jobs");
   for (const j of jobs ?? []) {
     if (!j.print_templates) continue;

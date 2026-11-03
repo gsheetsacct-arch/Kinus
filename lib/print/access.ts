@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { seesAllCamp } from "@/lib/auth/permissions";
 import { canPrintFor } from "./jobs";
+import { inChunks } from "@/lib/supabase/in-chunks";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -20,14 +21,14 @@ export async function visibleJobs(ids: string[]): Promise<boolean> {
   // division heads open their divisions' requests (their check-in's labels, whoever scanned):
   // read with the server's key, then checked camper by camper below
   const supabase = scopedQueue(user) ? createAdminClient() : await createClient();
-  const { data: jobs } = await supabase.from("print_jobs").select("id, requested_by").in("id", unique);
+  const jobs = await inChunks(unique, (c) => supabase.from("print_jobs").select("id, requested_by").in("id", c)).catch(() => null);
   if (!jobs || jobs.length !== unique.length) return false;
   if (seesAllCamp(user)) return true;
   const others = jobs.filter((j) => j.requested_by !== user.id).map((j) => j.id);
   if (!others.length) return true;
   const { fetchAll } = await import("@/lib/supabase/fetch-all");
   const admin = createAdminClient();
-  const items = await fetchAll((from, to) => admin.from("print_job_items").select("job_id, camper_id, campers(division_id, bunk_id)").in("job_id", others).order("job_id").order("camper_id").range(from, to));
+  const items = await inChunks(others, (c) => fetchAll((from, to) => admin.from("print_job_items").select("job_id, camper_id, campers(division_id, bunk_id)").in("job_id", c).order("job_id").order("camper_id").range(from, to)));
   return items.every((i) => {
     const c = i.campers as { division_id: string | null; bunk_id: string | null } | null;
     return c ? canPrintFor(user, c) : true;
@@ -50,7 +51,7 @@ export async function jobsVisibleTo(user: import("@/lib/auth/permissions").Curre
   const unique = [...new Set(ids)];
   if (!unique.length || unique.some((id) => !UUID.test(id))) return false;
   const admin = createAdminClient();
-  const { data: jobs } = await admin.from("print_jobs").select("id, requested_by").in("id", unique);
+  const jobs = await inChunks(unique, (c) => admin.from("print_jobs").select("id, requested_by").in("id", c)).catch(() => null);
   if (!jobs || jobs.length !== unique.length) return false;
   const others = jobs.filter((j) => j.requested_by !== user.id).map((j) => j.id);
   if (!others.length) return true;
@@ -58,15 +59,18 @@ export async function jobsVisibleTo(user: import("@/lib/auth/permissions").Curre
   if (!canUsePrintArea(user)) return false;
   if (seesAllCamp(user)) return true;
   const { fetchAll } = await import("@/lib/supabase/fetch-all");
-  const items = await fetchAll((from, to) => admin.from("print_job_items").select("job_id, camper_id, campers(division_id, bunk_id)").in("job_id", others).order("job_id").order("camper_id").range(from, to));
+  const items = await inChunks(others, (c) => fetchAll((from, to) => admin.from("print_job_items").select("job_id, camper_id, campers(division_id, bunk_id)").in("job_id", c).order("job_id").order("camper_id").range(from, to)));
   return items.every((i) => {
     const c = i.campers as { division_id: string | null; bunk_id: string | null } | null;
     return c ? canPrintFor(user, c) : true;
   });
 }
 
-/** Division heads: the print queue is their divisions' requests, and their own; no one else's. */
-export const scopedQueue = (user: import("@/lib/auth/permissions").CurrentUser) => user.role === "division_head";
+/**
+ * Anyone over part of camp (a division head, a kloli, an office person for one camp…): the
+ * print queue is their divisions' requests, and their own; no one else's.
+ */
+export const scopedQueue = (user: import("@/lib/auth/permissions").CurrentUser) => !seesAllCamp(user);
 
 /**
  * The requests of this session a division head sees: their own, and those whose campers are

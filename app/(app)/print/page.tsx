@@ -8,7 +8,8 @@ import { LabelUpdates } from "@/components/print/label-updates";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { canUsePrintArea } from "@/lib/auth/permissions";
-import { jobIdsInDivisions, myAreaJobIds, scopedQueue } from "@/lib/print/access";
+import { queueScope, waitingSets } from "@/lib/print/queue";
+import { WaitingAll } from "@/components/print/waiting-all";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { officeEmail, retryStuckJobs } from "@/lib/print/jobs";
 import { shownJobError } from "@/lib/print/labels";
@@ -37,41 +38,27 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
   // requests cut off while making their PDF get one more try (after the page is sent)
   const base = await appUrl();
   await retryStuckJobs(session.id, base, (fn) => after(fn)).catch((e) => console.error("Retrying stuck print jobs failed", e));
-  // division heads: only their divisions' requests (and their own), read with the server's key
-  const scoped = scopedQueue(user);
-  const mine = scoped ? await myAreaJobIds(user, session.id) : null;
+  // someone over part of camp: only their divisions' requests (and their own), read with the server's key
+  const scope = await queueScope(user, session.id, { camp: sp.camp, division: sp.division });
+  const { scoped, mine, camps, camp, division, campDivisions } = scope;
   const supabase = scoped ? createAdminClient() : await createClient();
   let q = supabase
     .from("print_jobs")
     .select("id, status, item_count, requested_at, deliver_to, error, pdf_path, printed_at, note, template_id, print_templates(name), requester:requested_by(full_name), printer:printed_by(full_name)")
     .eq("session_id", session.id)
     .order("requested_at", { ascending: false })
-    .limit(mine ? 1000 : 150);
+    .limit(mine || scope.division || scope.camp ? 1000 : 150);
   const statuses = SHOW[show].statuses;
   if (statuses) q = q.in("status", [...statuses]);
-  const [{ data: all }, office, { data: failed }] = await Promise.all([
+  const [{ data: all }, office, { data: failed }, sets] = await Promise.all([
     q,
     officeEmail(),
     supabase.from("print_jobs").select("id").eq("session_id", session.id).eq("status", "failed"),
+    show === "todo" ? waitingSets(session.id, scope.shows) : Promise.resolve([]),
   ]);
-  // one camp's, or one division's (its check-in location), requests, when picked
-  const admin = createAdminClient();
-  const [{ data: divisionRows }, { data: groupRows }] = await Promise.all([
-    admin.from("divisions").select("id, name, group_id").eq("session_id", session.id).order("sort_order"),
-    admin.from("division_groups").select("id, name").eq("session_id", session.id).order("sort_order").order("name"),
-  ]);
-  const divisions = (divisionRows ?? []).filter((d) => !scoped || user.coverage.some((c) => c.division_id === d.id));
-  const firstCamp = groupRows?.[0]?.id ?? null;
-  const campOf = (d: { group_id: string | null }) => d.group_id ?? firstCamp;
-  const camps = (groupRows ?? []).filter((g) => divisions.some((d) => campOf(d) === g.id));
-  const division = divisions.find((d) => d.id === sp.division) ?? null;
-  const camp = camps.find((g) => g.id === (division ? campOf(division) : sp.camp)) ?? null;
-  const campDivisions = camp ? divisions.filter((d) => campOf(d) === camp.id) : divisions;
-  const only = division ? [division.id] : camp && camps.length > 1 ? campDivisions.map((d) => d.id) : null;
-  const inDivision = only ? await jobIdsInDivisions(session.id, only) : null;
   const queueHref = (o: { show?: string; camp?: string | null; division?: string | null }) =>
     `/print?${new URLSearchParams({ ...(o.show && o.show !== "todo" ? { show: o.show } : {}), ...(o.camp ? { camp: o.camp } : {}), ...(o.division ? { division: o.division } : {}) })}`;
-  const data = (all ?? []).filter((j) => (!mine || mine.has(j.id)) && (!inDivision || inDivision.has(j.id))).slice(0, 150);
+  const data = (all ?? []).filter((j) => scope.shows(j.id)).slice(0, 150);
   const problems = (failed ?? []).filter((j) => !mine || mine.has(j.id)).length;
   // a request for one camper (or a few) names them; a batch says what it covered (its note)
   const few = (data ?? []).filter((j) => j.item_count <= 3).map((j) => j.id);
@@ -110,6 +97,10 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
         title="Print queue"
         description={office.to ? `Tag requests are emailed to ${office.to} as a PDF, and wait here until marked printed.` : "No office email is set, so requests wait here. Set one in Settings."}
       />
+      {/* first thing on the page: everything waiting, printed in one go (each camper's labels together) */}
+      {sets.map((set) => (
+        <WaitingAll key={set.key} set={set} where={division?.name ?? camp?.name ?? null} query={new URLSearchParams({ waiting: set.key, order: "name", ...(camp ? { camp: camp.id } : {}), ...(division ? { division: division.id } : {}) }).toString()} />
+      ))}
       {/* camp, then division: one check-in location's labels */}
       {camps.length > 1 && (
         <Bar
@@ -141,7 +132,7 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
           <LabelUpdates />
         </div>
       )}
-      <PrintQueue jobs={jobs} show={show} />
+      <PrintQueue jobs={jobs} show={show} together={sets.flatMap((s) => s.templateIds)} />
     </div>
   );
 }

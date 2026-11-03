@@ -1,7 +1,7 @@
 import { formatPhone } from "@/lib/utils";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { FIELD_BY_KEY, UNGATED_GROUPS, getFieldValue, groupOfKey } from "@/lib/fields";
+import { FIELD_BY_KEY, UNGATED_GROUPS, getFieldValue } from "@/lib/fields";
 import { presetAudiencesFor, visibleFieldGroups, type CurrentUser, type FieldVisibilityRow } from "@/lib/auth/permissions";
 import { listCampers } from "./campers";
 import { STATUS_LABEL } from "@/lib/attendance/machine";
@@ -59,7 +59,7 @@ export async function buildList(
   const sortKeys = preset.sort.length ? preset.sort : [{ field: "last_name", dir: "asc" }];
   // extra fields from the registration export ("source.ppa.sleeping_at_the_kinus")
   const extraDefs = preset.columns.some((k) => k.startsWith("source."))
-    ? await import("./extra-fields").then(async (m) => (await m.loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: f.label, group: groupOfKey(`source.${f.column}`), kind: "text" as const, answers: f.answers })))
+    ? await import("./extra-fields").then(async (m) => (await m.loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: f.label, group: m.extraGroupOf(f), kind: "text" as const, answers: f.answers })))
     : [];
   const defOf = (k: string) => FIELD_BY_KEY[k] ?? extraDefs.find((f) => f.key === k) ?? (k === SLEEPING_COLUMN ? { key: k, label: SLEEPING_COLUMN_LABEL, group: "basic" as const, kind: "text" as const } : undefined);
   const shownColumns = preset.columns
