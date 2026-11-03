@@ -116,7 +116,14 @@
 .list-table a:hover { text-decoration: underline; }
 .list-table td a[href^="tel:"] { text-decoration: underline; }
 
+/* only on paper (a printed list's cover page) */
+.print-only { display: none; }
+
 @media print {
+  .print-only { display: block; }
+  .print-cover { break-after: page; }
+  /* tall enough to fill a page, upright or sideways (wide lists print landscape) */
+  .print-cover-page { min-height: 7in; }
   .list-table a { text-decoration: none !important; }
   .no-print { display: none !important; }
   body { background: white; color: black; }
