@@ -104,7 +104,7 @@ export async function buildList(
   const combos = new Map((preset.combos ?? []).map((c) => [`combo:${c.id}`, c]));
   const allKeys = [...preset.columns, ...preset.columns.flatMap((k) => combos.get(k)?.parts ?? []), ...(preset.group_by ? [preset.group_by] : [])];
   const extraDefs = allKeys.some((k) => k.startsWith("source."))
-    ? await import("./extra-fields").then(async (m) => (await m.loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: f.label, group: m.extraGroupOf(f), kind: "text" as const, answers: f.answers })))
+    ? await import("./extra-fields").then(async (m) => (await m.loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: f.label, group: m.extraGroupOf(f), kind: "text" as const, answers: f.answers, hide: f.hide })))
     : [];
   const defOf = (k: string) => FIELD_BY_KEY[k] ?? extraDefs.find((f) => f.key === k) ?? (k === SLEEPING_COLUMN ? { key: k, label: SLEEPING_COLUMN_LABEL, group: "basic" as const, kind: "text" as const } : undefined);
   const allowed = (f: { group: FieldGroup }) => UNGATED_GROUPS.includes(f.group) || groupsAnywhere.has(f.group);
@@ -150,7 +150,11 @@ export async function buildList(
   }
   const columnLabels = new Map(where.length ? (await import("./extra-fields").then((m) => m.loadExtraFields())).map((f) => [f.column, f.label] as const) : []);
   const columns = shownColumns.map((f) => ({ key: f.key, label: f.label }));
-  const extraCols = [...new Set(partKeys.filter((k) => k.startsWith("source.")))].map((k) => ({ column: k.slice(7), label: defOf(k)?.label, answers: extraDefs.find((f) => f.key === k)?.answers }));
+  const extraCols = [...new Set(partKeys.filter((k) => k.startsWith("source.")))].map((k) => {
+    // its short answers, and the answers set to Hide (they print as nothing, like on the camper page)
+    const def = extraDefs.find((f) => f.key === k);
+    return { column: k.slice(7), label: defOf(k)?.label, answers: def?.answers, hide: def?.hide };
+  });
   // "Sleeping here" / "Going home", from the registration's Sleeping At The Kinus
   const sleeping = partKeys.includes(SLEEPING_COLUMN) ? await import("./sleeping").then((m) => m.sleepingAtKinus(scope.sessionId, campers.map((c) => String(c.id)))) : null;
   const extraValues = extraCols.length ? await import("./extra-fields").then((m) => m.extraValuesFor(campers.map((c) => String(c.id)), extraCols)) : new Map<string, Record<string, string>>();
