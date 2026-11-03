@@ -10,14 +10,29 @@ import { ACCESS_LEVELS, FIELD_GROUPS, ROLE_EXTRAS, ROLE_ORDER, STAFF_ROLES } fro
 import { KEPT_ROLES, loadRoles } from "@/lib/data/roles";
 import type { AccessLevel } from "@/lib/auth/permissions";
 import { plural } from "@/lib/utils";
-import { saveRoles, setRoleInUse } from "./actions";
+import { saveColumnGroups, saveRoles, setRoleInUse } from "./actions";
+import { Select } from "@/components/ui/select";
+import { FIELDS, groupOfKey } from "@/lib/fields";
+import { EXTRA_GROUPS, parseExtraFields } from "@/lib/import/extra-fields";
 
 export const metadata = { title: "Roles" };
 
 export default async function RolesPage() {
   await requireAdmin();
   const supabase = await createClient();
-  const [setup, { data: people }] = await Promise.all([loadRoles(supabase), createAdminClient().from("profiles").select("role").eq("is_active", true)]);
+  const [setup, { data: people }, { data: extraRow }] = await Promise.all([
+    loadRoles(supabase),
+    createAdminClient().from("profiles").select("role").eq("is_active", true),
+    supabase.from("settings").select("value").eq("key", "extra_fields").maybeSingle(),
+  ]);
+  const extra = parseExtraFields(extraRow?.value);
+  // who sees each kind of detail now, in words
+  const seenBy = (g: string) =>
+    ROLE_ORDER.filter((r) => r !== "owner" && setup.inUse[r] && setup.sees[r].includes(g))
+      .map((r) => STAFF_ROLES[r].label)
+      .join(", ") || "Owners only";
+  const groupOf = (f: (typeof extra)[number]) => f.group ?? groupOfKey(`source.${f.column}`);
+  const groupLabel = (g: string) => (g === "basic" ? "Everyone who sees the camper" : (FIELD_GROUPS[g]?.label ?? g));
   const count = (r: string) => (people ?? []).filter((p) => p.role === r).length;
   const roles = ROLE_ORDER.filter((r) => r !== "owner" && setup.inUse[r]);
   const removed = ROLE_ORDER.filter((r) => !setup.inUse[r]);
@@ -97,6 +112,66 @@ export default async function RolesPage() {
       </ActionForm>
 
       {/* outside the main form (forms can't nest); the Remove buttons above point here */}
+      {/* what each kind of detail covers, and which kind each added column is */}
+      <section className="mt-8 space-y-3">
+        <div>
+          <h2 className="font-semibold">What each kind of detail covers</h2>
+          <p className="text-sm text-muted-foreground">
+            The details above are these fields. Names, bunks, status and the medical flag are for everyone who sees the camper. Added columns from the export go wherever you put them below.
+          </p>
+        </div>
+        <div className="divide-y rounded-xl border bg-card">
+          {Object.entries(FIELD_GROUPS).map(([g, info]) => {
+            const fields = FIELDS.filter((f) => f.group === g && !f.key.startsWith("contact.")).map((f) => f.label);
+            if (g === "contacts") fields.unshift("Mother, father and emergency contacts (names, phones, emails)");
+            const cols = extra.filter((f) => groupOf(f) === g).map((f) => f.label);
+            return (
+              <div key={g} className="grid gap-1 px-4 py-3 text-sm sm:grid-cols-[12rem_1fr] sm:gap-4">
+                <span className="font-medium">{info.label}</span>
+                <span className="space-y-0.5">
+                  <span className="block">{[...fields, ...cols.map((c) => `${c} (added column)`)].join(" · ") || <span className="text-muted-foreground">Only added columns you put here</span>}</span>
+                  <span className="block text-xs text-muted-foreground">Seen by: {seenBy(g)}</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {extra.length > 0 && (
+          <ActionForm action={saveColumnGroups} warnUnsaved className="group space-y-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)]">
+            <div>
+              <h3 className="font-semibold">Added columns: who sees each one</h3>
+              <p className="text-sm text-muted-foreground">Columns from the registration export shown on the camper page and in lists. Put a sensitive one (a family situation) in its kind of detail, so only those roles see it.</p>
+            </div>
+            <ul className="divide-y">
+              {extra.map((f) => (
+                <li key={f.column} className="grid items-center gap-2 py-2 sm:grid-cols-[1fr_minmax(16rem,22rem)]">
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium" dir="auto">
+                      {f.label}
+                    </span>
+                    <span className="block truncate font-mono text-xs text-muted-foreground">{f.column}</span>
+                  </span>
+                  <Select name={`group:${f.column}`} defaultValue={f.group ?? ""} aria-label={`Who sees ${f.label}`} className="h-9">
+                    <option value="">Guessed from the name: {groupLabel(groupOfKey(`source.${f.column}`))}</option>
+                    {EXTRA_GROUPS.map((g) => (
+                      <option key={g} value={g}>
+                        {groupLabel(g)}
+                        {g === "basic" ? "" : ` (${seenBy(g)})`}
+                      </option>
+                    ))}
+                  </Select>
+                </li>
+              ))}
+            </ul>
+            <span className="flex items-center gap-3">
+              <Button type="submit">Save</Button>
+              <span className="hidden text-sm font-medium text-amber-700 group-data-[dirty=true]:inline dark:text-amber-300">Unsaved changes</span>
+            </span>
+          </ActionForm>
+        )}
+      </section>
+
       {roles
         .filter((r) => !KEPT_ROLES.includes(r) && count(r) === 0)
         .map((r) => (
