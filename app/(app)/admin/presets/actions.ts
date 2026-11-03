@@ -7,13 +7,17 @@ import { FIELD_BY_KEY } from "@/lib/fields";
 import { parseFlags } from "@/lib/camper-flags";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { SLEEPING_COLUMN } from "@/lib/sleeping";
+import { isListKey } from "@/lib/list-keys";
+
+// Kinus' own fields and Sleeping; export columns are checked by isListKey
+const own = (k: string) => Boolean(FIELD_BY_KEY[k]) || k === SLEEPING_COLUMN;
 
 const schema = z.object({
   id: z.guid().optional().or(z.literal("")),
   name: z.string().trim().min(1),
   audience: z.enum(["counselor", "head_counselor", "division_head", "director", "office", "custom"]),
   // bunk, division, or any field: a Kinus one, Sleeping, or an export column
-  group_by: z.string().max(200).refine((k) => k === "" || Boolean(FIELD_BY_KEY[k]) || k === SLEEPING_COLUMN || /^source\.[^\s{}|]{1,120}$/.test(k), "Pick what to group by."),
+  group_by: z.string().max(210).refine((k) => k === "" || isListKey(k, own), "Pick what to group by."),
   sort_field: z.string().default("last_name"),
   is_default: z.enum(["on"]).optional(),
 });
@@ -22,13 +26,13 @@ export async function savePreset(fd: FormData): Promise<ActionResult> {
   const me = await requireAdmin();
   try {
     const d = schema.parse(Object.fromEntries(fd));
-    const columns = fd.getAll("columns").map(String).filter((k) => FIELD_BY_KEY[k] || k === SLEEPING_COLUMN || /^source\.[^\s{}|]{1,120}$/.test(k));
+    const columns = fd.getAll("columns").map(String).filter((k) => isListKey(k, own));
     // combined columns: at least one field each (a name, or "Combined"); a new one (no id yet)
     // gets one; each shows when "Show this column" is ticked
     const combos: { id: string; label: string; parts: string[]; sep: string; labels: boolean }[] = [];
     for (let i = 0; i < 12; i++) {
       const label = String(fd.get(`combo_label_${i}`) ?? "").trim().slice(0, 60) || (fd.has(`combo_id_${i}`) ? "Combined" : "");
-      const parts = fd.getAll(`combo_part_${i}`).map(String).filter((k) => FIELD_BY_KEY[k] || k === SLEEPING_COLUMN || /^source\.[^\s{}|]{1,120}$/.test(k)).slice(0, 12);
+      const parts = fd.getAll(`combo_part_${i}`).map(String).filter((k) => isListKey(k, own)).slice(0, 12);
       if (!label || !parts.length) continue;
       const had = String(fd.get(`combo_id_${i}`) ?? "");
       const id = /^[a-z0-9]{4,12}$/.test(had) ? had : Math.random().toString(36).slice(2, 10);
