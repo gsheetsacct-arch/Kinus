@@ -297,3 +297,48 @@ export async function lookupCode(code: string): Promise<CodeLookup> {
   const division = (other.divisions as { name: string } | null)?.name;
   return { found: false, message: division ? `Wrong line: this camper checks in with ${division}.` : "This camper has no division yet. Send them to the office." };
 }
+
+export type RecentScan = { eventId: string; camperId: string; name: string; verb: string; tone: "in" | "out" | "home" | "already"; at: string; undoable: boolean; undone: boolean };
+
+const RECENT_VERB: Partial<Record<AttendanceEventType, [string, RecentScan["tone"]]>> = {
+  arrival: ["Checked in", "in"],
+  return: ["Back in", "in"],
+  leave: ["Checked out · coming back", "out"],
+  pickup: ["Checked out · not coming back", "home"],
+};
+
+/**
+ * The last 50 check-ins and outs this person recorded today (the check-in page's list, kept
+ * across reloads): each with whether it can still be undone (theirs, within 15 minutes, and
+ * still the camper's latest record) or was undone.
+ */
+export async function recentScans(): Promise<RecentScan[]> {
+  const user = await requireUser();
+  const supabase = await createClient();
+  const since = new Date(Date.now() - 16 * 3600_000).toISOString();
+  const { data: events } = await supabase
+    .from("attendance_events")
+    .select("id, camper_id, event_type, created_at, corrects_event_id, campers(first_name, last_name, last_event_id)")
+    .eq("recorded_by", user.id)
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(80);
+  const undone = new Set((events ?? []).filter((e) => e.event_type === "correction" && e.corrects_event_id).map((e) => e.corrects_event_id!));
+  return (events ?? [])
+    .filter((e) => RECENT_VERB[e.event_type as AttendanceEventType])
+    .slice(0, 50)
+    .map((e) => {
+      const c = e.campers as { first_name: string; last_name: string; last_event_id: string | null } | null;
+      const [verb, tone] = RECENT_VERB[e.event_type as AttendanceEventType]!;
+      return {
+        eventId: e.id,
+        camperId: e.camper_id,
+        name: c ? `${c.first_name} ${c.last_name}` : "A camper",
+        verb,
+        tone,
+        at: e.created_at,
+        undoable: !undone.has(e.id) && c?.last_event_id === e.id && Date.now() - Date.parse(e.created_at) < 15 * 60_000,
+        undone: undone.has(e.id),
+      };
+    });
+}

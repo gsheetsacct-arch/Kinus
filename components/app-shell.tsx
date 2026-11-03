@@ -99,7 +99,7 @@ export function AppShell({
         </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="no-print sticky top-0 z-30 flex items-center justify-between gap-3 border-b bg-card/95 px-4 py-3 backdrop-blur md:hidden">
+        <header data-app-header className="no-print sticky top-0 z-30 flex items-center justify-between gap-3 border-b bg-card/95 px-4 py-3 backdrop-blur md:hidden">
           <Link href="/" className="flex min-w-0 items-center gap-2 font-semibold">
             <Logo className="size-7" />
             {/* the session's own name usually says "Kinus" already ("Kinus 5787") */}
@@ -112,6 +112,7 @@ export function AppShell({
         </header>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-28 md:px-8 md:py-8 md:pb-10">{children}</main>
         <nav
+          data-app-tabbar
           style={{ gridTemplateColumns: `repeat(${mobileMain.length + 1}, minmax(0, 1fr))` }}
           className="no-print fixed inset-x-0 bottom-0 z-40 grid border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
           {mobileMain.map((n) => {

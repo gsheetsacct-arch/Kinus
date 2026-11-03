@@ -2,7 +2,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import Link from "next/link";
-import { Camera as CameraIcon, CameraOff, DoorOpen, LogIn, LogOut, Printer, Search, Undo2, Volume2, VolumeX } from "lucide-react";
+import { Camera as CameraIcon, CameraOff, ChevronUp, DoorOpen, LogIn, LogOut, Printer, Search, Tag, Undo2, Volume2, VolumeX, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,18 +12,19 @@ import { matchScore, searchEntry } from "@/lib/search";
 import { findScanCode, looksLikeScan, type ScanMode } from "@/lib/attendance/scan";
 import type { CamperStatus } from "@/lib/attendance/machine";
 import { cn, formatTime } from "@/lib/utils";
-import { lookupCode, rosterStatuses, scanCamper, undoScan } from "@/app/(app)/scan/actions";
+import { lookupCode, recentScans, rosterStatuses, scanCamper, undoScan } from "@/app/(app)/scan/actions";
 import { checkoutStatuses, finalCheckout, lookupCheckoutCode } from "@/app/(app)/checkout/actions";
 import { CamperCard, type TemplateButton } from "./camper-card";
 import { Camera } from "./camera";
-import { feedback } from "./feedback";
+import { feedback, unlockSound } from "./feedback";
 
 export type RosterEntry = { id: string; code: string; name: string; first: string; last: string; where: string; status: CamperStatus; div: string | null; buzzer?: number | null };
 type Line = { id: string; name: string; color: string | null };
 const ANY = "any";
 /** ask: an already checked-in camper scanned at check-in, offered a check-out */
-type Flash = { tone: "in" | "out" | "home" | "already" | "error"; title: string; detail: string; ask?: RosterEntry };
-type Recent = { key: number; camperId: string; name: string; verb: string; tone: Flash["tone"]; eventId?: string; at: number; undone?: boolean };
+/** labels: a camper scanned again, offered their labels (a new name tag…) */
+type Flash = { tone: "in" | "out" | "home" | "already" | "error"; title: string; detail: string; ask?: RosterEntry; labels?: RosterEntry };
+type Recent = { key: string; camperId: string; name: string; verb: string; tone: Flash["tone"]; eventId?: string; at: number; undone?: boolean; undoable?: boolean };
 
 const FLASH: Record<Flash["tone"], string> = {
   in: "bg-status-present text-white",
@@ -32,7 +33,7 @@ const FLASH: Record<Flash["tone"], string> = {
   already: "bg-slate-600 text-white",
   error: "bg-destructive text-white",
 };
-// the scanner's border takes the result's colour for a moment: readable from across the table
+// the picture's edge takes the result's colour for a moment: readable from across the table
 const FLASH_RING: Record<Flash["tone"], string> = {
   in: "ring-status-present",
   out: "ring-status-out",
@@ -40,8 +41,9 @@ const FLASH_RING: Record<Flash["tone"], string> = {
   already: "ring-slate-500",
   error: "ring-destructive",
 };
-// the server allows 30 s; the button goes a little earlier so a late tap doesn't fail
-const UNDO_MS = 25000;
+// the server allows 15 minutes (migration 0053); the button goes a little earlier
+const UNDO_MS = 14 * 60_000;
+const RECENT_MAX = 50;
 const MAX_RESULTS = 12;
 const MODE_KEEP_MS = 3 * 60 * 60 * 1000;
 
@@ -134,7 +136,7 @@ export function Scanner({
   const show = React.useCallback((f: Flash) => {
     setFlash(f);
     // a question stays up long enough to answer it
-    setTimeout(() => setFlash((cur) => (cur === f ? null : cur)), f.ask ? 12000 : f.tone === "error" ? 6000 : 4000);
+    setTimeout(() => setFlash((cur) => (cur === f ? null : cur)), f.ask ? 12000 : f.labels ? 8000 : f.tone === "error" ? 6000 : 4000);
   }, []);
 
   const act = React.useCallback(
@@ -163,19 +165,19 @@ export function Scanner({
       if (o.kind === "act") {
         feedback("ok");
         show({ tone: o.tone, title: o.name, detail: o.verb + (multi ? ` · ${r.where}` : "") + (o.autoPrinted.length ? ` · ${o.autoPrinted.join(", ")} sent to print` : "") });
-        setRecent((x) => [{ key: now, camperId: o.camperId, name: o.name, verb: o.verb, tone: o.tone, eventId: o.eventId, at: now }, ...x].slice(0, 8));
+        setRecent((x) => [{ key: o.eventId, camperId: o.camperId, name: o.name, verb: o.verb, tone: o.tone, eventId: o.eventId, at: now, undoable: true }, ...x].slice(0, RECENT_MAX));
       } else {
         feedback("already");
         // "Already checked in · 9:42 by Sarah" helps; for "hasn't checked in yet" the last event would mislead
         const detail = `${o.message}${o.kind === "already" && o.since ? ` · ${formatTime(o.since)}${o.by ? ` by ${o.by}` : ""}` : ""}`;
         // already here, scanned at check-in: maybe they're on their way out, so offer it
         const ask = !final && mode === "in" && o.kind === "already" && o.status === "present" ? r : undefined;
-        show({ tone: "already", title: o.name, detail, ask });
-        setRecent((x) => [{ key: now, camperId: o.camperId, name: o.name, verb: o.message, tone: "already" as const, at: now }, ...x].slice(0, 8));
+        show({ tone: "already", title: o.name, detail, ask, labels: templates.length ? r : undefined });
+        setRecent((x) => [{ key: `a${now}`, camperId: o.camperId, name: o.name, verb: o.message, tone: "already" as const, at: now }, ...x].slice(0, RECENT_MAX));
       }
       focusBox();
     },
-    [mode, show, focusBox, multi, line, final],
+    [mode, show, focusBox, multi, line, final, templates.length],
   );
 
   // the check-out offered for a camper scanned again at check-in
@@ -193,7 +195,7 @@ export function Scanner({
       if (o.kind === "act") {
         feedback("ok");
         show({ tone: o.tone, title: o.name, detail: o.verb });
-        setRecent((x) => [{ key: now, camperId: o.camperId, name: o.name, verb: o.verb, tone: o.tone, eventId: o.eventId, at: now }, ...x].slice(0, 8));
+        setRecent((x) => [{ key: o.eventId, camperId: o.camperId, name: o.name, verb: o.verb, tone: o.tone, eventId: o.eventId, at: now, undoable: true }, ...x].slice(0, RECENT_MAX));
       } else show({ tone: "already", title: o.name, detail: o.message });
       focusBox();
     },
@@ -301,216 +303,298 @@ export function Scanner({
     toast.success(`Undone: ${r.name}`);
   };
 
-  // the last scan's result: above the box, and over the camera's picture (where you're looking)
+  // this person's check-ins today, kept across reloads (the newest first)
+  React.useEffect(() => {
+    if (final) return;
+    recentScans()
+      .then((list) =>
+        setRecent((cur) => {
+          const have = new Set(cur.map((r) => r.eventId).filter(Boolean));
+          const loaded: Recent[] = list.filter((r) => !have.has(r.eventId)).map((r) => ({ key: r.eventId, camperId: r.camperId, name: r.name, verb: r.verb, tone: r.tone, eventId: r.eventId, at: Date.parse(r.at), undone: r.undone, undoable: r.undoable }));
+          return [...cur, ...loaded].sort((x, y) => y.at - x.at).slice(0, RECENT_MAX);
+        }),
+      )
+      .catch(() => undefined);
+  }, [final]);
+
+  // the page is the camera: it fills the space between the app's bars and doesn't scroll
+  const frame = useFullFrame();
+  const [sheet, setSheet] = React.useState(false);
+  const touch = React.useRef<number | null>(null);
+  const openCard = (id: string) => {
+    setFlash(null);
+    setCard(id);
+  };
+
+  // the last scan's result, over the picture under the name bar
   const flashView = flash ? (
-    flash.ask ? (
-      <div className={cn("flex h-full w-full flex-col justify-center gap-1.5 rounded-xl px-4 py-2 text-left shadow-lg", FLASH[flash.tone])}>
-        <span className="truncate text-lg font-bold leading-tight" dir="auto">
+    <div className={cn("pointer-events-auto flex w-full flex-col gap-1.5 rounded-2xl px-4 py-3 text-left shadow-xl", FLASH[flash.tone])} role="status">
+      <button type="button" className="min-w-0 text-left" onClick={() => (setFlash(null), focusBox())}>
+        <span className="block truncate text-xl font-bold leading-tight" dir="auto">
           {flash.title}
         </span>
-        <span className="truncate text-sm font-medium opacity-90" dir="auto">
-          {flash.detail}. Check them out?
-        </span>
-        <span className="flex gap-2">
-          <Button size="sm" className="bg-status-out text-amber-950 hover:bg-status-out/90" onClick={() => void checkOutNow(flash.ask!)}>
-            Check out · coming back
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => (setFlash(null), focusBox())}>
-            No
-          </Button>
-        </span>
-      </div>
-    ) : (
-      <button type="button" onClick={() => (setFlash(null), focusBox())} className={cn("flex h-full w-full flex-col justify-center rounded-xl px-4 py-2 text-left shadow-lg", FLASH[flash.tone])}>
-        <span className="truncate text-xl font-bold leading-tight" dir="auto">
-          {flash.title}
-        </span>
-        <span className="truncate text-sm font-medium opacity-90" dir="auto">
+        <span className="block text-sm font-medium opacity-90" dir="auto">
           {flash.detail}
+          {flash.ask ? ". Check them out?" : ""}
         </span>
       </button>
-    )
+      {(flash.ask || flash.labels) && (
+        <span className="flex flex-wrap gap-2">
+          {flash.ask && (
+            <Button size="sm" className="bg-status-out text-amber-950 hover:bg-status-out/90" onClick={() => void checkOutNow(flash.ask!)}>
+              <LogOut /> Check out · coming back
+            </Button>
+          )}
+          {flash.labels && (
+            <Button size="sm" variant="secondary" onClick={() => openCard(flash.labels!.id)}>
+              <Tag /> Labels
+            </Button>
+          )}
+          <Button size="sm" variant="secondary" onClick={() => (setFlash(null), focusBox())}>
+            {flash.ask ? "No" : "Close"}
+          </Button>
+        </span>
+      )}
+    </div>
   ) : null;
-  const tint = flash ? FLASH_RING[flash.tone] : final ? "ring-status-departed/40" : mode === "in" ? "ring-status-present/40" : mode === "out" ? "ring-status-out/50" : "ring-border";
+  const tint = flash ? FLASH_RING[flash.tone] : final ? "ring-status-departed/60" : mode === "in" ? "ring-status-present/60" : mode === "out" ? "ring-status-out" : "ring-transparent";
+  const toggleSound = () => {
+    const v = !sound;
+    setSound(v);
+    try {
+      localStorage.setItem("kinus:sound", v ? "on" : "off");
+    } catch {}
+    if (v) {
+      unlockSound();
+      feedback("ok");
+    }
+  };
+  const latest = recent[0];
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      {printQueue && (
-        <div className="flex justify-end">
-          <Button size="sm" variant="outline" asChild>
-            <Link href={lineDiv ? `/print?division=${lineDiv.id}` : "/print"}>
-              <Printer /> Print queue
-            </Link>
+    <div
+      className="fixed z-20 overflow-hidden bg-neutral-950"
+      style={{ top: frame.top, bottom: frame.bottom, left: frame.left, right: 0 }}
+      // the first tap wakes the sound up, so scans after it beep (phones need a tap first)
+      onPointerDown={unlockSound}
+    >
+      {/* the camera, the whole page */}
+      {camera ? (
+        <Camera onCode={onCameraCode} onTurnOff={neverCamera} fill />
+      ) : (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center text-sm text-white/70">
+          <CameraOff className="size-8" />
+          <p>The camera is off. A handheld scanner still works, or type a name.</p>
+          <Button variant="secondary" onClick={() => setCameraOn(true)}>
+            <CameraIcon /> Start camera
           </Button>
         </div>
       )}
-      {multi && canScan && mode !== "lookup" && (
-        <LineBar divisions={divisions} line={line} lineDiv={lineDiv} onChoose={chooseLine} />
-      )}
-      {final && <CheckoutProgress campName={final.campName} divisions={final.divisions} roster={[...roster, ...extra]} statuses={statuses} />}
-      <div className={cn("space-y-3 rounded-2xl border bg-card p-3 shadow-[var(--shadow-card)] ring-4 transition-[box-shadow] duration-150", tint)}>
-        {final && (
-          <div className="flex items-center gap-3 rounded-xl bg-status-departed px-4 py-3 text-white">
-            <DoorOpen className="size-6 shrink-0" />
-            <span className="min-w-0">
-              <span className="block font-semibold">Final check-out · {final.campName}</span>
-              <span className="block text-sm opacity-90">Scanning a tag or tapping a name checks the camper out: going home.</span>
-            </span>
-          </div>
-        )}
-        {!canScan && <p className="px-1 text-sm text-muted-foreground">Scan a tag or type a name to look a camper up. Your account can look campers up but not check them in.</p>}
-        <div className={cn("grid grid-cols-3 gap-2", (!canScan || final) && "hidden")} role="tablist" aria-label="What a scan does">
-          {(
-            [
-              ["in", "Check in", LogIn],
-              ["out", "Check out", LogOut],
-              ["lookup", "Look up", Search],
-            ] as const
-          ).map(([m, label, Icon]) => (
-            <button
-              key={m}
-              role="tab"
-              aria-selected={mode === m}
-              disabled={m !== "lookup" && !canScan}
-              onClick={() => choose(m)}
-              className={cn(
-                "flex h-14 flex-col items-center justify-center gap-0.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-40",
-                mode === m
-                  ? m === "in"
-                    ? "bg-status-present text-white"
-                    : m === "out"
-                      ? "bg-status-out text-amber-950"
-                      : "bg-foreground text-background"
-                  : "bg-muted text-muted-foreground hover:bg-muted/70",
-              )}
-            >
-              <Icon className="size-5" />
-              {m === "out" ? "Check out · coming back" : label}
-            </button>
-          ))}
-        </div>
-        {/* the last scan's result, in place: the box and camera below stay in view and still for the next tag */}
-        <div aria-live="assertive" className={flash?.ask ? "min-h-16" : "h-16"}>
-          {flash ? (
-            flashView
-          ) : (
-            <div className="flex h-full items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">{mode === "lookup" ? "Ready to look up" : "Ready for the next tag"}</div>
-          )}
-        </div>
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            ref={input}
-            id="scan-input"
-            autoComplete="off"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key !== "Enter") return;
-              e.preventDefault();
-              if (handleText(q, "scan")) return;
-              if (matches.length === 1 && !similar.has(matches[0].id)) act(matches[0], "manual");
-              else if (!matches.length && looksLikeScan(q)) unreadable(q);
-            }}
-            placeholder={final ? `Scan a tag or type any camper in ${final.campName}` : "Scan a tag or type a name"}
-            className="h-14 pl-11 text-lg"
-            dir="auto"
-            aria-label="Scan or search"
-          />
-        </div>
-      {matches.length > 0 && (
-        <ul className="divide-y overflow-hidden rounded-xl border bg-card">
-          {matches.map((r) => (
-            <li key={r.id}>
-              <button onClick={() => act(r, "manual")} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/50">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium" dir="auto">
-                    {r.name}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground" dir="auto">
-                    {similar.has(r.id) && <span className="mr-1 rounded bg-muted px-1.5 py-0.5 font-medium">Similar name</span>}
-                    {multi && line && line !== ANY && r.div !== line && <span className="mr-1 rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">Other line</span>}
-                    {r.where} · {r.code}
-                  </span>
-                </span>
-                <StatusBadge status={statuses[r.id] ?? r.status} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {needle.length >= 2 && !matches.length && !findScanCode(q) && <p className="px-1 text-sm text-muted-foreground">No camper {final ? `in ${final.campName}` : "in your area"} matches “{q}”.</p>}
-      {allMatches.length > matches.length && <p className="px-1 text-sm text-muted-foreground">{allMatches.length - matches.length} more match: type more of the name.</p>}
+      {/* the mode's colour round the edge; a result's colour for a moment */}
+      <div className={cn("pointer-events-none absolute inset-0 z-10 ring-[6px] ring-inset transition-[box-shadow] duration-150", tint)} />
 
-        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span className={cn(mode === "out" && !final && "rounded-md bg-status-out px-2 py-1 text-sm font-semibold text-amber-950")}>
-            {mode === "in" && "Scanning a tag or tapping a name checks the camper in."}
-            {mode === "out" && !final && "You're checking campers OUT: they'll come back. Going home is Final check-out."}
-            {mode === "lookup" && "Scanning a tag or tapping a name opens the camper. Nothing is recorded."}
-          </span>
-          <span className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                const v = !sound;
-                setSound(v);
-                try {
-                  localStorage.setItem("kinus:sound", v ? "on" : "off");
-                } catch {}
+      {/* on top: what a scan does, the name bar, the result */}
+      <div className="absolute inset-x-0 top-0 z-20 space-y-2 bg-gradient-to-b from-black/60 via-black/25 to-transparent p-3 pb-6">
+        {final ? (
+          <div className="flex items-center gap-3 rounded-xl bg-status-departed px-4 py-2.5 text-white shadow-lg">
+            <DoorOpen className="size-5 shrink-0" />
+            <span className="min-w-0 truncate text-sm font-semibold">Final check-out · {final.campName}: a scan checks the camper out, going home</span>
+          </div>
+        ) : canScan ? (
+          <div className="flex gap-1 rounded-xl bg-background/85 p-1 shadow-lg backdrop-blur" role="tablist" aria-label="What a scan does">
+            {(
+              [
+                ["in", "Check in", LogIn, "text-status-present ring-status-present"],
+                ["out", "Check out", LogOut, "text-amber-700 ring-status-out dark:text-amber-300"],
+                ["lookup", "Look up", Search, "text-foreground ring-primary"],
+              ] as const
+            ).map(([m, label, Icon, on]) => (
+              <button
+                key={m}
+                role="tab"
+                aria-selected={mode === m}
+                onClick={() => choose(m)}
+                className={cn(
+                  "flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 text-sm font-semibold whitespace-nowrap transition-colors",
+                  mode === m ? cn("bg-background shadow-sm ring-2", on) : "text-muted-foreground hover:bg-background/60",
+                )}
+              >
+                <Icon className="size-4" />
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-xl bg-background/85 px-3 py-2 text-sm text-muted-foreground shadow-lg backdrop-blur">Scanning or typing a name opens the camper. Your account can look campers up, not check them in.</p>
+        )}
+        {mode === "out" && !final && <p className="rounded-lg bg-status-out px-3 py-1 text-center text-xs font-semibold text-amber-950 shadow">Checking OUT: they&apos;ll come back. Going home is Final check-out.</p>}
+
+        <div className="flex gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              ref={input}
+              id="scan-input"
+              autoComplete="off"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                if (handleText(q, "scan")) return;
+                if (matches.length === 1 && !similar.has(matches[0].id)) act(matches[0], "manual");
+                else if (!matches.length && looksLikeScan(q)) unreadable(q);
               }}
-              aria-label={sound ? "Turn sound off" : "Turn sound on"}
-            >
-              {sound ? <Volume2 /> : <VolumeX />}
-            </Button>
-            <Button variant={camera ? "default" : "outline"} size="sm" onClick={() => setCameraOn(!camera)}>
-              {camera ? <CameraOff /> : <CameraIcon />} {camera ? "Stop camera" : "Start camera"}
-            </Button>
-          </span>
+              placeholder={final ? `Type a name in ${final.campName}` : "Type a name"}
+              className="h-12 border-0 bg-background/90 pl-11 pr-10 text-base shadow-lg backdrop-blur"
+              dir="auto"
+              aria-label="Type a name or code"
+            />
+            {q && (
+              <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-muted-foreground" onClick={() => (setQ(""), focusBox())} aria-label="Clear">
+                <X className="size-4" />
+              </button>
+            )}
+          </div>
+          <Button size="icon" variant="secondary" className="size-12 shrink-0 bg-background/85 shadow-lg backdrop-blur" onClick={toggleSound} aria-label={sound ? "Turn sound off" : "Turn sound on"}>
+            {sound ? <Volume2 /> : <VolumeX />}
+          </Button>
+          <Button size="icon" variant="secondary" className="size-12 shrink-0 bg-background/85 shadow-lg backdrop-blur" onClick={() => setCameraOn(!camera)} aria-label={camera ? "Stop camera" : "Start camera"}>
+            {camera ? <CameraOff /> : <CameraIcon />}
+          </Button>
         </div>
-        {camera && (
-          <div className={cn(q.trim() && "hidden")}>
-            <Camera onCode={onCameraCode} onTurnOff={neverCamera} overlay={flashView} />
+
+        {/* names that match, over the picture */}
+        {(matches.length > 0 || (needle.length >= 2 && !findScanCode(q))) && (
+          <div className="max-h-[45dvh] overflow-y-auto rounded-xl bg-card shadow-xl">
+            {matches.length > 0 ? (
+              <ul className="divide-y">
+                {matches.map((r) => (
+                  <li key={r.id}>
+                    <button onClick={() => act(r, "manual")} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/50">
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium" dir="auto">
+                          {r.name}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground" dir="auto">
+                          {similar.has(r.id) && <span className="mr-1 rounded bg-muted px-1.5 py-0.5 font-medium">Similar name</span>}
+                          {multi && line && line !== ANY && r.div !== line && <span className="mr-1 rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">Other line</span>}
+                          {r.where} · {r.code}
+                        </span>
+                      </span>
+                      <StatusBadge status={statuses[r.id] ?? r.status} />
+                    </button>
+                  </li>
+                ))}
+                {allMatches.length > matches.length && <li className="px-4 py-2 text-xs text-muted-foreground">{allMatches.length - matches.length} more: type more of the name.</li>}
+              </ul>
+            ) : (
+              <p className="px-4 py-3 text-sm text-muted-foreground">No camper {final ? `in ${final.campName}` : "in your area"} matches “{q}”.</p>
+            )}
           </div>
         )}
+
+        {/* which line, and the labels to print (people who use the print queue) */}
+        {((multi && canScan && mode !== "lookup" && line) || printQueue) && !q && (
+          <div className="flex flex-wrap items-center gap-2">
+            {multi && canScan && mode !== "lookup" && line && (
+              <button
+                type="button"
+                onClick={() => chooseLine(null)}
+                className="flex min-w-0 items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold text-white shadow-lg"
+                style={{ background: lineDiv?.color ?? "rgb(0 0 0 / 0.6)" }}
+                title="Change the line"
+              >
+                <span className="truncate" dir="auto">
+                  {lineDiv ? `Line: ${lineDiv.name}` : "Any division"}
+                </span>
+                <span className="text-xs font-normal opacity-80">Change</span>
+              </button>
+            )}
+            {printQueue && (
+              <Button size="sm" variant="secondary" className="ml-auto bg-background/85 shadow-lg backdrop-blur" asChild>
+                <Link href={lineDiv ? `/print?division=${lineDiv.id}` : "/print"}>
+                  <Printer /> Labels to print
+                </Link>
+              </Button>
+            )}
+          </div>
+        )}
+
+        <div aria-live="assertive">{!q && flashView}</div>
       </div>
 
-      {mode === "lookup" && card && (
-        <div className="rounded-2xl border bg-card p-5 shadow-[var(--shadow-card)]">
-          <CamperCard
-            camperId={card}
-            templates={templates}
-            canScan={canScan}
-            onAction={(o) => setStatuses((s) => ({ ...s, [o.camperId]: o.status }))}
-          />
+      {/* which line: asked once a shift, over everything */}
+      {multi && canScan && mode !== "lookup" && !line && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md">
+            <LineBar divisions={divisions} line={line} lineDiv={lineDiv} onChoose={chooseLine} />
+          </div>
         </div>
       )}
 
-      {recent.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Just now</h2>
-          <ul className="divide-y overflow-hidden rounded-xl border bg-card">
-            {recent.map((r) => (
-              <li key={r.key} className="flex items-center gap-3 px-4 py-2.5">
-                <button className="min-w-0 flex-1 text-left disabled:cursor-default" disabled={Boolean(final)} onClick={() => setCard(r.camperId)}>
-                  <span className={cn("block truncate font-medium", r.undone && "line-through opacity-60")} dir="auto">
-                    {r.name}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    {r.undone ? "Undone" : r.verb} · {formatTime(new Date(r.at).toISOString())}
-                  </span>
-                </button>
-                {r.eventId && !r.undone && Date.now() - r.at < UNDO_MS && (
-                  <Button size="sm" variant="outline" onClick={() => undo(r)}>
-                    <Undo2 /> Undo
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
+      {/* at the bottom: the last 50, peeking; pull up (or tap) to see them, undo, or open one */}
+      {(recent.length > 0 || final) && (
+        <section
+          className={cn("absolute inset-x-0 bottom-0 z-20 flex flex-col rounded-t-2xl bg-card shadow-[0_-8px_24px_rgb(0_0_0/0.25)] transition-[height] duration-200", sheet ? "h-[70%]" : "h-16")}
+          onTouchStart={(e) => (touch.current = e.touches[0].clientY)}
+          onTouchEnd={(e) => {
+            if (touch.current === null) return;
+            const dy = e.changedTouches[0].clientY - touch.current;
+            touch.current = null;
+            if (dy < -30) setSheet(true);
+            else if (dy > 30) setSheet(false);
+          }}
+        >
+          <button type="button" className="flex h-16 shrink-0 items-center gap-3 px-4 text-left" onClick={() => setSheet(!sheet)} aria-expanded={sheet}>
+            <span className="absolute left-1/2 top-1.5 h-1 w-10 -translate-x-1/2 rounded-full bg-muted-foreground/30" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">{final ? "Going home" : `Recent · ${recent.length}`}</span>
+              {latest ? (
+                <span className="block truncate text-sm" dir="auto">
+                  <span className={cn("font-medium", latest.undone && "line-through opacity-60")}>{latest.name}</span> · {latest.undone ? "Undone" : latest.verb} · {formatTime(new Date(latest.at).toISOString())}
+                </span>
+              ) : (
+                <span className="block text-sm text-muted-foreground">Nobody yet</span>
+              )}
+            </span>
+            <ChevronUp className={cn("size-5 text-muted-foreground transition-transform", sheet && "rotate-180")} />
+          </button>
+          {sheet && (
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain border-t">
+              {final && (
+                <div className="p-3">
+                  <CheckoutProgress campName={final.campName} divisions={final.divisions} roster={[...roster, ...extra]} statuses={statuses} />
+                </div>
+              )}
+              <ul className="divide-y">
+                {recent.map((r) => (
+                  <li key={r.key} className="flex items-center gap-2 px-4 py-2.5">
+                    <button className="min-w-0 flex-1 text-left disabled:cursor-default" disabled={Boolean(final)} onClick={() => openCard(r.camperId)}>
+                      <span className={cn("block truncate font-medium", r.undone && "line-through opacity-60")} dir="auto">
+                        {r.name}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {r.undone ? "Undone" : r.verb} · {formatTime(new Date(r.at).toISOString())}
+                      </span>
+                    </button>
+                    {r.eventId && !r.undone && r.undoable !== false && Date.now() - r.at < UNDO_MS && (
+                      <Button size="sm" variant="outline" onClick={() => undo(r)}>
+                        <Undo2 /> Undo
+                      </Button>
+                    )}
+                    {!final && templates.length > 0 && (
+                      <Button size="sm" variant="ghost" onClick={() => openCard(r.camperId)} aria-label={`Labels for ${r.name}`}>
+                        <Tag /> Labels
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
       )}
-
 
       <Dialog open={Boolean(wrong)} onOpenChange={(o) => !o && (setWrong(null), focusBox())}>
         <DialogContent className="border-amber-400">
@@ -547,8 +631,9 @@ export function Scanner({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!final && mode !== "lookup" && Boolean(card)} onOpenChange={(o) => !o && setCard(null)}>
-        <DialogContent>
+      {/* a camper: looked up, tapped in the list, or scanned again for labels */}
+      <Dialog open={!final && Boolean(card)} onOpenChange={(o) => !o && (setCard(null), focusBox())}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="sr-only">Camper</DialogTitle>
           </DialogHeader>
@@ -557,6 +642,38 @@ export function Scanner({
       </Dialog>
     </div>
   );
+}
+
+/**
+ * Where the check-in page goes: everything between the app's top bar and its bottom tabs
+ * (on a phone), or beside the side menu (a computer). The page itself doesn't scroll.
+ */
+function useFullFrame() {
+  const [box, setBox] = React.useState({ top: 0, bottom: 0, left: 0 });
+  React.useLayoutEffect(() => {
+    const measure = () => {
+      const rect = (sel: string) => {
+        const el = document.querySelector(sel);
+        const r = el?.getBoundingClientRect();
+        return r && r.width > 0 && r.height > 0 ? r : null;
+      };
+      const header = rect("[data-app-header]");
+      const tabs = rect("[data-app-tabbar]");
+      const side = rect("[data-app-sidebar]");
+      setBox({ top: header ? Math.max(0, header.bottom) : 0, bottom: tabs ? Math.max(0, window.innerHeight - tabs.top) : 0, left: side ? side.right : 0 });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const html = document.documentElement;
+    const before = html.style.overflow;
+    html.style.overflow = "hidden";
+    window.scrollTo(0, 0);
+    return () => {
+      window.removeEventListener("resize", measure);
+      html.style.overflow = before;
+    };
+  }, []);
+  return box;
 }
 
 /** Which line (division) this device is checking in: chosen once per shift. */

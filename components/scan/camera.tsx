@@ -31,7 +31,8 @@ function explain(e: unknown): string {
  * in view counts once until it has been out of view for a moment.
  */
 /** overlay: the last scan's result, shown over the picture (where the person scanning is looking). */
-export function Camera({ onCode, onTurnOff, overlay }: { onCode: (text: string) => void; onTurnOff?: () => void; overlay?: React.ReactNode }) {
+/** fill: the whole of its (positioned) parent, the controls down the right side (the check-in page). */
+export function Camera({ onCode, onTurnOff, overlay, fill = false }: { onCode: (text: string) => void; onTurnOff?: () => void; overlay?: React.ReactNode; fill?: boolean }) {
   const video = React.useRef<HTMLVideoElement>(null);
   const onCodeRef = React.useRef(onCode);
   onCodeRef.current = onCode;
@@ -190,27 +191,31 @@ export function Camera({ onCode, onTurnOff, overlay }: { onCode: (text: string) 
     } catch {}
   };
 
+  const controls = fill ? "absolute right-3 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-2" : null;
   return (
     <>
       {/* no camera (an office laptop): a short note instead of a big black box */}
       {state.kind === "error" && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
-          <p className="min-w-0 flex-1 basis-56">{state.message}</p>
-          <Button size="sm" variant="outline" onClick={() => setAttempt((a) => a + 1)}>
-            <RefreshCw /> Try again
-          </Button>
-          {onTurnOff && (
-            <Button size="sm" variant="ghost" onClick={onTurnOff}>
-              Don&apos;t use the camera here
-            </Button>
-          )}
+        <div className={fill ? "absolute inset-0 flex items-center justify-center p-6" : undefined}>
+          <div className={fill ? "max-w-sm space-y-3 rounded-2xl bg-card p-4 text-sm shadow-lg" : "flex flex-wrap items-center gap-2 rounded-xl border border-dashed bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground"}>
+            <p className="min-w-0 flex-1 basis-56">{state.message}</p>
+            <span className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => setAttempt((a) => a + 1)}>
+                <RefreshCw /> Try again
+              </Button>
+              {onTurnOff && (
+                <Button size="sm" variant="ghost" onClick={onTurnOff}>
+                  Don&apos;t use the camera here
+                </Button>
+              )}
+            </span>
+          </div>
         </div>
       )}
-      <div className={state.kind === "error" ? "hidden" : "relative overflow-hidden rounded-xl bg-black"}>
+      <div className={state.kind === "error" ? "hidden" : fill ? "absolute inset-0 overflow-hidden bg-black" : "relative overflow-hidden rounded-xl bg-black"}>
         <video
           ref={video}
-          className="aspect-[4/3] max-h-[50dvh] w-full object-cover"
-          // no camera zoom in this browser: enlarge the picture instead, so the tag is easy to aim
+          className={fill ? "h-full w-full object-cover" : "aspect-[4/3] max-h-[50dvh] w-full object-cover"}
           style={!hwZoom && zoom !== 1 ? { transform: `scale(${zoom})` } : undefined}
           muted
           playsInline
@@ -218,24 +223,26 @@ export function Camera({ onCode, onTurnOff, overlay }: { onCode: (text: string) 
         />
         {/* where to hold the QR code: a square, marked at its corners */}
         {state.kind === "on" && (
-          <div className="pointer-events-none absolute left-1/2 top-1/2 aspect-square h-[62%] -translate-x-1/2 -translate-y-1/2">
+          <div className={fill ? "pointer-events-none absolute left-1/2 top-1/2 aspect-square w-[min(64vw,38dvh)] -translate-x-1/2 -translate-y-1/2" : "pointer-events-none absolute left-1/2 top-1/2 aspect-square h-[62%] -translate-x-1/2 -translate-y-1/2"}>
             <span className="absolute left-0 top-0 size-8 rounded-tl-xl border-l-4 border-t-4 border-white/90" />
             <span className="absolute right-0 top-0 size-8 rounded-tr-xl border-r-4 border-t-4 border-white/90" />
             <span className="absolute bottom-0 left-0 size-8 rounded-bl-xl border-b-4 border-l-4 border-white/90" />
             <span className="absolute bottom-0 right-0 size-8 rounded-br-xl border-b-4 border-r-4 border-white/90" />
           </div>
         )}
-        {state.kind === "on" && (
-          <Button size="sm" variant="secondary" className="absolute bottom-2 right-2 opacity-90" onClick={nextZoom} aria-label={`Zoom ${zoom}×: tap to change`}>
-            <ZoomIn /> {zoom}×
-          </Button>
-        )}
         {state.kind === "starting" && <div className="absolute inset-0 flex items-center justify-center text-sm text-white/80">Starting the camera…</div>}
         {overlay && <div className="absolute inset-x-2 top-2 z-10">{overlay}</div>}
-        {state.kind === "on" && devices.length > 1 && (
-          <Button size="sm" variant="secondary" className="absolute right-2 top-2 opacity-90" onClick={next} aria-label="Use another camera">
-            <SwitchCamera /> Switch camera
-          </Button>
+        {state.kind === "on" && (
+          <div className={controls ?? "contents"}>
+            <Button size="sm" variant="secondary" className={controls ? "opacity-90" : "absolute bottom-2 right-2 opacity-90"} onClick={nextZoom} aria-label={`Zoom ${zoom}×: tap to change`}>
+              <ZoomIn /> {zoom}×
+            </Button>
+            {devices.length > 1 && (
+              <Button size="sm" variant="secondary" className={controls ? "opacity-90" : "absolute right-2 top-2 opacity-90"} onClick={next} aria-label="Use another camera">
+                <SwitchCamera /> {controls ? null : "Switch camera"}
+              </Button>
+            )}
+          </div>
         )}
       </div>
     </>
