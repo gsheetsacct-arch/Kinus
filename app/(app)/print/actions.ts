@@ -723,3 +723,20 @@ export async function setFieldEnabled(id: string, enabled: boolean): Promise<Act
     return fail(errorMessage(e));
   }
 }
+
+/** Print → Templates: put templates in folders (or take them out), rename a folder. */
+export async function organizeTemplatesAction(ops: import("@/lib/print/folders").FolderOps): Promise<ActionResult> {
+  try {
+    await requireDesigner();
+    const { organizeTemplates } = await import("@/lib/print/folders");
+    const said = await organizeTemplates({
+      moves: (ops.moves ?? []).slice(0, 200).map((m) => ({ template_id: z.string().uuid().parse(m.template_id), folder: m.folder ?? null, name: m.name })),
+      renames: (ops.renames ?? []).slice(0, 20),
+      order: (ops.order ?? []).slice(0, 500).map((id) => z.string().uuid().parse(id)),
+    });
+    revalidatePath("/print/templates");
+    return ok(said);
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}

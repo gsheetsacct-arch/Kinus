@@ -163,6 +163,8 @@ export async function copyTemplate(id: string, opts: { for?: "campers" | "staff"
     ...("back" in t ? { back: t.back } : {}),
     ...("camps" in t ? { camps: t.camps } : {}),
     ...("thermal" in t ? { thermal: t.thermal } : {}),
+    // a copy sits in the same folder as the original (migration 0056)
+    ...("folder" in t ? { folder: (t as { folder?: string | null }).folder ?? null } : {}),
   };
   const was = "audience" in t ? t.audience : "campers";
   const audience = opts.for ?? was;
