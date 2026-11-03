@@ -23,6 +23,7 @@ export const STAFF_FIELDS: { key: string; label: string }[] = [
   { key: "DIVISION", label: "Division" },
   { key: "BUNK", label: "Bunk" },
   { key: "CAMP", label: "Camp" },
+  { key: "BUNK_CONTINUED", label: "Number: one per division, after the last bunk number" },
   { key: "DIVISION_COLOR", label: "Division colour" },
   { key: "PHONE", label: "Phone" },
   { key: "EMAIL", label: "Email" },
@@ -46,7 +47,7 @@ export type StaffPerson = {
   /** Home address from registration (lib/staff/export). */
   address?: { street?: string; city?: string; state?: string; zip?: string; country?: string } | null;
   /** Where they work, in order: their division(s), with the bunk if they have one. */
-  places: { division: string; color: string | null; camp: string | null; bunk: string | null }[];
+  places: { division: string; color: string | null; camp: string | null; bunk: string | null; number?: number | null }[];
 };
 
 const detail = (d: Record<string, string> | null | undefined, ...names: string[]) => {
@@ -91,6 +92,8 @@ export function staffValues(p: StaffPerson, roleLabel: (role: string) => string)
     DIVISION: detail(p.details, "Division (name tag)") || divisions.join(", "),
     BUNK: unique(p.places.map((x) => x.bunk)).join(", "),
     CAMP: unique(p.places.map((x) => x.camp)).join(", "),
+    // the division's number, running on after the last bunk's (lib/print/bunk-continued): as a camper's {{BUNK_CONTINUED}}
+    BUNK_CONTINUED: String(p.places.find((x) => x.number)?.number ?? ""),
     DIVISION_COLOR: p.places.find((x) => x.color)?.color ?? "#64748b",
     PHONE: p.phone ?? "",
     EMAIL: p.email ?? "",
@@ -117,5 +120,5 @@ export const SAMPLE_STAFF: StaffPerson = {
   sourceId: "1234",
   details: { "Full hebrew name": "מנחם מענדל", "Last name (Hebrew)": "כהן", "T-shirt size": "L" },
   address: { street: "770 Eastern Parkway", city: "Brooklyn", state: "New York", zip: "11213", country: "United States" },
-  places: [{ division: "Division 2", color: "#2563eb", camp: "American", bunk: "Bunk Lamed" }],
+  places: [{ division: "Division 2", color: "#2563eb", camp: "American", bunk: "Bunk Lamed", number: 142 }],
 };

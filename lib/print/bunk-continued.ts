@@ -24,3 +24,18 @@ export function continuedBunkNumbers(camps: { id: string; name: string }[][]): M
   }
   return out;
 }
+
+/**
+ * Numbers for the staff of each division, running on after the last bunk number: when the
+ * camps' bunks end at 140 (each camp's highest added up, as above), the first division is 141,
+ * the second 142, and so on, the divisions in camp order and then their own order.
+ *
+ * `camps`: each camp's divisions ({ id, bunks }), in camp order and division order.
+ * Returns division id → number.
+ */
+export function continuedDivisionNumbers(camps: { id: string; bunks: { id: string; name: string }[] }[][]): Map<string, number> {
+  let next = camps.reduce((sum, divisions) => sum + Math.max(0, ...divisions.flatMap((d) => d.bunks.map((b) => findNumber(b.name)?.value ?? 0))), 0);
+  const out = new Map<string, number>();
+  for (const divisions of camps) for (const d of divisions) out.set(d.id, ++next);
+  return out;
+}
