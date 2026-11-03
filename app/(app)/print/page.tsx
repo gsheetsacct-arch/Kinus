@@ -97,6 +97,10 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
         title="Print queue"
         description={office.to ? `Tag requests are emailed to ${office.to} as a PDF, and wait here until marked printed.` : "No office email is set, so requests wait here. Set one in Settings."}
       />
+      {/* first thing on the page: everything waiting, printed in one go (each camper's labels together) */}
+      {sets.map((set) => (
+        <WaitingAll key={set.key} set={set} where={division?.name ?? camp?.name ?? null} query={new URLSearchParams({ waiting: set.key, order: "name", ...(camp ? { camp: camp.id } : {}), ...(division ? { division: division.id } : {}) }).toString()} />
+      ))}
       {/* camp, then division: one check-in location's labels */}
       {camps.length > 1 && (
         <Bar
@@ -111,10 +115,6 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
           ]}
         />
       )}
-      {/* the check-in labels still to print, all together: each camper's name tag and bag label one after another */}
-      {sets.map((set) => (
-        <WaitingAll key={set.key} set={set} where={division?.name ?? camp?.name ?? null} query={new URLSearchParams({ waiting: set.key, order: "name", ...(camp ? { camp: camp.id } : {}), ...(division ? { division: division.id } : {}) }).toString()} />
-      ))}
       <div className="mb-4 flex flex-wrap gap-2">
         {(Object.keys(SHOW) as (keyof typeof SHOW)[]).map((k) => (
           <Link

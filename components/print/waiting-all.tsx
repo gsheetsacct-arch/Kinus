@@ -12,7 +12,7 @@ import { SharePdf } from "./share-pdf";
 const PART = 400;
 
 /**
- * Every on-the-spot label still to print (name tags and bag labels from check-in), all
+ * Every label-printer label still to print (name tags and bag labels from check-in…), all
  * together, sorted by name: each camper's labels one after another. Printing them remembers
  * which requests went out, so "Mark these printed" doesn't take ones that came in since.
  */
@@ -36,7 +36,7 @@ export function WaitingAll({ set, where, query }: { set: WaitingSet; where: stri
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1 basis-64">
           <h2 className="text-base font-semibold">
-            {set.tags.toLocaleString()} on-the-spot {set.tags === 1 ? "label" : "labels"} waiting{where ? ` · ${where}` : ""}
+            {set.tags.toLocaleString()} {set.tags === 1 ? "label" : "labels"} waiting to print{where ? ` · ${where}` : ""}
           </h2>
           <p className="text-sm text-muted-foreground">
             {set.templates.join(" + ")} ({set.size}), all together, sorted by name: each camper&apos;s labels come out one after another.

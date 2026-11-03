@@ -36,15 +36,16 @@ export async function queueScope(user: CurrentUser, sessionId: string, pick: { c
 export type WaitingSet = { key: string; ids: string[]; tags: number; templates: string[]; templateIds: string[]; size: string };
 
 /**
- * The on-the-spot labels still to print (templates shown on a camper's card: the check-in
- * name tag and bag label), in this part of the queue (queueScope's shows), by label size: each size prints as one
- * set on its printer, each camper's labels together.
+ * The labels still to print for a label printer (one label a page: the check-in name tag and
+ * bag label, packing labels…), in this part of the queue (queueScope's shows), by label size:
+ * each size prints as one set on its printer, each camper's labels together. Label sheets
+ * print on their own (Print together).
  */
 export async function waitingSets(sessionId: string, shows: (jobId: string) => boolean): Promise<WaitingSet[]> {
   const jobs = await fetchAll((from, to) =>
     createAdminClient()
       .from("print_jobs")
-      .select("id, item_count, template_id, print_templates(name, sort_order, page_width_mm, page_height_mm, sheet_layout, show_on_card)")
+      .select("id, item_count, template_id, print_templates(name, sort_order, page_width_mm, page_height_mm, sheet_layout, thermal)")
       .eq("session_id", sessionId)
       .in("status", [...TO_PRINT])
       .not("template_id", "is", null)
@@ -53,9 +54,10 @@ export async function waitingSets(sessionId: string, shows: (jobId: string) => b
   );
   const sets = new Map<string, WaitingSet & { order: Map<string, number> }>();
   for (const j of jobs) {
-    const t = j.print_templates as { name: string; sort_order: number | null; page_width_mm: number; page_height_mm: number; sheet_layout: unknown; show_on_card: boolean } | null;
-    if (!t || !t.show_on_card || t.sheet_layout || !shows(j.id)) continue;
-    const key = `${Math.round(t.page_width_mm)}x${Math.round(t.page_height_mm)}`;
+    const t = j.print_templates as { name: string; sort_order: number | null; page_width_mm: number; page_height_mm: number; sheet_layout: unknown; thermal: boolean | null } | null;
+    if (!t || t.sheet_layout || !shows(j.id)) continue;
+    // one set per label size (and thermal or not: they go through the printer differently)
+    const key = `${Math.round(t.page_width_mm)}x${Math.round(t.page_height_mm)}${t.thermal ? "t" : ""}`;
     const s = sets.get(key) ?? { key, ids: [] as string[], tags: 0, templates: [] as string[], templateIds: [] as string[], size: `${Math.round(t.page_width_mm)} × ${Math.round(t.page_height_mm)} mm`, order: new Map<string, number>() };
     s.ids.push(j.id);
     s.tags += j.item_count;

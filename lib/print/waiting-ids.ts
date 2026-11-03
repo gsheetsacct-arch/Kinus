@@ -4,7 +4,7 @@ import { canUsePrintArea } from "@/lib/auth/permissions";
 import { queueScope, waitingSets } from "./queue";
 
 /**
- * ?waiting=<label size>[&camp=…][&division=…]: every on-the-spot label of that size still to
+ * ?waiting=<label size>[&camp=…][&division=…]: every label-printer label of that size still to
  * print in that part of the queue (worked out here, so the address stays short however many
  * there are). Null when this person can't use the print queue.
  */
