@@ -1,4 +1,4 @@
-import { loadExtraFields } from "@/lib/data/extra-fields";
+import { extraGroupOf, loadExtraFields } from "@/lib/data/extra-fields";
 import { COMBO_SEPS, parseCombos, parseWhere } from "@/lib/data/lists";
 import { notFound } from "next/navigation";
 import { Copy, Lock } from "lucide-react";
@@ -27,6 +27,7 @@ const GROUP_TITLES: { group: FieldGroup | "basic+status"; title: string }[] = [
   { group: "address", title: "Address" },
   { group: "parent_notes", title: "Notes from parents" },
   { group: "staff_notes", title: "Staff notes" },
+  { group: "family", title: "Family situations" },
 ];
 
 export default async function PresetEditPage({ params }: { params: Promise<{ id: string }> }) {
@@ -46,12 +47,21 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
   // combined columns: the saved ones, then a blank one to make another
   const combos = parseCombos(preset?.filters);
   const comboRows = [...combos, { id: "", label: "", parts: [] as string[], sep: "dot" as const, labels: false }].slice(0, 6);
-  // what can go in one: Kinus' fields, Sleeping, and every export column
-  const partOptions = [
-    ...FIELDS.map((f) => ({ key: f.key, label: f.label })),
-    { key: SLEEPING_COLUMN, label: SLEEPING_COLUMN_LABEL },
-    ...extraFields.map((f) => ({ key: `source.${f.column}`, label: `${f.label} (export)` })),
-  ];
+  // everything a combined column (or grouping) can use, by kind: Kinus' fields, Sleeping, and every
+  // export column under the kind chosen for it in Settings
+  const byKind = GROUP_TITLES.map(({ group, title }) => {
+    const inGroup = (g: string) => (group === "basic+status" ? UNGATED_GROUPS.includes(g as FieldGroup) : g === group);
+    return {
+      title,
+      options: [
+        ...FIELDS.filter((f) => inGroup(f.group)).map((f) => ({ key: f.key, label: f.label })),
+        ...(group === "basic+status" ? [{ key: SLEEPING_COLUMN, label: SLEEPING_COLUMN_LABEL }] : []),
+        ...extraFields.filter((f) => inGroup(extraGroupOf(f))).map((f) => ({ key: `source.${f.column}`, label: `${f.label} (export)` })),
+      ],
+    };
+  }).filter((k) => k.options.length);
+  const partOptions = byKind.flatMap((k) => k.options);
+  const groupBy = preset?.group_by ?? (isNew ? "bunk" : "");
   const whereRows = [...where, ...Array.from({ length: Math.max(1, 3 - where.length) }, () => ({ column: "", values: [] as string[] }))].slice(0, 5);
   const sortField = sort.find((s) => s.field !== preset?.group_by)?.field ?? "last_name";
 
@@ -87,11 +97,22 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                 ))}
               </Select>
             </Field>
-            <Field label="Group the list by" htmlFor="group_by">
-              <Select id="group_by" name="group_by" defaultValue={preset?.group_by ?? "bunk"}>
+            <Field label="Group the list by" htmlFor="group_by" hint="A heading for each bunk, division, or each answer of any field (e.g. Sleeping here / Going home, or each T-shirt size).">
+              <Select id="group_by" name="group_by" defaultValue={groupBy}>
                 <option value="bunk">Bunk (one page per bunk when printed)</option>
                 <option value="division">Division</option>
                 <option value="">Don&apos;t group</option>
+                {byKind.map((k) => (
+                  <optgroup key={k.title} label={`By ${k.title.toLowerCase()}`}>
+                    {k.options
+                      .filter((o) => o.key !== "bunk" && o.key !== "division" && !o.key.startsWith("contact."))
+                      .map((o) => (
+                        <option key={o.key} value={o.key}>
+                          {o.label}
+                        </option>
+                      ))}
+                  </optgroup>
+                ))}
               </Select>
             </Field>
             <Field label="Sort campers by" htmlFor="sort_field">
@@ -149,10 +170,18 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
             </Button>
           </div>
         </Section>
-        <Section title="Columns" description="Tick the columns to show, in this order.">
+        <div className="space-y-6">
+        <Section title="Columns" description="Tick the columns to show, in this order. Each kind holds Kinus' own fields and the export's columns of that kind (Settings → who sees each).">
           <div className="space-y-5">
             {GROUP_TITLES.map(({ group, title }) => {
-              const fields = FIELDS.filter((f) => (group === "basic+status" ? UNGATED_GROUPS.includes(f.group) : f.group === group));
+              // Kinus' own fields, then the export's columns of the same kind (Settings → who sees each)
+              const inGroup = (g: string) => (group === "basic+status" ? UNGATED_GROUPS.includes(g as FieldGroup) : g === group);
+              const fields = [
+                ...FIELDS.filter((f) => inGroup(f.group)).map((f) => ({ key: f.key, label: f.label, fromExport: false })),
+                ...(group === "basic+status" ? [{ key: SLEEPING_COLUMN, label: `${SLEEPING_COLUMN_LABEL} (Sleeping here / Going home)`, fromExport: false }] : []),
+                ...extraFields.filter((f) => inGroup(extraGroupOf(f))).map((f) => ({ key: `source.${f.column}`, label: f.label, fromExport: true })),
+              ];
+              if (!fields.length) return null;
               const gated = group !== "basic+status";
               return (
                 <fieldset key={group} className="space-y-2">
@@ -168,26 +197,23 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                     {fields.map((f) => (
                       <label key={f.key} className="flex cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm hover:bg-muted/40 has-[:checked]:border-primary/50 has-[:checked]:bg-primary-soft/40">
                         <input type="checkbox" name="columns" value={f.key} defaultChecked={columns.has(f.key)} className="size-4 accent-[var(--primary)]" />
-                        {f.label}
+                        <span className="min-w-0 truncate" dir="auto">
+                          {f.label}
+                        </span>
+                        {f.fromExport && <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">export</span>}
                       </label>
                     ))}
                   </div>
                 </fieldset>
               );
             })}
-            <fieldset className="space-y-2">
-              <legend className="mb-2 text-sm font-semibold">Sleeping</legend>
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm hover:bg-muted/40 has-[:checked]:border-primary/50 has-[:checked]:bg-primary-soft/40 sm:w-fit">
-                <input type="checkbox" name="columns" value={SLEEPING_COLUMN} defaultChecked={columns.has(SLEEPING_COLUMN)} className="size-4 accent-[var(--primary)]" />
-                {SLEEPING_COLUMN_LABEL} <span className="text-muted-foreground">(Sleeping here / Going home)</span>
-              </label>
-            </fieldset>
-            <fieldset className="space-y-3">
-              <legend className="mb-1 text-sm font-semibold">Combined columns</legend>
-              <p className="text-xs text-muted-foreground">
-                Several fields in one column, to take less room on a printed list: e.g. T-shirt · Sleeping · Yarmulka. Empty ones are left out; a yes/no field shows its name when yes. Combined
-                columns come after the others.
-              </p>
+          </div>
+        </Section>
+        <Section
+          title="Combined columns"
+          description="Several fields in one column, to take less room on a printed list: e.g. “M · Sleeping here · 6¾”. Name it, tick what goes in it, and choose what goes between them. Empty values are left out; a yes/no field shows its name when yes. Combined columns come after the others."
+        >
+            <div className="space-y-3">
               {comboRows.map((c, i) => (
                 <div key={c.id || `new-${i}`} className="space-y-2 rounded-lg border bg-background p-3">
                   <input type="hidden" name={`combo_id_${i}`} value={c.id} />
@@ -208,14 +234,21 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                     <summary className="cursor-pointer text-muted-foreground">
                       {c.parts.length ? `In it: ${c.parts.map((k) => partOptions.find((o) => o.key === k)?.label ?? k).join(" · ")}` : "Choose what goes in it"}
                     </summary>
-                    <div className="mt-2 grid max-h-72 gap-1 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
-                      {partOptions.map((o) => (
-                        <label key={o.key} className="flex items-center gap-2 text-sm">
-                          <input type="checkbox" name={`combo_part_${i}`} value={o.key} defaultChecked={c.parts.includes(o.key)} className="size-4 accent-[var(--primary)]" />
-                          <span className="truncate" dir="auto">
-                            {o.label}
-                          </span>
-                        </label>
+                    <div className="mt-2 max-h-80 space-y-3 overflow-y-auto">
+                      {byKind.map((k) => (
+                        <div key={k.title}>
+                          <p className="mb-1 text-xs font-semibold text-muted-foreground">{k.title}</p>
+                          <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-3">
+                            {k.options.map((o) => (
+                              <label key={o.key} className="flex items-center gap-2 text-sm">
+                                <input type="checkbox" name={`combo_part_${i}`} value={o.key} defaultChecked={c.parts.includes(o.key)} className="size-4 accent-[var(--primary)]" />
+                                <span className="truncate" dir="auto">
+                                  {o.label}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </details>
@@ -226,22 +259,9 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                   )}
                 </div>
               ))}
-            </fieldset>
-            {extraFields.length > 0 && (
-              <fieldset className="space-y-2">
-                <legend className="mb-2 text-sm font-semibold">From the registration export</legend>
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                  {extraFields.map((f) => (
-                    <label key={f.column} className="flex cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm hover:bg-muted/40 has-[:checked]:border-primary/50 has-[:checked]:bg-primary-soft/40">
-                      <input type="checkbox" name="columns" value={`source.${f.column}`} defaultChecked={columns.has(`source.${f.column}`)} className="size-4 accent-[var(--primary)]" />
-                      {f.label}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            )}
-          </div>
+            </div>
         </Section>
+        </div>
       </ActionForm>
       {!isNew && (
         <Section tone="danger" title="Delete this layout" description="People who use it will see the other layouts for their role instead.">
