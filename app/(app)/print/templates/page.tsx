@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Copy, Plus, UserRound } from "lucide-react";
+import { Copy, FolderMinus, FolderOpen, Plus, UserRound } from "lucide-react";
+import { MoveToFolder, RenameFolder } from "@/components/print/template-folders";
 import { PageHeader } from "@/components/page-header";
 import { ActionForm } from "@/components/action-form";
 import { Badge } from "@/components/ui/badge";
@@ -49,49 +50,11 @@ export default async function TemplatesPage({ searchParams }: { searchParams: Pr
   const isRetired = (t: { name: string }) => t.name.startsWith("(retired)");
   const retired = (data ?? []).filter(isRetired);
   const shown = (data ?? []).filter((t) => showRetired === isRetired(t));
-  return (
-    <div>
-      <PageHeader
-        title={showRetired ? "Retired templates" : "Templates"}
-        description={
-          showRetired ? "No longer offered for printing; kept so past print jobs still open." : "The designs for name tags, luggage tags and anything else printed per camper, and staff tags."
-        }
-        actions={
-          <>
-            <Button asChild size="sm">
-              <Link href="/print/templates/new">
-                <Plus /> New template
-              </Link>
-            </Button>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/print/templates/new?for=staff">
-                <UserRound /> New staff template
-              </Link>
-            </Button>
-          </>
-        }
-      />
-      {[
-        { title: null, list: shown.filter(forCampers) },
-        // staff tags: filled from the staff list, printed from Print → Staff tags (migration 0041)
-        { title: "For staff", list: shown.filter((t) => !forCampers(t)) },
-      ].map(({ title, list }) =>
-        title && !list.length ? null : (
-          <section key={title ?? "campers"} className={title ? "mt-8 space-y-3" : undefined}>
-            {title && (
-              <div>
-                <h2 className="font-semibold">{title}</h2>
-                <p className="text-sm text-muted-foreground">
-                  Name tags and badges for staff, printed from{" "}
-                  <Link href="/print/staff" className="text-primary hover:underline">
-                    Staff tags
-                  </Link>
-                  .
-                </p>
-              </div>
-            )}
-            <ul className="grid gap-3 sm:grid-cols-2">
-              {list.map((t) => {
+  // folders (Print → Templates, or the design connector's organize_templates), A–Z
+  const folderOf = (t: (typeof shown)[number]) => (t as { folder?: string | null }).folder ?? null;
+  const folders = [...new Set((data ?? []).map(folderOf).filter((f): f is string => Boolean(f)))].sort((x, y) => x.localeCompare(y, undefined, { numeric: true }));
+  const groups = [...folders.map((f) => ({ folder: f as string | null, list: shown.filter((t) => folderOf(t) === f) })), { folder: null as string | null, list: shown.filter((t) => !folderOf(t)) }].filter((g) => g.list.length);
+  const card = (t: (typeof shown)[number]) => {
                 const sheet = t.sheet_layout as SheetLayout | null;
                 const preset = currentPreset(Number(t.page_width_mm), Number(t.page_height_mm), sheet);
                 return (
@@ -123,7 +86,8 @@ export default async function TemplatesPage({ searchParams }: { searchParams: Pr
                       {preset ? ` · ${preset.brand} ${preset.product}` : ""}
                       {sheet ? ` · ${sheet.cols * sheet.rows} per ${sheet.paper === "a4" ? "A4" : "Letter"} sheet` : " · one per label"}
                     </p>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {!forCampers(t) && <Badge variant="primary">Staff tag</Badge>}
                       {Number((t as { copies?: number }).copies) > 1 && (
                         <Badge variant="secondary">
                           {(t as { copies?: number }).copies} per {forCampers(t) ? "camper" : "person"}
@@ -135,14 +99,55 @@ export default async function TemplatesPage({ searchParams }: { searchParams: Pr
                       {templateCamps(t).length > 0 && <Badge variant="primary">{templateCamps(t).join(" · ")} only</Badge>}
                       {Boolean((t as { back?: unknown }).back) && <Badge variant="outline">both sides</Badge>}
                       {Boolean((t as { thermal?: boolean }).thermal) && <Badge variant="outline">thermal printer</Badge>}
+                      <span className="ml-auto">
+                        <MoveToFolder templateId={t.id} folder={folderOf(t)} folders={folders} />
+                      </span>
                     </div>
                   </li>
                 );
-              })}
-            </ul>
-          </section>
-        ),
-      )}
+              };
+  return (
+    <div>
+      <PageHeader
+        title={showRetired ? "Retired templates" : "Templates"}
+        description={
+          showRetired ? "No longer offered for printing; kept so past print jobs still open." : "The designs for name tags, luggage tags and anything else printed per camper, and staff tags (printed from Staff tags). Put them in folders with Move, at the bottom of each."
+        }
+        actions={
+          <>
+            <Button asChild size="sm">
+              <Link href="/print/templates/new">
+                <Plus /> New template
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/print/templates/new?for=staff">
+                <UserRound /> New staff template
+              </Link>
+            </Button>
+          </>
+        }
+      />
+      {/* folders A–Z (open), then the templates in none; staff tags marked */}
+      <div className="space-y-4">
+        {groups.map((g) => (
+          <details key={g.folder ?? "none"} open className="group rounded-xl border bg-muted/20 p-3 sm:p-4">
+            <summary className="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+              {g.folder ? <FolderOpen className="size-4 text-primary" /> : <FolderMinus className="size-4 text-muted-foreground" />}
+              <h2 className="font-semibold" dir="auto">
+                {g.folder ?? (groups.length > 1 ? "Not in a folder" : "Templates")}
+              </h2>
+              <span className="text-sm text-muted-foreground">({g.list.length})</span>
+              {g.folder && (
+                <span className="ml-auto">
+                  <RenameFolder folder={g.folder} />
+                </span>
+              )}
+            </summary>
+            <ul className="mt-3 grid gap-3 sm:grid-cols-2">{g.list.map(card)}</ul>
+          </details>
+        ))}
+      </div>
       {showRetired && !shown.length && <p className="text-sm text-muted-foreground">No retired templates.</p>}
       {(retired.length > 0 || showRetired) && (
         <p className="mt-4 text-sm text-muted-foreground">

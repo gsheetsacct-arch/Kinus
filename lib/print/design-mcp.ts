@@ -72,7 +72,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
 
   server.registerTool(
     "list_templates",
-    { title: "List templates", description: "Every template: id, name, who it's for (campers or staff), size, label stock, thermal printer, camps.", annotations: { readOnlyHint: true } },
+    { title: "List templates", description: "Every template: id, name, its folder on Print → Templates (null: none), who it's for (campers or staff), size, label stock, thermal printer, camps. In the order the page lists them.", annotations: { readOnlyHint: true } },
     async () => {
       const { data } = await createAdminClient().from("print_templates").select("*").order("sort_order").order("name");
       return text(
@@ -82,6 +82,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
             return {
               id: t.id,
               name: t.name,
+              folder: (t as { folder?: string | null }).folder ?? null,
               retired: t.name.startsWith("(retired)"),
               for: audienceOf(t),
               kind: t.kind,
@@ -96,6 +97,28 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
           }),
         ),
       );
+    },
+  );
+
+  server.registerTool(
+    "organize_templates",
+    {
+      title: "Organize templates",
+      description:
+        "Tidies Print → Templates: put templates in folders (folder: a name; null or \"\" takes one out of its folder; a new name makes a new folder), rename templates (name), rename or empty a folder (renames), and set the order they're listed in (order: template ids, first to last; each folder lists its templates in this order). Folders are listed A–Z. Look with list_templates first; every change is recorded in the activity log.",
+      inputSchema: {
+        moves: z.array(z.object({ template_id: z.guid(), folder: z.string().max(60).nullable().optional(), name: z.string().min(1).max(120).optional() })).max(200).optional(),
+        renames: z.array(z.object({ from: z.string().min(1).max(60), to: z.string().max(60).nullable() })).max(20).optional(),
+        order: z.array(z.guid()).max(500).optional(),
+      },
+    },
+    async ({ moves, renames, order }) => {
+      try {
+        const { organizeTemplates } = await import("./folders");
+        return text(await organizeTemplates({ moves, renames, order }));
+      } catch (e) {
+        return problem(e instanceof Error ? e.message : "Couldn't organize the templates.");
+      }
     },
   );
 

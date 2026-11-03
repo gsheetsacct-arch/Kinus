@@ -101,7 +101,7 @@ export async function buildList(
     : [];
   // combined columns: their parts are loaded like columns of their own
   const combos = new Map((preset.combos ?? []).map((c) => [`combo:${c.id}`, c]));
-  const allKeys = [...preset.columns, ...preset.columns.flatMap((k) => combos.get(k)?.parts ?? [])];
+  const allKeys = [...preset.columns, ...preset.columns.flatMap((k) => combos.get(k)?.parts ?? []), ...(preset.group_by ? [preset.group_by] : [])];
   const extraDefs = allKeys.some((k) => k.startsWith("source."))
     ? await import("./extra-fields").then(async (m) => (await m.loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: f.label, group: m.extraGroupOf(f), kind: "text" as const, answers: f.answers })))
     : [];
@@ -115,7 +115,10 @@ export async function buildList(
     .map((k) => (combos.has(k) ? (comboParts.get(k)!.length ? { key: k, label: combos.get(k)!.label, group: "basic" as const, kind: "text" as const } : undefined) : defOf(k)))
     .filter((f): f is NonNullable<typeof f> => Boolean(f))
     .filter(allowed);
-  const partKeys = shownColumns.flatMap((f) => (combos.has(f.key) ? comboParts.get(f.key)!.map((p) => p.key) : [f.key]));
+  // grouped by any field (a bunk, a division, the T-shirt size, an export column…), when this person may see it
+  const groupDef = preset.group_by ? defOf(preset.group_by) : undefined;
+  const groupKey = groupDef && allowed(groupDef) ? groupDef.key : null;
+  const partKeys = [...shownColumns.flatMap((f) => (combos.has(f.key) ? comboParts.get(f.key)!.map((p) => p.key) : [f.key])), ...(groupKey ? [groupKey] : [])];
   const fields = [...new Set([...partKeys, ...sortKeys.map((s) => s.field), ...(preset.group_by ? [preset.group_by] : [])])].filter((k) => FIELD_BY_KEY[k]);
   // the layout's filters: all of them, or (by default) any one of them; the page's choice narrows it further
   const anyOf = preset.match === "any" && preset.only.length > 1 ? preset.only : [];
@@ -166,11 +169,11 @@ export async function buildList(
     }
     return 0;
   });
-  const groupKey = preset.group_by;
   const groupsMap = new Map<string, BuiltList["groups"][number]>();
   const bunkOfGroup = new Map<string, string>();
   for (const c of sorted) {
-    const title = groupKey ? String(getFieldValue(c, groupKey) ?? (groupKey === "bunk" ? "Unassigned" : "—")) : "";
+    const g = groupKey ? cellOf(c, groupKey) : null;
+    const title = !groupKey ? "" : g === null || g === undefined || g === "" ? (groupKey === "bunk" ? "Unassigned" : `No ${groupDef!.label.toLowerCase()}`) : typeof g === "boolean" ? `${groupDef!.label}: ${g ? "Yes" : "No"}` : String(g);
     if (groupKey === "bunk" && c.bunk_id && !bunkOfGroup.has(title)) bunkOfGroup.set(title, String(c.bunk_id));
     if (!groupsMap.has(title)) groupsMap.set(title, { title, rows: [] });
     groupsMap.get(title)!.rows.push({
@@ -212,7 +215,11 @@ export async function buildList(
   return {
     preset,
     columns,
-    groups: await inCampOrder(supabase, scope.sessionId, groupKey, [...groupsMap.values()]),
+    // bunks and divisions in the camp's order; any other field's groups A–Z, the empty one last
+    groups:
+      groupKey === "bunk" || groupKey === "division" || !groupKey
+        ? await inCampOrder(supabase, scope.sessionId, groupKey, [...groupsMap.values()])
+        : [...groupsMap.values()].sort((a, b) => Number(a.title.startsWith("No ")) - Number(b.title.startsWith("No ")) || a.title.localeCompare(b.title, undefined, { numeric: true })),
     scopeLabel: [[divName, bunkName].filter(Boolean).join(" · ") || (scope.campName ? `All of ${scope.campName}` : "All divisions"), ...(anyOf.length ? [anyOf.map((k) => CAMPER_FLAGS[k].label).join(" or ")] : []), ...only.map((k) => CAMPER_FLAGS[k].label), ...where.map((w) => `${columnLabels.get(w.column) ?? w.column}: ${w.values.join(" or ")}`)].join(" · "),
   };
 }

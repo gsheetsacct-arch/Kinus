@@ -12,7 +12,8 @@ const schema = z.object({
   id: z.guid().optional().or(z.literal("")),
   name: z.string().trim().min(1),
   audience: z.enum(["counselor", "head_counselor", "division_head", "director", "office", "custom"]),
-  group_by: z.enum(["bunk", "division", ""]),
+  // bunk, division, or any field: a Kinus one, Sleeping, or an export column
+  group_by: z.string().max(200).refine((k) => k === "" || Boolean(FIELD_BY_KEY[k]) || k === SLEEPING_COLUMN || /^source\.[^\s{}|]{1,120}$/.test(k), "Pick what to group by."),
   sort_field: z.string().default("last_name"),
   is_default: z.enum(["on"]).optional(),
 });
