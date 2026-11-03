@@ -22,14 +22,37 @@ jobs:
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           FILES: ${{ inputs.files }}
+          REGION: ${{ vars.SUPABASE_REGION || 'us-east-1' }}
         run: |
           if [ -z "$SUPABASE_DB_URL" ]; then echo "::error::Add the SUPABASE_DB_URL secret (Supabase → Connect → Session pooler URI, with the password; see .github/actions-secrets.env.example)."; exit 1; fi
+          # GitHub's machines can't reach Supabase's "Direct connection" address (IPv6 only):
+          # a direct address is turned into the same database through the session pooler
+          # (region from the SUPABASE_REGION variable, East US by default)
+          URL="$SUPABASE_DB_URL"
+          REF=$(python3 -c 'import re,sys; m=re.search(r"@db\.([a-z0-9]+)\.supabase\.co(:\d+)?/", sys.argv[1]); print(m.group(1) if m else "")' "$URL")
+          if [ -n "$REF" ]; then
+            for host in "aws-0-$REGION.pooler.supabase.com" "aws-1-$REGION.pooler.supabase.com"; do
+              try=$(python3 - "$URL" "$REF" "$host" <<'PY'
+          import sys
+          url, ref, host = sys.argv[1:]
+          scheme, rest = url.split("://", 1)
+          creds, after = rest.rsplit("@", 1)
+          password = creds.split(":", 1)[1] if ":" in creds else ""
+          path = after[after.index("/"):] if "/" in after else "/postgres"
+          print(f"{scheme}://postgres.{ref}:{password}@{host}:5432{path}")
+          PY
+              )
+              echo "::add-mask::$try"
+              if psql "$try" -qtAc "select 1" >/dev/null 2>err.txt; then URL="$try"; echo "Using the session pooler at $host"; break; fi
+              echo "Not at $host: $(grep -o 'FATAL.*\|error:.*' err.txt | head -1 | sed 's/postgres\.[a-z0-9]*:[^@]*@/…@/')"
+            done
+          fi
           for f in $FILES; do
             case "$f" in *[!A-Za-z0-9_.-]*) echo "::error::Not a migration file name: $f"; exit 1;; esac
             p="supabase/migrations/$f"
             [ -f "$p" ] || { echo "::error::No such migration: $f"; exit 1; }
             echo "== $f"
-            psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 --single-transaction -q -f "$p"
+            psql "$URL" -v ON_ERROR_STOP=1 --single-transaction -q -f "$p"
           done
-          psql "$SUPABASE_DB_URL" -qc "notify pgrst, 'reload schema'"
+          psql "$URL" -qc "notify pgrst, 'reload schema'"
           echo "Done."
