@@ -6,7 +6,8 @@ import { Markdown } from "@/components/help/markdown";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/current-user";
 import { canSeeHelp } from "@/lib/help/access";
-import { GUIDE } from "@/lib/help/guide";
+import { GUIDE, LIVE_SECTION } from "@/lib/help/guide";
+import { liveSetup } from "@/lib/help/live";
 
 export const metadata = { title: "Help" };
 
@@ -17,6 +18,9 @@ export const metadata = { title: "Help" };
 export default async function HelpPage() {
   const user = await requireUser();
   if (!canSeeHelp(user)) redirect("/");
+  // the actual settings, read live: what the written guide marks ⚙ Setting
+  const live = await liveSetup().catch((e) => (console.error("Reading the live setup failed", e), "Couldn't read the settings just now: reload the page."));
+  const sections = [GUIDE[0], { ...LIVE_SECTION, body: live }, ...GUIDE.slice(1)];
   return (
     <div className="space-y-6">
       <PageHeader
@@ -34,7 +38,7 @@ export default async function HelpPage() {
         {/* contents */}
         <nav className="no-print lg:sticky lg:top-4 lg:self-start" aria-label="Contents">
           <ul className="flex flex-wrap gap-1.5 lg:flex-col lg:gap-0.5">
-            {GUIDE.map((s) => (
+            {sections.map((s) => (
               <li key={s.id}>
                 <a href={`#${s.id}`} className="block rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
                   {s.title}
@@ -44,7 +48,7 @@ export default async function HelpPage() {
           </ul>
         </nav>
         <div className="min-w-0 space-y-4">
-          {GUIDE.map((s) => (
+          {sections.map((s) => (
             <section key={s.id} id={s.id} className="scroll-mt-20 rounded-xl border bg-card p-5 shadow-[var(--shadow-card)]">
               <h2 className="text-xl font-semibold">{s.title}</h2>
               <p className="text-sm text-muted-foreground">{s.summary}</p>

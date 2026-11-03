@@ -58,5 +58,9 @@ describe("the Kinus connector for everyone", () => {
     expect(guideText("templates")).toContain("OL875");
     expect(guideText("nope")).toBeNull();
     expect(guideContents()).toContain("add-info");
+    // the live settings are offered to those who may see them; settings are marked in the text
+    expect(guideContents(true)).toContain("**now**");
+    expect(guideContents()).not.toContain("**now**");
+    expect(guideText("start")).toContain("⚙ Setting");
   });
 });

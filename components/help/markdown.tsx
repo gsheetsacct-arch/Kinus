@@ -2,7 +2,7 @@ import * as React from "react";
 
 /**
  * The guide's Markdown, as the Help page shows it: headings (## / ###), paragraphs, lists
- * (- and 1.), tables (| a | b |), **bold** and `code`. Only that: the guide is our own text.
+ * (- and 1.), tables (| a | b |), notes (> …), **bold** and `code`. Only that: the guide is our own text.
  */
 export function Markdown({ text }: { text: string }) {
   const lines = text.trim().split("\n");
@@ -22,6 +22,12 @@ export function Markdown({ text }: { text: string }) {
     if (line.startsWith("## ")) {
       out.push(<h2 key={i} className="mt-6 mb-2 text-lg font-semibold">{inline(line.slice(3))}</h2>);
       i++;
+      continue;
+    }
+    if (line.startsWith("> ")) {
+      const quote: string[] = [];
+      while (i < lines.length && lines[i].startsWith("> ")) quote.push(lines[i++].slice(2));
+      out.push(<div key={i} className="my-3 rounded-lg border border-primary/30 bg-primary-soft/40 px-3 py-2 text-sm leading-relaxed">{inline(quote.join(" "))}</div>);
       continue;
     }
     if (line.startsWith("|")) {
@@ -66,7 +72,7 @@ export function Markdown({ text }: { text: string }) {
       continue;
     }
     const para: string[] = [];
-    while (i < lines.length && lines[i].trim() && !/^(#{2,3} |\||- |\d+\. )/.test(lines[i])) para.push(lines[i++]);
+    while (i < lines.length && lines[i].trim() && !/^(#{2,3} |\||- |\d+\. |> )/.test(lines[i])) para.push(lines[i++]);
     out.push(<p key={i} className="my-2 text-sm leading-relaxed">{inline(para.join(" "))}</p>);
   }
   return <>{out}</>;

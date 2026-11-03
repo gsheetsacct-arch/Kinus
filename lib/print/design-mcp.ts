@@ -69,7 +69,7 @@ Kinus runs the Kinus (a camp event): campers from the registration export, staff
 
 Help them with anything in Kinus: explain how it works, how to prepare and upload a file (the registration export, a short file of extra details, the staff list), where a setting is, why something looks the way it does, and do what your tools allow.
 
-**Before answering a how-to question, read the Kinus guide**: kinus_guide (no topic: its contents; a topic: that part; "all": everything). It's the same as the Help page in Kinus, and says exactly how things are set up here (the templates and their paper, imports, columns, Hebrew names, check-in, printing, lists). my_access says what this person may do, so your advice fits them. Point them to the page in Kinus (menu → page → section) when they have to do it there.`;
+**Before answering a how-to question, read the Kinus guide**: kinus_guide (no topic: its contents; a topic: that part; "all": everything). It's the same as the Help page in Kinus. It says how Kinus works; what's marked ⚙ Setting is a choice made in Kinus that people change (what each role may do and see, which columns show and to whom, the templates, the office email…): **never state those from the written guide: read kinus_guide("now")**, the actual settings read live, and when they differ, "now" is right. If "now" isn't available to this person, say it's a setting and who can check it. my_access says what this person may do, so your advice fits them. Point them to the page in Kinus (menu → page → section) when they have to do it there.`;
 
 export function designServer(user: CurrentUser, appUrl: string, opts: { designer?: boolean } = {}): McpServer {
   // everyone with their own sign-in connects; the template tools only for those who may edit templates
@@ -90,10 +90,19 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
       annotations: { readOnlyHint: true },
     },
     async ({ topic }) => {
-      const { guideContents, guideText } = await import("@/lib/help/guide");
-      if (!topic) return text(`# The Kinus guide\nAsk for a topic (or "all"):\n${guideContents()}`);
+      const { guideContents, guideText, LIVE_SECTION } = await import("@/lib/help/guide");
+      const { canSeeHelp } = await import("@/lib/help/access");
+      // "now": this camp's actual settings, read live (for the people who set Kinus up)
+      const live = canSeeHelp(user);
+      const liveText = async () => `## ${LIVE_SECTION.title}\n${await (await import("@/lib/help/live")).liveSetup()}`;
+      if (!topic)
+        return text(
+          `# The Kinus guide\nAsk for a topic (or "all"). The guide says how Kinus works; parts marked ⚙ Setting are choices made in Kinus${live ? ': their actual current values are in "now"' : " (ask a director what's set)"}.\n${guideContents(live)}`,
+        );
+      if (topic === "now") return live ? text(await liveText()) : problem("How it's set up here (the roles, columns, templates, settings) is for directors, the office and logistics: ask one of them, or see your own access with my_access.");
       const body = guideText(topic === "all" ? null : topic);
-      return body ? text(body) : problem(`No such topic. The topics:\n${guideContents()}`);
+      if (!body) return problem(`No such topic. The topics:\n${guideContents(live)}`);
+      return text(topic === "all" && live ? `${await liveText()}\n\n${body}` : body);
     },
   );
 

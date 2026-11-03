@@ -14,6 +14,8 @@ export const GUIDE: GuideSection[] = [
     body: `
 Kinus runs the Kinus: the campers (from the registration export), staff, check-in and check-out, lists, and everything printed (name tags, luggage tags, labels, badges).
 
+> **How this guide works.** It says how Kinus works. Some things are **settings people choose** in Kinus (what each role may do and see, which columns are shown and to whom, the templates, the office email…): those are marked **⚙ Setting** with where they're set, and what's written there is only the usual starting point. **The actual choices made here are in "How it's set up now"**, read live from Kinus. When the two differ, "How it's set up now" is right.
+
 ### The flow of a season
 1. **Set up the session** (Setup → Sessions): one per year or run. Everything (campers, divisions, print requests) belongs to the active session.
 2. **Import the registration export** (Setup → Import roster). Kinus makes the divisions and bunks it finds, adds the campers and remembers how the columns were matched.
@@ -25,9 +27,11 @@ Kinus runs the Kinus: the campers (from the registration export), staff, check-i
 8. **Going home**: final check-out.
 
 ### Roles
-Each person has a **role** (what they can do and which details they see) and **areas** (which campers: all of camp, a camp, a division or a bunk). Roles are set on Setup → Roles; a person's role and areas on Staff.
+Each person has a **role** (what they can do and which details they see) and **areas** (which campers: all of camp, a camp, a division or a bunk). A person's role and areas are set on Staff.
 
-| Role | Typically |
+**⚙ Setting** (Setup → Roles): each role's level and which details it sees, and which roles are in use, are chosen here and can be changed any time. The table is only what the roles are meant for; for what each role actually may do and see now, see **How it's set up now**.
+
+| Role | Meant for |
 |---|---|
 | Owner | Everything, everywhere. |
 | Director | Runs camp or part of it; over all of camp also imports, settings, templates. |
@@ -37,7 +41,7 @@ Each person has a **role** (what they can do and which details they see) and **a
 | Logistics | Printing (bus tags, labels) and lists for their area. |
 | Scanner / check-in logins | Only check-in: the phones at a check-in line. |
 
-The level of each role (view, check in & out, edit) and which kinds of detail it sees (contacts, medical, notes from parents, address, staff notes, family situations) are set per role on **Setup → Roles**, and apply to everyone with that role at once.
+The level of each role (view, check in & out, edit) and which kinds of detail it sees (contacts, medical, notes from parents, address, staff notes, family situations) are **⚙ settings** per role on **Setup → Roles**, and apply to everyone with that role at once.
 `,
   },
   {
@@ -60,7 +64,7 @@ Claude can work with Kinus directly through the **Kinus connector**: it can expl
 - "Queue the packing labels for Division 2, sorted by name."
 - "How do I make a list for counselors with the T-shirt, sleeping and yarmulka in one column?"
 
-Claude reads this guide with the **kinus_guide** tool; ask it to "read the Kinus guide on …" if it seems unsure.
+Claude reads this guide with the **kinus_guide** tool, including **How it's set up now** (the live settings) for people who may see it; ask it to "read the Kinus guide on …" if it seems unsure.
 `,
   },
   {
@@ -118,9 +122,9 @@ Every export column Kinus has no field of its own for is an **added column**. Ma
 
 - **Name**: what it's called everywhere ("Sleeping at the Kinus").
 - **Show**: untick to leave a column out (it moves to "Left out", where it can be shown again).
-- **Who sees this**: guessed from the name (medical-looking → medical, phone/parent → contacts, address → address, notes → notes from parents, else everyone), or chosen: everyone who sees the camper, or a kind of detail. **Family situations** is a kind of its own for sensitive family information (custody, a hard time at home); only the roles ticked for it on Roles see it.
-- **Short answers**: a shorter wording for long answers ("Yes, at the Kinus (In the dorms)" → "Sleeping here"), shown on the camper page and in lists.
-- **Hide** (per answer): for answers that mean nothing special ("No", "None"): they show **nothing** on the camper page, in lists and in combined columns.
+- **Who sees this** (**⚙ Setting**, per column; the current choices are in How it's set up now): guessed from the name (medical-looking → medical, phone/parent → contacts, address → address, notes → notes from parents, else everyone), or chosen: everyone who sees the camper, or a kind of detail. **Family situations** is a kind of its own for sensitive family information (custody, a hard time at home); only the roles ticked for it on Roles see it.
+- **Short answers** (**⚙ Setting**): a shorter wording for long answers ("Yes, at the Kinus (In the dorms)" → "Sleeping here"), shown on the camper page and in lists.
+- **Hide** (**⚙ Setting**, per answer): for answers that mean nothing special ("No", "None"): they show **nothing** on the camper page, in lists and in combined columns.
 
 On **Setup → Roles**, "What each kind of detail covers" lists every kind with its fields, the added columns in it and the roles that see it, and lets you put each added column in a kind.
 
@@ -136,7 +140,7 @@ The camper page shows only the added columns that have something in them.
 The Hebrew name columns are the ones the Hebrew-name label fields read (\`{{HEB_FIRST}}\`, \`{{HEB_LAST}}\`). The page lists campers whose Hebrew name is **typed in English letters**, **spelled out**, or **empty**, with a suggestion, and lets you fix each (Hebrew letters only, final letters at word ends). A fix prints at once and new uploads keep it. Claude can do this too (list_hebrew_names / fix_hebrew_names).
 
 ### Hebrew-language divisions
-Set a division's language on **Divisions & bunks** (English, Hebrew, French).
+A division's language is a **⚙ Setting** on **Divisions & bunks** (English, Hebrew, French); which divisions are Hebrew now is in How it's set up now.
 - **Hebrew divisions show their campers by their Hebrew name** (with the English one beside it): Campers, Who's here, check-in, the camper page; typing the name in Hebrew finds them (final letters don't matter).
 - A camper whose Hebrew name isn't in Hebrew letters keeps the English name until it's fixed.
 
@@ -178,7 +182,7 @@ A scan shows the result over the picture. Scanning someone already checked in sa
 At the bottom, **the last 50 check-ins** (kept across reloads): pull up to see them, **Undo** (for 15 minutes, while it's still the camper's latest record; after that a director corrects it on the camper page), or open one to request labels.
 
 ### Who's here
-Every camper of a place, live: counts by status (here, out, expected, check up, coming later, gone home, not coming), search, sort, parent phones (if allowed). "Check up" flags campers still missing once enough of their division has arrived or after a time (Settings → Campers who haven't arrived). Directors can change many at once.
+Every camper of a place, live: counts by status (here, out, expected, check up, coming later, gone home, not coming), search, sort, parent phones (if allowed). "Check up" flags campers still missing once enough of their division has arrived or after a time (**⚙ Setting**: Settings → Campers who haven't arrived; the current rule is in How it's set up now). Directors can change many at once.
 
 ### Final check-out
 Check-in logins can be given final check-out (Staff → check-in logins): every scan records "gone home" for any division of the camp, with progress per division.
@@ -199,7 +203,7 @@ Check-in logins can be given final check-out (Staff → check-in logins): every 
 - **Print all waiting** (top of the page): every label-printer label still to print, by label size, **sorted by name, each camper's labels together** (name tag, then bag label). Buttons: **Print all**, **Merged PDF** (in parts of 400 labels), and after printing **Mark printed** (only what went out; requests that came in since stay waiting).
 - On a phone, the PDF button downloads the file and then turns into **Open NIIMBOT** (pick the PDF there).
 - Label sheets print on their own (Print together), with "where the sheet starts" for a part-used sheet.
-- **Email to office** (Settings) is off by default: requests wait in the queue.
+- Asking for a camper's labels from their card emails the office a PDF only when **"Email it to the office as a PDF"** is ticked (off by default): otherwise they wait in the queue. Batches choose queue or email each time. The office's address is a **⚙ Setting** (Settings → Office email).
 
 ### Printing well
 - Thermal printers: choose the label size in the print dialog, scale 100% / "actual size", no margins. 4×6 labels print the right way round (Kinus turns the pages itself).
@@ -211,6 +215,8 @@ Check-in logins can be given final check-out (Staff → check-in logins): every 
     title: "Templates: the tags and labels we use",
     summary: "Each template, its paper, what's on it and why; folders; fields; conversions; designing.",
     body: `
+**⚙ Setting**: the templates are made and changed on **Print → Templates**, so the table below is how they were set up when this guide was written: **the current templates (names, paper, camps, copies) are in How it's set up now.**
+
 **Print → Templates**, grouped in folders (Move to… on a template's card puts it in a folder or a new one; Rename on a folder; Claude can organize them all at once). Each template has a version per camp (American, Hebrew, French): a template "for some camps only" prints just for those campers.
 
 ### The templates
@@ -248,6 +254,7 @@ Fields and their **conversions** (export answers turned into what prints: T-shir
 Pick a **list** (a layout), a division and a bunk. **Filter by** any of the list's columns (or a field inside a combined column), then **Is**: an answer that's in the list (with counts), "Has anything" or "Empty". **Show counselors** adds each bunk's counselors and phones under the bunk. **Print** (or Save as PDF) starts with a **cover page** (session, camp, list name, who it covers, counts, the groups), then each group on its own page; wide lists print sideways. **Excel / CSV** downloads follow the same choices.
 
 ### List layouts (Setup → List layouts)
+- Layouts are **⚙ settings** made here (which layouts exist, their columns and filters are chosen by the people setting up Kinus).
 - **Who uses it**: the role whose people see it on Lists.
 - **Columns**: by kind (Camper, Contacts, Medical, Address, Notes from parents, Staff notes, Family situations): Kinus' fields and the export columns of that kind. People only see the columns their role may see.
 - **Combined columns**: several fields in one column, to save room ("M · Sleeping here · 6¾"). **Ctrl-click** (⌘ on a Mac, long-press on a phone) the fields in Columns, then **Group into a new column** (or add them to one there is) in the box at the top. Each combined column: name, what goes between (· , / or one per line), Name each ("Shirt: M"), Show, fields as chips (drag or ‹ › to reorder, × to take out), ↑ ↓ to order the combined columns, Split back, Remove. Empty values and hidden answers are left out; a yes/no field shows its name when yes. Fields in a combined column are marked in its colour.
@@ -285,12 +292,13 @@ Pick a **list** (a layout), a division and a bunk. **Filter by** any of the list
     title: "Settings",
     summary: "What's on the Settings page.",
     body: `
+Everything here is a **⚙ Setting**; the current values are in How it's set up now.
 - **Who can see and do what**: opens Roles.
 - **Campers who haven't arrived**: when "check up" flags start (share of the division arrived, or a time).
 - **Extra fields from the export**: names, Show, who sees each, short answers, Hide (see Registration columns).
-- **Office email** and **email to office** (off by default), with a test email.
+- **Office email** (where emailed requests go), with a test email.
 - **Protected columns**: details our corrected copy may change (and later exports keep), e.g. cleaned medical notes.
-- **Import settings**: e.g. how many missing campers count as a partial export.
+- **Imports**: warn when more than this share of a division is missing from an uploaded export.
 `,
   },
 ];
@@ -302,5 +310,9 @@ export function guideText(id?: string | null): string | null {
   return parts.map((s) => `## ${s.title}\n${s.body.trim()}`).join("\n\n");
 }
 
-/** The table of contents: each section's id, title and what it covers. */
-export const guideContents = () => GUIDE.map((s) => `- **${s.id}**: ${s.title}. ${s.summary}`).join("\n");
+/** The live part: this camp's actual settings (lib/help/live), not in the written guide. */
+export const LIVE_SECTION = { id: "now", title: "How it's set up now", summary: "This camp's actual settings, read live: roles and what each sees, added columns and who sees them, templates, divisions, settings." };
+
+/** The table of contents: each section's id, title and what it covers (and the live part, when given). */
+export const guideContents = (withLive = false) =>
+  [...(withLive ? [LIVE_SECTION] : []), ...GUIDE].map((s) => `- **${s.id}**: ${s.title}. ${s.summary}`).join("\n");
