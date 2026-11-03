@@ -6,6 +6,7 @@ import { CheckCheck, FileDown, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { markPrinted } from "@/app/(app)/print/actions";
 import type { WaitingSet } from "@/lib/print/queue";
+import { SharePdf } from "./share-pdf";
 
 /** Labels in one PDF (as COMBINED_PDF_PART in lib/print/jobs). */
 const PART = 400;
@@ -48,18 +49,25 @@ export function WaitingAll({ set, where, query }: { set: WaitingSet; where: stri
             </a>
           </Button>
           {parts <= 1 ? (
-            <Button size="lg" variant="outline" asChild>
-              <a href={`/print/combined/pdf?${query}`} onClick={took}>
-                <FileDown /> Merged PDF
-              </a>
-            </Button>
-          ) : (
-            Array.from({ length: parts }, (_, i) => (
-              <Button key={i} variant="outline" asChild title={`Labels ${i * PART + 1}–${Math.min(set.tags, (i + 1) * PART)}`}>
-                <a href={`/print/combined/pdf?${query}&part=${i + 1}`} onClick={took}>
-                  <FileDown /> PDF {i + 1} of {parts}
+            <>
+              <Button size="lg" variant="outline" asChild>
+                <a href={`/print/combined/pdf?${query}`} onClick={took}>
+                  <FileDown /> Merged PDF
                 </a>
               </Button>
+              {/* on a phone: straight into the label printer's app */}
+              <SharePdf href={`/print/combined/pdf?${query}`} onShared={took} />
+            </>
+          ) : (
+            Array.from({ length: parts }, (_, i) => (
+              <span key={i} className="flex flex-wrap gap-2">
+                <Button variant="outline" asChild title={`Labels ${i * PART + 1}–${Math.min(set.tags, (i + 1) * PART)}`}>
+                  <a href={`/print/combined/pdf?${query}&part=${i + 1}`} onClick={took}>
+                    <FileDown /> PDF {i + 1} of {parts}
+                  </a>
+                </Button>
+                <SharePdf href={`/print/combined/pdf?${query}&part=${i + 1}`} label={`Open ${i + 1} of ${parts} in NIIMBOT`} onShared={took} />
+              </span>
             ))
           )}
         </div>
