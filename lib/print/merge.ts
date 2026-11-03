@@ -107,6 +107,7 @@ export const SAMPLE_CAMPER = {
   division_name: "Division 2",
   division_color: "#2563eb",
   bunk_name: "Bunk Yud Alef",
+  bunk_continued: "11",
   local_address: "1234 Crown St",
   local_address_cross_streets: "Kingston & Albany",
   contacts: [
