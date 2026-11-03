@@ -34,7 +34,7 @@ export function parseCombos(filters: unknown): Combo[] {
     .filter((x): x is Combo => Boolean(x && typeof x.id === "string" && typeof x.label === "string" && Array.isArray(x.parts)))
     .map((x) => ({ id: x.id, label: x.label, parts: x.parts.filter((p): p is string => typeof p === "string"), sep: x.sep in COMBO_SEPS ? x.sep : "dot", labels: Boolean(x.labels) }))
     .filter((x) => x.parts.length)
-    .slice(0, 6);
+    .slice(0, 12);
 }
 
 /** The layout's column filters, as saved ({ where: [{ column, values }] }). */
