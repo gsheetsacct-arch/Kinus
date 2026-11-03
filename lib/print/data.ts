@@ -4,6 +4,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import type { ContactLike, CamperLike } from "@/lib/fields";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { compareBunkNames, compareDivisionNames } from "@/lib/bunk-order";
+import { continuedBunkNumbers } from "./bunk-continued";
 import { picturesOf, type BackSide, type MergeField, type Transform, type ValueMap, type TemplateSpec, type Layer, type SheetLayout } from "./types";
 
 type DB = SupabaseClient<Database>;
@@ -74,6 +75,7 @@ export async function loadPrintCampers(admin: DB, ids: string[]): Promise<PrintC
   );
   const contacts = new Map<string, ContactLike[]>();
   for (const k of parts.flatMap((p) => p.ks)) contacts.set(k.camper_id, [...(contacts.get(k.camper_id) ?? []), k]);
+  const continued = await sessionBunkNumbers(admin, [...new Set(parts.flatMap((p) => p.cs.map((c) => c.session_id)))]);
   return parts.flatMap((p) =>
     p.cs.map((c) => {
       const d = c.divisions as { name: string; color: string | null; language?: string } | null;
@@ -87,10 +89,35 @@ export async function loadPrintCampers(admin: DB, ids: string[]): Promise<PrintC
         division_name: d?.name ?? null,
         division_color: d?.color ?? null,
         bunk_name: b?.name ?? null,
+        bunk_continued: c.bunk_id ? (continued.get(c.bunk_id)?.toString() ?? null) : null,
         contacts: contacts.get(c.id) ?? [],
       };
     }),
   );
+}
+
+/**
+ * Each bunk's number running on across camps (lib/print/bunk-continued), for the sessions
+ * given: bunk id → number. Camps in their usual order; a division with no camp is in the first.
+ */
+async function sessionBunkNumbers(admin: DB, sessionIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  await Promise.all(
+    sessionIds.map(async (sessionId) => {
+      const [{ data: groups, error: ge }, { data: divisions, error: de }] = await Promise.all([
+        admin.from("division_groups").select("id").eq("session_id", sessionId).order("sort_order").order("name"),
+        admin.from("divisions").select("id, group_id, bunks(id, name)").eq("session_id", sessionId),
+      ]);
+      if (ge) throw ge;
+      if (de) throw de;
+      const first = groups?.[0]?.id ?? null;
+      const camps = (groups?.length ? groups.map((g) => g.id) : [null]).map((gid) =>
+        (divisions ?? []).filter((d) => (d.group_id ?? first) === gid).flatMap((d) => (d.bunks ?? []) as { id: string; name: string }[]),
+      );
+      for (const [id, n] of continuedBunkNumbers(camps)) out.set(id, n);
+    }),
+  );
+  return out;
 }
 
 export type PrintCamperBrief = { id: string; first_name: string; last_name: string; division_id: string | null; division_name: string | null; division_color: string | null; bunk_name: string | null };

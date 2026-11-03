@@ -32,7 +32,7 @@ export default async function FieldsPage() {
         })()
       : Promise.resolve({ data: null }),
   ]);
-  const catalog = [...FIELDS.filter((f) => f.kind !== "bool" && f.key !== "status").map((f) => ({ key: f.key, label: f.label })), { key: "division", label: "Division" }, { key: "bunk", label: "Bunk" }, { key: "division_color", label: "Division colour" }];
+  const catalog = [...FIELDS.filter((f) => f.kind !== "bool" && f.key !== "status").map((f) => ({ key: f.key, label: f.label })), { key: "division", label: "Division" }, { key: "bunk", label: "Bunk" }, { key: "bunk_continued", label: "Bunk number, continuing from camp to camp" }, { key: "division_color", label: "Division colour" }];
   // extra fields from the registration export can feed a label field too ("Sleeping at the Kinus")
   const extras = (await loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: `${f.label} (from the export)`, group: "export" as const }));
   // and every column of the latest file of each kind of export (the main one, a separate
