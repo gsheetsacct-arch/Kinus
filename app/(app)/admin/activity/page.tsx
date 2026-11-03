@@ -9,6 +9,7 @@ import { isDirector } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { campDateTimeToIso } from "@/lib/time";
 import { formatDateTime } from "@/lib/utils";
+import { searchActivity } from "@/lib/data/search";
 import { CATEGORIES, TABLE_LABEL, actionWord, changesOf, showValue, thingName } from "@/lib/audit/describe";
 
 export const metadata = { title: "Activity" };
@@ -22,7 +23,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
  * templates…, who made it, from which page, and exactly what changed (old → new); and
  * sign-ins, downloads and prints. Owners and directors only.
  */
-export default async function ActivityPage({ searchParams }: { searchParams: Promise<{ who?: string; cat?: string; day?: string; camper?: string; before?: string }> }) {
+export default async function ActivityPage({ searchParams }: { searchParams: Promise<{ who?: string; cat?: string; day?: string; camper?: string; before?: string; q?: string }> }) {
   const [user, session, sp] = await Promise.all([requireUser(), getActiveSession(), searchParams]);
   if (!isDirector(user)) notFound();
   const admin = createAdminClient();
@@ -52,7 +53,10 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
     q = q.in("table_name", ["campers", "camper_contacts", "camper_followups", "buzzer_assignments"]).or(`row_id.in.(${ids}),after->>camper_id.in.(${ids}),before->>camper_id.in.(${ids})`);
   }
   if (sp.before && /^\d+$/.test(sp.before)) q = q.lt("id", Number(sp.before));
-  const [{ data: rows, error }, { data: staff }] = await Promise.all([q, admin.from("profiles").select("id, full_name").order("full_name")]);
+  // words to find anywhere in what was recorded (from Search): the log searched as a whole
+  const text = (sp.q ?? "").trim().slice(0, 100);
+  const found = text.length >= 2 ? await searchActivity(user, text, sp.before && /^\d+$/.test(sp.before) ? Number(sp.before) : null, PAGE + 1).then((data) => ({ data, error: null })) : null;
+  const [{ data: rows, error }, { data: staff }] = await Promise.all([found ?? q, admin.from("profiles").select("id, full_name").order("full_name")]);
   const list = (rows ?? []).slice(0, PAGE);
   const more = (rows ?? []).length > PAGE;
   const nameOf = new Map((staff ?? []).map((p) => [p.id, p.full_name]));
@@ -65,7 +69,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
     r.actor_id ? (nameOf.get(r.actor_id) ?? "Someone no longer on staff") : r.source.startsWith("import:") ? "An import" : r.source.startsWith("revert:") ? "Undoing an import" : "Kinus (automatic)";
   const href = (o: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    for (const [k, v] of Object.entries({ who: sp.who, cat, day, camper: camperText, ...o })) if (v) p.set(k, v);
+    for (const [k, v] of Object.entries({ who: sp.who, cat, day, camper: camperText, q: sp.q, ...o })) if (v) p.set(k, v);
     return `/admin/activity?${p}`;
   };
 
@@ -92,8 +96,17 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
         </Select>
         <Input type="date" name="day" defaultValue={day} aria-label="Day" />
         <Input name="camper" defaultValue={camperText} placeholder="A camper's name" aria-label="Camper" dir="auto" />
+        {sp.q && <input type="hidden" name="q" value={sp.q} />}
         <Button type="submit">Show</Button>
       </form>
+      {text.length >= 2 && (
+        <p className="text-sm text-muted-foreground">
+          Everything that mentions “{text}” (the filters above don&apos;t apply).{" "}
+          <Link href="/admin/activity" className="text-primary hover:underline">
+            Show everything
+          </Link>
+        </p>
+      )}
       {error && <p className="text-sm text-destructive">Couldn&apos;t load the log: {error.message}</p>}
       {!list.length ? (
         <p className="rounded-xl border bg-card px-4 py-12 text-center text-sm text-muted-foreground">Nothing here{sp.before ? " further back" : ""}.</p>

@@ -2,14 +2,14 @@
 import { Logo } from "@/components/logo";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { DoorOpen, Users, ListChecks, Settings, LogOut, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid, Menu, CircleUser, ScanLine, Activity, Printer, UserSearch, BookUser, ShieldCheck, MessageSquare, ClipboardCheck, History } from "lucide-react";
+import { DoorOpen, Users, ListChecks, Settings, LogOut, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid, Menu, CircleUser, ScanLine, Activity, Printer, UserSearch, BookUser, ShieldCheck, MessageSquare, ClipboardCheck, History, Search } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import type { NavItem } from "@/lib/nav";
 import { CampSwitcher, type CampOption } from "./camp-switcher";
 import { NavigationProgress } from "./navigation-progress";
 import { Suspense } from "react";
 
-const ICONS = { DoorOpen, Users, ListChecks, Settings, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid, CircleUser, ScanLine, Activity, Printer, UserSearch, BookUser, ShieldCheck, MessageSquare, ClipboardCheck, History };
+const ICONS = { DoorOpen, Users, ListChecks, Settings, Upload, Layers, UserCog, SlidersHorizontal, CalendarDays, LayoutGrid, CircleUser, ScanLine, Activity, Printer, UserSearch, BookUser, ShieldCheck, MessageSquare, ClipboardCheck, History, Search };
 
 
 export function AppShell({
