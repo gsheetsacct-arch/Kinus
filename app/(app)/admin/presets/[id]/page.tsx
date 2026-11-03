@@ -1,5 +1,6 @@
 import { extraGroupOf, loadExtraFields } from "@/lib/data/extra-fields";
-import { COMBO_SEPS, parseCombos, parseWhere } from "@/lib/data/lists";
+import { parseCombos, parseWhere } from "@/lib/data/lists";
+import { ComboBuilder } from "@/components/lists/combo-builder";
 import { notFound } from "next/navigation";
 import { Copy, Lock } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -46,7 +47,6 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
   const where = parseWhere(preset?.filters);
   // combined columns: the saved ones, then a blank one to make another
   const combos = parseCombos(preset?.filters);
-  const comboRows = [...combos, { id: "", label: "", parts: [] as string[], sep: "dot" as const, labels: false }].slice(0, 6);
   // everything a combined column (or grouping) can use, by kind: Kinus' fields, Sleeping, and every
   // export column under the kind chosen for it in Settings
   const byKind = GROUP_TITLES.map(({ group, title }) => {
@@ -211,55 +211,9 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
         </Section>
         <Section
           title="Combined columns"
-          description="Several fields in one column, to take less room on a printed list: e.g. “M · Sleeping here · 6¾”. Name it, tick what goes in it, and choose what goes between them. Empty values are left out; a yes/no field shows its name when yes. Combined columns come after the others."
+          description="Several fields in one column, to take less room on a printed list: e.g. “M · Sleeping here · 6¾”. Tick fields in Columns and combine them; make as many as you like. Empty values are left out; a yes/no field shows its name when yes. Combined columns come after the others."
         >
-            <div className="space-y-3">
-              {comboRows.map((c, i) => (
-                <div key={c.id || `new-${i}`} className="space-y-2 rounded-lg border bg-background p-3">
-                  <input type="hidden" name={`combo_id_${i}`} value={c.id} />
-                  <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-                    <Input name={`combo_label_${i}`} defaultValue={c.label} placeholder={c.id ? "Column name" : "New combined column: its name"} aria-label="Column name" dir="auto" />
-                    <Select name={`combo_sep_${i}`} defaultValue={c.sep} aria-label="Between them">
-                      {Object.entries(COMBO_SEPS).map(([k, v]) => (
-                        <option key={k} value={k}>
-                          {v.label}
-                        </option>
-                      ))}
-                    </Select>
-                    <label className="flex items-center gap-2 text-sm whitespace-nowrap">
-                      <input type="checkbox" name={`combo_labels_${i}`} defaultChecked={c.labels} className="size-4 accent-[var(--primary)]" /> Name each
-                    </label>
-                  </div>
-                  <details className="text-sm" open={!c.id ? false : undefined}>
-                    <summary className="cursor-pointer text-muted-foreground">
-                      {c.parts.length ? `In it: ${c.parts.map((k) => partOptions.find((o) => o.key === k)?.label ?? k).join(" · ")}` : "Choose what goes in it"}
-                    </summary>
-                    <div className="mt-2 max-h-80 space-y-3 overflow-y-auto">
-                      {byKind.map((k) => (
-                        <div key={k.title}>
-                          <p className="mb-1 text-xs font-semibold text-muted-foreground">{k.title}</p>
-                          <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-3">
-                            {k.options.map((o) => (
-                              <label key={o.key} className="flex items-center gap-2 text-sm">
-                                <input type="checkbox" name={`combo_part_${i}`} value={o.key} defaultChecked={c.parts.includes(o.key)} className="size-4 accent-[var(--primary)]" />
-                                <span className="truncate" dir="auto">
-                                  {o.label}
-                                </span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                  {c.id && (
-                    <label className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" name={`combo_show_${i}`} defaultChecked={columns.has(`combo:${c.id}`)} className="size-4 accent-[var(--primary)]" /> Show this column
-                    </label>
-                  )}
-                </div>
-              ))}
-            </div>
+          <ComboBuilder initial={combos.map((c) => ({ ...c, show: columns.has(`combo:${c.id}`) }))} options={partOptions} />
         </Section>
         </div>
       </ActionForm>
