@@ -14,6 +14,7 @@ export type ListPreset = { id: string; name: string; audience: string; columns: 
 
 export type ColumnFilter = { column: string; values: string[] };
 
+
 /**
  * A combined column: several fields in one cell ("M · Sleeping here · 6¾"), to save room on a
  * printed list. In the layout's columns as "combo:<id>"; empty values are left out.

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { FileSpreadsheet } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { formatDateTime } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/server";
@@ -62,6 +63,9 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
 
   return (
     <div>
+      {/* printed (or saved as a PDF): a cover page first, instead of the page's header */}
+      {list && <ListCover list={list} session={session?.name ?? null} camp={camp.current?.name ?? null} by={user.fullName} />}
+      <div className="no-print">
       <PageHeader
         title={list ? `${list.preset.name}` : "Lists"}
         description={list ? `${list.scopeLabel} · ${list.groups.reduce((n, g) => n + g.rows.length, 0)} campers` : undefined}
@@ -83,6 +87,7 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
           ) : undefined
         }
       />
+      </div>
       <ListFilters className="no-print mb-6 grid gap-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] md:grid-cols-[1fr_200px_180px_180px]">
         <label className="space-y-1">
           <span className="block text-xs font-medium text-muted-foreground">List</span>
@@ -149,5 +154,39 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
       )}
       {list && <ListGroups columns={list.columns} groups={list.groups} />}
     </div>
+  );
+}
+
+/** The printed list's first page: what it is, for whom, how many, and when it was printed. */
+function ListCover({ list, session, camp, by }: { list: NonNullable<Awaited<ReturnType<typeof buildList>>>; session: string | null; camp: string | null; by: string }) {
+  const campers = list.groups.reduce((n, g) => n + g.rows.length, 0);
+  const groups = list.groups.filter((g) => g.title);
+  const kind = list.preset.group_by === "bunk" ? "bunks" : list.preset.group_by === "division" ? "divisions" : "groups";
+  return (
+    <section className="print-only print-cover">
+      <div className="print-cover-page flex flex-col text-center">
+        <div className="my-auto">
+          {(session || camp) && <p className="text-sm uppercase tracking-[0.2em] text-neutral-500">{[session, camp && camp !== session ? `${camp} camp` : null].filter(Boolean).join(" · ")}</p>}
+          <h1 className="mt-4 text-5xl font-bold" dir="auto">
+            {list.preset.name}
+          </h1>
+          <p className="mt-4 text-xl" dir="auto">
+            {list.scopeLabel}
+          </p>
+          <p className="mt-6 text-lg">
+            {campers} {campers === 1 ? "camper" : "campers"}
+            {groups.length > 1 ? ` · ${groups.length} ${kind}` : ""}
+          </p>
+          {groups.length > 1 && (
+            <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-neutral-600" dir="auto">
+              {groups.map((g) => `${g.title} (${g.rows.length})`).join(" · ")}
+            </p>
+          )}
+        </div>
+        <p className="pt-10 text-xs text-neutral-500">
+          Printed {formatDateTime(new Date().toISOString())} by {by} · Kinus
+        </p>
+      </div>
+    </section>
   );
 }
