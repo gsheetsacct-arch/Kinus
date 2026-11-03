@@ -1,4 +1,5 @@
 "use server";
+import { logActivity } from "@/lib/audit/log";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient as createPlainClient } from "@supabase/supabase-js";
@@ -25,7 +26,9 @@ export async function signInWithPassword(formData: FormData): Promise<ActionResu
   const email = await emailFor(parsed.data.email);
   if (!email) return fail("No check-in login has that name. Check the spelling, or use your email.");
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password: parsed.data.password });
+  const { data: signedIn, error } = await supabase.auth.signInWithPassword({ email, password: parsed.data.password });
+  // tries that failed too: someone guessing at an account shows up
+  await logActivity("sign_in", error ? { what: "Sign-in failed (wrong password or no account)", email } : { what: "Signed in with a password", email }, error ? null : signedIn.user?.id);
   if (error) return fail(error.message === "Invalid login credentials" ? "Wrong email or password." : /banned/i.test(error.message) ? "This account doesn't sign in to Kinus." : error.message);
   // only paths on this site ("//other.site" would leave it)
   const next = parsed.data.next && parsed.data.next.startsWith("/") && !parsed.data.next.startsWith("//") ? parsed.data.next : "/";

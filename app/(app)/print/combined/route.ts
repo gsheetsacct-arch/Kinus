@@ -1,3 +1,4 @@
+import { logActivity } from "@/lib/audit/log";
 import { NextResponse, type NextRequest } from "next/server";
 import { parseOrder } from "@/lib/print/data";
 import { combinedSetHtml } from "@/lib/print/jobs";
@@ -20,6 +21,7 @@ export async function GET(request: NextRequest) {
   if (!(await visibleJobs(ids))) return new NextResponse("Not found", { status: 404 });
   try {
     const html = await combinedSetHtml(ids, { order: sp.get("order") ? parseOrder(sp.get("order")) : undefined });
+    await logActivity("print", { what: `Printed as sets: ${ids.length} requests`, waiting: sp.get("waiting") ?? undefined, order: sp.get("order") ?? undefined });
     const script = `<script>(function w(){document.body.getAttribute("data-fitted")?setTimeout(function(){window.print()},200):setTimeout(w,100)})()</script>`;
     return new NextResponse(html.replace("</body>", `${script}</body>`), {
       headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex" },

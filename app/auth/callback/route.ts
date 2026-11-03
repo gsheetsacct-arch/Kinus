@@ -1,3 +1,4 @@
+import { logActivity } from "@/lib/audit/log";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
@@ -8,7 +9,8 @@ export async function GET(request: NextRequest) {
   const next = searchParams.get("next") ?? "/";
   if (code) {
     const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error) await logActivity("sign_in", { what: "Signed in with an email link" }, data.user?.id);
     if (!error) return NextResponse.redirect(`${origin}${next.startsWith("/") ? next : "/"}`);
     const msg = /code verifier|both auth code and code verifier/i.test(error.message)
       ? "That sign-in link was opened in a different browser than the one that asked for it. Request a new link here."

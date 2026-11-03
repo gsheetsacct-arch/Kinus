@@ -1,3 +1,4 @@
+import { logActivity } from "@/lib/audit/log";
 import { NextResponse, type NextRequest } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
@@ -10,7 +11,8 @@ export async function GET(request: NextRequest) {
   const next = searchParams.get("next") ?? (type === "invite" ? "/set-password" : "/");
   if (token_hash && type) {
     const supabase = await createClient();
-    const { error } = await supabase.auth.verifyOtp({ type, token_hash });
+    const { data, error } = await supabase.auth.verifyOtp({ type, token_hash });
+    if (!error) await logActivity("sign_in", { what: type === "invite" ? "Accepted an invite and signed in" : type === "recovery" ? "Signed in to reset their password" : "Signed in with an email link" }, data.user?.id);
     if (!error) return NextResponse.redirect(`${origin}${next.startsWith("/") ? next : "/"}`);
     return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`);
   }

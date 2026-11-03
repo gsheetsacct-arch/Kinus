@@ -1,3 +1,4 @@
+import { logActivity } from "@/lib/audit/log";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, getCurrentUser } from "@/lib/auth/current-user";
@@ -26,5 +27,6 @@ export async function GET(request: NextRequest) {
   const withStaff = list.groups.some((g) => g.staff?.length);
   const rows: (string | boolean | null)[][] = [[...(withGroup ? [FIELD_BY_KEY[preset.group_by!]?.label ?? "Group"] : []), ...list.columns.map((c) => c.label), ...(withStaff ? ["Counselors"] : [])]];
   for (const g of list.groups) for (const r of g.rows) rows.push([...(withGroup ? [g.title] : []), ...r.cells, ...(withStaff ? [g.staff?.join(" · ") ?? ""] : [])]);
+  await logActivity("download", { what: `List “${preset.name}” (${list.scopeLabel})`, format: exportFormat(sp.get("format")), rows: rows.length - 1, columns: rows[0] });
   return tableDownload(`${preset.name} - ${list.scopeLabel}`, rows, exportFormat(sp.get("format")));
 }
