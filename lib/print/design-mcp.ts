@@ -63,14 +63,72 @@ function fitReport(fit: PartFit, spec: TemplateSpec, campers?: number): string {
   return lines.join("\n") || "No text parts.";
 }
 
-export function designServer(user: CurrentUser, appUrl: string): McpServer {
-  const server = new McpServer({ name: "kinus-design", version: "1.0.0" }, { instructions: DESIGN_GUIDE });
+/** What the connector says about itself first: what Kinus is and where its guide is. */
+const KINUS_INTRO = `# The Kinus connector
+Kinus runs the Kinus (a camp event): campers from the registration export, staff, check-in, lists, and everything printed (name tags, luggage tags, labels, badges). You act as the person who connected, with only what their account may do.
+
+Help them with anything in Kinus: explain how it works, how to prepare and upload a file (the registration export, a short file of extra details, the staff list), where a setting is, why something looks the way it does, and do what your tools allow.
+
+**Before answering a how-to question, read the Kinus guide**: kinus_guide (no topic: its contents; a topic: that part; "all": everything). It's the same as the Help page in Kinus, and says exactly how things are set up here (the templates and their paper, imports, columns, Hebrew names, check-in, printing, lists). my_access says what this person may do, so your advice fits them. Point them to the page in Kinus (menu → page → section) when they have to do it there.`;
+
+export function designServer(user: CurrentUser, appUrl: string, opts: { designer?: boolean } = {}): McpServer {
+  // everyone with their own sign-in connects; the template tools only for those who may edit templates
+  const designer = opts.designer ?? true;
+  const server = new McpServer({ name: "kinus", version: "2.0.0" }, { instructions: designer ? `${KINUS_INTRO}\n\n${DESIGN_GUIDE}` : KINUS_INTRO });
   const scope = visibleDivisionIds(user);
   const editorLink = (id: string) => `${appUrl}/print/templates/${id}`;
-
-  server.registerTool("design_guide", { title: "How Kinus templates work", description: "The template format, the parts, fonts and how to design around long names. Read this first.", annotations: { readOnlyHint: true } }, async () => text(DESIGN_GUIDE));
+  // the template tools: registered only for people who may edit templates
+  const design = (designer ? server.registerTool.bind(server) : () => undefined) as typeof server.registerTool;
 
   server.registerTool(
+    "kinus_guide",
+    {
+      title: "The Kinus guide",
+      description:
+        "How everything in Kinus is set up and how to do each job (the Help page): imports and the registration export, adding a short file of details, registration columns and who sees them, Hebrew names, divisions and bunks, check-in, printing and the queue, the templates (their paper and what's on each), lists and layouts, staff, search and the activity log, settings, connecting an AI. No topic: the contents; a topic id: that part; \"all\": everything. Read it before explaining how to do something.",
+      inputSchema: { topic: z.string().max(40).optional() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ topic }) => {
+      const { guideContents, guideText } = await import("@/lib/help/guide");
+      if (!topic) return text(`# The Kinus guide\nAsk for a topic (or "all"):\n${guideContents()}`);
+      const body = guideText(topic === "all" ? null : topic);
+      return body ? text(body) : problem(`No such topic. The topics:\n${guideContents()}`);
+    },
+  );
+
+  server.registerTool(
+    "my_access",
+    { title: "What this person may do", description: "The connected person's role, level (view, check in & out, edit), the part of camp they look after, and which kinds of detail and tools they have, so advice fits them.", annotations: { readOnlyHint: true } },
+    async () => {
+      const { STAFF_ROLES } = await import("@/lib/labels");
+      const { createAdminClient: admin } = await import("@/lib/supabase/admin");
+      const { visibleFieldGroups, canUsePrintArea: printArea, isAdmin, isDirector } = await import("@/lib/auth/permissions");
+      const { data: fv } = await admin().from("field_visibility").select("field_group, roles");
+      const ids = visibleDivisionIds(user);
+      const { data: divs } = ids ? await admin().from("divisions").select("name").in("id", ids) : { data: null };
+      return text(
+        json({
+          name: user.fullName,
+          role: STAFF_ROLES[user.role]?.label ?? user.role,
+          level: user.role === "owner" ? "edit" : user.level,
+          area: ids ? (divs ?? []).map((d) => d.name) : "all of camp",
+          sees: [...visibleFieldGroups(user, fv ?? [])],
+          can: {
+            camp_setup_imports_settings: isAdmin(user),
+            directors_pages_activity_log: isDirector(user),
+            print_queue_and_batches: printArea(user),
+            edit_templates: designer,
+            fix_hebrew_names: canFixNames(user),
+          },
+        }),
+      );
+    },
+  );
+
+  design("design_guide", { title: "How Kinus templates work", description: "The template format, the parts, fonts and how to design around long names. Read this first.", annotations: { readOnlyHint: true } }, async () => text(DESIGN_GUIDE));
+
+  design(
     "list_templates",
     { title: "List templates", description: "Every template: id, name, its folder on Print → Templates (null: none), who it's for (campers or staff), size, label stock, thermal printer, camps. In the order the page lists them.", annotations: { readOnlyHint: true } },
     async () => {
@@ -100,7 +158,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     },
   );
 
-  server.registerTool(
+  design(
     "organize_templates",
     {
       title: "Organize templates",
@@ -122,7 +180,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     },
   );
 
-  server.registerTool(
+  design(
     "get_template",
     { title: "Get a template", description: "The whole template as JSON (edit it and give it to save_template or preview_template).", inputSchema: { template_id: z.guid() }, annotations: { readOnlyHint: true } },
     async ({ template_id }) => {
@@ -150,7 +208,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     },
   );
 
-  server.registerTool(
+  design(
     "list_fields",
     {
       title: "List fields",
@@ -178,7 +236,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     },
   );
 
-  server.registerTool(
+  design(
     "list_fonts",
     { title: "List fonts", description: "Fonts a text part can use (the value for its \"font\").", annotations: { readOnlyHint: true } },
     async () => {
@@ -192,7 +250,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     },
   );
 
-  server.registerTool(
+  design(
     "list_label_stock",
     { title: "List label stock", description: "Label sheets and label-printer sizes Kinus knows exactly (Avery, Dymo, Zebra…). Copy a sheet's \"sheet\" into the template's sheet_layout, and its size into page_width_mm/page_height_mm.", inputSchema: { search: z.string().optional().describe("A product number (5160, 8293) or words (round, badge)") }, annotations: { readOnlyHint: true } },
     async ({ search }) =>
@@ -209,7 +267,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
       ),
   );
 
-  server.registerTool(
+  design(
     "longest_values",
     {
       title: "Longest values of each field",
@@ -242,7 +300,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     },
   );
 
-  server.registerTool(
+  design(
     "preview_template",
     {
       title: "Preview a template",
@@ -299,7 +357,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     },
   );
 
-  server.registerTool(
+  design(
     "check_fit",
     {
       title: "Check every camper fits",
@@ -323,7 +381,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     },
   );
 
-  server.registerTool(
+  design(
     "save_template",
     {
       title: "Save a template",
@@ -345,7 +403,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     },
   );
 
-  server.registerTool(
+  design(
     "copy_template",
     {
       title: "Copy a template",
@@ -368,7 +426,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     },
   );
 
-  server.registerTool(
+  design(
     "upload_link",
     {
       title: "Get a link to upload a big PDF",
@@ -389,7 +447,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     },
   );
 
-  server.registerTool(
+  design(
     "upload_picture",
     {
       title: "Upload a picture",
@@ -442,7 +500,7 @@ export function designServer(user: CurrentUser, appUrl: string): McpServer {
     },
   );
 
-  server.registerTool(
+  design(
     "upload_font",
     {
       title: "Upload a font",

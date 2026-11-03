@@ -4,6 +4,9 @@ import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canDesign } from "@/lib/print/designers";
+import { canConnect } from "@/lib/ai/connect";
+import { canUsePrintArea } from "@/lib/auth/permissions";
+import { canFixNames } from "@/lib/print/name-columns";
 import { allowedRedirect, issueCode, readClient } from "@/lib/oauth";
 import { appUrl } from "@/lib/auth/app-url";
 
@@ -41,7 +44,7 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Pr
     const a = JSON.parse(String(formData.get("ask") ?? "{}")) as Ask;
     const r = check(a);
     const me = await getCurrentUser();
-    if ("error" in r || !me || !(await canDesign(me))) redirect("/oauth/authorize?" + new URLSearchParams(a as Record<string, string>).toString());
+    if ("error" in r || !me || !canConnect(me)) redirect("/oauth/authorize?" + new URLSearchParams(a as Record<string, string>).toString());
     if (a.response_type !== "code" || a.code_challenge_method !== "S256" || !a.code_challenge) redirect(r.back({ error: "invalid_request", error_description: "PKCE (S256) is required." }));
     redirect(r.back({ code: issueCode(me.id, a.client_id!, a.redirect_uri ?? readClient(a.client_id!)!.redirect_uris[0], a.code_challenge), iss: await appUrl() }));
   }
@@ -49,20 +52,21 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Pr
   let body: React.ReactNode;
   if ("error" in req) body = <p className="text-sm text-destructive">{req.error}</p>;
   else if (!user) body = <p className="text-sm text-muted-foreground">Your Kinus account can&apos;t be used right now. Ask a director.</p>;
-  else if (!(await canDesign(user)))
-    body = <p className="text-sm text-muted-foreground">{user.fullName}, you can&apos;t edit templates in Kinus, so there&apos;s nothing to connect. A director can let you design templates (Print → Templates).</p>;
-  else
+  else if (!canConnect(user)) body = <p className="text-sm text-muted-foreground">{user.fullName}, this is a check-in login: it can&apos;t be connected. Sign in with your own account.</p>;
+  else {
+    const designer = await canDesign(user);
     body = (
       <>
         <p className="text-sm">
-          <strong>{req.client.name}</strong> wants to work on Kinus templates as <strong>{user.fullName}</strong>.
+          <strong>{req.client.name}</strong> wants to work with Kinus as <strong>{user.fullName}</strong>.
         </p>
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>Read, design and change label and tag templates, with your fonts and pictures.</li>
-          <li>Preview them with campers&apos; names, to check that every name fits.</li>
-          <li>Nothing else: no check-ins, lists, contacts or medical details.</li>
+          <li>Read the Kinus guide, and explain how anything here works and how to prepare and upload files.</li>
+          <li>Only what your account may do{canUsePrintArea(user) ? ": ask for prints and check the print queue" : ""}{canFixNames(user) ? ", fix Hebrew names" : ""}.</li>
+          {designer && <li>Read, design and change label and tag templates, previewed with campers&apos; names.</li>}
+          <li>No contacts or medical details.</li>
         </ul>
-        <p className="text-xs text-muted-foreground">You can disconnect it any time: Print → Templates → Design with Claude → Remove.</p>
+        <p className="text-xs text-muted-foreground">You can disconnect it any time: Connect your AI → Remove.</p>
         <div className="flex flex-wrap gap-2 pt-2">
           <form action={allow}>
             <input type="hidden" name="ask" value={JSON.stringify(ask)} />
@@ -76,13 +80,14 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Pr
         </div>
       </>
     );
+  }
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-muted/40 p-6">
       <div className="w-full max-w-md space-y-4 rounded-xl border bg-card p-6 shadow-[var(--shadow-card)]">
         <div className="flex items-center gap-3">
           <Logo className="size-10" />
-          <h1 className="text-xl font-semibold">Connect Claude to Kinus</h1>
+          <h1 className="text-xl font-semibold">Connect your AI to Kinus</h1>
         </div>
         {body}
       </div>

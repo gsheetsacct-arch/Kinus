@@ -268,6 +268,13 @@ export async function createBatch(fd: FormData): Promise<ActionResult> {
 // Templates, fields and conversions (directors over all of camp, and staff they allow)
 // ---------------------------------------------------------------------------
 /** Changes are written with the server's key after this check (see lib/print/designers). */
+async function requireConnectable() {
+  const user = await requireUser();
+  const { canConnect } = await import("@/lib/ai/connect");
+  if (!canConnect(user)) throw new Error("A check-in login can't connect an AI.");
+  return user;
+}
+
 async function requireDesigner() {
   const user = await requireUser();
   if (!(await canDesign(user))) throw new Error("Only directors over all of camp, and staff they allow, can change templates.");
@@ -323,9 +330,11 @@ export async function removeFont(id: string): Promise<ActionResult> {
 /** A link that connects this person's Claude to Kinus for designing templates (shown once). */
 export async function createDesignLink(label: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
   try {
-    const me = await requireDesigner();
+    // anyone with their own sign-in connects their AI (the template tools only for designers)
+    const me = await requireConnectable();
     const { token } = await createConnector(me.id, label);
     revalidatePath("/print/templates");
+    revalidatePath("/connect");
     return { ok: true, url: `${await appUrl()}/api/mcp/${token}` };
   } catch (e) {
     return { ok: false, error: errorMessage(e) };
@@ -334,7 +343,7 @@ export async function createDesignLink(label: string): Promise<{ ok: true; url: 
 
 export async function removeDesignLink(id: string): Promise<ActionResult> {
   try {
-    const me = await requireDesigner();
+    const me = await requireConnectable();
     await revokeConnector(String(id), me.id);
     revalidatePath("/print/templates");
     return ok("Link removed: that Claude can't reach Kinus any more.");

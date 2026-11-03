@@ -15,6 +15,9 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { getCampContext } from "@/lib/data/camp";
 import { campHour } from "@/lib/time";
+import { canConnect } from "@/lib/ai/connect";
+import { connectorsOf } from "@/lib/print/design-connectors";
+import { ConnectAiPrompt } from "@/components/ai/connect-prompt";
 
 export const metadata = { title: "Home" };
 
@@ -95,8 +98,12 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     ...(isAdmin(user) ? [{ href: "/admin/imports/new", label: "Import the export", desc: "When registrations change", icon: Upload }] : []),
   ];
 
+  // never connected their AI: ask once (on this device)
+  const showAiPrompt = canConnect(user) && (await connectorsOf(user.id).catch(() => [{}])).length === 0;
+
   return (
     <div className="space-y-8">
+      {showAiPrompt && <ConnectAiPrompt />}
       <PageHeader
         title={`${greeting}, ${user.fullName.split(" ")[0]}`}
         description={session ? [session.name, camp.camps.length > 1 ? (camp.current ? `${camp.current.name} camp` : "All camps") : null].filter(Boolean).join(" · ") : "No active session yet"}

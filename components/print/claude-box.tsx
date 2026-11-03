@@ -8,7 +8,7 @@ import { createDesignLink, removeDesignLink } from "@/app/(app)/print/actions";
 import { formatDateTime } from "@/lib/utils";
 
 /**
- * Design with Claude: connects Claude (claude.ai, the Claude app or Claude Code) to Kinus, so it
+ * The Kinus connector: connects Claude (claude.ai, the Claude app or Claude Code) to Kinus, so it
  * can read, design and preview templates here. One address for everyone, where each person
  * signs in to Kinus (what an organization adds to Claude once), or a personal link.
  */
@@ -34,11 +34,11 @@ export function ClaudeBox({ links, connector }: { links: { id: string; label: st
     <section className="space-y-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-card)]">
       <div>
         <h2 className="flex items-center gap-2 font-semibold">
-          <Sparkles className="size-4 text-muted-foreground" /> Design with Claude
+          <Sparkles className="size-4 text-muted-foreground" /> The Kinus connector
         </h2>
         <p className="text-sm text-muted-foreground">
-          Connect your Claude to Kinus: it can read the templates, design and change them with your fonts, pictures and colours, see each change as it prints, and check that every
-          camper&apos;s name fits. It works as you, and only on templates.
+          Claude works with Kinus as you, with only what your account may do: it knows how everything here is set up (the Help guide), and can look things up, ask for prints, fix
+          Hebrew names, and (for people who edit templates) design and check templates.
         </p>
       </div>
 
@@ -53,7 +53,7 @@ export function ClaudeBox({ links, connector }: { links: { id: string; label: st
         <p className="text-muted-foreground">
           A Claude organization (Team or Enterprise): an owner adds it once, under Organization settings → Connectors → Add custom connector, named “Kinus”. Then each person opens
           Settings → Connectors, clicks Connect next to Kinus and signs in here with their own Kinus account. Personal Claude: add it the same way under Settings → Connectors.
-          Anyone who can edit templates can connect; disconnecting is Remove below.
+          Anyone with their own Kinus sign-in can connect; disconnecting is Remove below.
         </p>
       </div>
       <p className="text-sm text-muted-foreground">Or a personal link, with the sign-in built in (for Claude Code, or where you can&apos;t sign in):</p>
@@ -75,7 +75,7 @@ export function ClaudeBox({ links, connector }: { links: { id: string; label: st
             <li>
               <strong className="text-foreground">Claude Code:</strong> <code className="rounded bg-muted px-1">claude mcp add --transport http kinus &lt;the link&gt;</code>
             </li>
-            <li>Then ask, e.g. “Show me the Kinus name tag template and redesign it in our camp style with the Camp Display font. Preview it with the longest names.”</li>
+            <li>Then ask, e.g. “How should I prepare the staff list to upload to Kinus?”, or “Queue the luggage tags for Division 2, sorted by name.”</li>
           </ol>
           <Button size="sm" variant="ghost" onClick={() => setUrl(null)}>
             Done

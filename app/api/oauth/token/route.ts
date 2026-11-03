@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { readClient, redeemCode } from "@/lib/oauth";
 import { createConnector } from "@/lib/print/design-connectors";
 import { loadUserById } from "@/lib/auth/user-by-id";
-import { canDesign } from "@/lib/print/designers";
+import { canConnect } from "@/lib/ai/connect";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "content-type, authorization", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const problem = (error: string, error_description: string, status = 400) => NextResponse.json({ error, error_description }, { status, headers: { ...cors, "Cache-Control": "no-store" } });
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   const userId = redeemCode(raw.code ?? "", raw.client_id, redirectUri, raw.code_verifier ?? "");
   if (!userId) return problem("invalid_grant", "The code isn't valid, is more than 5 minutes old, or doesn't match.");
   const user = await loadUserById(userId);
-  if (!user || !(await canDesign(user))) return problem("invalid_grant", "That person can't edit templates.");
+  if (!user || !canConnect(user)) return problem("invalid_grant", "That account can't be connected.");
   const { token } = await createConnector(user.id, `${client.name} (connected)`, { replace: true });
   return NextResponse.json({ access_token: token, token_type: "Bearer", scope: "templates" }, { headers: { ...cors, "Cache-Control": "no-store" } });
 }
