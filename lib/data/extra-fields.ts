@@ -1,11 +1,49 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { groupOfKey, UNGATED_GROUPS } from "@/lib/fields";
-import { columnKey, extraValue, parseExtraFields, shortAnswer, type ExtraField } from "@/lib/import/extra-fields";
+import { cache } from "react";
+import { columnKey, extraValue, humanLabel, oneOfEachColumn, parseExtraFields, shortAnswer, type ExtraField } from "@/lib/import/extra-fields";
 import { withFixes } from "@/lib/source-fixes";
 
-/** The export columns chosen to show (Import → column step → "Show on the camper page"). */
-export async function loadExtraFields(): Promise<ExtraField[]> {
+/**
+ * Every export column Kinus has no field of its own for, as an added column (on the camper
+ * page and Edit tab, in lists and their filters, on labels): the ones named in Settings (with
+ * their names, short answers and who sees them) and, after them, every other column of the
+ * latest exports that wasn't read into a Kinus field, named from the column. Columns left out
+ * (Settings, or "Not needed" on the import's column step) stay out. Once per request.
+ */
+export const loadExtraFields = cache(async (): Promise<ExtraField[]> => {
+  const admin = createAdminClient();
+  const [{ data: row }, hidden, { data: imports }] = await Promise.all([
+    admin.from("settings").select("value").eq("key", "extra_fields").maybeSingle(),
+    loadHiddenColumns(),
+    admin.from("imports").select("options").eq("status", "applied").order("applied_at", { ascending: false }).limit(6),
+  ]);
+  const named = parseExtraFields(row?.value);
+  const out = [...named];
+  const taken = new Set([...named.map((f) => columnKey(f.column)), ...hidden.map(columnKey)]);
+  const labels = new Set(named.map((f) => f.label.trim().toLowerCase()));
+  for (const imp of imports ?? []) {
+    const o = (imp.options ?? {}) as { headers?: string[]; columnMap?: Record<string, string> };
+    const mapped = new Set(Object.keys(o.columnMap ?? {}).map(columnKey));
+    // only exports read with a column setup (older ones didn't keep it): their unmapped columns
+    if (!o.columnMap || !Array.isArray(o.headers)) continue;
+    for (const h of oneOfEachColumn(o.headers.filter((x) => typeof x === "string" && x.trim()), (x) => x)) {
+      const k = columnKey(h);
+      if (taken.has(k) || mapped.has(k)) continue;
+      taken.add(k);
+      // two columns with the same plain name ("City" in the form and the family record): told apart
+      let label = humanLabel(h);
+      if (labels.has(label.toLowerCase())) label = `${label} (${h.split(/[.#]/)[0]})`;
+      labels.add(label.toLowerCase());
+      out.push({ column: h.trim(), label });
+    }
+  }
+  return out;
+});
+
+/** Only the ones named in Settings (no automatic columns): for saving. */
+export async function loadNamedExtraFields(): Promise<ExtraField[]> {
   const { data } = await createAdminClient().from("settings").select("value").eq("key", "extra_fields").maybeSingle();
   return parseExtraFields(data?.value);
 }

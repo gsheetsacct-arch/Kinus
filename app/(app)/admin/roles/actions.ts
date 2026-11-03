@@ -61,16 +61,20 @@ export async function setRoleInUse(fd: FormData): Promise<ActionResult> {
 export async function saveColumnGroups(fd: FormData): Promise<ActionResult> {
   const me = await requireAdmin();
   try {
-    const { EXTRA_GROUPS, parseExtraFields } = await import("@/lib/import/extra-fields");
+    const { EXTRA_GROUPS, columnKey } = await import("@/lib/import/extra-fields");
+    type ExtraField = import("@/lib/import/extra-fields").ExtraField;
+    const { loadExtraFields, loadNamedExtraFields } = await import("@/lib/data/extra-fields");
     const supabase = await createClient();
-    const { data: current } = await supabase.from("settings").select("value").eq("key", "extra_fields").maybeSingle();
-    const fields = parseExtraFields(current?.value).map((f) => {
+    // every column (the automatic ones too); a column gets saved once it has a choice of its own
+    const named = new Set((await loadNamedExtraFields()).map((f) => columnKey(f.column)));
+    const all: ExtraField[] = (await loadExtraFields()).map((f) => {
       if (!fd.has(`group:${f.column}`)) return f;
       const g = String(fd.get(`group:${f.column}`) ?? "");
       const { group: _old, ...rest } = f;
       void _old;
       return (EXTRA_GROUPS as readonly string[]).includes(g) ? { ...rest, group: g as (typeof EXTRA_GROUPS)[number] } : rest;
     });
+    const fields = all.filter((f) => named.has(columnKey(f.column)) || f.group);
     const { error } = await supabase.from("settings").upsert({ key: "extra_fields", value: fields, updated_by: me.id, updated_at: new Date().toISOString() });
     if (error) throw error;
     revalidatePath("/", "layout");

@@ -75,8 +75,7 @@ export async function saveExtraFields(fd: FormData): Promise<ActionResult> {
     const supabase = await createClient();
     const { data: current } = await supabase.from("settings").select("value").eq("key", "extra_fields").maybeSingle();
     const before = parseExtraFields(current?.value);
-    const fields = columns
-      .map((column, i) => {
+    const all = columns.map((column, i) => {
         // short answers: the ones on the page, plus any for answers not in this session
         const orig = fd.getAll(`orig:${column}`).map(String);
         const short = fd.getAll(`short:${column}`).map((v) => String(v).trim().slice(0, 60));
@@ -89,11 +88,22 @@ export async function saveExtraFields(fd: FormData): Promise<ActionResult> {
         // left out of the form (an older page): keep the choice already made
         const group = fd.has(`group:${column}`) ? ((EXTRA_GROUPS as readonly string[]).includes(g) ? (g as ExtraGroup) : undefined) : before.find((f) => f.column === column)?.group;
         return { column, label: (String(fd.getAll("label")[i] ?? "").trim() || column).slice(0, 80), keep: fd.get(`keep:${column}`) === "on", answers, group };
-      })
-      .filter((f) => f.keep)
-      .map(({ column, label, answers, group }) => ({ column, label, ...(Object.keys(answers).length ? { answers } : {}), ...(group ? { group } : {}) }));
-    const { error } = await supabase.from("settings").upsert({ key: "extra_fields", value: fields, updated_by: me.id, updated_at: new Date().toISOString() });
+    });
+    const fields = all.filter((f) => f.keep).map(({ column, label, answers, group }) => ({ column, label, ...(Object.keys(answers).length ? { answers } : {}), ...(group ? { group } : {}) }));
+    // every export column shows unless left out: unticked ones are left out (hidden_columns);
+    // ticked "Show again" brings one back
+    const { data: hiddenRow } = await supabase.from("settings").select("value").eq("key", "hidden_columns").maybeSingle();
+    const key = (c: string) => c.trim().toLowerCase().replace(/#/g, ".");
+    const unhide = new Set(fd.getAll("unhide").map((v) => key(String(v))));
+    const kept = new Set(fields.map((f) => key(f.column)));
+    const wasHidden = Array.isArray(hiddenRow?.value) ? (hiddenRow.value as unknown[]).filter((x): x is string => typeof x === "string") : [];
+    const hidden = [...wasHidden, ...all.filter((f) => !f.keep).map((f) => f.column)].filter((c, i, list) => !unhide.has(key(c)) && !kept.has(key(c)) && list.findIndex((x) => key(x) === key(c)) === i);
+    const [{ error }, { error: e2 }] = await Promise.all([
+      supabase.from("settings").upsert({ key: "extra_fields", value: fields, updated_by: me.id, updated_at: new Date().toISOString() }),
+      supabase.from("settings").upsert({ key: "hidden_columns", value: hidden, updated_by: me.id, updated_at: new Date().toISOString() }),
+    ]);
     if (error) throw error;
+    if (e2) throw e2;
     revalidatePath("/", "layout");
     return ok("Saved.");
   } catch (e) {

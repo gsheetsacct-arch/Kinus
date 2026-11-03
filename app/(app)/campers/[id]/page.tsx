@@ -93,6 +93,22 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
   const groups = visibleFieldGroups(user, fv ?? []);
   const extraFields = visibleExtraFields(extraAll.fields, groups);
   const regColumns = visibleColumns(registration.columns, groups);
+  // the export's columns in the history, one by one: only the ones this person may see
+  const colName = (k: string) => k.trim().toLowerCase().replace(/#/g, ".");
+  const seenColumns = new Map([...regColumns, ...extraFields].map((f) => [colName(f.column), f.label]));
+  const historyRows = (diff: Record<string, { old: unknown; new: unknown }>) =>
+    Object.entries(diff).flatMap(([k, v]): { key: string; label: string; old: unknown; new: unknown }[] => {
+      if (k === "source_data" || k === "source_fixes") {
+        const o = (v.old && typeof v.old === "object" ? v.old : {}) as Record<string, unknown>;
+        const n = (v.new && typeof v.new === "object" ? v.new : {}) as Record<string, unknown>;
+        const val = (x: unknown) => (x && typeof x === "object" && "value" in (x as object) ? (x as { value: unknown }).value : x);
+        return [...new Set([...Object.keys(o), ...Object.keys(n)])]
+          .filter((c) => seenColumns.has(colName(c)) && JSON.stringify(val(o[c]) ?? "") !== JSON.stringify(val(n[c]) ?? ""))
+          .map((c) => ({ key: `${k}.${c}`, label: `${seenColumns.get(colName(c))}${k === "source_fixes" ? " (corrected)" : ""}`, old: val(o[c]), new: val(n[c]) }));
+      }
+      if (["last_event_id", "updated_at", "staff_edited", "bunk_locked_by_staff", "name_normalized", "display_name"].includes(k)) return [];
+      return [{ key: k, label: HISTORY_LABEL[k] ?? FIELD_BY_KEY[k]?.label ?? k, old: historyValue(k, v.old), new: historyValue(k, v.new) }];
+    });
   const extra = extraAll.values;
   const canEdit = c.division_id ? canAccessBunk(user, c.division_id, c.bunk_id, "edit") : isAdmin(user);
   // a Hebrew-language division: the Hebrew name is the title, the English one under it
@@ -289,17 +305,17 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
                     {h.action === "UPDATE" && (
                       <table className="mt-1 text-xs">
                         <tbody>
-                          {Object.entries(diff)
-                            .filter(([k]) => !["last_event_id", "updated_at", "source_data", "staff_edited", "bunk_locked_by_staff", "name_normalized", "display_name"].includes(k))
-                            .map(([k, v]) => (
-                              <tr key={k}>
-                                <td className="pr-3 text-muted-foreground">{HISTORY_LABEL[k] ?? FIELD_BY_KEY[k]?.label ?? k}</td>
-                                <td className="pr-3 line-through" dir="auto">
-                                  {historyValue(k, v.old)}
-                                </td>
-                                <td dir="auto">{historyValue(k, v.new)}</td>
-                              </tr>
-                            ))}
+                          {historyRows(diff).map((row) => (
+                            <tr key={row.key}>
+                              <td className="pr-3 text-muted-foreground" dir="auto">
+                                {row.label}
+                              </td>
+                              <td className="pr-3 line-through" dir="auto">
+                                {row.old === null || row.old === undefined || row.old === "" ? "—" : String(row.old)}
+                              </td>
+                              <td dir="auto">{row.new === null || row.new === undefined || row.new === "" ? "—" : String(row.new)}</td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     )}

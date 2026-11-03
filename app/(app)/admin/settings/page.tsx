@@ -17,7 +17,7 @@ import { parseProtected, PROTECTABLE_FIELDS } from "@/lib/import/protected";
 import { FormDialog } from "@/components/form-dialog";
 import { isOwner } from "@/lib/auth/permissions";
 import { emailSetup } from "@/lib/print/email";
-import { parseExtraFields } from "@/lib/import/extra-fields";
+import { loadExtraFields, loadHiddenColumns } from "@/lib/data/extra-fields";
 import { Select } from "@/components/ui/select";
 import { groupOfKey } from "@/lib/fields";
 import { FIELD_GROUPS, ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
@@ -44,7 +44,8 @@ export default async function SettingsPage() {
   const exportColumns = ((lastImport?.options as { headers?: string[] } | null)?.headers ?? []).filter((h) => h.trim());
   const listed = new Set(exportColumns.map((h) => h.trim().toLowerCase()));
   const otherGuarded = guarded.columns.filter((c) => !listed.has(c.toLowerCase()));
-  const extraFields = parseExtraFields(settings?.find((x) => x.key === "extra_fields")?.value);
+  // every export column Kinus has no field for (named ones first), and the ones left out
+  const [extraFields, hiddenColumns] = await Promise.all([loadExtraFields(), loadHiddenColumns()]);
   const session = await getActiveSession();
   const answers = session ? await extraAnswers(session.id, extraFields) : new Map();
   const missing = { ...DEFAULT_RULES, ...(setting("missing_rules") as Partial<MissingRules>) };
@@ -91,7 +92,7 @@ export default async function SettingsPage() {
 
       <Section
         title="Extra fields from the export"
-        description="Columns of the registration export shown on the camper page, and offered for lists and labels. Choose them on the import's column step (“Show on the camper page”); rename or remove them here, and choose who sees each one. Which roles see each kind of detail is set on Roles."
+        description="Every column of the registration export that isn't one of Kinus' own fields: on the camper page and Edit tab, in lists and labels. Rename them, untick Show to leave a column out, and choose who sees each one (which roles see each kind of detail is set on Roles)."
       >
         {extraFields.length === 0 ? (
           <p className="text-sm text-muted-foreground">None yet.</p>
@@ -122,6 +123,20 @@ export default async function SettingsPage() {
                 <ShortAnswers field={f} answers={answers.get(f.column)} />
               </div>
             ))}
+            {hiddenColumns.length > 0 && (
+              <details className="rounded-lg border p-3 text-sm">
+                <summary className="cursor-pointer font-medium">Left out ({hiddenColumns.length})</summary>
+                <p className="mt-1 text-xs text-muted-foreground">Tick one to show it again.</p>
+                <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                  {hiddenColumns.map((c) => (
+                    <label key={c} className="flex items-center gap-2">
+                      <input type="checkbox" name="unhide" value={c} className="size-4" />
+                      <span className="truncate font-mono text-xs">{c}</span>
+                    </label>
+                  ))}
+                </div>
+              </details>
+            )}
             <span className="flex items-center gap-3">
               <Button type="submit">Save</Button>
               <span className="hidden text-sm font-medium text-amber-700 group-data-[dirty=true]:inline dark:text-amber-300">Unsaved changes</span>

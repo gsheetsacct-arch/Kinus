@@ -10,7 +10,20 @@ import { SLEEPING_COLUMN, SLEEPING_COLUMN_LABEL, sleepingText } from "@/lib/slee
 
 type DB = SupabaseClient<Database>;
 
-export type ListPreset = { id: string; name: string; audience: string; columns: string[]; sort: { field: string; dir: string }[]; group_by: string | null; is_default: boolean; /** Only campers with these (lib/camper-flags): any one of them, or all of them. */ only: CamperFlag[]; match: "any" | "all" };
+export type ListPreset = { id: string; name: string; audience: string; columns: string[]; sort: { field: string; dir: string }[]; group_by: string | null; is_default: boolean; /** Only campers with these (lib/camper-flags): any one of them, or all of them. */ only: CamperFlag[]; match: "any" | "all"; /** Only campers whose export column is one of these values ("(empty)": nothing in it). */ where: ColumnFilter[] };
+
+export type ColumnFilter = { column: string; values: string[] };
+
+/** The layout's column filters, as saved ({ where: [{ column, values }] }). */
+export function parseWhere(filters: unknown): ColumnFilter[] {
+  const w = (filters as { where?: unknown } | null)?.where;
+  if (!Array.isArray(w)) return [];
+  return w
+    .filter((x): x is ColumnFilter => Boolean(x && typeof x.column === "string" && Array.isArray(x.values)))
+    .map((x) => ({ column: x.column, values: x.values.filter((v): v is string => typeof v === "string").map((v) => v.trim()).filter(Boolean) }))
+    .filter((x) => x.column && x.values.length)
+    .slice(0, 5);
+}
 
 export type BuiltList = {
   preset: ListPreset;
@@ -29,6 +42,7 @@ export async function getPresetsFor(supabase: DB, user: CurrentUser): Promise<Li
     sort: p.sort as { field: string; dir: string }[],
     only: parseFlags(((filters as { only?: string[] } | null)?.only ?? []).join(",")),
     match: (filters as { match?: string } | null)?.match === "all" ? ("all" as const) : ("any" as const),
+    where: parseWhere(filters),
   }));
 }
 
@@ -58,6 +72,9 @@ export async function buildList(
   const groupsAnywhere = visibleFieldGroups(user, fv);
   const sortKeys = preset.sort.length ? preset.sort : [{ field: "last_name", dir: "asc" }];
   // extra fields from the registration export ("source.ppa.sleeping_at_the_kinus")
+  const extraAll = (preset.where ?? []).length
+    ? await import("./extra-fields").then(async (m) => (await m.loadExtraFields()).map((f) => ({ key: `source.${f.column}`, group: m.extraGroupOf(f) })))
+    : [];
   const extraDefs = preset.columns.some((k) => k.startsWith("source."))
     ? await import("./extra-fields").then(async (m) => (await m.loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: f.label, group: m.extraGroupOf(f), kind: "text" as const, answers: f.answers })))
     : [];
@@ -70,10 +87,31 @@ export async function buildList(
   // the layout's filters: all of them, or (by default) any one of them; the page's choice narrows it further
   const anyOf = preset.match === "any" && preset.only.length > 1 ? preset.only : [];
   const only = [...new Set([...(anyOf.length ? [] : preset.only), ...(scope.only ?? [])])];
-  const [campers, { data: divisions }] = await Promise.all([
+  const [loaded, { data: divisions }] = await Promise.all([
     listCampers(supabase, { sessionId: scope.sessionId, divisionId: scope.divisionId, bunkId: scope.bunkId, divisionIds: scope.divisionIds, fields, only, anyOf }),
     supabase.from("divisions").select("id, name").eq("session_id", scope.sessionId),
   ]);
+  // the layout's column filters ("T-shirt is M or L"): only on columns this person may see
+  let campers = loaded;
+  const where = (preset.where ?? []).filter((w) => {
+    const def = extraDefs.find((f) => f.key === `source.${w.column}`) ?? extraAll.find((f) => f.key === `source.${w.column}`);
+    return def && (UNGATED_GROUPS.includes(def.group) || groupsAnywhere.has(def.group));
+  });
+  if (where.length && campers.length) {
+    const m = await import("./extra-fields");
+    const { shortAnswer } = await import("@/lib/import/extra-fields");
+    const defs = await m.loadExtraFields();
+    const raw = await m.extraValuesFor(campers.map((c) => String(c.id)), where.map((w) => ({ column: w.column })));
+    const norm = (v: string) => v.replace(/\s+/g, " ").trim().toLowerCase();
+    campers = campers.filter((c) =>
+      where.every((w) => {
+        const value = raw.get(String(c.id))?.[w.column] ?? "";
+        const short = shortAnswer(defs.find((f) => f.column === w.column) ?? {}, value);
+        return w.values.some((want) => (want === "(empty)" ? !value.trim() : norm(want) === norm(value) || norm(want) === norm(short)));
+      }),
+    );
+  }
+  const columnLabels = new Map(where.length ? (await import("./extra-fields").then((m) => m.loadExtraFields())).map((f) => [f.column, f.label] as const) : []);
   const columns = shownColumns.map((f) => ({ key: f.key, label: f.label }));
   const extraCols = columns.filter((c) => c.key.startsWith("source.")).map((c) => ({ column: c.key.slice(7), label: c.label, answers: extraDefs.find((f) => f.key === c.key)?.answers }));
   // "Sleeping here" / "Going home", from the registration's Sleeping At The Kinus
@@ -130,6 +168,6 @@ export async function buildList(
     preset,
     columns,
     groups: await inCampOrder(supabase, scope.sessionId, groupKey, [...groupsMap.values()]),
-    scopeLabel: [[divName, bunkName].filter(Boolean).join(" · ") || (scope.campName ? `All of ${scope.campName}` : "All divisions"), ...(anyOf.length ? [anyOf.map((k) => CAMPER_FLAGS[k].label).join(" or ")] : []), ...only.map((k) => CAMPER_FLAGS[k].label)].join(" · "),
+    scopeLabel: [[divName, bunkName].filter(Boolean).join(" · ") || (scope.campName ? `All of ${scope.campName}` : "All divisions"), ...(anyOf.length ? [anyOf.map((k) => CAMPER_FLAGS[k].label).join(" or ")] : []), ...only.map((k) => CAMPER_FLAGS[k].label), ...where.map((w) => `${columnLabels.get(w.column) ?? w.column}: ${w.values.join(" or ")}`)].join(" · "),
   };
 }

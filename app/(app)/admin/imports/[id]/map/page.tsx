@@ -45,7 +45,7 @@ function ColumnRow({ header, value, samples, highlight, labels, name }: { header
       </div>
       <Select name={`map:${header}`} defaultValue={value} className="h-9 text-sm" aria-label={`What to do with ${header}`}>
         <option value="">Not needed</option>
-        <option value={EXTRA}>Show on the camper page</option>
+        <option value={EXTRA}>Show in Kinus (camper page, lists, labels)</option>
         <optgroup label="A Kinus field">
           {TARGET_OPTIONS.filter((o) => o.value !== "").map((o) => (
             <option key={o.value} value={o.value}>
@@ -98,15 +98,18 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
   const sampleFor = (h: string) => [...new Set(samples.map((s) => s[h]).filter(Boolean))].slice(0, 2);
   const { count } = await supabase.from("import_rows").select("id", { count: "exact", head: true }).eq("import_id", id);
   // extra fields already chosen, and the columns labels read ("{{source.ppa.yarmulka_size}}")
-  const [{ data: extraRow }, { data: mergeFields }] = await Promise.all([
+  const [{ data: extraRow }, { data: mergeFields }, { data: hiddenRow }] = await Promise.all([
     supabase.from("settings").select("value").eq("key", "extra_fields").maybeSingle(),
     supabase.from("merge_fields").select("label, source_field"),
+    supabase.from("settings").select("value").eq("key", "hidden_columns").maybeSingle(),
   ]);
+  // columns left out before ("Not needed", or unticked in Settings) stay out; every other one shows
+  const hiddenCols = new Set((Array.isArray(hiddenRow?.value) ? (hiddenRow.value as unknown[]) : []).filter((x): x is string => typeof x === "string").map(columnKey));
   const extras = parseExtraFields(extraRow?.value);
   const isExtra = (h: string) => extras.some((f) => columnKey(f.column) === columnKey(h));
   const labelsUsing = (h: string) => (mergeFields ?? []).filter((f) => [...f.source_field.matchAll(/source\.([^{}|\s]+)/g)].some((m) => columnKey(m[1]) === columnKey(h))).map((f) => f.label);
   // a column labels read is shown on the camper page too, so it plainly is in use
-  const valueFor = (h: string) => presetMap[h] ?? (isExtra(h) || labelsUsing(h).length ? EXTRA : "");
+  const valueFor = (h: string) => presetMap[h] ?? (isExtra(h) || labelsUsing(h).length || !hiddenCols.has(columnKey(h)) ? EXTRA : "");
   // the plain name shown for an extra field ("Sleeping at the Kinus"), editable right here
   const nameFor = (h: string) => extras.find((f) => columnKey(f.column) === columnKey(h))?.label ?? humanLabel(h);
   const decided = (h: string) => h in presetMap || isExtra(h) || labelsUsing(h).length > 0;

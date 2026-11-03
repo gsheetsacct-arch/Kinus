@@ -1,4 +1,5 @@
 import { loadExtraFields } from "@/lib/data/extra-fields";
+import { parseWhere } from "@/lib/data/lists";
 import { notFound } from "next/navigation";
 import { Copy, Lock } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -40,6 +41,9 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
   const sort = (preset?.sort as { field: string; dir: string }[] | undefined) ?? [];
   const only = new Set(parseFlags(((preset?.filters as { only?: string[] } | null)?.only ?? []).join(",")));
   const match = (preset?.filters as { match?: string } | null)?.match === "all" ? "all" : "any";
+  // column filters ("T-shirt size is M or L"): the saved ones, then empty rows to add more
+  const where = parseWhere(preset?.filters);
+  const whereRows = [...where, ...Array.from({ length: Math.max(1, 3 - where.length) }, () => ({ column: "", values: [] as string[] }))].slice(0, 5);
   const sortField = sort.find((s) => s.field !== preset?.group_by)?.field ?? "last_name";
 
   return (
@@ -109,6 +113,23 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                 </label>
               </div>
               <p className="text-xs text-muted-foreground">None ticked: every camper. Any of them: campers with at least one (medical flag or notes). All of them: only campers with every one ticked.</p>
+            </fieldset>
+            <fieldset className="space-y-1.5">
+              <legend className="mb-1 text-sm font-medium">Only campers whose…</legend>
+              {whereRows.map((w, i) => (
+                <div key={i} className="grid gap-1.5 sm:grid-cols-2">
+                  <Select name="where_column" defaultValue={w.column} aria-label="Column">
+                    <option value="">(no filter)</option>
+                    {extraFields.map((f) => (
+                      <option key={f.column} value={f.column}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </Select>
+                  <Input name="where_values" defaultValue={w.values.join(", ")} placeholder="is, e.g. Yes or M, L" aria-label="Values" dir="auto" />
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground">Any column of the export. Separate values with commas (any of them matches); &ldquo;(empty)&rdquo; for campers with nothing in it. Every filter here must match.</p>
             </fieldset>
             <label className="flex items-start gap-2 text-sm">
               <input type="checkbox" name="is_default" defaultChecked={preset?.is_default ?? false} className="mt-0.5 size-4" />

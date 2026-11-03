@@ -15,6 +15,7 @@ import { bunkOrders, divisionOrder, slotNewBunks, slotNewDivisions } from "@/lib
 import { columnKey, humanLabel, parseExtraFields } from "@/lib/import/extra-fields";
 import { locksFor, parseProtected, type Locks } from "@/lib/import/protected";
 import { fixKey, parseFixes, withFixes } from "@/lib/source-fixes";
+import { exportColumnChanges } from "@/lib/import/export-changes";
 import { campersForImport, intoProgram, layoutFit, LAYOUT_FIT } from "@/lib/import/programs";
 
 /** The column step's choice "show it on the camper page" (an extra field). */
@@ -271,13 +272,23 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     // like the same thing twice: show one, or give them different names
     const byName = new Map<string, string[]>();
     for (const f of [...keepOthers, ...chosen]) byName.set(f.label.trim().toLowerCase(), [...(byName.get(f.label.trim().toLowerCase()) ?? []), f.column]);
-    const clash = [...byName.entries()].find(([, cols]) => cols.length > 1);
-    if (clash) {
-      const [name, cols] = clash;
-      const shown = [...keepOthers, ...chosen].find((f) => f.label.trim().toLowerCase() === name)!.label;
-      return fail(`${cols.join(" and ")} would both show as “${shown}”. Show only one of them on the camper page, or give them different names (e.g. “${shown} (family)”).`);
-    }
-    await admin.from("settings").upsert({ key: "extra_fields", value: [...keepOthers, ...chosen] as unknown as J, updated_by: me.id, updated_at: new Date().toISOString() });
+    // two columns under one plain name ("City" from the form and from the family record): the
+    // later ones say where they're from ("City (family)")
+    for (const cols of byName.values())
+      for (const col of cols.slice(1)) {
+        const f = chosen.find((x) => x.column === col);
+        if (f) f.label = `${f.label} (${col.split(/[.#]/)[0]})`.slice(0, 80);
+      }
+    // every column shows unless it's "Not needed": those are left out (and stay out next time)
+    const notNeeded = headers.filter((h) => !(h in columnMap) && !extra.includes(h));
+    const { data: hiddenRow } = await admin.from("settings").select("value").eq("key", "hidden_columns").maybeSingle();
+    const wasHidden = (Array.isArray(hiddenRow?.value) ? (hiddenRow.value as unknown[]) : []).filter((x): x is string => typeof x === "string");
+    const shownNow = new Set([...extra, ...Object.keys(columnMap)].map(columnKey));
+    const hidden = [...wasHidden, ...notNeeded].filter((c, i, list) => !shownNow.has(columnKey(c)) && list.findIndex((x) => columnKey(x) === columnKey(c)) === i);
+    await Promise.all([
+      admin.from("settings").upsert({ key: "extra_fields", value: [...keepOthers, ...chosen] as unknown as J, updated_by: me.id, updated_at: new Date().toISOString() }),
+      admin.from("settings").upsert({ key: "hidden_columns", value: hidden as unknown as J, updated_by: me.id, updated_at: new Date().toISOString() }),
+    ]);
 
     const rawRows = await fetchAll((from, to) => admin.from("import_rows").select("id, row_number, raw").eq("import_id", imp.id).order("row_number").range(from, to));
     const parsedRows = rawRows.map((r) => {
@@ -311,6 +322,11 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     // the export's other columns (labels, extra fields): applying refreshes them for every camper
     // in the file, so the preview says so, rather than "unchanged"
     const columns = columnRefresh(result.rows, sourceData);
+    // and each of them, camper by camper, is a change like any other (old → new), shown on the
+    // Updated tab by column; a camper whose only change is in those columns is updated too
+    const exported = exportColumnChanges(result.rows, sourceData, loaded.fixes, Object.keys(columnMap));
+    result.summary.updated = result.rows.filter((r) => r.action === "update").length;
+    result.summary.unchanged = result.rows.filter((r) => r.action === "unchanged").length;
 
     const rawByRow = new Map(rawRows.map((r) => [r.row_number, r]));
     for (let i = 0; i < result.rows.length; i += 200) {
@@ -342,7 +358,7 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
       .update({
         status: "previewed",
         options: { ...(imp.options as object), columnMap, mappingOptions, fixedDivision, takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on", correctedCopy: corrected, protected: corrected ? guarded : null, divisionsInFile: result.summary.divisionsInFile, partialWarning },
-        summary: { ...result.summary, missing: result.summary.missing.length, missingList: result.summary.missing, columns, locked, correctedCopy: corrected } as unknown as J,
+        summary: { ...result.summary, missing: result.summary.missing.length, missingList: result.summary.missing, columns, exportChanged: exported, locked, correctedCopy: corrected } as unknown as J,
       })
       .eq("id", imp.id);
     if (e4) throw e4;
@@ -422,9 +438,8 @@ export async function applyImportAction(fd: FormData): Promise<ActionResult> {
   await carryAreasTo(imp.session_id);
   const r = data as { added: number; updated: number; missing: number };
   revalidatePath("/", "layout");
-  const columns = ((imp.summary ?? {}) as { columns?: { campers: number } }).columns?.campers ?? 0;
   return ok(
-    `Done: ${r.added} added, ${r.updated} updated, ${r.missing} marked “not in the latest export”${columns ? `; the export's columns refreshed for ${columns}` : ""}.`,
+    `Done: ${r.added} added, ${r.updated} updated, ${r.missing} marked “not in the latest export”.`,
     `/admin/imports/${id}`,
   );
 }

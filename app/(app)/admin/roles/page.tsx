@@ -13,19 +13,16 @@ import { plural } from "@/lib/utils";
 import { saveColumnGroups, saveRoles, setRoleInUse } from "./actions";
 import { Select } from "@/components/ui/select";
 import { FIELDS, groupOfKey } from "@/lib/fields";
-import { EXTRA_GROUPS, parseExtraFields } from "@/lib/import/extra-fields";
+import { EXTRA_GROUPS } from "@/lib/import/extra-fields";
+import { loadExtraFields } from "@/lib/data/extra-fields";
 
 export const metadata = { title: "Roles" };
 
 export default async function RolesPage() {
   await requireAdmin();
   const supabase = await createClient();
-  const [setup, { data: people }, { data: extraRow }] = await Promise.all([
-    loadRoles(supabase),
-    createAdminClient().from("profiles").select("role").eq("is_active", true),
-    supabase.from("settings").select("value").eq("key", "extra_fields").maybeSingle(),
-  ]);
-  const extra = parseExtraFields(extraRow?.value);
+  // every export column Kinus has no field of its own for
+  const [setup, { data: people }, extra] = await Promise.all([loadRoles(supabase), createAdminClient().from("profiles").select("role").eq("is_active", true), loadExtraFields()]);
   // who sees each kind of detail now, in words
   const seenBy = (g: string) =>
     ROLE_ORDER.filter((r) => r !== "owner" && setup.inUse[r] && setup.sees[r].includes(g))
