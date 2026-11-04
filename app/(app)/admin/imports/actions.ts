@@ -15,7 +15,7 @@ import { bunkOrders, divisionOrder, slotNewBunks, slotNewDivisions } from "@/lib
 import { columnKey, humanLabel, parseExtraFields } from "@/lib/import/extra-fields";
 import { locksFor, parseProtected, type Locks } from "@/lib/import/protected";
 import { fixKey, parseFixes, withFixes } from "@/lib/source-fixes";
-import { exportColumnChanges } from "@/lib/import/export-changes";
+import { exportColumnChanges, keepFilledColumns } from "@/lib/import/export-changes";
 import { campersForImport, intoProgram, layoutFit, LAYOUT_FIT } from "@/lib/import/programs";
 import { hasThursdayColumns, isThursdayOnlyFile, thursdayCamp, thursdayCells, thursdayCopy, thursdayOf, THURSDAY_PREFIX, THURSDAY_ROW_OFFSET } from "@/lib/import/thursday";
 import { ensureThursdayCamps } from "@/lib/import/thursday-camps";
@@ -373,6 +373,12 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
       result.summary.divisionsInFile = [];
       result.summary.skipped = result.rows.filter((r) => r.action === "skip").length;
     }
+    // "empty cells change nothing" holds for the export's own columns too: an empty cell keeps
+    // what an earlier export (or a fix) gave the camper (a protected column in our corrected copy
+    // may still be cleared)
+    if (!thursdayOnly && d.emptyMeansUnknown === "on")
+      for (const r of result.rows)
+        if (r.matchedCamperId) r.parsed.source_data = keepFilledColumns(sourceData.get(r.matchedCamperId) ?? {}, r.parsed.source_data ?? {}, corrected ? guarded.columns : []);
     let locked = 0;
     if (corrected)
       for (const r of result.rows) {
@@ -457,6 +463,8 @@ export async function resolveConflict(fd: FormData): Promise<ActionResult> {
         emptyMeansUnknown: imp.options.emptyMeansUnknown ?? true,
         clearable: guarded?.fields ?? [],
       }).rows[0];
+      // empty cells change nothing: the export's columns too (as in the preview)
+      if (imp.options.emptyMeansUnknown ?? true) r.parsed.source_data = keepFilledColumns(sourceData.get(target.id) ?? {}, r.parsed.source_data ?? {}, guarded?.columns ?? []);
       // our corrected copy, matched by hand: what it changes in the protected details is locked too
       if (guarded) {
         const reg = sourceData.get(target.id) ?? {};

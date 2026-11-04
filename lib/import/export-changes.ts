@@ -40,3 +40,23 @@ export function exportColumnChanges(
   }
   return campers;
 }
+
+/**
+ * "Empty cells change nothing", for the export's own columns too: a column empty (or missing) in
+ * this file keeps what the camper has from an earlier export; one with something in it takes the
+ * file's. `clearable` columns (the corrected copy's protected ones) take the file's even empty.
+ */
+export function keepFilledColumns(old: Record<string, string>, next: Record<string, string>, clearable: string[] = []): Record<string, string> {
+  const key = (k: string) => k.trim().toLowerCase();
+  const clear = new Set(clearable.map(key));
+  const out: Record<string, string> = { ...old };
+  const oldKey = new Map(Object.keys(old).map((k) => [key(k), k]));
+  for (const [k, v] of Object.entries(next)) {
+    const filled = String(v ?? "").trim() !== "";
+    const same = oldKey.get(key(k));
+    if (!filled && same !== undefined && !clear.has(key(k))) continue;
+    if (same !== undefined && same !== k) delete out[same];
+    out[k] = v;
+  }
+  return out;
+}
