@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Copy, FolderMinus, FolderOpen, Plus, Sparkles, UserRound } from "lucide-react";
+import { Copy, FolderMinus, Plus, Sparkles, UserRound } from "lucide-react";
+import { FolderBox } from "@/components/print/folder-box";
 import { MoveToFolder, RenameFolder } from "@/components/print/template-folders";
 import { PageHeader } from "@/components/page-header";
 import { ActionForm } from "@/components/action-form";
@@ -107,7 +108,7 @@ export default async function TemplatesPage({ searchParams }: { searchParams: Pr
       <PageHeader
         title={showRetired ? "Retired templates" : "Templates"}
         description={
-          showRetired ? "No longer offered for printing; kept so past print jobs still open." : "The designs for name tags, luggage tags and anything else printed per camper, and staff tags (printed from Staff tags). Put them in folders with Move, at the bottom of each."
+          showRetired ? "No longer offered for printing; kept so past print jobs still open." : "The designs for name tags, luggage tags and anything else printed per camper, and staff tags (printed from Staff tags). Tap a folder to open it; put templates in folders with the folder menu at the bottom of each."
         }
         actions={
           <>
@@ -124,26 +125,30 @@ export default async function TemplatesPage({ searchParams }: { searchParams: Pr
           </>
         }
       />
-      {/* folders A–Z (open), then the templates in none; staff tags marked */}
-      <div className="space-y-4">
-        {groups.map((g) => (
-          <details key={g.folder ?? "none"} open className="group rounded-xl border bg-muted/20 p-3 sm:p-4">
-            <summary className="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
-              {g.folder ? <FolderOpen className="size-4 text-primary" /> : <FolderMinus className="size-4 text-muted-foreground" />}
-              <h2 className="font-semibold" dir="auto">
-                {g.folder ?? (groups.length > 1 ? "Not in a folder" : "Templates")}
+      {/* folders A–Z (closed: tap one to open it), then the templates in none; staff tags marked */}
+      {groups.some((g) => g.folder) && (
+        <div className="grid items-start gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+          {groups
+            .filter((g) => g.folder)
+            .map((g) => (
+              <FolderBox key={g.folder} name={g.folder!} count={g.list.length} peek={g.list.slice(0, 3).map((t) => t.name)} actions={<RenameFolder folder={g.folder!} />}>
+                <ul className="grid gap-3 sm:grid-cols-2">{g.list.map(card)}</ul>
+              </FolderBox>
+            ))}
+        </div>
+      )}
+      {groups
+        .filter((g) => !g.folder)
+        .map((g) => (
+          <section key="none" className={groups.length > 1 ? "mt-6" : undefined}>
+            {groups.length > 1 && (
+              <h2 className="mb-3 flex items-center gap-2 font-semibold">
+                <FolderMinus className="size-4 text-muted-foreground" /> Not in a folder <span className="text-sm font-normal text-muted-foreground">({g.list.length})</span>
               </h2>
-              <span className="text-sm text-muted-foreground">({g.list.length})</span>
-              {g.folder && (
-                <span className="ml-auto">
-                  <RenameFolder folder={g.folder} />
-                </span>
-              )}
-            </summary>
-            <ul className="mt-3 grid gap-3 sm:grid-cols-2">{g.list.map(card)}</ul>
-          </details>
+            )}
+            <ul className="grid gap-3 sm:grid-cols-2">{g.list.map(card)}</ul>
+          </section>
         ))}
-      </div>
       {showRetired && !shown.length && <p className="text-sm text-muted-foreground">No retired templates.</p>}
       {(retired.length > 0 || showRetired) && (
         <p className="mt-4 text-sm text-muted-foreground">
