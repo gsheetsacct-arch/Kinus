@@ -163,7 +163,7 @@ A division's language is a **⚙ Setting** on **Divisions & bunks** (English, He
 - Empty bunks fold into "N empty bunks"; **Remove empty ones** removes bunks with no campers (archived campers don't count).
 - The export's bunk format ("Bunk סה - Online School Only") is read into the bunk's name.
 
-**Buzzer numbers** are given in this order: division by name (1, 2, 3, then A–Z), then bunk (in Alef-Beis order), then last name.
+**Buzzer numbers** are given in this order: division by name (1, 2, 3, then A–Z), then bunk (in Alef-Beis order), then last name. The Thursday Program's second records get none (the camper has theirs on their regular record).
 `,
   },
   {
