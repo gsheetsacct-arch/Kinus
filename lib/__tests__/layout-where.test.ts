@@ -15,3 +15,14 @@ describe("a layout's filters", () => {
     expect(parseWhere({ where: [{ key: "grade", values: [] }] })).toEqual([]);
   });
 });
+
+describe("has anything", () => {
+  it("a real answer", async () => {
+    const { hasContent } = await import("../list-where");
+    for (const v of ["Peanuts", "4", "M", "No", "בוטנים", "Yes"]) expect(hasContent(v)).toBe(true);
+  });
+  it("nothing that only looks like something", async () => {
+    const { hasContent } = await import("../list-where");
+    for (const v of ["", "  ", "‏", "​ ", "-", ".", "N/A", "n/a", "NA", "None", "none.", "nothing", "--"]) expect(hasContent(v)).toBe(false);
+  });
+});

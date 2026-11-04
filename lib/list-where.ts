@@ -19,3 +19,17 @@ export function parseWhere(filters: unknown): ColumnFilter[] {
     .filter((x) => x.key && x.values.length)
     .slice(0, 10);
 }
+
+// what people put when they mean nothing: "N/A", "none", "-", "."
+const FILLER = /^(n\/?a|none|nothing|null|nil|no answer|not applicable)$/i;
+
+/**
+ * Whether an answer says something: at least a letter or a digit (an export's invisible marks,
+ * a right-to-left mark or zero-width space from Hebrew text, a dash or a dot don't count), and
+ * not a filler like "N/A" or "none". "Has anything" takes these; "Empty" the rest.
+ */
+export function hasContent(v: string | null | undefined): boolean {
+  if (!v) return false;
+  if (!/[\p{L}\p{N}]/u.test(v)) return false;
+  return !FILLER.test(v.replace(/[^\p{L}\p{N}/ ]/gu, "").replace(/\s+/g, " ").trim());
+}
