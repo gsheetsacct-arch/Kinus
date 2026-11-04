@@ -123,8 +123,12 @@ export function LayoutFilters({ kinds, initial }: { kinds: Kind[]; initial: { ke
         <Plus /> {rows.length ? "Add another filter" : "Add a filter"}
       </Button>
       <p className="text-xs text-muted-foreground">
-        {rows.length > 1 ? "Campers must match every filter; within one, any answer ticked. " : "No filter: every camper. "}
-        Answers and counts are this session&apos;s.
+        {!saved.length
+          ? "No filter yet: every camper is on the list. "
+          : saved.length === 1
+            ? "Only campers who match this filter are on the list (any of the answers picked). "
+            : `Only campers who match all ${saved.length} filters are on the list (in each, any of the answers picked). `}
+        The answers and counts are from this session. Save the layout to apply.
       </p>
     </div>
   );
