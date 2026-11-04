@@ -1,5 +1,4 @@
 \pset pager off
-select j.id, j.requested_at, j.status, it->>'name' as name, it->'values'->>'DIVISION' as division, it->'values'->>'BUNK_CONTINUED' as num, it->'values'->>'PHONE' as phone, it->>'id' as pid
-from print_jobs j, jsonb_array_elements(j.staff_items) it
-where j.template_id = 'b82e75c7-18ab-4c74-b5ff-a4aa1bd211c3' and j.status <> 'cancelled' and it->>'name' in ('Ari Boaz','Akiva Small','Berel Emlen','Arik Schectman','Ari Freeman')
-order by it->>'name', j.requested_at;
+select g.name as camp, g.sort_order as camp_order, d.name, d.sort_order, d.created_at, (select count(*) from bunks b where b.division_id = d.id) as bunks, (select count(*) from campers c where c.division_id = d.id and c.archived_at is null) as campers
+from divisions d left join division_groups g on g.id = d.group_id
+where d.session_id = (select id from sessions where is_active) order by g.sort_order nulls first, d.sort_order, d.name;
