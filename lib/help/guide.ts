@@ -270,7 +270,7 @@ Pick a **list** (a layout), a division and a bunk. **Filter by** any of the list
     title: "Staff, roles and the phone book",
     summary: "Adding staff, the staff import, check-in logins, merging duplicates, phone book.",
     body: `
-- **Add a person**, or **Add many at once**: paste or upload a sheet (name, email, role, division, bunk, title, phone) or the staff registration export / master sheet. Counselors are usually **listed only** (in the phone book and bunk lists, without signing in) unless the sheet says they sign in.
+- **Add a person**, or **Add many at once**: paste or upload a sheet (name, email, role, division, bunk, title, phone) or the staff registration export / master sheet. Counselors are usually **listed only** (in the phone book and bunk lists, without signing in) unless the sheet says they sign in. Someone on the sheet several times with **different staff IDs** (e.g. a counselor and a Thursday Program head) gets a record for each, with its own role, division and badge: the first row signs in with their email, the others are listed only.
 - **Areas**: all of camp, a camp, a division or a bunk; they decide which campers a person sees.
 - **Check-in logins**: shared logins for the phones at a division's check-in line (check-in pages only); one can be given final check-out.
 - **Same person twice?** (someone added by hand, then again by the staff import): Staff lists "Possibly the same person twice" (same name or phone); **Review and merge** keeps the one that signs in and the import's phone and details, moves areas and history over, and deletes the copy.
