@@ -518,12 +518,17 @@ export async function applyImportAction(fd: FormData): Promise<ActionResult> {
 
 /** Undoes the latest applied import of the session: back to how things were before it. */
 export async function revertImportAction(fd: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const me = await requireAdmin();
   const id = String(fd.get("id"));
   const supabase = await createClient();
   const { data: imp } = await supabase.from("imports").select("session_id").eq("id", id).maybeSingle();
   if (!imp) return fail("Import not found.");
-  const { data, error } = await supabase.rpc("revert_import", { p_import_id: id });
+  // from the server, for this person (migration 0058): a big undo outlasts a signed-in request's
+  // few seconds; before the migration, as before
+  const admin = createAdminClient();
+  const asServer = admin.rpc.bind(admin) as unknown as (f: string, a: object) => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }>;
+  let { data, error } = await asServer("revert_import_for", { p_import_id: id, p_actor: me.id });
+  if (error && (error.code === "PGRST202" || /revert_import_for/.test(error.message))) ({ data, error } = await supabase.rpc("revert_import", { p_import_id: id }));
   if (error) return fail(errorMessage(error));
   await discardDrafts(imp.session_id);
   const r = data as { removed: number; keptCheckedIn: number; restored: number; keptFields: number };
