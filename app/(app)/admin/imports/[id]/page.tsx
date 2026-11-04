@@ -324,7 +324,7 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
                 {by("add").slice(0, 500).map((r) => (
                   <li key={r.id} className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
                     <Who p={r.parsed} />
-                    <span className="shrink-0 text-xs text-muted-foreground">row {r.row_number}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{r.row_number >= 1_000_000 ? `row ${r.row_number - 1_000_000} · Thursday` : `row ${r.row_number}`}</span>
                   </li>
                 ))}
               </ul>

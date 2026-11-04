@@ -1,7 +1,7 @@
 "use server";
 import { formatDateTime } from "@/lib/utils";
 import { carryAreasTo } from "@/lib/staff/carry-areas";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -17,6 +17,8 @@ import { locksFor, parseProtected, type Locks } from "@/lib/import/protected";
 import { fixKey, parseFixes, withFixes } from "@/lib/source-fixes";
 import { exportColumnChanges } from "@/lib/import/export-changes";
 import { campersForImport, intoProgram, layoutFit, LAYOUT_FIT } from "@/lib/import/programs";
+import { hasThursdayColumns, thursdayCamp, thursdayCopy, thursdayOf, THURSDAY_ROW_OFFSET } from "@/lib/import/thursday";
+import { ensureThursdayCamps } from "@/lib/import/thursday-camps";
 
 /** The column step's choice "show it on the camper page" (an extra field). */
 const EXTRA = "__extra";
@@ -290,12 +292,36 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
       admin.from("settings").upsert({ key: "hidden_columns", value: hidden as unknown as J, updated_by: me.id, updated_at: new Date().toISOString() }),
     ]);
 
-    const rawRows = await fetchAll((from, to) => admin.from("import_rows").select("id, row_number, raw").eq("import_id", imp.id).order("row_number").range(from, to));
+    // the Thursday records an earlier preview of this file made go first: they're made again below
+    await admin.from("import_rows").delete().eq("import_id", imp.id).gte("row_number", THURSDAY_ROW_OFFSET);
+    const rawRows = (await fetchAll((from, to) => admin.from("import_rows").select("id, row_number, raw").eq("import_id", imp.id).order("row_number").range(from, to))).filter((r) => r.row_number < THURSDAY_ROW_OFFSET);
     const parsedRows = rawRows.map((r) => {
       const parsed = applyMapping(r.raw as Record<string, string>, columnMap, mappingOptions);
       // a separate program's file: everyone into its division, with registration ids of its own
       return { id: r.id, rowNumber: r.row_number, parsed: fixedDivision ? intoProgram(parsed, fixedDivision) : parsed };
     });
+    // the Thursday Program (lib/import/thursday): campers in it get a second record, in their
+    // Thursday division (its own camp), with an id of its own
+    const thursdayDivisions = new Set<string>();
+    if (!fixedDivision && hasThursdayColumns(headers)) {
+      for (const r of [...parsedRows]) {
+        const raw = rawRows.find((x) => x.id === r.id)!;
+        const pick = thursdayOf(raw.raw as Record<string, string>);
+        if (!pick) continue;
+        if ("skip" in pick) {
+          r.parsed.warnings.push(pick.skip);
+          continue;
+        }
+        if (!thursdayCamp(pick.division)) {
+          r.parsed.warnings.push(`Thursday group "${pick.division}" doesn't say English, French or Hebrew, so they aren't put in a Thursday camp.`);
+          continue;
+        }
+        thursdayDivisions.add(pick.division);
+        const id = randomUUID();
+        parsedRows.push({ id, rowNumber: THURSDAY_ROW_OFFSET + r.rowNumber, parsed: thursdayCopy(r.parsed, pick) });
+        rawRows.push({ id, row_number: THURSDAY_ROW_OFFSET + r.rowNumber, raw: raw.raw });
+      }
+    }
     const loaded = await loadExisting(imp.session_id);
     const { known, sourceData } = loaded;
     // each file matches only its own campers: a program's file its division; the main export everyone else
@@ -357,7 +383,7 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
       .from("imports")
       .update({
         status: "previewed",
-        options: { ...(imp.options as object), columnMap, mappingOptions, fixedDivision, takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on", correctedCopy: corrected, protected: corrected ? guarded : null, divisionsInFile: result.summary.divisionsInFile, partialWarning },
+        options: { ...(imp.options as object), columnMap, mappingOptions, fixedDivision, thursdayDivisions: [...thursdayDivisions], takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on", correctedCopy: corrected, protected: corrected ? guarded : null, divisionsInFile: result.summary.divisionsInFile, partialWarning },
         summary: { ...result.summary, missing: result.summary.missing.length, missingList: result.summary.missing, columns, exportChanged: exported, locked, correctedCopy: corrected } as unknown as J,
       })
       .eq("id", imp.id);
@@ -422,8 +448,17 @@ export async function applyImportAction(fd: FormData): Promise<ActionResult> {
   const id = String(fd.get("id"));
   const supabase = await createClient();
   const active = await getActiveSession();
-  const { data: imp } = await supabase.from("imports").select("session_id, summary").eq("id", id).maybeSingle();
+  const { data: imp } = await supabase.from("imports").select("session_id, summary, options").eq("id", id).maybeSingle();
   if (!imp || !active || imp.session_id !== active.id) return fail("This draft belongs to another session. Start a new import in the active session.");
+  // the Thursday divisions, each in its Thursday camp, before the campers go into them
+  const thursday = ((imp.options as { thursdayDivisions?: string[] } | null)?.thursdayDivisions ?? []).filter((d) => typeof d === "string");
+  if (thursday.length) {
+    try {
+      await ensureThursdayCamps(imp.session_id, thursday);
+    } catch (e) {
+      return fail(`Couldn't set up the Thursday camps: ${errorMessage(e)}`);
+    }
+  }
   const before = await bunkOrders(supabase, imp.session_id);
   const divisionsBefore = await divisionOrder(supabase, imp.session_id);
   const { data, error } = await supabase.rpc("apply_import", { p_import_id: id });
