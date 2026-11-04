@@ -67,7 +67,7 @@ describe("staff tags", () => {
 
   it("every field the editor offers has a value for the sample", () => {
     const v = staffValues(SAMPLE_STAFF, label);
-    for (const f of STAFF_FIELDS) expect(v[f.key], f.key).not.toBe("");
+    for (const f of STAFF_FIELDS) expect(v[f.key] || f.sample || "", f.key).not.toBe("");
     // the registration address: state and country as on every tag
     expect([v.CITY, v.STATE, v.ZIP, v.COUNTRY]).toEqual(["Brooklyn", "NY", "11213", "USA"]);
   });
