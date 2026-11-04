@@ -5,6 +5,7 @@ import { loadAreaTree } from "@/lib/data/areas";
 import { continuedDivisionNumbers } from "./bunk-continued";
 import { STAFF_ROLES } from "@/lib/labels";
 import { shownEmail } from "@/lib/staff/login-kinds";
+import { withNameTagDivision } from "@/lib/staff/name-tag";
 import { backgroundDataUrl, imageDataUrls } from "./data";
 import { renderDocument } from "./render";
 import { customFontCss } from "./custom-fonts";
@@ -26,13 +27,20 @@ const roleLabel = (r: string) => STAFF_ROLES[r as keyof typeof STAFF_ROLES]?.lab
 export async function staffInView(me: CurrentUser): Promise<StaffToPrint[]> {
   const admin = createAdminClient();
   const { data: session } = await admin.from("sessions").select("id").eq("is_active", true).maybeSingle();
-  const [tree, { data: people }, { data: scopes }, reg] = await Promise.all([
+  const [tree, { data: people }, { data: scopes }, reg, tagSet] = await Promise.all([
     loadAreaTree(admin, session?.id),
     admin.from("profiles").select("id, full_name, role, title, phone, email, all_areas").eq("is_active", true).neq("login", "shared").order("full_name"),
     admin.from("staff_scopes").select("user_id, group_id, division_id, bunk_id"),
     // registration details (migration 0040): read on their own, so tags print before it's applied
     admin.from("profiles").select("id, source_id, details, address").then((r) => r.data ?? [], () => []),
+    // the name-tag division set in Kinus (migration 0061), on its own for the same reason
+    admin
+      .from("profiles")
+      .select("id, name_tag_division")
+      .not("name_tag_division", "is", null)
+      .then((r) => (r.error ? [] : (r.data ?? [])), () => []),
   ]);
+  const tagDivisionOf = new Map(tagSet.map((r) => [r.id, r.name_tag_division]));
   const regOf = new Map(reg.map((r) => [r.id, r]));
   const camp = new Map(tree.groups.map((g) => [g.id, g.name]));
   const division = new Map(tree.divisions.map((d) => [d.id, d]));
@@ -61,7 +69,7 @@ export async function staffInView(me: CurrentUser): Promise<StaffToPrint[]> {
       phone: p.phone,
       email: shownEmail(p.email),
       sourceId: r?.source_id ?? null,
-      details: (r?.details as Record<string, string> | null) ?? null,
+      details: withNameTagDivision((r?.details as Record<string, string> | null) ?? null, tagDivisionOf.get(p.id)),
       address: (r?.address as StaffPerson["address"]) ?? null,
       places,
     };
