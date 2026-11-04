@@ -1,6 +1,17 @@
+import Link from "next/link";
 import { formatPhone, formatWhen, telHref } from "@/lib/utils";
 
-export type Reply = { id: string; name: string | null; phone_e164: string; body: string; received_at: string };
+export type Reply = {
+  id: string;
+  name: string | null;
+  phone_e164: string;
+  body: string;
+  received_at: string;
+  /** Their division(s), for the inbox. */
+  where?: string;
+  /** The inbox: the text it probably answers (null: none from the week before). */
+  answering?: { id: string; body: string; sender: string } | null;
+};
 
 /** Texts people sent back to the camp number: who, when, and what they said (tap the number to call back). */
 export function ReplyList({ replies }: { replies: Reply[] }) {
@@ -16,11 +27,26 @@ export function ReplyList({ replies }: { replies: Reply[] }) {
             <a href={telHref(r.phone_e164)} className="hover:underline">
               {formatPhone(r.phone_e164)}
             </a>{" "}
-            · {formatWhen(r.received_at)}
+            {r.where && <> · <span dir="auto">{r.where}</span></>} · {formatWhen(r.received_at)}
           </p>
           <p className="whitespace-pre-wrap text-sm" dir="auto">
             {r.body}
           </p>
+          {r.answering !== undefined && (
+            <p className="truncate text-xs text-muted-foreground" dir="auto">
+              {r.answering ? (
+                <>
+                  Probably answering{" "}
+                  <Link href={`/messages/${r.answering.id}`} className="text-primary hover:underline">
+                    “{r.answering.body}”
+                  </Link>{" "}
+                  from {r.answering.sender}
+                </>
+              ) : (
+                "Not answering any text from the week before"
+              )}
+            </p>
+          )}
         </li>
       ))}
     </ul>

@@ -13,22 +13,45 @@ import { sendText } from "@/app/(app)/messages/actions";
 
 export type ComposeCamp = { id: string; name: string; divisions: { id: string; name: string; color: string | null }[] };
 
-/** Write a text, pick who gets it (everyone, or divisions), see exactly who that is, send. */
-export function Compose({ camps, recipients, canEveryone, configured, role }: { camps: ComposeCamp[]; recipients: TextRecipient[]; canEveryone: boolean; configured: boolean; role: string }) {
+/** Write a text, pick who gets it (everyone, or divisions; every role or only some), see exactly who that is, send. */
+export function Compose({
+  camps,
+  recipients,
+  roles,
+  canEveryone,
+  configured,
+  role,
+}: {
+  camps: ComposeCamp[];
+  recipients: TextRecipient[];
+  roles: { value: string; label: string }[];
+  canEveryone: boolean;
+  configured: boolean;
+  role: string;
+}) {
   const router = useRouter();
   const all = camps.flatMap((c) => c.divisions);
   const [mode, setMode] = React.useState<"everyone" | "divisions">(canEveryone ? "everyone" : "divisions");
   const [picked, setPicked] = React.useState<Set<string>>(() => new Set(all.length === 1 ? [all[0].id] : []));
+  const [someRoles, setSomeRoles] = React.useState(false);
+  const [pickedRoles, setPickedRoles] = React.useState<Set<string>>(() => new Set());
   const [body, setBody] = React.useState("");
   const [showWho, setShowWho] = React.useState(false);
   const [pending, start] = React.useTransition();
 
   const divisionIds = mode === "everyone" ? null : [...picked];
-  const { to, skipped } = React.useMemo(() => pickRecipients(recipients, divisionIds), [recipients, mode, picked]); // eslint-disable-line react-hooks/exhaustive-deps
+  const roleIds = someRoles ? [...pickedRoles] : null;
+  const { to, skipped } = React.useMemo(() => pickRecipients(recipients, divisionIds, roleIds), [recipients, mode, picked, someRoles, pickedRoles]); // eslint-disable-line react-hooks/exhaustive-deps
+  // how many of each role are in the divisions picked (before narrowing by role)
+  const perRole = React.useMemo(() => {
+    const n = new Map<string, number>();
+    for (const r of pickRecipients(recipients, divisionIds).to) if (r.role) n.set(r.role, (n.get(r.role) ?? 0) + 1);
+    return n;
+  }, [recipients, mode, picked]); // eslint-disable-line react-hooks/exhaustive-deps
   const prefix = textPrefix(role);
   // counted as it goes out: with the camp and role in front
   const seg = smsSegments(body.trim() ? prefix + body.trim() : "");
-  const nothingPicked = mode === "divisions" && picked.size === 0;
+  const nothingPicked = (mode === "divisions" && picked.size === 0) || (someRoles && pickedRoles.size === 0);
   const toggle = (ids: string[], on: boolean) =>
     setPicked((p) => {
       const next = new Set(p);
@@ -42,7 +65,7 @@ export function Compose({ camps, recipients, canEveryone, configured, role }: { 
   const send = () => {
     if (!confirm(`Text ${to.length} ${to.length === 1 ? "person" : "people"} now? This can't be taken back.`)) return;
     start(async () => {
-      const r = await sendText({ body, divisionIds });
+      const r = await sendText({ body, divisionIds, roles: roleIds });
       if (!r.ok) {
         toast.error(r.error);
         return;
@@ -103,6 +126,42 @@ export function Compose({ camps, recipients, canEveryone, configured, role }: { 
         )}
       </div>
 
+      {roles.length > 1 && (
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Which staff</p>
+          <Segmented
+            value={someRoles ? "some" : "all"}
+            onChange={(v) => setSomeRoles(v === "some")}
+            options={[
+              { value: "all", label: "Every role" },
+              { value: "some", label: "Only some roles" },
+            ]}
+          />
+          {someRoles && (
+            <div className="flex flex-wrap gap-2">
+              {roles.map((r) => (
+                <label key={r.value} className={cn("flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm", pickedRoles.has(r.value) && "border-primary bg-primary-soft/50")}>
+                  <Checkbox
+                    checked={pickedRoles.has(r.value)}
+                    onCheckedChange={(v) =>
+                      setPickedRoles((p) => {
+                        const next = new Set(p);
+                        if (v === true) next.add(r.value);
+                        else next.delete(r.value);
+                        return next;
+                      })
+                    }
+                  />
+                  {r.label}
+                  <span className="text-xs text-muted-foreground">{perRole.get(r.value) ?? 0}</span>
+                </label>
+              ))}
+            </div>
+          )}
+          {someRoles && mode === "everyone" && <p className="text-xs text-muted-foreground">People who only signed up for updates have no role, so they don&apos;t get it.</p>}
+        </div>
+      )}
+
       <div className="space-y-1.5">
         <label htmlFor="text-body" className="text-sm font-medium">
           Message
@@ -117,7 +176,7 @@ export function Compose({ camps, recipients, canEveryone, configured, role }: { 
 
       <div className="rounded-lg border bg-muted/30 p-3 text-sm">
         {nothingPicked ? (
-          <p className="text-muted-foreground">Pick the divisions to text.</p>
+          <p className="text-muted-foreground">{mode === "divisions" && picked.size === 0 ? "Pick the divisions to text." : "Pick the roles to text."}</p>
         ) : (
           <>
             <p>
