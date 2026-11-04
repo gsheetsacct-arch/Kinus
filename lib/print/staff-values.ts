@@ -1,5 +1,6 @@
 import { DIVISION_VALUE } from "./types";
 import { countryName, stateCode } from "@/lib/address-codes";
+import { findNumber } from "@/lib/hebrew-number";
 
 /** Who a template is for (migration 0041): campers, or staff (Print → Staff tags). */
 export type Audience = "campers" | "staff";
@@ -20,6 +21,7 @@ export const STAFF_FIELDS: { key: string; label: string; /** what it says for so
   { key: "HEBREW_LAST", label: "Hebrew last name (registration)" },
   { key: "POSITION", label: "Position (Learning head, Waterfront…)" },
   { key: "ROLE", label: "Role in Kinus (Counselor, Head counselor…)" },
+  { key: "BUNK_HE", label: "Bunk as the Hebrew campers' tags say it (סיירת 101), for the Hebrew camps' staff (empty otherwise: use {{BUNK_HE|BUNK}})", sample: "סיירת 101" },
   { key: "ROLE_HE", label: "Role in Hebrew, for the Hebrew camps' staff (מדריך, גנרל, מנהל; empty otherwise: use {{ROLE_HE|ROLE}})", sample: "מדריך" },
   { key: "DIVISION", label: "Division" },
   { key: "BUNK", label: "Bunk" },
@@ -59,6 +61,11 @@ const unique = (xs: (string | null | undefined)[]) => [...new Set(xs.filter((x):
 
 /** The roles with a Hebrew word on the Hebrew camps' badges (the rest print in English). */
 const ROLE_HEBREW: Record<string, string> = { counselor: "מדריך", head_counselor: "גנרל", director: "מנהל" };
+/** A Hebrew camp bunk as the campers' tags number it: the bunk's letter, 101 and up (א 101, ב 102…). */
+const hebrewBunk = (bunk: string | null) => {
+  const n = bunk ? findNumber(bunk)?.value : undefined;
+  return n ? `סיירת ${100 + n}` : null;
+};
 /** Works in the Hebrew camp or the Thursday Program's Hebrew one (by camp, division or the name-tag division). */
 const inHebrewCamp = (p: StaffPerson) =>
   p.places.some((x) => /hebrew|עברית/i.test(`${x.camp ?? ""} ${x.division}`)) || /hebrew|עברית/i.test(detail(p.details, "Division (name tag)"));
@@ -102,6 +109,8 @@ export function staffValues(p: StaffPerson, roleLabel: (role: string) => string)
     // the division on the office's staff sheet ("Ohel Rally", "All Access"), else where they work in Kinus
     DIVISION: tagDivision || divisions.join(", "),
     BUNK: unique(p.places.map((x) => x.bunk)).join(", "),
+    // the Hebrew camps' staff: their bunk as the campers' tags say it ("Bunk א עברית" → "סיירת 101"); BUNK stays as it is
+    BUNK_HE: inHebrewCamp(p) ? unique(p.places.map((x) => hebrewBunk(x.bunk))).join(", ") : "",
     CAMP: unique(p.places.map((x) => x.camp)).join(", "),
     // the division's number, running on after the last bunk's (lib/print/bunk-continued): as a camper's {{BUNK_CONTINUED}}
     BUNK_CONTINUED: String(p.places.find((x) => x.number)?.number ?? ""),
