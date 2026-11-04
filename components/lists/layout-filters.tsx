@@ -39,10 +39,10 @@ export function LayoutFilters({ kinds, initial }: { kinds: Kind[]; initial: { ke
 
   const update = (id: number, change: Partial<Row>) => setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...change } : r)));
   const toggle = (r: Row, v: string) => {
-    // "Has anything" and "Empty" stand alone; picking an answer clears them
-    const special = v === ANY || v === EMPTY;
+    // "Has anything" stands alone (it covers every answer); "Empty" goes with answers too
+    // ("empty or Yes"), and picking either clears "Has anything"
     const on = r.values.includes(v);
-    const values = on ? r.values.filter((x) => x !== v) : special ? [v] : [...r.values.filter((x) => x !== ANY && x !== EMPTY), v];
+    const values = on ? r.values.filter((x) => x !== v) : v === ANY ? [v] : [...r.values.filter((x) => x !== ANY), v];
     update(r.id, { values });
   };
   const saved = rows.filter((r) => r.key && r.values.length).map(({ key, values }) => ({ key, values }));
