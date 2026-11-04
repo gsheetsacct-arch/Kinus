@@ -198,7 +198,7 @@ Check-in logins can be given final check-out (Staff → check-in logins): every 
 ### Where prints come from
 - **Print a batch** (Print → Print a batch): one template for everyone you can print for, a division, a bunk, or some campers. **Which campers**: not printed yet, new or changed since printed, everyone, here now, arrived today. **Order**: by bunk, by division or by name. Deliver to the queue, or email the PDF.
 - **Camper card / check-in**: the templates set "Print button at check-in" (the 50×80 thermal name tag and bag label) can be requested for one camper; they go to the queue.
-- **Claude**: queue_print_job (same choices).
+- **Claude**: queue_print_job (same choices, or a whole camp in one job), and delete_print_job takes off the queue jobs you asked for that aren't printed yet.
 
 ### The print queue (Print)
 - Someone over part of camp (a division head, an office person for one camp…) sees only their divisions' requests and their own; the camp and division bars show only theirs.

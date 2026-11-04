@@ -615,9 +615,10 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
     {
       title: "Add a print job to the queue",
       description:
-        'Asks for tags of a camper template, the same as Print a batch: for everyone you can print for, a division, a bunk, or some campers (by camper code). which: "not_printed" (default: only campers who never got this tag), "changed" (new, and anyone whose details on this tag changed since printed), "all", "present" (checked in now), "arrived_today". order: "bunk" (default), "division" or "name". deliver: "queue" (waits in Print → Queue for the office to print) or "email" (the PDF is made and emailed, to email_to or the office). Use dry_run first to see how many and who.',
+        'Asks for tags of a camper template, the same as Print a batch: for everyone you can print for, a camp (all its divisions, in one job), a division, a bunk, or some campers (by camper code). which: "not_printed" (default: only campers who never got this tag), "changed" (new, and anyone whose details on this tag changed since printed), "all", "present" (checked in now), "arrived_today". order: "bunk" (default), "division" or "name". deliver: "queue" (waits in Print → Queue for the office to print) or "email" (the PDF is made and emailed, to email_to or the office). Use dry_run first to see how many and who.',
       inputSchema: {
         template_id: z.guid(),
+        camp: z.string().optional().describe('A camp\'s name ("American"): all its divisions in one job. Not with division'),
         division: z.string().optional().describe("A division's name (leave out for everyone)"),
         bunk: z.string().optional().describe("A bunk's name (in division, when given)"),
         camper_codes: z.array(z.string()).max(2000).optional().describe("Instead of a place: these campers (their 4-digit codes)"),
@@ -631,7 +632,7 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
       },
       annotations: { destructiveHint: false },
     },
-    async ({ template_id, division, bunk, camper_codes, which, order, copies, purpose, deliver, email_to, dry_run }) => {
+    async ({ template_id, camp, division, bunk, camper_codes, which, order, copies, purpose, deliver, email_to, dry_run }) => {
       try {
         if (!canUsePrintArea(user)) return problem(`${user.fullName} can't ask for prints (printing is for the office, directors and division heads).`);
         const session = await activeSession();
@@ -657,9 +658,19 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
           const bunks = (d ? [d] : (divs ?? [])).flatMap((x) => (x.bunks as { id: string; name: string }[]).map((b) => ({ ...b, division: x.name })));
           const b = bunk ? bunks.filter((x) => same(x.name, bunk)) : [];
           if (bunk && b.length !== 1) return problem(b.length ? `More than one bunk is called "${bunk}": say the division too.` : `No bunk called "${bunk}"${d ? ` in ${d.name}` : ""}.`);
+          // a camp: all its divisions (a division with no camp is in the first, as everywhere)
+          let inCamp: string[] | null = null;
+          if (camp && !division) {
+            const { campDivisions } = await import("./template-camps");
+            const camps = await campDivisions(admin, session.id);
+            const c = camps.find((x) => same(x.name, camp));
+            if (!c) return problem(`No camp called "${camp}". Camps: ${camps.map((x) => x.name).join(", ")}.`);
+            inCamp = scope ? c.divisionIds.filter((x) => scope.includes(x)) : c.divisionIds;
+            if (!inCamp.length) return text(`No campers of yours in ${c.name}: nothing to print.`);
+          }
           const { batchCamperIds } = await import("./batch");
-          ids = await batchCamperIds(admin, session.id, { divisionIds: scope, divisionId: d?.id, bunkId: b[0]?.id }, which, template_id);
-          place = b[0] ? `${b[0].division} · ${b[0].name}` : d ? d.name : "Everyone";
+          ids = await batchCamperIds(admin, session.id, { divisionIds: inCamp ?? scope, divisionId: d?.id, bunkId: b[0]?.id }, which, template_id);
+          place = b[0] ? `${b[0].division} · ${b[0].name}` : d ? d.name : inCamp ? `All of ${camp}` : "Everyone";
         }
         if (!ids.length) return text(`No campers match (${place}, ${which}): nothing to print.`);
         if (ids.length > 2000) return problem("That's more than 2,000 tags: one division at a time.");
@@ -683,6 +694,45 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
           after(() => processPrintJob(job.id, appUrl));
         } else await admin.from("print_jobs").update({ status: "ready" }).eq("id", job.id);
         return text(`${deliver === "email" ? "Asked: the PDF is being made and emailed" : "Added to the print queue"}: ${job.count} × “${tpl.name}”${job.copies > 1 ? ` (${job.copies} of each)` : ""}, ${place}. ${appUrl}/print/jobs/${job.id}`);
+      } catch (e) {
+        return problem(e instanceof Error ? e.message : String(e));
+      }
+    },
+  );
+
+  server.registerTool(
+    "delete_print_job",
+    {
+      title: "Take print jobs off the queue",
+      description:
+        "Takes print jobs off the queue (Print → Queue): only ones this person asked for, through Claude or Kinus, that aren't printed yet. They show as cancelled; the tags count as never printed. Job ids from list_print_jobs or queue_print_job's link.",
+      inputSchema: { job_ids: z.array(z.guid()).min(1).max(100) },
+      annotations: { destructiveHint: true },
+    },
+    async ({ job_ids }) => {
+      try {
+        if (!canUsePrintArea(user)) return problem(`${user.fullName} can't change the print queue.`);
+        const admin = createAdminClient();
+        const { data: jobs } = await admin.from("print_jobs").select("id, status, requested_by, item_count, print_templates(name)").in("id", job_ids);
+        const found = jobs ?? [];
+        const notMine = found.filter((j) => j.requested_by !== user.id);
+        const printed = found.filter((j) => j.requested_by === user.id && j.status === "printed");
+        const take = found.filter((j) => j.requested_by === user.id && j.status !== "printed" && j.status !== "cancelled").map((j) => j.id);
+        if (take.length) {
+          const { error } = await admin.from("print_jobs").update({ status: "cancelled" }).in("id", take).neq("status", "printed");
+          if (error) throw error;
+        }
+        const missing = job_ids.filter((id) => !found.some((j) => j.id === id));
+        return text(
+          [
+            `${take.length} taken off the queue.`,
+            printed.length ? `${printed.length} already printed (kept).` : "",
+            notMine.length ? `${notMine.length} asked for by someone else (kept: only their own can be taken off here).` : "",
+            missing.length ? `${missing.length} not found.` : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
+        );
       } catch (e) {
         return problem(e instanceof Error ? e.message : String(e));
       }
