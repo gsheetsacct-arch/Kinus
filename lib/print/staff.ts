@@ -26,14 +26,12 @@ const roleLabel = (r: string) => STAFF_ROLES[r as keyof typeof STAFF_ROLES]?.lab
 export async function staffInView(me: CurrentUser): Promise<StaffToPrint[]> {
   const admin = createAdminClient();
   const { data: session } = await admin.from("sessions").select("id").eq("is_active", true).maybeSingle();
-  const [tree, { data: people }, { data: scopes }, reg, fixes] = await Promise.all([
+  const [tree, { data: people }, { data: scopes }, reg] = await Promise.all([
     loadAreaTree(admin, session?.id),
     admin.from("profiles").select("id, full_name, role, title, phone, email, all_areas").eq("is_active", true).neq("login", "shared").order("full_name"),
     admin.from("staff_scopes").select("user_id, group_id, division_id, bunk_id"),
     // registration details (migration 0040): read on their own, so tags print before it's applied
     admin.from("profiles").select("id, source_id, details, address").then((r) => r.data ?? [], () => []),
-    // fixes person by person, by registration id (lib/print/staff-fixes)
-    import("./staff-fixes").then((m) => m.loadStaffFixes()).catch(() => ({}) as Record<string, Record<string, string>>),
   ]);
   const regOf = new Map(reg.map((r) => [r.id, r]));
   const camp = new Map(tree.groups.map((g) => [g.id, g.name]));
@@ -67,8 +65,7 @@ export async function staffInView(me: CurrentUser): Promise<StaffToPrint[]> {
       address: (r?.address as StaffPerson["address"]) ?? null,
       places,
     };
-    const fix = person.sourceId ? fixes[person.sourceId] : undefined;
-    out.push({ id: p.id, name: p.full_name, role: p.role, title: p.title, divisionIds: [...new Set(divisionIds)], values: { ...staffValues(person, roleLabel), ...(fix ?? {}) } });
+    out.push({ id: p.id, name: p.full_name, role: p.role, title: p.title, divisionIds: [...new Set(divisionIds)], values: staffValues(person, roleLabel) });
   }
   return out;
 }

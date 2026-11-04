@@ -767,54 +767,6 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
   );
 
   server.registerTool(
-    "fix_staff_fields",
-    {
-      title: "Fix what staff tags say, by registration id",
-      description:
-        'Sets what a staff member\'s tags say for a field, by their registration id ({{STAFF_ID}}, e.g. "KTH87-305"), never by name: ROLE_HE (the Hebrew role), BUNK_HE, POSITION or DIVISION. value "" takes a fix back. The staff list itself is unchanged, and a new upload of the staff sheet keeps the fixes. A person on the list twice (their camp and the Thursday Program, two ids) usually needs both ids: with_twins (default) also fixes the other record of the same person, and says which ids that was. No fixes: lists the fixes made so far.',
-      inputSchema: {
-        fixes: z
-          .array(z.object({ staff_id: z.string().trim().min(1).max(60), field: z.enum(["ROLE_HE", "BUNK_HE", "POSITION", "DIVISION"]), value: z.string().trim().max(120) }))
-          .max(500)
-          .default([]),
-        with_twins: z.boolean().default(true),
-      },
-      annotations: { destructiveHint: false },
-    },
-    async ({ fixes, with_twins }) => {
-      try {
-        const { isAdmin } = await import("@/lib/auth/permissions");
-        if (!isAdmin(user) && !canFixNames(user)) return problem(`${user.fullName} can't change what staff tags say.`);
-        const { loadStaffFixes, saveStaffFixes } = await import("./staff-fixes");
-        if (!fixes.length) return text(json(await loadStaffFixes()));
-        const admin = createAdminClient();
-        const { data: people } = await admin.from("profiles").select("id, full_name, source_id, is_active").not("source_id", "is", null);
-        const byId = new Map((people ?? []).map((p) => [String(p.source_id), p]));
-        const unknown = fixes.filter((f) => !byId.has(f.staff_id)).map((f) => f.staff_id);
-        if (unknown.length) return problem(`No staff member with registration id ${[...new Set(unknown)].slice(0, 10).join(", ")} (nothing saved).`);
-        // the same person's other record (their camp and the Thursday Program): the same name, another id
-        const twinsOf = (id: string) => {
-          const me = byId.get(id)!;
-          return (people ?? []).filter((p) => p.is_active && p.source_id !== id && p.full_name.trim().toLowerCase() === me.full_name.trim().toLowerCase()).map((p) => String(p.source_id));
-        };
-        const changes = fixes.map((f) => ({ staffId: f.staff_id, field: f.field, value: f.value }));
-        const twins: string[] = [];
-        if (with_twins)
-          for (const f of fixes)
-            for (const t of twinsOf(f.staff_id))
-              if (!fixes.some((x) => x.staff_id === t && x.field === f.field)) {
-                changes.push({ staffId: t, field: f.field, value: f.value });
-                twins.push(`${f.staff_id} → ${t}`);
-              }
-        await saveStaffFixes(changes, user.id);
-        return text(`Saved ${changes.length} ${changes.length === 1 ? "fix" : "fixes"}${twins.length ? ` (with the other record of the same person: ${twins.join(", ")})` : ""}. Tags printed from now say them; requests already in the queue keep what they said: queue those again.`);
-      } catch (e) {
-        return problem(e instanceof Error ? e.message : String(e));
-      }
-    },
-  );
-
-  server.registerTool(
     "delete_print_job",
     {
       title: "Take print jobs off the queue",
