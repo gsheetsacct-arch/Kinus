@@ -2,7 +2,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { requireAdmin } from "@/lib/auth/current-user";
+import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
+import { buildList, FILTER_ANY } from "@/lib/data/lists";
 import { FIELD_BY_KEY } from "@/lib/fields";
 import { parseFlags } from "@/lib/camper-flags";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
@@ -53,11 +54,8 @@ export async function savePreset(fd: FormData): Promise<ActionResult> {
         only: parseFlags(fd.getAll("only").map(String).join(",")),
         match: fd.get("match") === "all" ? "all" : "any",
         // "only campers whose <column> is one of these"
-        where: fd
-          .getAll("where_column")
-          .map((c, i) => ({ column: String(c).slice(0, 200), values: String(fd.getAll("where_values")[i] ?? "").split(",").map((v) => v.trim().slice(0, 100)).filter(Boolean).slice(0, 20) }))
-          .filter((w) => w.column && w.values.length)
-          .slice(0, 5),
+        // "only campers whose <field> is one of these answers" (the editor sends them as JSON)
+        where: parseWhereInput(String(fd.get("where") ?? "[]")),
         combos,
         // printed: each group (each bunk…) this many times, one after another
         copies: Math.min(10, Math.max(1, Math.round(Number(fd.get("copies"))) || 1)),
@@ -70,6 +68,47 @@ export async function savePreset(fd: FormData): Promise<ActionResult> {
     return ok("Layout saved.", "/admin/presets");
   } catch (e) {
     return fail(errorMessage(e));
+  }
+}
+
+/** The layout editor's filters: [{ key, values }], any field a list may show, up to 10 of them. */
+function parseWhereInput(raw: string): { key: string; values: string[] }[] {
+  let list: unknown;
+  try {
+    list = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((w: { key?: unknown; values?: unknown }) => ({
+      key: typeof w?.key === "string" ? w.key.slice(0, 210) : "",
+      values: Array.isArray(w?.values) ? [...new Set(w.values.filter((v): v is string => typeof v === "string").map((v) => v.trim().slice(0, 300)).filter(Boolean))].slice(0, 50) : [],
+    }))
+    .filter((w) => w.key && isListKey(w.key, own) && w.values.length)
+    .slice(0, 10);
+}
+
+/**
+ * A field's answers this session, with how many campers have each (most first), for picking
+ * a layout filter's answers instead of typing them.
+ */
+export async function layoutFilterValues(key: string): Promise<{ ok: true; values: { value: string; count: number }[]; empty: number } | { ok: false; error: string }> {
+  const me = await requireAdmin();
+  try {
+    if (!isListKey(key, own)) return { ok: false, error: "Pick a field." };
+    const session = await getActiveSession();
+    if (!session) return { ok: true, values: [], empty: 0 };
+    const supabase = await createClient();
+    const { data: fv } = await supabase.from("field_visibility").select("field_group, roles");
+    const preset = { id: "values", name: "", audience: "custom", columns: [key], sort: [], group_by: null, is_default: false, only: [], match: "any" as const, where: [] };
+    const list = await buildList(supabase, me, preset, { sessionId: session.id, filter: { key, value: FILTER_ANY } }, fv ?? []);
+    const all = await buildList(supabase, me, preset, { sessionId: session.id }, fv ?? []);
+    const total = all.groups.reduce((n, g) => n + g.rows.length, 0);
+    const withAnswer = list.groups.reduce((n, g) => n + g.rows.length, 0);
+    return { ok: true, values: list.filterValues, empty: total - withAnswer };
+  } catch (e) {
+    return { ok: false, error: errorMessage(e) };
   }
 }
 

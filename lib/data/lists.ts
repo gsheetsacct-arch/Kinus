@@ -10,9 +10,10 @@ import { SLEEPING_COLUMN, SLEEPING_COLUMN_LABEL, sleepingText } from "@/lib/slee
 
 type DB = SupabaseClient<Database>;
 
-export type ListPreset = { id: string; name: string; audience: string; columns: string[]; sort: { field: string; dir: string }[]; group_by: string | null; is_default: boolean; /** Only campers with these (lib/camper-flags): any one of them, or all of them. */ only: CamperFlag[]; match: "any" | "all"; /** Only campers whose export column is one of these values ("(empty)": nothing in it). */ where: ColumnFilter[]; /** Combined columns ("combo:<id>" in columns). */ combos?: Combo[]; /** How many copies of each group (each bunk…) print, one after another. */ copies?: number };
+export type ListPreset = { id: string; name: string; audience: string; columns: string[]; sort: { field: string; dir: string }[]; group_by: string | null; is_default: boolean; /** Only campers with these (lib/camper-flags): any one of them, or all of them. */ only: CamperFlag[]; match: "any" | "all"; /** Only campers whose field is one of these answers (WHERE_EMPTY: nothing in it; WHERE_ANY: anything). Every filter must match. */ where: ColumnFilter[]; /** Combined columns ("combo:<id>" in columns). */ combos?: Combo[]; /** How many copies of each group (each bunk…) print, one after another. */ copies?: number };
 
-export type ColumnFilter = { column: string; values: string[] };
+export { WHERE_ANY, WHERE_EMPTY, parseWhere, type ColumnFilter } from "@/lib/list-where";
+import { WHERE_ANY, WHERE_EMPTY, parseWhere, type ColumnFilter } from "@/lib/list-where";
 
 
 /**
@@ -38,16 +39,7 @@ export function parseCombos(filters: unknown): Combo[] {
     .slice(0, 12);
 }
 
-/** The layout's column filters, as saved ({ where: [{ column, values }] }). */
-export function parseWhere(filters: unknown): ColumnFilter[] {
-  const w = (filters as { where?: unknown } | null)?.where;
-  if (!Array.isArray(w)) return [];
-  return w
-    .filter((x): x is ColumnFilter => Boolean(x && typeof x.column === "string" && Array.isArray(x.values)))
-    .map((x) => ({ column: x.column, values: x.values.filter((v): v is string => typeof v === "string").map((v) => v.trim()).filter(Boolean) }))
-    .filter((x) => x.column && x.values.length)
-    .slice(0, 5);
-}
+
 
 export type BuiltList = {
   preset: ListPreset;
@@ -109,12 +101,10 @@ export async function buildList(
   const groupsAnywhere = visibleFieldGroups(user, fv);
   const sortKeys = preset.sort.length ? preset.sort : [{ field: "last_name", dir: "asc" }];
   // extra fields from the registration export ("source.ppa.sleeping_at_the_kinus")
-  const extraAll = (preset.where ?? []).length
-    ? await import("./extra-fields").then(async (m) => (await m.loadExtraFields()).map((f) => ({ key: `source.${f.column}`, group: m.extraGroupOf(f) })))
-    : [];
   // combined columns: their parts are loaded like columns of their own
   const combos = new Map((preset.combos ?? []).map((c) => [`combo:${c.id}`, c]));
-  const allKeys = [...preset.columns, ...preset.columns.flatMap((k) => combos.get(k)?.parts ?? []), ...(preset.group_by ? [preset.group_by] : [])];
+  const whereKeys = (preset.where ?? []).map((w) => w.key);
+  const allKeys = [...preset.columns, ...preset.columns.flatMap((k) => combos.get(k)?.parts ?? []), ...(preset.group_by ? [preset.group_by] : []), ...whereKeys];
   const extraDefs = allKeys.some((k) => k.startsWith("source."))
     ? await import("./extra-fields").then(async (m) => (await m.loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: f.label, group: m.extraGroupOf(f), kind: "text" as const, answers: f.answers, hide: f.hide })))
     : [];
@@ -131,7 +121,12 @@ export async function buildList(
   // grouped by any field (a bunk, a division, the T-shirt size, an export column…), when this person may see it
   const groupDef = preset.group_by ? defOf(preset.group_by) : undefined;
   const groupKey = groupDef && allowed(groupDef) ? groupDef.key : null;
-  const partKeys = [...shownColumns.flatMap((f) => (combos.has(f.key) ? comboParts.get(f.key)!.map((p) => p.key) : [f.key])), ...(groupKey ? [groupKey] : [])];
+  // the layout's filters: on fields this person may see (another's filter on a hidden field doesn't apply)
+  const where = (preset.where ?? []).filter((w) => {
+    const def = defOf(w.key);
+    return def && allowed(def);
+  });
+  const partKeys = [...shownColumns.flatMap((f) => (combos.has(f.key) ? comboParts.get(f.key)!.map((p) => p.key) : [f.key])), ...(groupKey ? [groupKey] : []), ...where.map((w) => w.key)];
   const fields = [...new Set([...partKeys, ...sortKeys.map((s) => s.field), ...(preset.group_by ? [preset.group_by] : [])])].filter((k) => FIELD_BY_KEY[k]);
   // the layout's filters: all of them, or (by default) any one of them; the page's choice narrows it further
   const anyOf = preset.match === "any" && preset.only.length > 1 ? preset.only : [];
@@ -140,27 +135,7 @@ export async function buildList(
     listCampers(supabase, { sessionId: scope.sessionId, divisionId: scope.divisionId, bunkId: scope.bunkId, divisionIds: scope.divisionIds, fields, only, anyOf }),
     supabase.from("divisions").select("id, name").eq("session_id", scope.sessionId),
   ]);
-  // the layout's column filters ("T-shirt is M or L"): only on columns this person may see
   let campers = loaded;
-  const where = (preset.where ?? []).filter((w) => {
-    const def = extraDefs.find((f) => f.key === `source.${w.column}`) ?? extraAll.find((f) => f.key === `source.${w.column}`);
-    return def && (UNGATED_GROUPS.includes(def.group) || groupsAnywhere.has(def.group));
-  });
-  if (where.length && campers.length) {
-    const m = await import("./extra-fields");
-    const { shortAnswer } = await import("@/lib/import/extra-fields");
-    const defs = await m.loadExtraFields();
-    const raw = await m.extraValuesFor(campers.map((c) => String(c.id)), where.map((w) => ({ column: w.column })));
-    const norm = (v: string) => v.replace(/\s+/g, " ").trim().toLowerCase();
-    campers = campers.filter((c) =>
-      where.every((w) => {
-        const value = raw.get(String(c.id))?.[w.column] ?? "";
-        const short = shortAnswer(defs.find((f) => f.column === w.column) ?? {}, value);
-        return w.values.some((want) => (want === "(empty)" ? !value.trim() : norm(want) === norm(value) || norm(want) === norm(short)));
-      }),
-    );
-  }
-  const columnLabels = new Map(where.length ? (await import("./extra-fields").then((m) => m.loadExtraFields())).map((f) => [f.column, f.label] as const) : []);
   const columns = shownColumns.map((f) => ({ key: f.key, label: f.label }));
   const extraCols = [...new Set(partKeys.filter((k) => k.startsWith("source.")))].map((k) => {
     // its short answers, and the answers set to Hide (they print as nothing, like on the camper page)
@@ -199,6 +174,20 @@ export async function buildList(
     const v = combos.has(key) ? comboText(c, key) : cellOf(c, key);
     return v === null || v === undefined || v === "" ? "" : typeof v === "boolean" ? (v ? "Yes" : "No") : Array.isArray(v) ? (v as string[]).join(", ") : String(v);
   };
+  // the layout's filters ("T-shirt is M or L", "Grade is 4", "Allergies: has anything"): every one must match
+  if (where.length) {
+    const { shortAnswer } = await import("@/lib/import/extra-fields");
+    const norm = (v: string) => v.replace(/\s+/g, " ").trim().toLowerCase();
+    const answersOf = new Map(extraCols.map((e) => [`source.${e.column}`, e]));
+    campers = campers.filter((c) =>
+      where.every((w) => {
+        const t = textOf(c, w.key);
+        const short = w.key.startsWith("source.") && t ? shortAnswer(answersOf.get(w.key) ?? {}, t) : "";
+        return w.values.some((v) => (v === WHERE_EMPTY ? !t.trim() : v === WHERE_ANY ? Boolean(t.trim()) : norm(v) === norm(t) || (short !== "" && norm(v) === norm(short))));
+      }),
+    );
+  }
+  const whereText = (w: ColumnFilter) => `${defOf(w.key)?.label ?? w.key}: ${w.values.map((v) => (v === WHERE_EMPTY ? "empty" : v === WHERE_ANY ? "has something" : v)).join(" or ")}`;
   const counts = new Map<string, number>();
   if (fKey) for (const c of campers) {
     const t = textOf(c, fKey);
@@ -258,7 +247,7 @@ export async function buildList(
       groupKey === "bunk" || groupKey === "division" || !groupKey
         ? await inCampOrder(supabase, scope.sessionId, groupKey, [...groupsMap.values()])
         : [...groupsMap.values()].sort((a, b) => Number(a.title.startsWith("No ")) - Number(b.title.startsWith("No ")) || a.title.localeCompare(b.title, undefined, { numeric: true })),
-    scopeLabel: [[divName, bunkName].filter(Boolean).join(" · ") || (scope.campName ? `All of ${scope.campName}` : "All divisions"), ...(anyOf.length ? [anyOf.map((k) => CAMPER_FLAGS[k].label).join(" or ")] : []), ...only.map((k) => CAMPER_FLAGS[k].label), ...where.map((w) => `${columnLabels.get(w.column) ?? w.column}: ${w.values.join(" or ")}`), ...(fKey ? [`${filterOptions.find((o) => o.key === fKey)!.label}: ${scope.filter!.value === FILTER_ANY ? "has something" : scope.filter!.value === FILTER_NONE ? "empty" : scope.filter!.value}`] : [])].join(" · "),
+    scopeLabel: [[divName, bunkName].filter(Boolean).join(" · ") || (scope.campName ? `All of ${scope.campName}` : "All divisions"), ...(anyOf.length ? [anyOf.map((k) => CAMPER_FLAGS[k].label).join(" or ")] : []), ...only.map((k) => CAMPER_FLAGS[k].label), ...where.map(whereText), ...(fKey ? [`${filterOptions.find((o) => o.key === fKey)!.label}: ${scope.filter!.value === FILTER_ANY ? "has something" : scope.filter!.value === FILTER_NONE ? "empty" : scope.filter!.value}`] : [])].join(" · "),
     filterOptions,
     filterValues,
   };
