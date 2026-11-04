@@ -1,5 +1,5 @@
 import { extraGroupOf, loadExtraFields } from "@/lib/data/extra-fields";
-import { parseCombos, parseWhere } from "@/lib/data/lists";
+import { parseCombos, parseCopies, parseWhere } from "@/lib/data/lists";
 import { ComboBuilder } from "@/components/lists/combo-builder";
 import { notFound } from "next/navigation";
 import { Copy, Lock } from "lucide-react";
@@ -112,6 +112,15 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                         </option>
                       ))}
                   </optgroup>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Copies of each when printed" htmlFor="copies" hint="Grouped by bunk: each bunk's page prints this many times, one after another (three for the bunk, the counselor and the office), instead of the whole list over again.">
+              <Select id="copies" name="copies" defaultValue={String(parseCopies((preset?.filters as { copies?: unknown } | null)?.copies))}>
+                {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>
+                    {n === 1 ? "1 (once)" : n}
+                  </option>
                 ))}
               </Select>
             </Field>

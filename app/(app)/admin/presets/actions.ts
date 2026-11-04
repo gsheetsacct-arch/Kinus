@@ -59,6 +59,8 @@ export async function savePreset(fd: FormData): Promise<ActionResult> {
           .filter((w) => w.column && w.values.length)
           .slice(0, 5),
         combos,
+        // printed: each group (each bunk…) this many times, one after another
+        copies: Math.min(10, Math.max(1, Math.round(Number(fd.get("copies"))) || 1)),
       },
     };
     const { error } = d.id ? await supabase.from("list_presets").update(row).eq("id", d.id) : await supabase.from("list_presets").insert({ ...row, created_by: me.id });

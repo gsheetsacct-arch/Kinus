@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { visibleDivisionIds, visibleFieldGroups } from "@/lib/auth/permissions";
 import { flagsFor, isFlag } from "@/lib/camper-flags";
-import { buildList, getPresetsFor } from "@/lib/data/lists";
+import { buildList, getPresetsFor, parseCopies } from "@/lib/data/lists";
 import { PrintButton } from "./print-button";
 import { ListGroups } from "@/components/lists/list-groups";
 import { FILTER_ANY, FILTER_NONE } from "@/lib/data/lists";
@@ -59,15 +59,18 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
   const counselors = sp.counselors === "1";
   // the page's column filter (fcol: a column of the list; fval: an answer, has anything, or empty)
   const filter = sp.fcol ? { key: String(sp.fcol).slice(0, 210), value: sp.fval ? String(sp.fval).slice(0, 300) : FILTER_ANY } : undefined;
+  // copies of each group when printed: the layout's own number, or this page's
+  const copies = parseCopies(sp.copies ?? preset?.copies);
   const list = preset
     ? await buildList(supabase, user, preset, { sessionId: session.id, divisionId: divisionId || undefined, bunkId: bunkId || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name, only: onlyFlag ? [onlyFlag] : [], counselors, filter }, fv ?? [])
     : null;
   const qs = new URLSearchParams({ ...(preset ? { preset: preset.id } : {}), ...(divisionId ? { division: divisionId } : {}), ...(bunkId ? { bunk: bunkId } : {}), ...(onlyFlag ? { only: onlyFlag } : {}), ...(counselors ? { counselors: "1" } : {}), ...(filter ? { fcol: filter.key, fval: filter.value } : {}) }).toString();
+  const groupWord = preset?.group_by === "bunk" ? "bunk" : preset?.group_by === "division" ? "division" : preset?.group_by ? "group" : "list";
 
   return (
     <div>
       {/* printed (or saved as a PDF): a cover page first, instead of the page's header */}
-      {list && <ListCover list={list} session={session?.name ?? null} camp={camp.current?.name ?? null} by={user.fullName} />}
+      {list && <ListCover list={list} session={session?.name ?? null} camp={camp.current?.name ?? null} by={user.fullName} copies={copies} />}
       <div className="no-print">
       <PageHeader
         title={list ? `${list.preset.name}` : "Lists"}
@@ -75,7 +78,7 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
         actions={
           list ? (
             <>
-              <PrintButton />
+              <PrintButton label={copies > 1 ? `Print (${copies} of each ${groupWord})` : undefined} />
               <Button asChild variant="outline" size="sm">
                 <Link href={`/lists/export?${qs}&format=xlsx`} prefetch={false}>
                   <FileSpreadsheet /> Excel
@@ -155,6 +158,19 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
             </label>
           )}
         </div>
+        {preset && (
+          <label className="flex items-center gap-2 text-sm md:col-span-4">
+            <span className="text-muted-foreground">When printed:</span>
+            <Select name="copies" defaultValue={String(copies)} className="w-auto">
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n === 1 ? `each ${groupWord} once` : `${n} copies of each ${groupWord}`}
+                </option>
+              ))}
+            </Select>
+            {preset.copies && preset.copies > 1 && copies !== preset.copies && <span className="text-xs text-muted-foreground">(the layout says {preset.copies})</span>}
+          </label>
+        )}
         {preset?.group_by === "bunk" && (
           <label className="flex items-center gap-2 text-sm md:col-span-4">
             <input type="checkbox" name="counselors" value="1" defaultChecked={counselors} className="size-4 accent-[var(--primary)]" />
@@ -172,13 +188,13 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
       {list && list.columns.length > 10 && (
         <style>{`@media print { @page { size: landscape; margin: 8mm } .list-table { font-size: ${list.columns.length > 16 ? 6.5 : 8}pt; table-layout: fixed; width: 100% } .list-table th, .list-table td { padding-right: 3px; overflow-wrap: anywhere; } }`}</style>
       )}
-      {list && <ListGroups columns={list.columns} groups={list.groups} />}
+      {list && <ListGroups columns={list.columns} groups={list.groups} copies={copies} />}
     </div>
   );
 }
 
 /** The printed list's first page: what it is, for whom, how many, and when it was printed. */
-function ListCover({ list, session, camp, by }: { list: NonNullable<Awaited<ReturnType<typeof buildList>>>; session: string | null; camp: string | null; by: string }) {
+function ListCover({ list, session, camp, by, copies }: { list: NonNullable<Awaited<ReturnType<typeof buildList>>>; session: string | null; camp: string | null; by: string; copies: number }) {
   const campers = list.groups.reduce((n, g) => n + g.rows.length, 0);
   const groups = list.groups.filter((g) => g.title);
   const kind = list.preset.group_by === "bunk" ? "bunks" : list.preset.group_by === "division" ? "divisions" : "groups";
@@ -196,6 +212,7 @@ function ListCover({ list, session, camp, by }: { list: NonNullable<Awaited<Retu
           <p className="mt-6 text-lg">
             {campers} {campers === 1 ? "camper" : "campers"}
             {groups.length > 1 ? ` · ${groups.length} ${kind}` : ""}
+            {copies > 1 ? ` · ${copies} copies of each` : ""}
           </p>
           {groups.length > 1 && (
             <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-neutral-600" dir="auto">
