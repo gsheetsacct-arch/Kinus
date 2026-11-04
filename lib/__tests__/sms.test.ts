@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { laterStatus, optKeyword, pickRecipients, smsSegments, type TextRecipient } from "../sms";
 import { validTwilioSignature } from "../twilio";
 
-const person = (key: string, o: Partial<TextRecipient> = {}): TextRecipient => ({ key, profileId: key, name: key, phone: `+1718555${key.padStart(4, "0").slice(-4)}`, divisionIds: [], optedOut: false, signup: false, ...o });
+const person = (key: string, o: Partial<TextRecipient> = {}): TextRecipient => ({ key, profileId: key, name: key, phone: `+1718555${key.padStart(4, "0").slice(-4)}`, divisionIds: [], role: "counselor", optedOut: false, signup: false, ...o });
 
 describe("who a staff text goes to", () => {
   const all = [
@@ -12,21 +12,29 @@ describe("who a staff text goes to", () => {
     person("3", { divisionIds: ["d2"] }),
     person("4", { divisionIds: ["d1"], phone: null }),
     person("5", { divisionIds: ["d2"], optedOut: true }),
-    person("director", { divisionIds: [] }),
-    person("signup", { profileId: null, signup: true, phone: person("1").phone }),
-    person("signup2", { profileId: null, signup: true }),
+    person("director", { divisionIds: [], role: "director" }),
+    person("hc", { divisionIds: ["d1"], role: "head_counselor" }),
+    person("signup", { profileId: null, role: null, signup: true, phone: person("1").phone }),
+    person("signup2", { profileId: null, role: null, signup: true }),
   ];
   it("a division: its staff only, without directors or sign-ups", () => {
     const { to, skipped } = pickRecipients(all, ["d1"]);
-    expect(to.map((r) => r.key)).toEqual(["1", "2"]);
+    expect(to.map((r) => r.key)).toEqual(["1", "2", "hc"]);
     expect(skipped.map((r) => [r.key, r.why])).toEqual([["4", "no phone"]]);
   });
   it("two divisions: someone in both gets it once", () => {
-    expect(pickRecipients(all, ["d1", "d2"]).to.map((r) => r.key)).toEqual(["1", "2", "3"]);
+    expect(pickRecipients(all, ["d1", "d2"]).to.map((r) => r.key)).toEqual(["1", "2", "3", "hc"]);
+  });
+  it("only some roles: the counselors of a division, not its head counselor", () => {
+    expect(pickRecipients(all, ["d1"], ["counselor"]).to.map((r) => r.key)).toEqual(["1", "2"]);
+    expect(pickRecipients(all, ["d1"], ["head_counselor"]).to.map((r) => r.key)).toEqual(["hc"]);
+  });
+  it("everyone, only some roles: no sign-ups", () => {
+    expect(pickRecipients(all, null, ["director"]).to.map((r) => r.key)).toEqual(["director"]);
   });
   it("everyone: directors and sign-ups too, one text per number, never someone who replied STOP", () => {
     const { to, skipped } = pickRecipients(all, null);
-    expect(to.map((r) => r.key)).toEqual(["1", "2", "3", "director", "signup2"]);
+    expect(to.map((r) => r.key)).toEqual(["1", "2", "3", "director", "hc", "signup2"]);
     expect(skipped.find((s) => s.key === "5")?.why).toBe("opted out");
   });
 });

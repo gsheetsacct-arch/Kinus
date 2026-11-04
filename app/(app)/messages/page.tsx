@@ -13,6 +13,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { twilioConfig, twilioMissing } from "@/lib/twilio";
 import { formatWhen } from "@/lib/utils";
 import { ReplyList } from "@/components/messages/reply-list";
+import { replyVisibility } from "@/lib/data/reply-access";
+import { ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
 
 export const metadata = { title: "Text staff" };
 // sending to a few hundred staff runs inside this page's action
@@ -36,19 +38,27 @@ export default async function MessagesPage() {
     .map((c) => ({ ...c, divisions: c.divisions.map(({ id, name, color }) => ({ id, name, color })) }));
   const everyone = canTextEveryone(me);
   // only the people this person may text reach the page (sign-ups only with "everyone")
-  const recipients = (await loadTextRecipients(admin, tree)).filter((r) => everyone || r.divisionIds.some((d) => !allowed || allowed.includes(d)));
+  const everybody = await loadTextRecipients(admin, tree);
+  const recipients = everybody.filter((r) => everyone || r.divisionIds.some((d) => !allowed || allowed.includes(d)));
 
   // what was sent before: everything for directors over all of camp, otherwise their own and their divisions'
   let history = admin.from("text_broadcasts").select("id, sender_name, body, audience, recipient_count, failed_count, created_at").order("created_at", { ascending: false }).limit(30);
   if (!isAdmin(me)) history = history.or(allowed?.length ? `sent_by.eq.${me.id},division_ids.ov.{${allowed.join(",")}}` : `sent_by.eq.${me.id}`);
   const { data: sent, error } = await history;
-  // replies (migration 0045): how many each text got, and, for directors over all of camp, the ones that answer no text
-  const [{ data: replied }, { data: loose }] = await Promise.all([
-    sent?.length ? admin.from("text_replies").select("broadcast_id").in("broadcast_id", sent.map((b) => b.id)) : Promise.resolve({ data: [] as { broadcast_id: string | null }[] }),
-    isAdmin(me) ? admin.from("text_replies").select("id, name, phone_e164, body, received_at").is("broadcast_id", null).order("received_at", { ascending: false }).limit(30) : Promise.resolve({ data: [] }),
+  // replies (migration 0045): how many each text got, and the ones that answer no text; each one
+  // only for the head staff of the division of whoever sent it, and up (lib/data/reply-access)
+  const sees = replyVisibility(me, everybody);
+  const [{ data: replied }, { data: looseAll }] = await Promise.all([
+    sent?.length
+      ? admin.from("text_replies").select("broadcast_id, profile_id, phone_e164").in("broadcast_id", sent.map((b) => b.id))
+      : Promise.resolve({ data: [] as { broadcast_id: string | null; profile_id: string | null; phone_e164: string }[] }),
+    admin.from("text_replies").select("id, name, phone_e164, profile_id, body, received_at").is("broadcast_id", null).order("received_at", { ascending: false }).limit(isAdmin(me) ? 30 : 200),
   ]);
+  const loose = (looseAll ?? []).filter(sees).slice(0, 30);
   const replyCount = new Map<string, number>();
-  for (const r of replied ?? []) if (r.broadcast_id) replyCount.set(r.broadcast_id, (replyCount.get(r.broadcast_id) ?? 0) + 1);
+  for (const r of replied ?? []) if (r.broadcast_id && sees(r)) replyCount.set(r.broadcast_id, (replyCount.get(r.broadcast_id) ?? 0) + 1);
+  // the roles a text can be narrowed to, in their usual order
+  const roleOptions = ROLE_ORDER.filter((r) => r !== "owner" && recipients.some((x) => x.role === r)).map((r) => ({ value: r, label: STAFF_ROLES[r].label }));
   const missing = twilioMissing();
 
   return (
@@ -68,7 +78,7 @@ export default async function MessagesPage() {
         </Callout>
       )}
       <Section title="New text">
-        <Compose camps={camps} recipients={recipients} canEveryone={everyone} role={me.role} configured={!missing.length && !error && Boolean(twilioConfig())} />
+        <Compose camps={camps} recipients={recipients} roles={roleOptions} canEveryone={everyone} role={me.role} configured={!missing.length && !error && Boolean(twilioConfig())} />
       </Section>
       {(sent ?? []).length > 0 && (
         <Section title="Sent" bodyClassName="p-0">
@@ -93,9 +103,9 @@ export default async function MessagesPage() {
           </ul>
         </Section>
       )}
-      {(loose ?? []).length > 0 && (
+      {loose.length > 0 && (
         <Section title="Other texts to the camp number" description="Texts that don't answer anything sent in the last week." bodyClassName="p-0">
-          <ReplyList replies={loose ?? []} />
+          <ReplyList replies={loose} />
         </Section>
       )}
     </div>

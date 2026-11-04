@@ -38,6 +38,7 @@ export async function loadTextRecipients(admin: SupabaseClient<Database>, tree: 
       phone,
       // directors and office over all of camp aren't the staff of any one division
       divisionIds: p.role === "owner" || p.all_areas ? [] : [...(divisionsOf.get(p.id) ?? [])],
+      role: p.role,
       optedOut: Boolean(phone && stopped.has(phone)),
       signup: false,
     };
@@ -45,6 +46,6 @@ export async function loadTextRecipients(admin: SupabaseClient<Database>, tree: 
   const staffPhones = new Set(staff.map((s) => s.phone).filter(Boolean));
   const fromSignups: TextRecipient[] = signups
     .filter((s) => !staffPhones.has(s.phone_e164))
-    .map((s) => ({ key: `signup:${s.id}`, profileId: null, name: s.full_name, phone: s.phone_e164, divisionIds: [], optedOut: stopped.has(s.phone_e164), signup: true }));
+    .map((s) => ({ key: `signup:${s.id}`, profileId: null, name: s.full_name, phone: s.phone_e164, divisionIds: [], role: null, optedOut: stopped.has(s.phone_e164), signup: true }));
   return [...staff, ...fromSignups];
 }

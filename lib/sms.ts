@@ -9,6 +9,8 @@ export type TextRecipient = {
   phone: string | null; // +17185550100; null = no usable number
   /** Divisions they work in (empty for directors and office over all of camp, and sign-ups). */
   divisionIds: string[];
+  /** Their role in Kinus (null for sign-ups). */
+  role: string | null;
   optedOut: boolean;
   signup: boolean;
 };
@@ -18,9 +20,10 @@ export type TextRecipient = {
  * number (two staff sharing a phone, or a staff member who also signed up, get it once).
  * `skipped` are the people it can't go to: no number, or they replied STOP.
  */
-export function pickRecipients(all: TextRecipient[], divisionIds: string[] | null) {
+export function pickRecipients(all: TextRecipient[], divisionIds: string[] | null, roles: string[] | null = null) {
   const wanted = divisionIds ? new Set(divisionIds) : null;
-  const inAudience = all.filter((r) => !wanted || r.divisionIds.some((d) => wanted.has(d)));
+  // only some roles (counselors, head counselors…): sign-ups have none, so they're left out
+  const inAudience = all.filter((r) => (!wanted || r.divisionIds.some((d) => wanted.has(d))) && (!roles || (r.role !== null && roles.includes(r.role))));
   const seen = new Set<string>();
   const to: TextRecipient[] = [];
   const skipped: (TextRecipient & { why: "no phone" | "opted out" })[] = [];

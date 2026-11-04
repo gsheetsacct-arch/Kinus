@@ -9,26 +9,37 @@ import { loadAreaTree } from "@/lib/data/areas";
 import { loadTextRecipients } from "@/lib/data/text-recipients";
 import { pickRecipients, textPrefix } from "@/lib/sms";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { STAFF_ROLES } from "@/lib/labels";
+import type { StaffRole } from "@/lib/auth/permissions";
 import { sendSms, TwilioError, twilioConfig } from "@/lib/twilio";
 
 const input = z.object({
   body: z.string().trim().min(1, "Write the message first.").max(1600, "That's too long for a text (1,600 characters at most)."),
   // null = everyone
   divisionIds: z.array(z.guid()).min(1, "Pick at least one division.").nullable(),
+  // null = every role; otherwise only staff with these roles (counselors, head counselors…)
+  roles: z
+    .array(z.string().refine((r) => r in STAFF_ROLES, "Unknown role."))
+    .min(1, "Pick at least one role.")
+    .nullish()
+    .transform((r) => r ?? null),
 });
+
+// "Counselor" → "Counselors"; "Office", "Staff", "Logistics", "Kloli" as they are
+const plural = (label: string) => (/(s|Office|Staff|Kloli)$/.test(label) ? label : `${label}s`);
 
 // Twilio: "Attempt to send to unsubscribed recipient" (they replied STOP to this sender)
 const UNSUBSCRIBED = "21610";
 
 /** Texts the staff of the chosen divisions (or everyone), one message per number, through Twilio. */
-export async function sendText(raw: { body: string; divisionIds: string[] | null }): Promise<ActionResult> {
+export async function sendText(raw: { body: string; divisionIds: string[] | null; roles?: string[] | null }): Promise<ActionResult> {
   const me = await requireUser();
   if (!canTextStaff(me)) return fail("Only directors, division heads and head counselors can text staff.");
   const config = twilioConfig();
   if (!config) return fail("Texting isn't set up yet: Twilio's details need adding in Vercel.");
   const parsed = input.safeParse(raw);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the message and try again.");
-  const { divisionIds } = parsed.data;
+  const { divisionIds, roles } = parsed.data;
   // the camp and the sender's role go first ("Kinus Tzeirei Hashluchim - HC: …"), as registered with the carriers
   const body = textPrefix(me.role) + parsed.data.body;
   if (body.length > 1600) return fail("That's too long for a text (1,600 characters at most, with the name in front).");
@@ -50,12 +61,14 @@ export async function sendText(raw: { body: string; divisionIds: string[] | null
       .gte("created_at", new Date(Date.now() - 2 * 60_000).toISOString());
     if (repeats) return fail("You sent this exact text a moment ago. Change it if you mean to send it again.");
 
-    const { to } = pickRecipients(await loadTextRecipients(admin, tree), divisionIds);
+    const { to } = pickRecipients(await loadTextRecipients(admin, tree), divisionIds, roles);
     if (!to.length) return fail("Nobody there has a phone number to text yet.");
     const names = divisionIds ? tree.divisions.filter((d) => divisionIds.includes(d.id)).map((d) => d.name) : [];
+    // "Division 1 · Counselors, Head counselors"
+    const roleNames = roles ? ` · ${roles.map((r) => plural(STAFF_ROLES[r as StaffRole].label)).join(", ")}` : "";
     const { data: broadcast, error } = await admin
       .from("text_broadcasts")
-      .insert({ session_id: session?.id ?? null, sent_by: me.id, sender_name: me.fullName, body, division_ids: divisionIds ?? [], audience: divisionIds ? names.join(", ") : "Everyone", recipient_count: to.length })
+      .insert({ session_id: session?.id ?? null, sent_by: me.id, sender_name: me.fullName, body, division_ids: divisionIds ?? [], audience: (divisionIds ? names.join(", ") : "Everyone") + roleNames, recipient_count: to.length })
       .select("id")
       .single();
     if (error) throw error;

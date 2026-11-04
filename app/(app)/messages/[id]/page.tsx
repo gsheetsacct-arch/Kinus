@@ -8,6 +8,10 @@ import { canTextStaff, isAdmin, textableDivisionIds } from "@/lib/auth/permissio
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDateTime, formatPhone } from "@/lib/utils";
 import { ReplyList } from "@/components/messages/reply-list";
+import { getActiveSession } from "@/lib/auth/current-user";
+import { loadAreaTree } from "@/lib/data/areas";
+import { loadTextRecipients } from "@/lib/data/text-recipients";
+import { replyVisibility } from "@/lib/data/reply-access";
 
 export const metadata = { title: "Text" };
 
@@ -32,11 +36,14 @@ export default async function MessagePage({ params }: { params: Promise<{ id: st
   const allowed = textableDivisionIds(me);
   const mine = isAdmin(me) || b.sent_by === me.id || (b.division_ids.length > 0 && (!allowed || b.division_ids.some((d) => allowed.includes(d))));
   if (!mine) notFound();
-  const [{ data: rows }, { data: replies }] = await Promise.all([
+  const [{ data: rows }, { data: allReplies }, everybody] = await Promise.all([
     admin.from("text_broadcast_recipients").select("id, name, phone_e164, status, error_code, error_message").eq("broadcast_id", id).order("name"),
     // what people texted back (migration 0045): none until it's applied
-    admin.from("text_replies").select("id, name, phone_e164, body, received_at").eq("broadcast_id", id).order("received_at"),
+    admin.from("text_replies").select("id, name, phone_e164, profile_id, body, received_at").eq("broadcast_id", id).order("received_at"),
+    getActiveSession().then((s) => loadAreaTree(admin, s?.id)).then((tree) => loadTextRecipients(admin, tree)),
   ]);
+  // each reply only for the head staff of the division of whoever sent it, and up
+  const replies = (allReplies ?? []).filter(replyVisibility(me, everybody));
   const list = rows ?? [];
   const counts = list.reduce<Record<string, number>>((n, r) => ({ ...n, [STATUS[r.status]?.label ?? r.status]: (n[STATUS[r.status]?.label ?? r.status] ?? 0) + 1 }), {});
   const stillSending = list.some((r) => ["queued", "accepted", "sending"].includes(r.status));
