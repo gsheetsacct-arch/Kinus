@@ -138,14 +138,44 @@ export const blankStaffValues = (division: string) => staffValues({ name: "", ro
  */
 export async function staffQueueItems(me: CurrentUser, opts: { ids?: string[]; copies?: number; blank?: { count: number; division: string } | null }) {
   const copies = Math.min(10, Math.max(1, Math.round(opts.copies ?? 1)));
-  const items: { name: string; division: string; values: Record<string, string>; copies: number }[] = [];
+  const items: { id?: string; name: string; division: string; values: Record<string, string>; copies: number }[] = [];
   if (opts.ids?.length) {
     const want = new Set(opts.ids);
-    for (const p of await staffInView(me)) if (want.has(p.id)) items.push({ name: p.name, division: p.values.DIVISION ?? "", values: p.values, copies });
+    for (const p of await staffInView(me)) if (want.has(p.id)) items.push({ id: p.id, name: p.name, division: p.values.DIVISION ?? "", values: p.values, copies });
   }
   if (opts.blank && opts.blank.count > 0 && opts.blank.division.trim()) {
     const values = blankStaffValues(opts.blank.division.trim());
     for (let i = 0; i < Math.min(300, opts.blank.count); i++) items.push({ name: "", division: opts.blank.division.trim(), values, copies: 1 });
   }
   return items;
+}
+
+/**
+ * Of these staff members, the ones whose tag on this template is new or says something else
+ * than when it was last asked for (printed or still in the queue): their name, role, bunk,
+ * the division that picks its design… only what the template shows. A tag asked for before
+ * Kinus kept the person on it is matched by name.
+ */
+export async function staffChangedSince(templateId: string, people: { id: string; name: string; values: Record<string, string> }[]): Promise<Set<string>> {
+  const admin = createAdminClient();
+  const [{ data: template }, { data: jobs }] = await Promise.all([
+    admin.from("print_templates").select("*").eq("id", templateId).maybeSingle(),
+    admin.from("print_jobs").select("staff_items, created_at, status").eq("template_id", templateId).neq("status", "cancelled").order("created_at", { ascending: false }),
+  ]);
+  if (!template) return new Set(people.map((p) => p.id));
+  const [{ toSpec }, { templateKeys, labelValues, contentHash }, { parseStaffItems }] = await Promise.all([import("./data"), import("./content"), import("./jobs")]);
+  const spec = toSpec(template);
+  const keys = templateKeys(spec);
+  const said = (values: Record<string, string>) => contentHash(keys, labelValues(spec, values));
+  const name = (n: string) => n.replace(/\s+/g, " ").trim().toLowerCase();
+  // each person's latest tag (newest job first)
+  const byId = new Map<string, string>();
+  const byName = new Map<string, string>();
+  for (const j of (jobs ?? []) as { staff_items?: unknown }[])
+    for (const it of parseStaffItems(j.staff_items)) {
+      if (!it.name) continue; // a blank badge
+      if (it.id && !byId.has(it.id)) byId.set(it.id, said(it.values));
+      if (!it.id && !byName.has(name(it.name))) byName.set(name(it.name), said(it.values));
+    }
+  return new Set(people.filter((p) => (byId.get(p.id) ?? byName.get(name(p.name))) !== said(p.values)).map((p) => p.id));
 }

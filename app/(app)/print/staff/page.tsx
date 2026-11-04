@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/current-user";
 import { canUsePrintArea } from "@/lib/auth/permissions";
 import { canDesign } from "@/lib/print/designers";
-import { staffInView } from "@/lib/print/staff";
+import { staffChangedSince, staffInView } from "@/lib/print/staff";
 import { forCampers } from "@/lib/print/staff-values";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UserRound } from "lucide-react";
@@ -30,6 +30,8 @@ export default async function StaffTagsPage() {
   // the divisions a blank badge can be for: this session's, and the name-tag ones on the staff sheet (Ohel Rally…)
   const divisions = [...new Set([...(divisionRows ?? []).map((d) => d.name), ...people.map((p) => p.values.DIVISION ?? "").filter(Boolean)])];
   const templates = (rows ?? []).filter((t) => !forCampers(t)).map((t) => ({ id: t.id, name: t.name, copies: Number((t as { copies?: number }).copies) || 1, sheet: Boolean(t.sheet_layout) }));
+  // per template: whose tag is new or says something else than when it was last asked for
+  const changed = Object.fromEntries(await Promise.all(templates.map(async (t) => [t.id, [...(await staffChangedSince(t.id, people))]] as [string, string[]])));
   return (
     <div>
       <PageHeader title="Staff tags" description="Name tags and badges for staff, filled from the staff list: name, position, division, bunk, phone and what registration sent." />
@@ -54,6 +56,7 @@ export default async function StaffTagsPage() {
         <div className="space-y-6">
         <StaffTags
           templates={templates}
+          changed={changed}
           // the division each name tag says (the office's staff sheet: teams like Ohel Rally too)
           people={people.map(({ id, name, role, title, values }) => ({ id, name, role, title, label: values.DIVISION ?? "" }))}
         />

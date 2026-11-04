@@ -705,13 +705,14 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
     {
       title: "Add staff tags to the print queue",
       description:
-        'Staff tags (a staff template) into the print queue, to print with the rest: everyone you can print for, or only a name-tag division (division: "Division 2", "Thursday Program - Hebrew", "Ohel Rally"…), a camp (camp: "American", "Thursday French"…), or some people (names). blank_count with blank_division adds blank badges (that division\'s design, no name) for staff not on the list yet. Each tag reads as it is when asked for. dry_run first to see who.',
+        'Staff tags (a staff template) into the print queue, to print with the rest: everyone you can print for, or only a name-tag division (division: "Division 2", "Thursday Program - Hebrew", "Ohel Rally"…), a camp (camp: "American", "Thursday French"…), or some people (names). blank_count with blank_division adds blank badges (that division\'s design, no name) for staff not on the list yet. which "changed": only those whose tag is new or says something else than when last asked for (after a staff upload). Each tag reads as it is when asked for. dry_run first to see who.',
       inputSchema: {
         template_id: z.guid(),
         division: z.string().optional().describe("Only staff whose tag says this division"),
         camp: z.string().optional().describe("Only staff in this camp"),
         names: z.array(z.string()).max(500).optional().describe("Only these people (full names)"),
         everyone: z.boolean().default(false).describe("Everyone you can print for (when no division, camp or names)"),
+        which: z.enum(["all", "changed"]).default("all").describe('"changed": only tags that are new or say something else than when last printed or queued'),
         blank_count: z.number().int().min(0).max(300).default(0),
         blank_division: z.string().optional().describe("The division whose design blank badges have"),
         copies: z.number().int().min(1).max(10).default(1),
@@ -721,15 +722,15 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
       },
       annotations: { destructiveHint: false },
     },
-    async ({ template_id, division, camp, names, everyone, blank_count, blank_division, copies, order, purpose, dry_run }) => {
+    async ({ template_id, division, camp, names, everyone, which, blank_count, blank_division, copies, order, purpose, dry_run }) => {
       try {
         if (!canUsePrintArea(user)) return problem(`${user.fullName} can't ask for prints (printing is for the office, directors and division heads).`);
         const session = await activeSession();
         if (!session) return problem("No active session.");
-        const { staffInView, staffQueueItems } = await import("./staff");
+        const { staffInView, staffQueueItems, staffChangedSince } = await import("./staff");
         const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
         const pick = division || camp || names?.length || everyone;
-        const people = pick
+        let people = pick
           ? (await staffInView(user)).filter(
               (p) =>
                 (!division || same(p.values.DIVISION ?? "", division)) &&
@@ -740,6 +741,10 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
         if (names?.length) {
           const missing = names.filter((n) => !people.some((p) => same(p.name, n)));
           if (missing.length) return problem(`No staff member of yours called ${missing.slice(0, 10).join(", ")}.`);
+        }
+        if (which === "changed" && people.length) {
+          const changed = await staffChangedSince(template_id, people);
+          people = people.filter((p) => changed.has(p.id));
         }
         const blank = blank_count && blank_division ? { count: blank_count, division: blank_division } : null;
         if (!people.length && !blank) return text("Nobody matches (and no blank badges asked for): nothing to print.");
@@ -757,7 +762,7 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
           templateId: template_id,
           items,
           order,
-          note: [purpose, division ?? camp ?? (names?.length ? `${names.length} chosen` : people.length ? "Everyone" : null), blank ? `${blank.count} blank (${blank.division})` : null, "asked through Claude"].filter(Boolean).join(" · "),
+          note: [purpose, division ?? camp ?? (names?.length ? `${names.length} chosen` : people.length ? "Everyone" : null), which === "changed" ? "new or changed" : null, blank ? `${blank.count} blank (${blank.division})` : null, "asked through Claude"].filter(Boolean).join(" · "),
         });
         return text(`Added to the print queue: ${job.tags} staff tags (${job.count} ${job.count === 1 ? "badge" : "badges"}). ${appUrl}/print/jobs/${job.id}`);
       } catch (e) {

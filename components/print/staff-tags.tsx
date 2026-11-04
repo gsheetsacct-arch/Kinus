@@ -21,7 +21,7 @@ type Template = { id: string; name: string; copies: number; sheet: boolean };
 const NONE = "none";
 
 /** Pick a staff template and who (by name-tag division, role, name, or ticking), then print them. */
-export function StaffTags({ templates, people }: { templates: Template[]; people: Person[] }) {
+export function StaffTags({ templates, people, changed }: { templates: Template[]; people: Person[]; /** per template: whose tag is new or changed since last printed */ changed: Record<string, string[]> }) {
   const [templateId, setTemplateId] = React.useState(templates[0]?.id ?? "");
   const template = templates.find((t) => t.id === templateId);
   const [copies, setCopies] = React.useState(template?.copies ?? 1);
@@ -30,6 +30,9 @@ export function StaffTags({ templates, people }: { templates: Template[]; people
   const [division, setDivision] = React.useState("");
   const [role, setRole] = React.useState("");
   const [q, setQ] = React.useState("");
+  // only those whose tag on this template is new or changed since it was last printed (after a staff upload)
+  const [onlyChanged, setOnlyChanged] = React.useState(false);
+  const changedNow = React.useMemo(() => new Set(changed[templateId] ?? []), [changed, templateId]);
   const [picked, setPicked] = React.useState<Set<string>>(() => new Set(people.map((p) => p.id)));
   const router = useRouter();
   const [queuing, startQueue] = React.useTransition();
@@ -37,6 +40,7 @@ export function StaffTags({ templates, people }: { templates: Template[]; people
   const needle = normalizeName(q);
   const shown = people.filter(
     (p) =>
+      (!onlyChanged || changedNow.has(p.id)) &&
       (!division || (division === NONE ? !p.label : p.label === division)) &&
       (!role || p.role === role) &&
       (!needle || normalizeName(`${p.name} ${p.title ?? ""}`).includes(needle)),
@@ -104,6 +108,10 @@ export function StaffTags({ templates, people }: { templates: Template[]; people
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or position" className="pl-9" dir="auto" aria-label="Find staff" />
           </div>
+          <Select value={onlyChanged ? "changed" : ""} onChange={(e) => setOnlyChanged(e.target.value === "changed")} className="w-auto" aria-label="Which tags">
+            <option value="">Every tag</option>
+            <option value="changed">New or changed since printed ({changedNow.size})</option>
+          </Select>
           {labels.length > 0 && (
             <Select value={division} onChange={(e) => setDivision(e.target.value)} className="w-auto" aria-label="Division">
               <option value="">Every division</option>

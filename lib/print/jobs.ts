@@ -102,13 +102,13 @@ export async function createPrintJob(
 }
 
 /** One staff tag in a request: who, the division their tag is for, what it says, how many. */
-export type StaffItem = { name: string; division: string; values: Record<string, string>; copies: number };
+export type StaffItem = { /** the staff member (profiles.id); not on tags asked for before it was kept */ id?: string; name: string; division: string; values: Record<string, string>; copies: number };
 
-const parseStaffItems = (v: unknown): StaffItem[] =>
+export const parseStaffItems = (v: unknown): StaffItem[] =>
   Array.isArray(v)
     ? v
         .filter((x): x is StaffItem => Boolean(x && typeof x === "object" && typeof (x as StaffItem).values === "object"))
-        .map((x) => ({ name: String(x.name ?? ""), division: String(x.division ?? ""), values: x.values ?? {}, copies: Math.min(10, Math.max(1, Math.round(Number(x.copies) || 1))) }))
+        .map((x) => ({ ...(typeof x.id === "string" ? { id: x.id } : {}), name: String(x.name ?? ""), division: String(x.division ?? ""), values: x.values ?? {}, copies: Math.min(10, Math.max(1, Math.round(Number(x.copies) || 1))) }))
     : [];
 
 /**
