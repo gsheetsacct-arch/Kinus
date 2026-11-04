@@ -21,7 +21,9 @@ import { formatDateTime } from "@/lib/utils";
 import { addressLine, type StaffAddress } from "@/lib/staff/export";
 import { loadRoles, roleSummary, rolesInUse } from "@/lib/data/roles";
 import { checkinNameOf, shownEmail, type LoginKind } from "@/lib/staff/login-kinds";
-import { deletePeople, removePasskeys, savePerson, sendSignInLink, setActive, setUserPassword } from "../actions";
+import { deletePeople, removePasskeys, savePerson, sendSignInLink, setActive, setNameTagDivision, setUserPassword } from "../actions";
+import { NAME_TAG_DIVISION } from "@/lib/staff/master-sheet";
+import { Select } from "@/components/ui/select";
 
 export const metadata = { title: "Edit person" };
 
@@ -41,6 +43,27 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
   const { data: reg } = await admin.from("profiles").select("source_id, address, details").eq("id", id).maybeSingle().then((r) => r, () => ({ data: null }));
   const regAddress = addressLine(reg?.address as StaffAddress | null);
   const regDetails = Object.entries((reg?.details ?? {}) as Record<string, string>);
+  // their name tag's division: set here (0061), else the staff sheet's, else their division in Kinus
+  const [{ data: tagRow }, { data: sheetTags }] = await Promise.all([
+    admin.from("profiles").select("name_tag_division").eq("id", id).maybeSingle().then((r) => r, () => ({ data: null })),
+    admin.from("profiles").select("details").not("details", "is", null).then((r) => r, () => ({ data: null })),
+  ]);
+  const tagSet = tagRow?.name_tag_division ?? null;
+  const sheetTag = ((reg?.details ?? {}) as Record<string, string>)[NAME_TAG_DIVISION]?.trim() || null;
+  const divisionNames = tree.divisions.map((d) => d.name);
+  // the names the staff sheet puts on badges that aren't divisions (All Access, Finale Team…)
+  const otherTags = [...new Set((sheetTags ?? []).map((r) => ((r.details ?? {}) as Record<string, string>)[NAME_TAG_DIVISION]?.trim()).filter((x): x is string => Boolean(x)))]
+    .concat(tagSet ? [tagSet] : [])
+    .filter((x, i, all) => !divisionNames.includes(x) && all.indexOf(x) === i)
+    .sort((a, b) => a.localeCompare(b));
+  // the divisions they work in (as their badge reads with no name-tag division)
+  const theirDivisions = [
+    ...new Set(
+      (areas ?? []).flatMap((a) =>
+        a.group_id ? tree.divisions.filter((d) => d.group_id === a.group_id).map((d) => d.name) : tree.divisions.filter((d) => d.id === a.division_id).map((d) => d.name),
+      ),
+    ),
+  ];
   const summaries = Object.fromEntries(ROLE_ORDER.map((r) => [r, roleSummary(setup, r)]));
   if (!p) notFound();
   const isSelf = me.id === p.id;
@@ -98,6 +121,49 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
                 <dd dir="auto">{regAddress}</dd>
               </>
             )}
+      {p.login !== "shared" && (
+        <Section
+          title="Name tag"
+          description="The division their badge says, and so which design it gets. Set here, it stays through the next staff sheet upload."
+        >
+          <p className="mb-3 text-sm">
+            Their badge says <strong dir="auto">{(tagSet ?? sheetTag) || theirDivisions.join(", ") || "no division"}</strong>
+            <span className="text-muted-foreground">
+              {tagSet !== null ? " (set in Kinus)" : sheetTag ? " (from the staff sheet)" : theirDivisions.length ? " (their division in Kinus)" : ""}
+            </span>
+          </p>
+          {manageable && (
+            <ActionForm action={setNameTagDivision} className="flex flex-wrap items-end gap-2">
+              <input type="hidden" name="id" value={p.id} />
+              <Field label="Division on their name tag" htmlFor="name_tag_division" className="min-w-64 flex-1">
+                <Select id="name_tag_division" name="name_tag_division" defaultValue={tagSet ?? "sheet"} dir="auto">
+                  <option value="sheet">As the staff sheet says{sheetTag ? ` (${sheetTag})` : " (nothing)"}</option>
+                  <option value="">Their division in Kinus{theirDivisions.length ? ` (${theirDivisions.join(", ")})` : ""}</option>
+                  <optgroup label="Divisions">
+                    {divisionNames.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {otherTags.length > 0 && (
+                    <optgroup label="Other names on badges">
+                      {otherTags.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </Select>
+              </Field>
+              <Button type="submit" variant="outline">
+                Save
+              </Button>
+            </ActionForm>
+          )}
+        </Section>
+      )}
             {regDetails.map(([k, v]) => (
               <div key={k} className="contents">
                 <dt className="text-muted-foreground" dir="auto">

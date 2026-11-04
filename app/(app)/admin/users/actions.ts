@@ -602,8 +602,12 @@ export async function mergePeople(fd: FormData): Promise<ActionResult> {
     if (keep !== me.id && people.length < 2) return fail("One of these people is gone. Reload the page.");
     const phone = String(fd.get("phone") ?? "").trim().slice(0, 40) || null;
     const admin = createAdminClient();
+    // a name-tag division set in Kinus on either record: the kept one's, else the other's (0061)
+    const { data: tags } = await admin.from("profiles").select("id, name_tag_division").in("id", [keep, drop]).then((r) => r, () => ({ data: null }));
+    const tagOf = (id: string) => tags?.find((t) => t.id === id)?.name_tag_division ?? null;
     const { error } = await admin.rpc("merge_profiles" as never, { p_keep: keep, p_drop: drop, p_phone: phone } as never);
     if (error) throw error;
+    if (tagOf(keep) === null && tagOf(drop) !== null) await admin.from("profiles").update({ name_tag_division: tagOf(drop) }).eq("id", keep);
     const gone = await admin.auth.admin.deleteUser(drop);
     if (gone.error && !/not found/i.test(gone.error.message)) throw gone.error;
     if (gone.error) {
@@ -617,4 +621,26 @@ export async function mergePeople(fd: FormData): Promise<ActionResult> {
   } catch (e) {
     return fail(errorMessage(e));
   }
+}
+
+/**
+ * The division on their name tag (what it says, and which badge design): set here, it stays
+ * through the next staff sheet upload. "sheet": as the sheet says; "": none (their Kinus division).
+ */
+export async function setNameTagDivision(fd: FormData): Promise<ActionResult> {
+  const me = await requireStaffManager();
+  const id = z.string().uuid().parse(fd.get("id"));
+  const raw = String(fd.get("name_tag_division") ?? "sheet");
+  const value = raw === "sheet" ? null : raw.trim().slice(0, 80);
+  try {
+    if (id === me.id) return fail("Ask another director to change your own name tag.");
+    if (!(await assertCanManage(me, [id])).length) return fail("You can't change this person.");
+    const { error } = await createAdminClient().from("profiles").update({ name_tag_division: value }).eq("id", id);
+    if (error) throw error;
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+  revalidatePath(`/admin/users/${id}`);
+  revalidatePath("/print/staff");
+  return ok(value === null ? "Their name tag follows the staff sheet again." : value ? `Their name tag says ${value}.` : "Their name tag shows their division in Kinus.");
 }
