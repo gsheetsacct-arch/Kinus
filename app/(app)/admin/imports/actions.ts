@@ -17,7 +17,7 @@ import { locksFor, parseProtected, type Locks } from "@/lib/import/protected";
 import { fixKey, parseFixes, withFixes } from "@/lib/source-fixes";
 import { exportColumnChanges } from "@/lib/import/export-changes";
 import { campersForImport, intoProgram, layoutFit, LAYOUT_FIT } from "@/lib/import/programs";
-import { hasThursdayColumns, thursdayCamp, thursdayCopy, thursdayOf, THURSDAY_ROW_OFFSET } from "@/lib/import/thursday";
+import { hasThursdayColumns, isThursdayOnlyFile, thursdayCamp, thursdayCells, thursdayCopy, thursdayOf, THURSDAY_PREFIX, THURSDAY_ROW_OFFSET } from "@/lib/import/thursday";
 import { ensureThursdayCamps } from "@/lib/import/thursday-camps";
 
 /** The column step's choice "show it on the camper page" (an extra field). */
@@ -303,7 +303,9 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     // the Thursday Program (lib/import/thursday): campers in it get a second record, in their
     // Thursday division (its own camp), with an id of its own
     const thursdayDivisions = new Set<string>();
-    if (!fixedDivision && hasThursdayColumns(headers)) {
+    // a file just for the Thursday Program (its bunks): rows are Thursday records only (below)
+    const thursdayOnly = !fixedDivision && isThursdayOnlyFile(headers);
+    if (!fixedDivision && !thursdayOnly && hasThursdayColumns(headers)) {
       for (const r of [...parsedRows]) {
         const raw = rawRows.find((x) => x.id === r.id)!;
         const pick = thursdayOf(raw.raw as Record<string, string>);
@@ -327,13 +329,48 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     // each file matches only its own campers: a program's file its division; the main export everyone else
     const others = (await programDivisions()).filter((x) => !fixedDivision || x.toLowerCase() !== fixedDivision.toLowerCase());
     const existing = campersForImport(loaded.existing, fixedDivision, fixedDivision ? [] : others);
+    // a Thursday-only file: each row becomes the camper's Thursday record (their Thursday group
+    // from the file, else the one they're in), with the file's Thursday bunk; nobody's regular
+    // record is touched, and a row of someone not in the Thursday Program is left out
+    const notInThursday = new Set<string>();
+    if (thursdayOnly) {
+      const thursdayDivisionOf = new Map(existing.filter((e) => e.source_id?.startsWith(THURSDAY_PREFIX)).map((e) => [e.source_id!, e.division_name]));
+      for (const r of parsedRows) {
+        const raw = rawRows.find((x) => x.id === r.id)!.raw as Record<string, string>;
+        const { group, bunk } = thursdayCells(raw);
+        const id = r.parsed.source_id?.trim();
+        const division = group ?? (id ? thursdayDivisionOf.get(`${THURSDAY_PREFIX}${id}`) : null) ?? null;
+        if (!division || !thursdayCamp(division)) {
+          notInThursday.add(r.id);
+          continue;
+        }
+        if (group) thursdayDivisions.add(group);
+        r.parsed = thursdayCopy(r.parsed, { division, bunk });
+      }
+    }
     resolveMultiValues(parsedRows, known);
     // our corrected copy (Settings → Protected columns): what it changes in the protected
     // details is locked camper by camper (applied with the import); a regular upload as ever
     const corrected = d.correctedCopy === "on";
     const { data: protectedRow } = await admin.from("settings").select("value").eq("key", "protected_columns").maybeSingle();
     const guarded = parseProtected(protectedRow?.value);
-    const result = matchAndDiff(parsedRows, existing, known, { takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on", clearable: corrected ? guarded.fields : [] });
+    // a Thursday-only file changes only what it has (its bunks), never empties the rest
+    const result = matchAndDiff(thursdayOnly ? parsedRows.filter((r) => !notInThursday.has(r.id)) : parsedRows, existing, known, {
+      takeBunksFromFile: thursdayOnly || d.takeBunksFromFile === "on",
+      emptyMeansUnknown: thursdayOnly || d.emptyMeansUnknown === "on",
+      clearable: corrected && !thursdayOnly ? guarded.fields : [],
+    });
+    if (thursdayOnly) {
+      // left-out rows show as skipped, and nobody is marked missing (it lists only some campers)
+      for (const r of parsedRows.filter((x) => notInThursday.has(x.id)))
+        result.rows.push({ rowNumber: r.rowNumber, parsed: r.parsed, matchedCamperId: null, matchMethod: null, action: "skip", changes: [], warnings: ["Not in the Thursday Program in Kinus (no Thursday record): left out. Upload the main export first."] });
+      // its few columns are added to what the Thursday record has from the main export, not instead of it
+      for (const r of result.rows) if (r.matchedCamperId) r.parsed.source_data = { ...(sourceData.get(r.matchedCamperId) ?? {}), ...(r.parsed.source_data ?? {}) };
+      result.rows.sort((a, b) => a.rowNumber - b.rowNumber);
+      result.summary.missing = [];
+      result.summary.divisionsInFile = [];
+      result.summary.skipped = result.rows.filter((r) => r.action === "skip").length;
+    }
     let locked = 0;
     if (corrected)
       for (const r of result.rows) {
@@ -383,7 +420,7 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
       .from("imports")
       .update({
         status: "previewed",
-        options: { ...(imp.options as object), columnMap, mappingOptions, fixedDivision, thursdayDivisions: [...thursdayDivisions], takeBunksFromFile: d.takeBunksFromFile === "on", emptyMeansUnknown: d.emptyMeansUnknown === "on", correctedCopy: corrected, protected: corrected ? guarded : null, divisionsInFile: result.summary.divisionsInFile, partialWarning },
+        options: { ...(imp.options as object), columnMap, mappingOptions, fixedDivision, thursdayDivisions: [...thursdayDivisions], thursdayOnly, takeBunksFromFile: thursdayOnly || d.takeBunksFromFile === "on", emptyMeansUnknown: thursdayOnly || d.emptyMeansUnknown === "on", correctedCopy: corrected, protected: corrected ? guarded : null, divisionsInFile: result.summary.divisionsInFile, partialWarning },
         summary: { ...result.summary, missing: result.summary.missing.length, missingList: result.summary.missing, columns, exportChanged: exported, locked, correctedCopy: corrected } as unknown as J,
       })
       .eq("id", imp.id);

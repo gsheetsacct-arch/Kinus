@@ -47,6 +47,20 @@ const cell = (raw: Record<string, string>, column: string) => {
 /** Whether a file has the Thursday columns at all. */
 export const hasThursdayColumns = (headers: string[]) => headers.some((h) => h.trim().toLowerCase() === COLUMNS.group);
 
+const REGULAR_BUNKS = ["group_types.bunks", "group_types.hebrew_bunks", "group_types.french_bunks"];
+/**
+ * A file just for the Thursday Program (its bunks: "group_types.thursday_bunks", with the ids
+ * and names, but none of the regular bunk columns): every row is a camper's Thursday record,
+ * never their regular one, and only what the file has changes.
+ */
+export const isThursdayOnlyFile = (headers: string[]) => {
+  const h = headers.map((x) => x.trim().toLowerCase());
+  return (h.includes(COLUMNS.bunk) || h.includes(COLUMNS.group)) && !REGULAR_BUNKS.some((b) => h.includes(b));
+};
+
+/** In a Thursday-only file: the row's Thursday group (if the file has it) and bunk. */
+export const thursdayCells = (raw: Record<string, string>) => ({ group: cell(raw, COLUMNS.group) || null, bunk: cell(raw, COLUMNS.bunk) || null });
+
 export type ThursdayPick = { division: string; bunk: string | null } | { skip: string } | null;
 
 /**
@@ -62,6 +76,9 @@ export function thursdayOf(raw: Record<string, string>): ThursdayPick {
   return { division: group, bunk: cell(raw, COLUMNS.bunk) || null };
 }
 
+/** A Thursday bunk as the export gives it: "3" is "Bunk 3", like every other bunk. */
+export const thursdayBunk = (v: string | null) => (v ? (/^\d+$/.test(v.trim()) ? `Bunk ${v.trim()}` : v.trim()) : null);
+
 /** A camper's Thursday record: the same details, in the Thursday division, with its own id. */
 export function thursdayCopy(parsed: ParsedCamper, pick: { division: string; bunk: string | null }): ParsedCamper {
   const id = parsed.source_id?.trim();
@@ -69,9 +86,9 @@ export function thursdayCopy(parsed: ParsedCamper, pick: { division: string; bun
     ...parsed,
     source_id: id ? (id.startsWith(THURSDAY_PREFIX) ? id : THURSDAY_PREFIX + id) : null,
     division_name: pick.division,
-    bunk_name: pick.bunk,
+    bunk_name: thursdayBunk(pick.bunk),
     division_candidates: [pick.division],
-    bunk_candidates: pick.bunk ? [pick.bunk] : [],
+    bunk_candidates: pick.bunk ? [thursdayBunk(pick.bunk)!] : [],
     contacts: parsed.contacts.map((c) => ({ ...c })),
     source_data: { ...parsed.source_data },
     warnings: [`Thursday Program: a second record for Thursday (${pick.division}), next to their regular one.`],
