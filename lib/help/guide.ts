@@ -82,7 +82,7 @@ Kinus remembers each kind of export (the main one, a separate program's) and mat
 
 Options on this step: **a separate program's export** (everyone in it goes into one division, with registration IDs of its own), **take bunks from the file**, **empty cells mean "don't know"** (keep what Kinus has), and **our corrected copy** (see Protected columns).
 
-**The Thursday Program.** The main export's Thursday columns (Thursday program yes/no, the Thursday group "Thursday Program - English / French / Hebrew", and Thursday bunks) put each camper with a Thursday group in it a second time: they stay in their regular division, and get a Thursday record in their Thursday division, in its own camp (**Thursday American**, **Thursday French**, **Thursday Hebrew**, made by the first import that has them, after the other camps). The Thursday record has its own registration ID (the same number, kept apart), its own check-in and tags, and prints with the regular camp's templates (Thursday American with American's) and the Thursday Program's badge picture. A camper whose group says Thursday but who answered No, or who answered Yes with no group yet, isn't put in, and the preview says so on their row. Dropping out of Thursday marks only the Thursday record "not in the latest export".
+**The Thursday Program.** The main export's Thursday columns (Thursday program yes/no, the Thursday group "Thursday Program - English / French / Hebrew", and Thursday bunks) put each camper with a Thursday group in it a second time: they stay in their regular division, and get a Thursday record in their Thursday division, in its own camp (**Thursday American**, **Thursday French**, **Thursday Hebrew**, made by the first import that has them, after the other camps). The Thursday record has its own registration ID (the same number, kept apart), its own check-in and tags, and gets only the templates that list its camp (the name badges list Thursday American, French and Hebrew: no luggage tags or packing labels), with the Thursday Program's badge picture. A camper whose group says Thursday but who answered No, or who answered Yes with no group yet, isn't put in, and the preview says so on their row. Dropping out of Thursday marks only the Thursday record "not in the latest export".
 
 ### 2. Review
 - **New**: campers added.
@@ -163,7 +163,7 @@ A division's language is a **⚙ Setting** on **Divisions & bunks** (English, He
 - Empty bunks fold into "N empty bunks"; **Remove empty ones** removes bunks with no campers (archived campers don't count).
 - The export's bunk format ("Bunk סה - Online School Only") is read into the bunk's name.
 
-**Buzzer numbers** are given in this order: division by name (1, 2, 3, then A–Z), then bunk (in Alef-Beis order), then last name.
+**Buzzer numbers** are given in this order: division by name (1, 2, 3, then A–Z), then bunk (in Alef-Beis order), then last name. The Thursday Program's second records get none (the camper has theirs on their regular record).
 `,
   },
   {
@@ -198,7 +198,7 @@ Check-in logins can be given final check-out (Staff → check-in logins): every 
 ### Where prints come from
 - **Print a batch** (Print → Print a batch): one template for everyone you can print for, a division, a bunk, or some campers. **Which campers**: not printed yet, new or changed since printed, everyone, here now, arrived today. **Order**: by bunk, by division or by name. Deliver to the queue, or email the PDF.
 - **Camper card / check-in**: the templates set "Print button at check-in" (the 50×80 thermal name tag and bag label) can be requested for one camper; they go to the queue.
-- **Claude**: queue_print_job (same choices).
+- **Claude**: queue_print_job (same choices, or a whole camp in one job), and delete_print_job takes off the queue jobs you asked for that aren't printed yet.
 
 ### The print queue (Print)
 - Someone over part of camp (a division head, an office person for one camp…) sees only their divisions' requests and their own; the camp and division bars show only theirs.

@@ -72,8 +72,12 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   for (const p of people) {
     for (const k of [`n:${nameKey(p.full_name)}`, ...(phoneKey(p.phone).length >= 7 ? [`p:${phoneKey(p.phone)}`] : [])]) seen.set(k, [...(seen.get(k) ?? []), p.id]);
   }
+  // two registration ids are two registrations (a counselor and their Thursday Program row): not a copy
+  const { data: regIds } = await admin.from("profiles").select("id, source_id").not("source_id", "is", null).then((r) => r, () => ({ data: [] as { id: string; source_id: string | null }[] }));
+  const regOf = new Map((regIds ?? []).map((p) => [p.id, p.source_id]));
+  const twoRegistrations = (a: string, b: string) => Boolean(regOf.get(a) && regOf.get(b) && regOf.get(a) !== regOf.get(b));
   const pairs = new Map<string, [string, string]>();
-  for (const ids of seen.values()) if (ids.length === 2) pairs.set([...ids].sort().join(), [ids[0], ids[1]]);
+  for (const ids of seen.values()) if (ids.length === 2 && !twoRegistrations(ids[0], ids[1])) pairs.set([...ids].sort().join(), [ids[0], ids[1]]);
   const personName = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
   const roles = rolesInUse(setup, ROLE_ORDER).filter((r) => canManageRole(me, r as StaffRole));
   // the check-in logins of each division this person looks after (any number per division)

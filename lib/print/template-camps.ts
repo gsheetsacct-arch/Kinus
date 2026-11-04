@@ -16,10 +16,11 @@ export function templateCamps(t: unknown): string[] {
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /**
- * Whether a template kept to camp `want` ("American") is for camp `camp`: that camp, or its
- * Thursday Program camp ("Thursday American" prints with American's templates; lib/import/thursday).
+ * Whether a template kept to camp `want` ("American") is for camp `camp`. By name only: a
+ * Thursday Program camp ("Thursday American") gets just the templates that list it (the badges),
+ * not the regular camp's luggage tags or packing labels.
  */
-export const campMatches = (want: string, camp: string) => same(want, camp) || same(want, camp.trim().replace(/^thursday\s+/i, ""));
+export const campMatches = (want: string, camp: string) => same(want, camp);
 
 /** Whether a template is for this camp (by name; null = no camp chosen: every template). */
 export const forCamp = (t: unknown, camp: string | null | undefined) => {

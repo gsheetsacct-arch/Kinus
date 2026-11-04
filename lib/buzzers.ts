@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { byBunkThenName } from "@/lib/print/data";
 import { formatBuzzer } from "@/lib/buzzer-format";
+import { THURSDAY_PREFIX } from "@/lib/import/thursday";
 
 export { formatBuzzer };
 
@@ -32,12 +33,21 @@ export async function assignBuzzers(sessionId: string, camperIds?: string[], opt
   const rows = await fetchAll((from, to) =>
     admin
       .from("campers")
-      .select("id, first_name, last_name, current_buzzer_number, divisions(name), bunks(name)")
+      .select("id, first_name, last_name, current_buzzer_number, source_id, divisions(name), bunks(name)")
       .eq("session_id", sessionId)
       .is("archived_at", null)
       .order("id")
       .range(from, to),
   );
+  // the Thursday Program's second records (lib/import/thursday) get no buzzer: the camper has
+  // theirs on their regular record; any they were given before are taken off
+  const thursday = rows.filter(isThursdayRecord);
+  const numbered = thursday.filter((c) => c.current_buzzer_number !== null).map((c) => c.id);
+  for (let i = 0; i < numbered.length; i += 200) {
+    const { error } = await admin.from("campers").update({ current_buzzer_number: null }).in("id", numbered.slice(i, i + 200));
+    if (error) throw error;
+  }
+  rows.splice(0, rows.length, ...rows.filter((c) => !isThursdayRecord(c)));
   const wanted = camperIds ? new Set(camperIds) : null;
   const redo = Boolean(opts.redo);
   // numbering a few again from 001 would give them numbers others have
@@ -81,12 +91,16 @@ export async function setBuzzer(camperId: string, number: number | null): Promis
   if (error) throw error;
 }
 
-/** How many campers of the session have a number, and how many don't yet. */
+/** A Thursday Program record ("thursday:1234"): no buzzer of its own. */
+const isThursdayRecord = (c: { source_id: string | null }) => Boolean(c.source_id?.startsWith(THURSDAY_PREFIX));
+const NOT_THURSDAY = `source_id.is.null,source_id.not.like.${THURSDAY_PREFIX}*`;
+
+/** How many campers of the session have a number, and how many don't yet (Thursday Program records aside). */
 export async function buzzerCounts(sessionId: string): Promise<{ with: number; without: number; highest: number | null }> {
   const admin = createAdminClient();
   const [{ count: all }, { count: without }, { data: top }] = await Promise.all([
-    admin.from("campers").select("id", { count: "exact", head: true }).eq("session_id", sessionId).is("archived_at", null),
-    admin.from("campers").select("id", { count: "exact", head: true }).eq("session_id", sessionId).is("archived_at", null).is("current_buzzer_number", null),
+    admin.from("campers").select("id", { count: "exact", head: true }).eq("session_id", sessionId).is("archived_at", null).or(NOT_THURSDAY),
+    admin.from("campers").select("id", { count: "exact", head: true }).eq("session_id", sessionId).is("archived_at", null).is("current_buzzer_number", null).or(NOT_THURSDAY),
     admin.from("campers").select("current_buzzer_number").eq("session_id", sessionId).not("current_buzzer_number", "is", null).order("current_buzzer_number", { ascending: false }).limit(1),
   ]);
   return { with: (all ?? 0) - (without ?? 0), without: without ?? 0, highest: top?.[0]?.current_buzzer_number ?? null };
