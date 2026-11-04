@@ -52,7 +52,6 @@ export function guessTarget(header: string): string | null {
     [/^(students? |campers? |child |participants? )?first ?name$|^first$|^given name$/, "first_name"],
     [/^(students? |campers? |child |participants? )?last ?name$|^last$|^surname$|^family name$/, "last_name"],
     [/^(students? |campers? |participants? |registration |reg )?id$|^(students?|campers?|registration|participants?) (id|number|no)$/, "source_id"],
-    [/^(full |camper |student |child )?name$/, "full_name"],
     [/^grade( level)?$/, "grade"],
     [/^(t ?shirt|tshirt|shirt)( size)?$/, "tshirt_size"],
     [/^division$/, "division"],

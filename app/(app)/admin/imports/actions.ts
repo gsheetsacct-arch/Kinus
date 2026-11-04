@@ -17,7 +17,7 @@ import { locksFor, parseProtected, type Locks } from "@/lib/import/protected";
 import { fixKey, parseFixes, withFixes } from "@/lib/source-fixes";
 import { exportColumnChanges } from "@/lib/import/export-changes";
 import { campersForImport, intoProgram, layoutFit, LAYOUT_FIT } from "@/lib/import/programs";
-import { hasThursdayColumns, isThursdayOnlyFile, thursdayCamp, thursdayCells, thursdayCopy, thursdayOf, thursdayRecordFor, THURSDAY_PREFIX, THURSDAY_ROW_OFFSET } from "@/lib/import/thursday";
+import { hasThursdayColumns, isThursdayOnlyFile, thursdayCamp, thursdayCells, thursdayCopy, thursdayOf, THURSDAY_PREFIX, THURSDAY_ROW_OFFSET } from "@/lib/import/thursday";
 import { ensureThursdayCamps } from "@/lib/import/thursday-camps";
 
 /** The column step's choice "show it on the camper page" (an extra field). */
@@ -214,8 +214,8 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     }
     // names, or the registration id (it alone matches and updates the campers already here)
     const mapped = Object.values(columnMap);
-    if (!(mapped.includes("first_name") && mapped.includes("last_name")) && !mapped.includes("full_name") && !mapped.includes("source_id")) {
-      return fail("Map first name and last name (or a full name column), or the registration ID.");
+    if (!(mapped.includes("first_name") && mapped.includes("last_name")) && !mapped.includes("source_id")) {
+      return fail("Map first name and last name, or the registration ID.");
     }
     // a separate program's division must be one of this session's
     let fixedDivision: string | null = null;
@@ -334,25 +334,19 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     // a Thursday-only file: each row becomes the camper's Thursday record (their Thursday group
     // from the file, else the one they're in), with the file's Thursday bunk; nobody's regular
     // record is touched, and a row of someone not in the Thursday Program is left out
-    const notInThursday = new Map<string, string>();
+    const notInThursday = new Set<string>();
     if (thursdayOnly) {
-      const thursdayRecords = existing.filter((e) => e.source_id?.startsWith(THURSDAY_PREFIX));
+      const thursdayDivisionOf = new Map(existing.filter((e) => e.source_id?.startsWith(THURSDAY_PREFIX)).map((e) => [e.source_id!, e.division_name]));
       for (const r of parsedRows) {
         const raw = rawRows.find((x) => x.id === r.id)!.raw as Record<string, string>;
         const { group, bunk } = thursdayCells(raw);
-        // by registration id, or by name when the file has no ids (a list exported from Kinus)
-        const rec = thursdayRecordFor(r.parsed, group, thursdayRecords);
-        if (rec && "skip" in rec) {
-          notInThursday.set(r.id, rec.skip);
-          continue;
-        }
-        const division = group ?? rec?.division ?? null;
-        if (!division || !thursdayCamp(division) || (!rec && !r.parsed.source_id)) {
-          notInThursday.set(r.id, "Not in the Thursday Program in Kinus (no Thursday record): left out. Upload the main export first.");
+        const id = r.parsed.source_id?.trim();
+        const division = group ?? (id ? thursdayDivisionOf.get(`${THURSDAY_PREFIX}${id}`) : null) ?? null;
+        if (!division || !thursdayCamp(division)) {
+          notInThursday.add(r.id);
           continue;
         }
         if (group) thursdayDivisions.add(group);
-        if (rec) r.parsed = { ...r.parsed, source_id: rec.id };
         r.parsed = thursdayCopy(r.parsed, { division, bunk });
       }
     }
@@ -371,7 +365,7 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     if (thursdayOnly) {
       // left-out rows show as skipped, and nobody is marked missing (it lists only some campers)
       for (const r of parsedRows.filter((x) => notInThursday.has(x.id)))
-        result.rows.push({ rowNumber: r.rowNumber, parsed: r.parsed, matchedCamperId: null, matchMethod: null, action: "skip", changes: [], warnings: [notInThursday.get(r.id)!] });
+        result.rows.push({ rowNumber: r.rowNumber, parsed: r.parsed, matchedCamperId: null, matchMethod: null, action: "skip", changes: [], warnings: ["Not in the Thursday Program in Kinus (no Thursday record): left out. Upload the main export first."] });
       // its few columns are added to what the Thursday record has from the main export, not instead of it
       for (const r of result.rows) if (r.matchedCamperId) r.parsed.source_data = { ...(sourceData.get(r.matchedCamperId) ?? {}), ...(r.parsed.source_data ?? {}) };
       result.rows.sort((a, b) => a.rowNumber - b.rowNumber);

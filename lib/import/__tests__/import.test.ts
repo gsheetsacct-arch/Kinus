@@ -308,11 +308,6 @@ describe("rows with a registration id and no name", () => {
     expect(full.rows[0].changes.map((c) => c.field)).not.toContain("first_name");
     expect(full.rows[0].changes.map((c) => c.field)).not.toContain("last_name");
   });
-  it("a full-name row matched by name keeps the first / last name Kinus has", () => {
-    const r = matchAndDiff([{ rowNumber: 2, parsed: parsedFor({ source_id: null, first_name: "אלישע  פיש", last_name: "", full_name_only: true, grade: "5" }) }], [{ ...base, source_id: null }], known, opts);
-    expect(r.rows[0].matchMethod).toBe("name");
-    expect(r.rows[0].changes).toEqual([{ field: "grade", old: "4", new: "5" }]);
-  });
   it("skips an id nobody has: a new camper needs a name", () => {
     const r = matchAndDiff([{ rowNumber: 2, parsed: parsedFor({ source_id: "9999", first_name: "", last_name: "" }) }], [base], known, opts);
     expect(r.rows[0].action).toBe("skip");
