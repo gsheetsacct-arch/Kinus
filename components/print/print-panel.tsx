@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AlertTriangle, Check, CheckCheck, Download, Printer, RotateCcw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { OpenOnPhone, phoneOf } from "./pdf-button";
+import { AfterDownload, phoneOf } from "./pdf-button";
 import { markPrinted, saveSheetPosition } from "@/app/(app)/print/actions";
 import { fitPreview } from "@/lib/print/fit-preview";
 import { cleanUsed, freeLabels, sheetsUsed, usedAfter, usedBefore, type SheetStock } from "@/lib/print/sheet-position";
@@ -68,7 +68,7 @@ export function PrintPanel({
   // what Kinus has saved for this sheet (changes here are saved when printed, or with Save)
   const [saved, setSaved] = React.useState<number[]>(sheetStock ? cleanUsed(remembered, per) : []);
   const [saving, setSaving] = React.useState<string | null>(null);
-  // on a phone, once the PDF is downloaded: open it (Android) or NIIMBOT, to print on the label printer
+  // on a phone, once the PDF is downloaded: how to print it on the label printer
   const [phone, setPhone] = React.useState<"android" | "ios" | null>(null);
   const [downloaded, setDownloaded] = React.useState(false);
   React.useEffect(() => setPhone(phoneOf()), []);
@@ -399,7 +399,7 @@ export function PrintPanel({
           </Button>
         </div>
       </div>
-      {phone && downloaded && <OpenOnPhone phone={phone} size="default" />}
+      {phone && downloaded && <AfterDownload phone={phone} />}
 
       {twoSided && (
         <p className="rounded-xl border border-primary/30 bg-primary-soft/40 px-3 py-2 text-sm">

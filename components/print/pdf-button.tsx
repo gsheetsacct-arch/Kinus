@@ -1,17 +1,8 @@
 "use client";
 import * as React from "react";
 import { toast } from "sonner";
-import { ExternalLink, FileDown, FileText, Loader2 } from "lucide-react";
+import { FileDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-/** The NIIMBOT label printer app: Android opens it by its package, iPhones through the App Store page (its Open button). */
-const NIIMBOT_ANDROID = "intent://#Intent;package=com.gengcon.android.jccloudprinter;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.gengcon.android.jccloudprinter;end";
-const NIIMBOT_IOS = "https://apps.apple.com/app/id1359104615";
-/**
- * Android's Downloads list: tapping the PDF there opens it, and Android offers the apps that
- * print it, NIIMBOT among them (sharing the file doesn't list NIIMBOT; opening it does).
- */
-const ANDROID_DOWNLOADS = "intent:#Intent;action=android.intent.action.VIEW_DOWNLOADS;end";
 
 export const phoneOf = () => {
   const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
@@ -21,8 +12,7 @@ export const phoneOf = () => {
 };
 
 /**
- * Download a PDF. On a phone it then turns into "Open NIIMBOT", to print the file just
- * downloaded from the label printer's app (pick it there from Files / Downloads).
+ * Download a PDF. On a phone it then says how to print it on the label printer (NIIMBOT).
  */
 export function PdfButton({ href, label, size = "lg", onDone }: { href: string; label: string; size?: "lg" | "default" | "sm"; onDone?: () => void }) {
   const [phone, setPhone] = React.useState<"android" | "ios" | null>(null);
@@ -40,7 +30,15 @@ export function PdfButton({ href, label, size = "lg", onDone }: { href: string; 
         </a>
       </Button>
     );
-  if (done) return <OpenOnPhone phone={phone} size={size} again={() => setDone(false)} />;
+  if (done)
+    return (
+      <span className="flex flex-col gap-1.5">
+        <AfterDownload phone={phone} />
+        <button type="button" className="self-start text-xs text-muted-foreground underline" onClick={() => setDone(false)}>
+          Download again
+        </button>
+      </span>
+    );
   const download = async () => {
     setBusy(true);
     try {
@@ -71,35 +69,27 @@ export function PdfButton({ href, label, size = "lg", onDone }: { href: string; 
 }
 
 /**
- * After a PDF is downloaded on a phone: on Android, "Open the PDF" (the Downloads list: tap the
- * file and Android offers NIIMBOT to print it) and "Open NIIMBOT"; on an iPhone, "Open NIIMBOT"
- * (pick the file there).
+ * What to do once the PDF is downloaded on a phone, to print it on the NIIMBOT label printer.
+ * On Android, opening the PDF offers NIIMBOT; sharing it doesn't.
  */
-export function OpenOnPhone({ phone, size = "lg", again }: { phone: "android" | "ios"; size?: "lg" | "default" | "sm"; again?: () => void }) {
+export function AfterDownload({ phone }: { phone: "android" | "ios" }) {
   return (
-    <span className="flex flex-col gap-1.5">
-      <span className="flex flex-wrap items-center gap-2">
-        {phone === "android" && (
-          <Button size={size} asChild>
-            <a href={ANDROID_DOWNLOADS}>
-              <FileText /> Open the PDF
-            </a>
-          </Button>
-        )}
-        <Button size={size} variant={phone === "android" ? "outline" : "default"} asChild>
-          <a href={phone === "android" ? NIIMBOT_ANDROID : NIIMBOT_IOS}>
-            <ExternalLink /> Open NIIMBOT
-          </a>
-        </Button>
-        {again && (
-          <button type="button" className="text-xs text-muted-foreground underline" onClick={again}>
-            Download again
-          </button>
-        )}
-      </span>
-      {phone === "android" && (
-        <span className="text-xs text-muted-foreground">Tap the PDF in Downloads (or Open in the download bar) and choose NIIMBOT: open it, don&apos;t share it. Not offered? Open NIIMBOT and print the PDF from there.</span>
+    <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+      <p className="font-medium">Downloaded. To print it on the label printer:</p>
+      {phone === "android" ? (
+        <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-muted-foreground">
+          <li>
+            <strong className="text-foreground">Open</strong> the PDF: tap Open in the download bar, or find it in Files → Downloads. Don&apos;t share it: sharing doesn&apos;t list NIIMBOT.
+          </li>
+          <li>Choose NIIMBOT and print.</li>
+          <li>NIIMBOT not offered? Open the NIIMBOT app and print the PDF from there.</li>
+        </ol>
+      ) : (
+        <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-muted-foreground">
+          <li>Open the NIIMBOT app.</li>
+          <li>Pick the PDF (Files → Downloads) and print.</li>
+        </ol>
       )}
-    </span>
+    </div>
   );
 }
