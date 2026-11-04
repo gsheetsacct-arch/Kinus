@@ -240,6 +240,8 @@ export function matchAndDiff(
 
     if (match) {
       matchedIds.add(match.id);
+      // one "Name" column: it found them; the first / last name Kinus has stay as they are
+      if (parsed.full_name_only) parsed = { ...parsed, first_name: match.first_name, last_name: match.last_name };
       if (match.archived) warnings.push("archived in Kinus, so they stay archived; restore them from their page if they're coming");
       if (method === "name" && !match.source_id) warnings.push("linked by name to the camper added in Kinus (a walk-in); from now on they're matched by registration id");
       const d = diffOne(parsed, match, opts);

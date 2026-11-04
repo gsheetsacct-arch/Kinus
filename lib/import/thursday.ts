@@ -1,5 +1,6 @@
 import type { ParsedCamper } from "./mapping";
 import { idPrefix } from "./programs";
+import { normalizeName } from "./normalize";
 
 /**
  * The Thursday Program: regular campers who also come on Thursday. The registration export
@@ -38,9 +39,21 @@ export function thursdayCamp(division: string): string | null {
 /** The regular camp a Thursday camp prints with ("Thursday American" → "American"). */
 export const regularCampOf = (camp: string) => camp.replace(/^thursday\s+/i, "");
 
+/**
+ * A column's name, however it's written: "group_types.thursday_bunks" (the registration export)
+ * and "Thursday bunks" (a list exported from Kinus) are the same column.
+ */
+const columnName = (h: string) =>
+  h
+    .trim()
+    .toLowerCase()
+    .replace(/^group_types\./, "")
+    .replace(/[._\s-]+/g, " ")
+    .trim();
+const isColumn = (h: string, column: string) => columnName(h) === columnName(column);
+
 const cell = (raw: Record<string, string>, column: string) => {
-  const want = column.toLowerCase();
-  const key = Object.keys(raw).find((k) => k.trim().toLowerCase() === want);
+  const key = Object.keys(raw).find((k) => isColumn(k, column));
   return key ? String(raw[key] ?? "").trim() : "";
 };
 
@@ -55,7 +68,8 @@ const REGULAR_BUNKS = ["group_types.bunks", "group_types.hebrew_bunks", "group_t
  */
 export const isThursdayOnlyFile = (headers: string[]) => {
   const h = headers.map((x) => x.trim().toLowerCase());
-  return (h.includes(COLUMNS.bunk) || h.includes(COLUMNS.group)) && !REGULAR_BUNKS.some((b) => h.includes(b));
+  const hasThursday = headers.some((x) => isColumn(x, COLUMNS.bunk)) || h.includes(COLUMNS.group);
+  return hasThursday && !REGULAR_BUNKS.some((b) => h.includes(b));
 };
 
 /** In a Thursday-only file: the row's Thursday group (if the file has it) and bunk. */
@@ -93,4 +107,28 @@ export function thursdayCopy(parsed: ParsedCamper, pick: { division: string; bun
     source_data: { ...parsed.source_data },
     warnings: [`Thursday Program: a second record for Thursday (${pick.division}), next to their regular one.`],
   };
+}
+
+/**
+ * In a Thursday-only file, the Thursday record a row is about: by its registration id, or, when
+ * the file has none (a list exported from Kinus), by name among the Thursday records (in the
+ * file's Thursday group, if it says). Null: nobody in the Thursday Program; skip: can't tell who.
+ */
+export function thursdayRecordFor(
+  parsed: { source_id: string | null; first_name: string; last_name: string },
+  group: string | null,
+  thursday: { source_id: string | null; first_name: string; last_name: string; division_name: string | null }[],
+): { id: string; division: string | null } | { skip: string } | null {
+  const id = parsed.source_id?.trim().replace(THURSDAY_PREFIX, "");
+  if (id) {
+    const rec = thursday.find((e) => e.source_id === THURSDAY_PREFIX + id);
+    return rec ? { id, division: rec.division_name } : null;
+  }
+  const name = normalizeName(`${parsed.first_name} ${parsed.last_name}`);
+  if (!name) return null;
+  let same = thursday.filter((e) => e.source_id && normalizeName(`${e.first_name} ${e.last_name}`) === name);
+  if (group && same.length > 1) same = same.filter((e) => (e.division_name ?? "").toLowerCase() === group.toLowerCase());
+  if (!same.length) return null;
+  if (same.length > 1) return { skip: `${same.length} campers in the Thursday Program have this name (${same.map((e) => e.division_name ?? "?").join(", ")}): add their registration ID to the file to tell them apart` };
+  return { id: same[0].source_id!.slice(THURSDAY_PREFIX.length), division: same[0].division_name };
 }

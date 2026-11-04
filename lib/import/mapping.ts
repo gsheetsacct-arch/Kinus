@@ -47,6 +47,8 @@ export type ParsedCamper = {
   contacts: ParsedContact[];
   source_data: Record<string, string>;
   warnings: string[];
+  /** The file gives one "Name" column: first_name holds the whole name, for matching only. */
+  full_name_only?: boolean;
 };
 
 export const SCALAR_TARGETS = [
@@ -71,6 +73,7 @@ export const SCALAR_TARGETS = [
 export const TARGET_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "— keep in raw data only —" },
   ...SCALAR_TARGETS.map((t) => ({ value: t, label: t })),
+  { value: "full_name", label: "full name (first and last together: matches campers by name)" },
   { value: "bunk_preferences[0]", label: "bunk preference 1" },
   { value: "bunk_preferences[1]", label: "bunk preference 2" },
   { value: "bunk_preferences[2]", label: "bunk preference 3" },
@@ -194,6 +197,13 @@ export function applyMapping(row: Record<string, string>, map: ColumnMap, opts: 
         break;
       case "first_name":
         out.first_name = text ?? "";
+        break;
+      case "full_name":
+        // only when the file has no first / last name columns of its own
+        if (text && !Object.values(map).includes("first_name") && !Object.values(map).includes("last_name")) {
+          out.first_name = text;
+          out.full_name_only = true;
+        }
         break;
       case "last_name":
         out.last_name = text ?? "";

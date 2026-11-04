@@ -32,7 +32,8 @@ export function parseFile(input: Uint8Array, fileName: string): ParsedFile {
   const ws = wb.Sheets[sheetName];
   const grid = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "", raw: false, blankrows: false });
   if (grid.length === 0) return { headers: [], rows: [], encoding, sheetName, skippedEmptyRows: 0 };
-  const raw = grid[0].map((h) => String(h ?? "").replace(/\s+/g, " ").trim());
+  // a byte-order mark (or what it turns into when a CSV is opened as Latin-1: "ï»¿") isn't part of the name
+  const raw = grid[0].map((h) => String(h ?? "").replace(/^(\uFEFF|ï»¿)+/, "").replace(/\s+/g, " ").trim());
   // A name used for more than one column (the export lists family.city twice, or once per
   // family, or as "Family.City" / "family#city"): the copies are one column, under the first
   // spelling, holding the first copy with something in it for each camper. (Once the last copy
