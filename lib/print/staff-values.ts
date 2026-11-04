@@ -79,6 +79,8 @@ export function staffValues(p: StaffPerson, roleLabel: (role: string) => string)
   const first = words.length > 1 ? words.slice(0, -1).join(" ") : (words[0] ?? "");
   const last = words.length > 1 ? words[words.length - 1] : "";
   const divisions = unique(p.places.map((x) => x.division));
+  // the division the office's staff sheet gives for the name tag ("Ohel Rally", "All Access"), else where they work in Kinus
+  const tagDivision = detail(p.details, "Division (name tag)");
   return {
     ...byColumn(p.details),
     FIRST: first,
@@ -89,7 +91,7 @@ export function staffValues(p: StaffPerson, roleLabel: (role: string) => string)
     POSITION: p.title ?? "",
     ROLE: roleLabel(p.role),
     // the division on the office's staff sheet ("Ohel Rally", "All Access"), else where they work in Kinus
-    DIVISION: detail(p.details, "Division (name tag)") || divisions.join(", "),
+    DIVISION: tagDivision || divisions.join(", "),
     BUNK: unique(p.places.map((x) => x.bunk)).join(", "),
     CAMP: unique(p.places.map((x) => x.camp)).join(", "),
     // the division's number, running on after the last bunk's (lib/print/bunk-continued): as a camper's {{BUNK_CONTINUED}}
@@ -105,8 +107,9 @@ export function staffValues(p: StaffPerson, roleLabel: (role: string) => string)
     ZIP: p.address?.zip ?? "",
     COUNTRY: countryName(p.address?.country),
     STAFF_ID: p.sourceId ?? "",
-    // a picture part with a different picture per division goes by the first one
-    [DIVISION_VALUE]: divisions[0] ?? "",
+    // a picture part with a different picture per division goes by the name tag's division
+    // (the badge's design matches what it says), else the first division they work in
+    [DIVISION_VALUE]: tagDivision || (divisions[0] ?? ""),
   };
 }
 

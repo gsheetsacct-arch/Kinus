@@ -14,7 +14,8 @@ import type { Layer, PdfArt } from "./types";
  * a print-ready PDF with crop marks lines up with the tag.
  */
 export const MAX_PDF_BYTES = 15 * 1024 * 1024;
-const MAX_PAGES = 6;
+// a sheet of designs (a front and a back for each of several divisions)
+const MAX_PAGES = 16;
 
 export type Box = { x: number; y: number; w: number; h: number };
 
