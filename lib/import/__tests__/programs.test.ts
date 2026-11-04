@@ -35,5 +35,7 @@ import { guessTarget } from "../default-mapping";
 describe("a new kind of export", () => {
   it("guesses the usual columns", () => {
     expect(["First Name", "Last Name", "Student ID", "Grade", "T-Shirt Size", "Parent Email"].map(guessTarget)).toEqual(["first_name", "last_name", "source_id", "grade", "tshirt_size", null]);
+    // the registration export's own headers, in a file Kinus hasn't seen
+    expect(["students.id", "students.first_name", "students.last_name"].map(guessTarget)).toEqual(["source_id", "first_name", "last_name"]);
   });
 });

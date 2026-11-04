@@ -49,9 +49,9 @@ export const DEFAULT_MAPPING_OPTIONS: MappingOptions = {
 export function guessTarget(header: string): string | null {
   const h = header.toLowerCase().replace(/[#._-]+/g, " ").replace(/\s+/g, " ").trim();
   const rules: [RegExp, string][] = [
-    [/^(student |camper |child |participant )?first ?name$|^first$|^given name$/, "first_name"],
-    [/^(student |camper |child |participant )?last ?name$|^last$|^surname$|^family name$/, "last_name"],
-    [/^(student |camper |participant |registration |reg )?id$|^(student|camper|registration|participant) (id|number|no)$/, "source_id"],
+    [/^(students? |campers? |child |participants? )?first ?name$|^first$|^given name$/, "first_name"],
+    [/^(students? |campers? |child |participants? )?last ?name$|^last$|^surname$|^family name$/, "last_name"],
+    [/^(students? |campers? |participants? |registration |reg )?id$|^(students?|campers?|registration|participants?) (id|number|no)$/, "source_id"],
     [/^grade( level)?$/, "grade"],
     [/^(t ?shirt|tshirt|shirt)( size)?$/, "tshirt_size"],
     [/^division$/, "division"],

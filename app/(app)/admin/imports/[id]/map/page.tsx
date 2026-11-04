@@ -11,7 +11,7 @@ import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/current-user";
-import { guessTarget, TARGET_OPTIONS, type ColumnMap, type MappingOptions } from "@/lib/import";
+import { DEFAULT_COLUMN_MAP, guessTarget, TARGET_OPTIONS, type ColumnMap, type MappingOptions } from "@/lib/import";
 import { columnKey, humanLabel, parseExtraFields } from "@/lib/import/extra-fields";
 import { FIELD_BY_KEY } from "@/lib/fields";
 import { previewImport } from "../../actions";
@@ -74,10 +74,28 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
     presetMap = (m?.column_map as ColumnMap) ?? {};
     presetOptions = (m?.options as MappingOptions) ?? {};
   }
+  // a column the saved setups already know (the main export's students.id, its names…) means
+  // the same in any file, so a shorter file of the same export starts matched; the main setup first
+  const { data: saved } = await supabase.from("import_mappings").select("column_map, is_default").order("is_default", { ascending: false });
+  const knownTarget = (h: string): string | undefined => {
+    for (const m of saved ?? []) {
+      const t = ((m.column_map ?? {}) as ColumnMap)[h];
+      if (t) return t;
+    }
+    return DEFAULT_COLUMN_MAP[h];
+  };
+  presetMap = { ...presetMap };
+  // (a file read with a saved setup takes only who's who from the others: the id and names)
+  const seen = Boolean(opts.columnMap || imp.mapping_id);
+  for (const h of headers) {
+    const k = h in presetMap ? undefined : knownTarget(h);
+    if (k && (!seen || k === "source_id" || k === "first_name" || k === "last_name")) presetMap[h] = k;
+  }
   // a kind of export Kinus hasn't seen: guess the usual columns (first name, last name, id…)
   if (!opts.columnMap && !imp.mapping_id) {
-    const taken = new Set<string>();
+    const taken = new Set(Object.values(presetMap));
     for (const h of headers) {
+      if (h in presetMap) continue;
       const t = guessTarget(h);
       if (t && !taken.has(t)) {
         presetMap[h] = t;
