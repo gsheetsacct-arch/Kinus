@@ -11,9 +11,11 @@ import { loadAreaTree } from "@/lib/data/areas";
 import { loadTextRecipients } from "@/lib/data/text-recipients";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { twilioConfig, twilioMissing } from "@/lib/twilio";
+import { CAMP } from "@/lib/update-signups";
 import { formatWhen } from "@/lib/utils";
 import { ReplyList } from "@/components/messages/reply-list";
-import { replyVisibility } from "@/lib/data/reply-access";
+import { replyDivisions, replyVisibility } from "@/lib/data/reply-access";
+import type { Reply } from "@/components/messages/reply-list";
 import { ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
 
 export const metadata = { title: "Text staff" };
@@ -45,16 +47,40 @@ export default async function MessagesPage() {
   let history = admin.from("text_broadcasts").select("id, sender_name, body, audience, recipient_count, failed_count, created_at").order("created_at", { ascending: false }).limit(30);
   if (!isAdmin(me)) history = history.or(allowed?.length ? `sent_by.eq.${me.id},division_ids.ov.{${allowed.join(",")}}` : `sent_by.eq.${me.id}`);
   const { data: sent, error } = await history;
-  // replies (migration 0045): how many each text got, and the ones that answer no text; each one
-  // only for the head staff of the division of whoever sent it, and up (lib/data/reply-access)
+  // replies (migration 0045): every text people sent back, newest first, with the text each
+  // probably answers (the latest sent to that number in the week before: texts don't say which);
+  // each one only for the head staff of the division of whoever sent it, and up (lib/data/reply-access)
   const sees = replyVisibility(me, everybody);
-  const [{ data: replied }, { data: looseAll }] = await Promise.all([
+  const [{ data: replied }, { data: recent }] = await Promise.all([
     sent?.length
       ? admin.from("text_replies").select("broadcast_id, profile_id, phone_e164").in("broadcast_id", sent.map((b) => b.id))
       : Promise.resolve({ data: [] as { broadcast_id: string | null; profile_id: string | null; phone_e164: string }[] }),
-    admin.from("text_replies").select("id, name, phone_e164, profile_id, body, received_at").is("broadcast_id", null).order("received_at", { ascending: false }).limit(isAdmin(me) ? 30 : 200),
+    admin
+      .from("text_replies")
+      .select("id, name, phone_e164, profile_id, body, received_at, broadcast_id")
+      .order("received_at", { ascending: false })
+      .limit(isAdmin(me) ? 60 : 400),
   ]);
-  const loose = (looseAll ?? []).filter(sees).slice(0, 30);
+  const divisionsOf = replyDivisions(everybody);
+  const divisionName = new Map(tree.divisions.map((d) => [d.id, d.name]));
+  // "Kinus Tzeirei Hashluchim - DH: Meeting at 9" → "Meeting at 9"
+  const withoutPrefix = (body: string) => (body.startsWith(CAMP) ? body.replace(/^[^:]*:\s*/, "") : body);
+  const shown = (recent ?? []).filter(sees).slice(0, 60);
+  const answeredIds = [...new Set(shown.map((r) => r.broadcast_id).filter((x): x is string => Boolean(x)))];
+  const { data: answered } = answeredIds.length ? await admin.from("text_broadcasts").select("id, body, sender_name").in("id", answeredIds) : { data: [] };
+  const textById = new Map((answered ?? []).map((b) => [b.id, b]));
+  const inbox: Reply[] = shown.map((r) => {
+      const b = r.broadcast_id ? textById.get(r.broadcast_id) : undefined;
+      return {
+        id: r.id,
+        name: r.name,
+        phone_e164: r.phone_e164,
+        body: r.body,
+        received_at: r.received_at,
+        where: divisionsOf(r).map((d) => divisionName.get(d)).filter(Boolean).join(", ") || undefined,
+        answering: r.broadcast_id && b ? { id: r.broadcast_id, body: withoutPrefix(b.body), sender: b.sender_name } : null,
+      };
+    });
   const replyCount = new Map<string, number>();
   for (const r of replied ?? []) if (r.broadcast_id && sees(r)) replyCount.set(r.broadcast_id, (replyCount.get(r.broadcast_id) ?? 0) + 1);
   // the roles a text can be narrowed to, in their usual order
@@ -80,6 +106,15 @@ export default async function MessagesPage() {
       <Section title="New text">
         <Compose camps={camps} recipients={recipients} roles={roleOptions} canEveryone={everyone} role={me.role} configured={!missing.length && !error && Boolean(twilioConfig())} />
       </Section>
+      {inbox.length > 0 && (
+        <Section
+          title="Replies"
+          description={`What staff texted back, newest first${isAdmin(me) ? "" : " (your divisions' staff)"}. Texts don't say which message they answer: it's the latest one that person got in the week before.`}
+          bodyClassName="p-0"
+        >
+          <ReplyList replies={inbox} />
+        </Section>
+      )}
       {(sent ?? []).length > 0 && (
         <Section title="Sent" bodyClassName="p-0">
           <ul className="divide-y">
@@ -103,11 +138,7 @@ export default async function MessagesPage() {
           </ul>
         </Section>
       )}
-      {loose.length > 0 && (
-        <Section title="Other texts to the camp number" description="Texts that don't answer anything sent in the last week." bodyClassName="p-0">
-          <ReplyList replies={loose} />
-        </Section>
-      )}
+
     </div>
   );
 }
