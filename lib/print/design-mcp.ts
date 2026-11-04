@@ -615,7 +615,7 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
     {
       title: "Add a print job to the queue",
       description:
-        'Asks for tags of a camper template, the same as Print a batch: for everyone you can print for, a camp (all its divisions, in one job), a division, a bunk, or some campers (by camper code). which: "not_printed" (default: only campers who never got this tag), "changed" (new, and anyone whose details on this tag changed since printed), "all", "present" (checked in now), "arrived_today". order: "bunk" (default), "division" or "name". deliver: "queue" (waits in Print → Queue for the office to print) or "email" (the PDF is made and emailed, to email_to or the office). Use dry_run first to see how many and who.',
+        'Asks for tags of a camper template, the same as Print a batch: for everyone you can print for, a camp (all its divisions, in one job), a division, a bunk, or some campers (by camper code). which: "not_printed" (default: only campers who never got this tag), "changed" (new, and anyone whose details on this tag changed since printed), "all", "present" (checked in now), "arrived_today". blank: instead of campers, blank tags (a division\'s design, nothing filled in, no QR or code: to write on), several divisions in one request ([{division: "Division 1", count: 8}, {division: "Thursday Program - English", count: 8}]). order: "bunk" (default), "division" or "name". deliver: "queue" (waits in Print → Queue for the office to print) or "email" (the PDF is made and emailed, to email_to or the office). Use dry_run first to see how many and who.',
       inputSchema: {
         template_id: z.guid(),
         camp: z.string().optional().describe('A camp\'s name ("American"): all its divisions in one job. Not with division'),
@@ -629,10 +629,15 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
         deliver: z.enum(["queue", "email"]).default("queue"),
         email_to: z.string().optional().describe('With deliver "email": the address (default: the office)'),
         dry_run: z.boolean().default(false).describe("Only count and list who, without asking"),
+        blank: z
+          .array(z.object({ division: z.string().min(1), count: z.number().int().min(1).max(300) }))
+          .max(30)
+          .optional()
+          .describe("Instead of campers: blank tags of these divisions' designs (no name, no QR or code), so many of each"),
       },
       annotations: { destructiveHint: false },
     },
-    async ({ template_id, camp, division, bunk, camper_codes, which, order, copies, purpose, deliver, email_to, dry_run }) => {
+    async ({ template_id, camp, division, bunk, camper_codes, which, order, copies, purpose, deliver, email_to, dry_run, blank }) => {
       try {
         if (!canUsePrintArea(user)) return problem(`${user.fullName} can't ask for prints (printing is for the office, directors and division heads).`);
         const session = await activeSession();
@@ -640,6 +645,21 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
         const admin = createAdminClient();
         const { data: tpl } = await admin.from("print_templates").select("id, name").eq("id", template_id).maybeSingle();
         if (!tpl) return problem("No template with that id (list_templates).");
+        // blank tags: a division's design, nothing filled in, so many of each (one request)
+        if (blank?.length) {
+          const total = blank.reduce((n, b) => n + b.count, 0);
+          const what = blank.map((b) => `${b.count} ${b.division}`).join(", ");
+          if (dry_run) return text(`${total} blank “${tpl.name}” tags would be added: ${what}.`);
+          const { blankCamperItems, createStaffPrintJob } = await import("./jobs");
+          const job = await createStaffPrintJob(user, {
+            sessionId: session.id,
+            templateId: template_id,
+            items: blank.flatMap((b) => blankCamperItems(b.division.trim(), b.count)),
+            order: "division",
+            note: [purpose, `${total} blank (${what})`, "asked through Claude"].filter(Boolean).join(" · "),
+          });
+          return text(`Added to the print queue: ${job.tags} blank “${tpl.name}” tags (${what}). ${appUrl}/print/jobs/${job.id}`);
+        }
         let ids: string[];
         let place: string;
         if (camper_codes?.length) {
