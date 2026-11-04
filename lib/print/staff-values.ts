@@ -20,6 +20,7 @@ export const STAFF_FIELDS: { key: string; label: string }[] = [
   { key: "HEBREW_LAST", label: "Hebrew last name (registration)" },
   { key: "POSITION", label: "Position (Learning head, Waterfront…)" },
   { key: "ROLE", label: "Role in Kinus (Counselor, Head counselor…)" },
+  { key: "ROLE_HE", label: "Role in Hebrew, for the Hebrew camps' staff (מדריך, גנרל, מנהל; empty otherwise: use {{ROLE_HE|ROLE}})" },
   { key: "DIVISION", label: "Division" },
   { key: "BUNK", label: "Bunk" },
   { key: "CAMP", label: "Camp" },
@@ -56,6 +57,12 @@ const detail = (d: Record<string, string> | null | undefined, ...names: string[]
 };
 const unique = (xs: (string | null | undefined)[]) => [...new Set(xs.filter((x): x is string => Boolean(x)))];
 
+/** The roles with a Hebrew word on the Hebrew camps' badges (the rest print in English). */
+const ROLE_HEBREW: Record<string, string> = { counselor: "מדריך", head_counselor: "גנרל", director: "מנהל" };
+/** Works in the Hebrew camp or the Thursday Program's Hebrew one (by camp, division or the name-tag division). */
+const inHebrewCamp = (p: StaffPerson) =>
+  p.places.some((x) => /hebrew|עברית/i.test(`${x.camp ?? ""} ${x.division}`)) || /hebrew|עברית/i.test(detail(p.details, "Division (name tag)"));
+
 // the export's column prefixes (lib/staff/export keeps the answers by their wording: "Full hebrew name")
 const PREFIXES = ["ppa", "students", "group_types", "applications", "programs"];
 
@@ -90,6 +97,8 @@ export function staffValues(p: StaffPerson, roleLabel: (role: string) => string)
     HEBREW_LAST: detail(p.details, "Last name (Hebrew)", "Hebrew last name"),
     POSITION: p.title ?? "",
     ROLE: roleLabel(p.role),
+    // the Hebrew camps' staff: their role in Hebrew, where there's a word for it (the English role stays as it is)
+    ROLE_HE: inHebrewCamp(p) ? (ROLE_HEBREW[p.role] ?? "") : "",
     // the division on the office's staff sheet ("Ohel Rally", "All Access"), else where they work in Kinus
     DIVISION: tagDivision || divisions.join(", "),
     BUNK: unique(p.places.map((x) => x.bunk)).join(", "),
