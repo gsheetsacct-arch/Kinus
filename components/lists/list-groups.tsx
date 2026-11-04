@@ -7,13 +7,19 @@ import type { BuiltList } from "@/lib/data/lists";
  * A printed list: one table per group. Kept deliberately plain (styles on the table, not
  * on each cell) because a whole camp is ~1,000 rows.
  */
-export function ListGroups({ columns, groups }: Pick<BuiltList, "columns" | "groups">) {
+export function ListGroups({ columns, groups, copies = 1 }: Pick<BuiltList, "columns" | "groups"> & { copies?: number }) {
   const nameCol = columns.findIndex((c) => c.key === "display_name");
   const phoneCols = new Set(columns.flatMap((c, i) => (c.key.endsWith(".phone") ? [i] : [])));
+  // printed with copies: each group again and again (bunk 1 ×3, then bunk 2 ×3…), the extra
+  // ones only on paper; on screen each group shows once
+  const sections = groups.flatMap((g, gi) => Array.from({ length: Math.max(1, copies) }, (_, copy) => ({ g, gi, copy })));
   return (
     <>
-      {groups.map((g, gi) => (
-        <section key={g.title || "all"} className={`rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] print:border-0 print:p-0 print:shadow-none ${gi > 0 ? "print-page-break mt-6" : ""}`}>
+      {sections.map(({ g, gi, copy }) => (
+        <section
+          key={`${g.title || "all"}:${copy}`}
+          className={`rounded-xl border bg-card p-4 shadow-[var(--shadow-card)] print:border-0 print:p-0 print:shadow-none ${gi > 0 || copy > 0 ? "print-page-break mt-6" : ""} ${copy > 0 ? "print-only" : ""}`}
+        >
           {g.title && (
             <h2 className="mb-2 text-lg font-semibold" dir="auto">
               {g.title} <span className="text-sm font-normal text-muted-foreground">({g.rows.length})</span>
@@ -24,7 +30,7 @@ export function ListGroups({ columns, groups }: Pick<BuiltList, "columns" | "gro
               {g.staff.length === 1 ? "Counselor" : "Counselors"}: {g.staff.join(" · ")}
             </p>
           )}
-          {gi === 0 && columns.length > 3 && <p className="no-print mb-1 text-xs text-muted-foreground sm:hidden">Swipe the table sideways to see every column →</p>}
+          {gi === 0 && copy === 0 && columns.length > 3 && <p className="no-print mb-1 text-xs text-muted-foreground sm:hidden">Swipe the table sideways to see every column →</p>}
           <div className="-mx-4 overflow-x-auto px-4 print:mx-0 print:overflow-visible print:px-0">
             <table className="list-table w-full border-collapse text-sm">
               <thead>

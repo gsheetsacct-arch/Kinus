@@ -10,7 +10,7 @@ import { SLEEPING_COLUMN, SLEEPING_COLUMN_LABEL, sleepingText } from "@/lib/slee
 
 type DB = SupabaseClient<Database>;
 
-export type ListPreset = { id: string; name: string; audience: string; columns: string[]; sort: { field: string; dir: string }[]; group_by: string | null; is_default: boolean; /** Only campers with these (lib/camper-flags): any one of them, or all of them. */ only: CamperFlag[]; match: "any" | "all"; /** Only campers whose export column is one of these values ("(empty)": nothing in it). */ where: ColumnFilter[]; /** Combined columns ("combo:<id>" in columns). */ combos?: Combo[] };
+export type ListPreset = { id: string; name: string; audience: string; columns: string[]; sort: { field: string; dir: string }[]; group_by: string | null; is_default: boolean; /** Only campers with these (lib/camper-flags): any one of them, or all of them. */ only: CamperFlag[]; match: "any" | "all"; /** Only campers whose export column is one of these values ("(empty)": nothing in it). */ where: ColumnFilter[]; /** Combined columns ("combo:<id>" in columns). */ combos?: Combo[]; /** How many copies of each group (each bunk…) print, one after another. */ copies?: number };
 
 export type ColumnFilter = { column: string; values: string[] };
 
@@ -65,6 +65,9 @@ export type BuiltList = {
 export const FILTER_ANY = "__any";
 export const FILTER_NONE = "__none";
 
+/** Copies of each group when printed: 1 to 10. */
+export const parseCopies = (v: unknown) => Math.min(10, Math.max(1, Math.round(Number(v)) || 1));
+
 export async function getPresetsFor(supabase: DB, user: CurrentUser): Promise<ListPreset[]> {
   const audiences = presetAudiencesFor(user);
   const { data } = await supabase.from("list_presets").select("id, name, audience, columns, sort, group_by, is_default, filters").in("audience", audiences).order("audience").order("name");
@@ -76,6 +79,7 @@ export async function getPresetsFor(supabase: DB, user: CurrentUser): Promise<Li
     match: (filters as { match?: string } | null)?.match === "all" ? ("all" as const) : ("any" as const),
     where: parseWhere(filters),
     combos: parseCombos(filters),
+    copies: parseCopies((filters as { copies?: unknown } | null)?.copies),
   }));
 }
 

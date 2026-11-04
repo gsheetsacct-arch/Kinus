@@ -22,6 +22,9 @@ export function ListFilters({ children, className }: { children: React.ReactNode
           if (name === "preset") {
             const col = form.elements.namedItem("fcol") as HTMLSelectElement | null;
             if (col) col.value = "";
+            // another list: its own number of copies
+            const copies = form.elements.namedItem("copies") as HTMLSelectElement | null;
+            if (copies) copies.disabled = true;
           }
         }
         form.requestSubmit();
