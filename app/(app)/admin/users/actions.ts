@@ -17,6 +17,7 @@ import { normalizeName } from "@/lib/import/normalize";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { checkinEmail, emailWayIn, generatePassword, placeholderEmail, setLoginKind } from "@/lib/staff/accounts";
 import { checkinLoginProblem, checkinName, isPlaceholderEmail, type LoginKind } from "@/lib/staff/login-kinds";
+import { matchStaffRows } from "@/lib/staff/match";
 
 const ROLES = ["owner", "director", "division_head", "kloli", "head_counselor", "counselor", "scanner", "office", "logistics", "staff"] as const;
 const signInRedirect = async () => `${await appUrl()}/login?next=/set-password`;
@@ -227,20 +228,27 @@ export async function previewBulkAdd(fd: FormData): Promise<ActionResult & { pre
         ? admin.from("profiles").select("id, email, role, full_name, source_id").in("source_id", sourceIds).then((r) => r, () => ({ data: [] }))
         : Promise.resolve({ data: [] as { id: string; email: string; role: StaffRole; full_name: string; source_id: string | null }[] }),
     ]);
-    const existing = [...(byEmail ?? []), ...(listedPeople ?? []).filter((p) => !byEmail?.some((x) => x.id === p.id))];
+    const existing = [...(byEmail ?? []), ...(listedPeople ?? []).filter((p) => !byEmail?.some((x) => x.id === p.id)), ...(bySource ?? []).filter((p) => !byEmail?.some((x) => x.id === p.id) && !listedPeople?.some((x) => x.id === p.id))];
+    // each one's registration id, if they have one (needs migration 0040)
+    const ids = existing.map((p) => p.id);
+    const { data: withIds } = ids.length ? await admin.from("profiles").select("id, source_id").in("id", ids).then((r) => r, () => ({ data: [] as { id: string; source_id: string | null }[] })) : { data: [] };
+    const idOf = new Map((withIds ?? []).map((p) => [p.id, p.source_id]));
+    // who each row is (lib/staff/match): their id, else their email or name, never someone with another id
+    const matches = matchStaffRows(
+      rows.map((r, i) => ({ name: r.name, email: r.email, sourceId: exported?.rows[i]?.sourceId ?? "" })),
+      existing.map((p) => ({ id: p.id, email: p.email, full_name: p.full_name, source_id: idOf.get(p.id) ?? null, placeholder: isPlaceholderEmail(p.email) })),
+      (a, b) => normalizeName(a) === normalizeName(b),
+    );
     const lookup = await divisionGroupLookup();
     const removed = await removedRoles();
     // someone already in Kinus may only be changed if they work inside my area (not taken from another division)
     const outside = new Set<string>();
     for (const p of existing ?? []) await assertCanManage(me, [p.id]).catch(() => outside.add(p.id));
-    const out = rows.map((r, i) => {
+    const out = rows.map((row, i) => {
       const reg = exported?.rows[i];
-      const sameName = (p: { full_name: string }) => normalizeName(p.full_name) === normalizeName(r.name);
-      // their registration id first, then email, then (listed people without an email) name
-      const ex =
-        (reg?.sourceId ? (bySource ?? []).find((p) => p.source_id === reg.sourceId) : null) ??
-        (r.email ? existing.find((p) => p.email.toLowerCase() === r.email) : existing.find((p) => isPlaceholderEmail(p.email) && sameName(p))) ??
-        null;
+      const m = matches[i];
+      const r = m.dropEmail ? { ...row, email: "", warnings: [...row.warnings, m.warning!] } : row;
+      const ex = m.existingId ? (existing.find((p) => p.id === m.existingId) ?? null) : null;
       const errors = [...r.errors];
       if (r.role && !canManageRole(me, r.role)) errors.push(`You can't add a ${STAFF_ROLES[r.role].label.toLowerCase()}.`);
       else if (r.role && removed.has(r.role) && r.role !== ex?.role) errors.push(notInUse(r.role));
