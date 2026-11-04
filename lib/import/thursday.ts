@@ -1,5 +1,6 @@
 import type { ParsedCamper } from "./mapping";
 import { idPrefix } from "./programs";
+import { readGroups } from "./groups";
 
 /**
  * The Thursday Program: regular campers who also come on Thursday. The registration export
@@ -68,7 +69,13 @@ export type ThursdayPick = { division: string; bunk: string | null } | { skip: s
  * it's left out (the group says Thursday but they answered No, or they answered Yes with no
  * group yet); or null (not in the program).
  */
-export function thursdayOf(raw: Record<string, string>): ThursdayPick {
+export function thursdayOf(raw: Record<string, string>, groupsColumn?: string): ThursdayPick {
+  // the registration's one list of groups (students.group), when the file has it, says who's in
+  // the Thursday Program and which one; their Thursday bunk is still its own column
+  if (groupsColumn) {
+    const g = readGroups(raw[groupsColumn]);
+    return g.thursday ? { division: g.thursday, bunk: cell(raw, COLUMNS.bunk) || null } : null;
+  }
   const group = cell(raw, COLUMNS.group);
   const said = cell(raw, COLUMNS.yesNo);
   if (!group) return YES.test(said) ? { skip: `answered ${said} to the Thursday Program, but has no Thursday group in the export yet, so isn't in it` } : null;

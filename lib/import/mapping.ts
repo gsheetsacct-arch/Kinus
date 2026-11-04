@@ -1,5 +1,6 @@
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 import { normText } from "./normalize";
+import { readGroups } from "./groups";
 
 export type ColumnMap = Record<string, string>;
 export type MappingOptions = {
@@ -71,6 +72,7 @@ export const SCALAR_TARGETS = [
 export const TARGET_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "— keep in raw data only —" },
   ...SCALAR_TARGETS.map((t) => ({ value: t, label: t })),
+  { value: "groups", label: "division, bunk and Thursday Program (one list, as students.group)" },
   { value: "bunk_preferences[0]", label: "bunk preference 1" },
   { value: "bunk_preferences[1]", label: "bunk preference 2" },
   { value: "bunk_preferences[2]", label: "bunk preference 3" },
@@ -166,7 +168,7 @@ export function applyMapping(row: Record<string, string>, map: ColumnMap, opts: 
   }
 
   for (const [col, target] of Object.entries(map)) {
-    if (!target || target === "bunk") continue;
+    if (!target || target === "bunk" || target === "groups") continue;
     const raw = row[col];
     const text = normText(raw);
     const m = CONTACT_RE.exec(target);
@@ -221,6 +223,20 @@ export function applyMapping(row: Record<string, string>, map: ColumnMap, opts: 
         break;
       default:
         warnings.push(`unknown mapping target "${target}" for column "${col}"`);
+    }
+  }
+  // the registration's one list of groups (students.group): when it has a division or a bunk,
+  // it's the source of truth for them, over the division and bunk columns
+  const groupsCol = Object.keys(map).find((c) => map[c] === "groups");
+  if (groupsCol) {
+    const g = readGroups(row[groupsCol]);
+    if (g.divisions.length) {
+      out.division_candidates = g.divisions;
+      out.division_name = g.divisions[0];
+    }
+    if (g.bunks.length || g.divisions.length) {
+      out.bunk_candidates = g.bunks;
+      out.bunk_name = g.bunks[0] ?? null;
     }
   }
   out.bunk_preferences = out.bunk_preferences.filter((x): x is string => Boolean(x));

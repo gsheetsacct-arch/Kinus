@@ -3,6 +3,8 @@ import type { ColumnMap, MappingOptions } from "./mapping";
 /** Mirrors the seeded `import_mappings` row for the registration export. */
 export const DEFAULT_COLUMN_MAP: ColumnMap = {
   "students.id": "source_id",
+  // division, bunk and Thursday Program, one list (lib/import/groups)
+  "students.group": "groups",
   "students.first_name": "first_name",
   "students.last_name": "last_name",
   "group_types.division": "division",
@@ -52,6 +54,7 @@ export function guessTarget(header: string): string | null {
     [/^(students? |campers? |child |participants? )?first ?name$|^first$|^given name$/, "first_name"],
     [/^(students? |campers? |child |participants? )?last ?name$|^last$|^surname$|^family name$/, "last_name"],
     [/^(students? |campers? |participants? |registration |reg )?id$|^(students?|campers?|registration|participants?) (id|number|no)$/, "source_id"],
+    [/^(students? )?groups?$/, "groups"],
     [/^grade( level)?$/, "grade"],
     [/^(t ?shirt|tshirt|shirt)( size)?$/, "tshirt_size"],
     [/^division$/, "division"],
