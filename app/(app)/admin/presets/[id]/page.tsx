@@ -1,6 +1,7 @@
 import { extraGroupOf, loadExtraFields } from "@/lib/data/extra-fields";
 import { parseCombos, parseCopies, parseWhere } from "@/lib/data/lists";
 import { ComboBuilder } from "@/components/lists/combo-builder";
+import { LayoutFilters } from "@/components/lists/layout-filters";
 import { notFound } from "next/navigation";
 import { Copy, Lock } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -43,7 +44,7 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
   const sort = (preset?.sort as { field: string; dir: string }[] | undefined) ?? [];
   const only = new Set(parseFlags(((preset?.filters as { only?: string[] } | null)?.only ?? []).join(",")));
   const match = (preset?.filters as { match?: string } | null)?.match === "all" ? "all" : "any";
-  // column filters ("T-shirt size is M or L"): the saved ones, then empty rows to add more
+  // filters on any field ("T-shirt size is M or L", "Grade is 4")
   const where = parseWhere(preset?.filters);
   // combined columns: the saved ones, then a blank one to make another
   const combos = parseCombos(preset?.filters);
@@ -62,7 +63,6 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
   }).filter((k) => k.options.length);
   const partOptions = byKind.flatMap((k) => k.options);
   const groupBy = preset?.group_by ?? (isNew ? "bunk" : "");
-  const whereRows = [...where, ...Array.from({ length: Math.max(1, 3 - where.length) }, () => ({ column: "", values: [] as string[] }))].slice(0, 5);
   const sortField = sort.find((s) => s.field !== preset?.group_by)?.field ?? "last_name";
 
   return (
@@ -132,43 +132,34 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                 <option value="camper_code">Camper code</option>
               </Select>
             </Field>
-            <fieldset className="space-y-1.5">
-              <legend className="mb-1 text-sm font-medium">Only campers who have</legend>
-              {FLAG_KEYS.map((k) => (
-                <label key={k} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" name="only" value={k} defaultChecked={only.has(k)} className="size-4 accent-[var(--primary)]" />
-                  {CAMPER_FLAGS[k].label}
-                </label>
-              ))}
-              <div className="flex flex-wrap items-center gap-3 pt-1 text-sm">
-                <span className="text-muted-foreground">With more than one ticked:</span>
+            <fieldset className="space-y-2 rounded-xl border p-3">
+              <legend className="px-1 text-sm font-medium">Only campers who have</legend>
+              <div className="flex flex-wrap gap-1.5">
+                {FLAG_KEYS.map((k) => (
+                  <label key={k} className="cursor-pointer">
+                    <input type="checkbox" name="only" value={k} defaultChecked={only.has(k)} className="peer sr-only" />
+                    <span className="inline-flex items-center rounded-full border bg-background px-2.5 py-1 text-xs transition-colors peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-ring hover:border-primary/50">
+                      {CAMPER_FLAGS[k].label}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <span className="text-muted-foreground">More than one picked:</span>
                 <label className="flex items-center gap-1.5">
-                  <input type="radio" name="match" value="any" defaultChecked={match === "any"} className="size-4 accent-[var(--primary)]" />
+                  <input type="radio" name="match" value="any" defaultChecked={match === "any"} className="size-3.5 accent-[var(--primary)]" />
                   any of them
                 </label>
                 <label className="flex items-center gap-1.5">
-                  <input type="radio" name="match" value="all" defaultChecked={match === "all"} className="size-4 accent-[var(--primary)]" />
+                  <input type="radio" name="match" value="all" defaultChecked={match === "all"} className="size-3.5 accent-[var(--primary)]" />
                   all of them
                 </label>
               </div>
-              <p className="text-xs text-muted-foreground">None ticked: every camper. Any of them: campers with at least one (medical flag or notes). All of them: only campers with every one ticked.</p>
+              <p className="text-xs text-muted-foreground">None picked: every camper.</p>
             </fieldset>
-            <fieldset className="space-y-1.5">
-              <legend className="mb-1 text-sm font-medium">Only campers whose…</legend>
-              {whereRows.map((w, i) => (
-                <div key={i} className="grid gap-1.5 sm:grid-cols-2">
-                  <Select name="where_column" defaultValue={w.column} aria-label="Column">
-                    <option value="">(no filter)</option>
-                    {extraFields.map((f) => (
-                      <option key={f.column} value={f.column}>
-                        {f.label}
-                      </option>
-                    ))}
-                  </Select>
-                  <Input name="where_values" defaultValue={w.values.join(", ")} placeholder="is, e.g. Yes or M, L" aria-label="Values" dir="auto" />
-                </div>
-              ))}
-              <p className="text-xs text-muted-foreground">Any column of the export. Separate values with commas (any of them matches); &ldquo;(empty)&rdquo; for campers with nothing in it. Every filter here must match.</p>
+            <fieldset className="space-y-2 rounded-xl border p-3">
+              <legend className="px-1 text-sm font-medium">Only campers whose…</legend>
+              <LayoutFilters kinds={byKind} initial={where} />
             </fieldset>
             <label className="flex items-start gap-2 text-sm">
               <input type="checkbox" name="is_default" defaultChecked={preset?.is_default ?? false} className="mt-0.5 size-4" />

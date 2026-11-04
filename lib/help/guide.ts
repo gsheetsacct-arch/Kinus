@@ -260,7 +260,7 @@ Pick a **list** (a layout), a division and a bunk. **Filter by** any of the list
 - **Combined columns**: several fields in one column, to save room ("M · Sleeping here · 6¾"). **Ctrl-click** (⌘ on a Mac, long-press on a phone) the fields in Columns, then **Group into a new column** (or add them to one there is) in the box at the top. Each combined column: name, what goes between (· , / or one per line), Name each ("Shirt: M"), Show, fields as chips (drag or ‹ › to reorder, × to take out), ↑ ↓ to order the combined columns, Split back, Remove. Empty values and hidden answers are left out; a yes/no field shows its name when yes. Fields in a combined column are marked in its colour.
 - **Group the list by**: bunk (a page per bunk), division, nothing, or **any field** (each answer gets a heading: Sleeping here / Going home, each T-shirt size…).
 - **Sort** by last name, first name, grade or code.
-- **Only campers who have** (medical flag, notes…) and **Only campers whose \<column\> is …** filters saved with the layout.
+- **Only campers who have** (medical flag, notes…) and **Only campers whose…** filters saved with the layout: **Add a filter**, pick any field (Kinus' own, Sleeping, any export column, by kind), then tap its answers (this session's, with how many campers have each), or **Has anything** / **Empty**. Several answers: any of them; several filters: every one must match.
 `,
   },
   {
