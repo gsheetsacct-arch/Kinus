@@ -1,4 +1,5 @@
 "use client";
+import { PdfButton } from "./pdf-button";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -105,11 +106,7 @@ export function PrintQueue({ jobs, show, together = [] }: { jobs: QueueJob[]; sh
                   <Printer /> Print as sets
                 </a>
               </Button>
-              <Button size="sm" variant="outline" asChild>
-                <a href={`/print/combined/pdf?jobs=${ids.join(",")}`}>
-                  <FileDown /> PDF
-                </a>
-              </Button>
+              <PdfButton size="sm" href={`/print/combined/pdf?jobs=${ids.join(",")}`} label="PDF" />
             </>
           )}
           {chosen.length > 1 && (
