@@ -3,6 +3,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { seesAllCamp, type CurrentUser } from "@/lib/auth/permissions";
 import { loadAreaTree } from "@/lib/data/areas";
 import { continuedDivisionNumbers } from "./bunk-continued";
+
+/** A Thursday Program camp ("Thursday American"…): its records are second copies of campers. */
+const isThursdayCamp = (name: string) => /^thursday\b/i.test(name.trim());
 import { STAFF_ROLES } from "@/lib/labels";
 import { shownEmail } from "@/lib/staff/login-kinds";
 import { withNameTagDivision } from "@/lib/staff/name-tag";
@@ -46,9 +49,12 @@ export async function staffInView(me: CurrentUser): Promise<StaffToPrint[]> {
   const division = new Map(tree.divisions.map((d) => [d.id, d]));
   const bunk = new Map(tree.divisions.flatMap((d) => d.bunks.map((b) => [b.id, b.name] as const)));
   const mine = new Set(me.coverage.map((c) => c.division_id));
-  // each division's staff number, after the last bunk number (camps in order; a division with no camp is in the first)
+  // each division's staff number, after the last bunk number (camps in order; a division with no camp is in the first).
+  // The Thursday Program's camps don't count: no luggage tags there, so their bunks don't move
+  // the numbers, and their divisions get none
   const firstCamp = tree.groups[0]?.id ?? null;
-  const number = continuedDivisionNumbers((tree.groups.length ? tree.groups.map((g) => g.id) : [null]).map((gid) => tree.divisions.filter((d) => (d.group_id ?? firstCamp) === gid)));
+  const counted = tree.groups.filter((g) => !isThursdayCamp(g.name)).map((g) => g.id);
+  const number = continuedDivisionNumbers((tree.groups.length ? counted : [null]).map((gid) => tree.divisions.filter((d) => (d.group_id ?? firstCamp) === gid)));
   const out: StaffToPrint[] = [];
   for (const p of people ?? []) {
     const places: StaffPerson["places"] = [];
@@ -170,14 +176,32 @@ export async function staffChangedSince(templateId: string, people: { id: string
   const keys = templateKeys(spec);
   const said = (values: Record<string, string>) => contentHash(keys, labelValues(spec, values));
   const name = (n: string) => n.replace(/\s+/g, " ").trim().toLowerCase();
-  // each person's latest tag (newest job first)
+  // each person's latest tag (newest job first); a tag from before Kinus kept who it was for is
+  // known only by name, and two records of one name (a counselor and their Thursday record)
+  // can't be told apart there: any of that name's last tags saying the same counts as printed
   const byId = new Map<string, string>();
-  const byName = new Map<string, string>();
+  const byName = new Map<string, Set<string>>();
+  const namedJobs = new Map<string, unknown>();
   for (const j of (jobs ?? []) as { staff_items?: unknown }[])
     for (const it of parseStaffItems(j.staff_items)) {
       if (!it.name) continue; // a blank badge
-      if (it.id && !byId.has(it.id)) byId.set(it.id, said(it.values));
-      if (!it.id && !byName.has(name(it.name))) byName.set(name(it.name), said(it.values));
+      if (it.id) {
+        if (!byId.has(it.id)) byId.set(it.id, said(it.values));
+        continue;
+      }
+      const n = name(it.name);
+      // the newest request with this name only (its records' tags as last printed)
+      if (namedJobs.has(n) && namedJobs.get(n) !== j) continue;
+      namedJobs.set(n, j);
+      byName.set(n, (byName.get(n) ?? new Set()).add(said(it.values)));
     }
-  return new Set(people.filter((p) => (byId.get(p.id) ?? byName.get(name(p.name))) !== said(p.values)).map((p) => p.id));
+  return new Set(
+    people
+      .filter((p) => {
+        const now = said(p.values);
+        const last = byId.get(p.id);
+        return last !== undefined ? last !== now : !byName.get(name(p.name))?.has(now);
+      })
+      .map((p) => p.id),
+  );
 }
