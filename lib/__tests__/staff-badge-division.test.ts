@@ -29,3 +29,15 @@ describe("the role in Hebrew", () => {
     expect(person("counselor", "Division 2", "American").ROLE).toBe("counselor");
   });
 });
+
+describe("the bunk as the Hebrew campers' tags say it", () => {
+  const person = (bunk: string, division: string, camp: string) => staffValues({ ...SAMPLE_STAFF, details: null, places: [{ division, camp, color: null, bunk }] }, (r) => r);
+  it("סיירת 101 and up, by the bunk's letter, for the Hebrew camps", () => {
+    expect(person("Bunk א עברית", "Hebrew Division", "Hebrew").BUNK_HE).toBe("סיירת 101");
+    expect(person("Bunk י עברית", "Thursday Program - Hebrew", "Thursday Hebrew").BUNK_HE).toBe("סיירת 110");
+    expect(person("Bunk א עברית", "Hebrew Division", "Hebrew").BUNK).toBe("Bunk א עברית");
+  });
+  it("nothing elsewhere", () => {
+    expect(person("Bunk Lamed", "Division 2", "American").BUNK_HE).toBe("");
+  });
+});
