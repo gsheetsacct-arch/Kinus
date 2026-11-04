@@ -39,3 +39,18 @@ describe("the Thursday Program in the export", () => {
     expect(pictureFor(part, "Division 9")).toBe("default.png");
   });
 });
+
+describe("a file just for the Thursday Program's bunks", () => {
+  it("is known by its Thursday bunk column without the regular bunk columns", async () => {
+    const { isThursdayOnlyFile } = await import("../import/thursday");
+    expect(isThursdayOnlyFile(["students.id", "students.first_name", "group_types.division", "group_types.thursday_bunks"])).toBe(true);
+    expect(isThursdayOnlyFile(["students.id", "group_types.bunks", "group_types.thursday", "group_types.thursday_bunks"])).toBe(false);
+    expect(isThursdayOnlyFile(["students.id", "group_types.bunks"])).toBe(false);
+  });
+  it("a number is Bunk <number>", async () => {
+    const { thursdayBunk } = await import("../import/thursday");
+    expect(thursdayBunk("3")).toBe("Bunk 3");
+    expect(thursdayBunk("Bunk Alef")).toBe("Bunk Alef");
+    expect(thursdayBunk(null)).toBeNull();
+  });
+});
