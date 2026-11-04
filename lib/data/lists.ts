@@ -13,7 +13,7 @@ type DB = SupabaseClient<Database>;
 export type ListPreset = { id: string; name: string; audience: string; columns: string[]; sort: { field: string; dir: string }[]; group_by: string | null; is_default: boolean; /** Only campers with these (lib/camper-flags): any one of them, or all of them. */ only: CamperFlag[]; match: "any" | "all"; /** Only campers whose field is one of these answers (WHERE_EMPTY: nothing in it; WHERE_ANY: anything). Every filter must match. */ where: ColumnFilter[]; /** Combined columns ("combo:<id>" in columns). */ combos?: Combo[]; /** How many copies of each group (each bunk…) print, one after another. */ copies?: number };
 
 export { WHERE_ANY, WHERE_EMPTY, parseWhere, type ColumnFilter } from "@/lib/list-where";
-import { WHERE_ANY, WHERE_EMPTY, parseWhere, type ColumnFilter } from "@/lib/list-where";
+import { WHERE_ANY, WHERE_EMPTY, hasContent, parseWhere, type ColumnFilter } from "@/lib/list-where";
 
 
 /**
@@ -183,7 +183,7 @@ export async function buildList(
       where.every((w) => {
         const t = textOf(c, w.key);
         const short = w.key.startsWith("source.") && t ? shortAnswer(answersOf.get(w.key) ?? {}, t) : "";
-        return w.values.some((v) => (v === WHERE_EMPTY ? !t.trim() : v === WHERE_ANY ? Boolean(t.trim()) : norm(v) === norm(t) || (short !== "" && norm(v) === norm(short))));
+        return w.values.some((v) => (v === WHERE_EMPTY ? !hasContent(t) : v === WHERE_ANY ? hasContent(t) : norm(v) === norm(t) || (short !== "" && norm(v) === norm(short))));
       }),
     );
   }
@@ -191,13 +191,13 @@ export async function buildList(
   const counts = new Map<string, number>();
   if (fKey) for (const c of campers) {
     const t = textOf(c, fKey);
-    if (t) counts.set(t, (counts.get(t) ?? 0) + 1);
+    if (hasContent(t)) counts.set(t, (counts.get(t) ?? 0) + 1);
   }
   const filterValues = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], undefined, { numeric: true })).slice(0, 200).map(([value, count]) => ({ value, count }));
   const shownCampers = fKey
     ? campers.filter((c) => {
         const t = textOf(c, fKey);
-        return scope.filter!.value === FILTER_ANY ? Boolean(t) : scope.filter!.value === FILTER_NONE ? !t : t === scope.filter!.value;
+        return scope.filter!.value === FILTER_ANY ? hasContent(t) : scope.filter!.value === FILTER_NONE ? !hasContent(t) : t === scope.filter!.value;
       })
     : campers;
   const sorted = [...shownCampers].sort((a, b) => {
