@@ -230,7 +230,7 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
         const sample = sampleStaffValues();
         return text(
           json({
-            fields: STAFF_FIELDS.map((f) => ({ key: `{{${f.key}}}`, name: f.label, sample: sample[f.key] ?? "" })),
+            fields: STAFF_FIELDS.map((f) => ({ key: `{{${f.key}}}`, name: f.label, sample: sample[f.key] || f.sample || "" })),
             also: "Staff tags are filled from the staff list. The camper names are reused where they mean the same thing, so a camper design copied for staff (copy_template) mostly just works.",
           }),
         );

@@ -12,7 +12,7 @@ export const forCampers = (t: unknown) => audienceOf(t) === "campers";
  * ({{FIRST}}, {{DIVISION}}, {{BUNK}}, {{DIVISION_COLOR}}), so a camper tag copied for staff
  * mostly just works.
  */
-export const STAFF_FIELDS: { key: string; label: string }[] = [
+export const STAFF_FIELDS: { key: string; label: string; /** what it says for someone it applies to (the sample person isn't) */ sample?: string }[] = [
   { key: "FIRST", label: "First name" },
   { key: "LAST", label: "Last name" },
   { key: "FULL", label: "Full name" },
@@ -20,7 +20,7 @@ export const STAFF_FIELDS: { key: string; label: string }[] = [
   { key: "HEBREW_LAST", label: "Hebrew last name (registration)" },
   { key: "POSITION", label: "Position (Learning head, Waterfront…)" },
   { key: "ROLE", label: "Role in Kinus (Counselor, Head counselor…)" },
-  { key: "ROLE_HE", label: "Role in Hebrew, for the Hebrew camps' staff (מדריך, גנרל, מנהל; empty otherwise: use {{ROLE_HE|ROLE}})" },
+  { key: "ROLE_HE", label: "Role in Hebrew, for the Hebrew camps' staff (מדריך, גנרל, מנהל; empty otherwise: use {{ROLE_HE|ROLE}})", sample: "מדריך" },
   { key: "DIVISION", label: "Division" },
   { key: "BUNK", label: "Bunk" },
   { key: "CAMP", label: "Camp" },

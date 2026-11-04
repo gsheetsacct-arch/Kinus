@@ -24,6 +24,7 @@ describe("the role in Hebrew", () => {
   });
   it("nothing for other roles, or other camps (their English role prints)", () => {
     expect(person("logistics", "Hebrew Division", "Hebrew").ROLE_HE).toBe("");
+    expect(person("kloli", "Hebrew Division", "Hebrew").ROLE_HE).toBe("");
     expect(person("counselor", "Division 2", "American").ROLE_HE).toBe("");
     expect(person("counselor", "Division 2", "American").ROLE).toBe("counselor");
   });
