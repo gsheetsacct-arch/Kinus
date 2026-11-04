@@ -44,6 +44,17 @@ describe("matching", () => {
 });
 
 describe("planRows", () => {
+  it("one person on the sheet with several staff ids: a record each, the others listed without the email", () => {
+    const row = (line: number, sourceId: string, role: string, where: string) => ({ line, name: "Levi Azimov", email: "levi@x.com", role, where, bunk: "", level: "", title: "", phone: "", sourceId });
+    const plan = planRows([row(2, "KTH87-021", "Director", "Division 1"), row(3, "KTH87-330", "Division head", "Division 2"), row(4, "KTH87-333", "Division head", "Hebrew Division")], tree, { role: "counselor", level: "role" });
+    expect(plan.map((p) => p.errors)).toEqual([[], [], []]);
+    expect(plan.map((p) => [p.email, p.login])).toEqual([["levi@x.com", "personal"], ["", "none"], ["", "none"]]);
+    expect(plan[1].warnings.join(" ")).toMatch(/KTH87-330/);
+    // without a staff id, a second sign-in with one email is still an error
+    const twice = planRows([{ ...row(2, "", "Director", "Division 1") }, { ...row(3, "", "Director", "Division 2") }], tree, { role: "counselor", level: "role" });
+    expect(twice[1].errors).toContain("This email is listed twice.");
+  });
+
   it("applies the default role, flags duplicates and missing places", () => {
     const plan = planRows(
       [

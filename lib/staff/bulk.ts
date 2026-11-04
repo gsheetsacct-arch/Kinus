@@ -198,7 +198,7 @@ export function planRows(rows: BulkInputRow[], tree: AreaTree, defaults: { role:
     }
     // counselors are listed (phone book, bunk) without signing in, unless the sheet says they sign in
     const said = (r.signs ?? "").trim().toLowerCase();
-    const login: "personal" | "none" = /^(y|yes|true|1|x|✓)$/.test(said) ? "personal" : /^(n|no|false|0|-)$/.test(said) ? "none" : role === "counselor" || role === "staff" ? "none" : "personal";
+    let login: "personal" | "none" = /^(y|yes|true|1|x|✓)$/.test(said) ? "personal" : /^(n|no|false|0|-)$/.test(said) ? "none" : role === "counselor" || role === "staff" ? "none" : "personal";
     let email = r.email;
     if (email && !EMAIL.test(email)) errors.push(`“${email}” isn't an email address.`);
     else if (!email && login === "personal") errors.push(MISSING_EMAIL);
@@ -207,6 +207,13 @@ export function planRows(rows: BulkInputRow[], tree: AreaTree, defaults: { role:
       if (login === "none") {
         warnings.push(`Same email as someone above (${email}): added without it.`);
         email = "";
+      } else if (r.sourceId) {
+        // one person on the staff sheet several times, each with a staff id of its own (a
+        // counselor and a Thursday Program head): a record each; the first signs in with the
+        // email, the others are listed (phone book, badges) without it
+        warnings.push(`Same email as a row above (${email}), with a staff id of its own (${r.sourceId}): added as a separate record, listed only (the row above signs in with the email).`);
+        email = "";
+        login = "none";
       } else errors.push("This email is listed twice.");
     }
     if (email) seen.add(email);
