@@ -296,6 +296,27 @@ describe("staff-locked placement", () => {
   });
 });
 
+describe("rows with a registration id and no name", () => {
+  it("updates the camper with that id and keeps their name", () => {
+    const r = matchAndDiff([{ rowNumber: 2, parsed: parsedFor({ first_name: "", last_name: "", grade: "5", warnings: ["row has no name"] }) }], [base], known, opts);
+    expect(r.rows[0].action).toBe("update");
+    expect(r.rows[0].matchMethod).toBe("source_id");
+    expect(r.rows[0].changes).toEqual([{ field: "grade", old: "4", new: "5" }]);
+    expect(r.rows[0].warnings).not.toContain("row has no name");
+    // even when empty cells count (a full export), the empty name never wipes theirs
+    const full = matchAndDiff([{ rowNumber: 2, parsed: parsedFor({ first_name: "", last_name: "" }) }], [base], known, { ...opts, emptyMeansUnknown: false });
+    expect(full.rows[0].changes.map((c) => c.field)).not.toContain("first_name");
+    expect(full.rows[0].changes.map((c) => c.field)).not.toContain("last_name");
+  });
+  it("skips an id nobody has: a new camper needs a name", () => {
+    const r = matchAndDiff([{ rowNumber: 2, parsed: parsedFor({ source_id: "9999", first_name: "", last_name: "" }) }], [base], known, opts);
+    expect(r.rows[0].action).toBe("skip");
+    expect(r.rows[0].warnings.join(" ")).toMatch(/9999.*needs a name/);
+    const none = matchAndDiff([{ rowNumber: 2, parsed: parsedFor({ source_id: null, first_name: "", last_name: "" }) }], [base], known, opts);
+    expect(none.rows[0].action).toBe("skip");
+  });
+});
+
 describe("bunks as the registration export writes them", () => {
   const all = ["Bunk לב", "Bunk סה - Online School Only", "Bunk נו - Online School Only", "Bunk ל - Online School Only", "Bunk טז - Online School Only", "Bunk טו - Online School Only", "Bunk יד - Online School Only", "Bunk מג - Online School Only", "Bunk יט", "Bunk א", "Bunk ס", "Bunk כ", "Bunk סד", "Bunk נט"];
   it("reads the bunk without the Online School note", () => {

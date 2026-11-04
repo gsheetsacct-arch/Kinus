@@ -193,13 +193,23 @@ export function matchAndDiff(
   const matchedIds = new Set<string>();
   const results: RowResult[] = [];
 
-  for (const { rowNumber, parsed } of rows) {
+  for (const row of rows) {
+    const { rowNumber } = row;
+    let { parsed } = row;
     const warnings = [...parsed.warnings];
     const cand = (e: ExistingCamper): Candidate => ({ id: e.id, display_name: `${e.first_name} ${e.last_name}`, division_name: e.division_name });
 
+    // no name: the registration id alone is enough to update a camper already here, but a new
+    // camper needs a name. The names they have are kept (an empty name never wipes one).
     if (!parsed.first_name && !parsed.last_name) {
-      results.push({ rowNumber, parsed, matchedCamperId: null, matchMethod: null, action: "skip", changes: [], warnings: [...warnings, "skipped: no name"] });
-      continue;
+      const byId = parsed.source_id ? bySource.get(parsed.source_id) : undefined;
+      if (!byId) {
+        const why = parsed.source_id ? `skipped: no name, and no camper has registration id ${parsed.source_id} (a new camper needs a name)` : "skipped: no name";
+        results.push({ rowNumber, parsed, matchedCamperId: null, matchMethod: null, action: "skip", changes: [], warnings: [...warnings.filter((w) => w !== "row has no name"), why] });
+        continue;
+      }
+      parsed = { ...parsed, first_name: byId.first_name, last_name: byId.last_name };
+      warnings.splice(0, warnings.length, ...warnings.filter((w) => w !== "row has no name"));
     }
     if (parsed.source_id && seenSource.has(parsed.source_id)) {
       results.push({ rowNumber, parsed, matchedCamperId: null, matchMethod: null, action: "conflict", changes: [], warnings: [...warnings, `duplicate id ${parsed.source_id} in file`] });

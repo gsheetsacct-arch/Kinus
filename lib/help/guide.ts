@@ -76,7 +76,7 @@ Claude reads this guide with the **kinus_guide** tool, including **How it's set 
 
 ### 1. Match the columns
 Kinus remembers each kind of export (the main one, a separate program's) and matches the columns as last time. For each column choose:
-- **A Kinus field**: first name, last name (both required), registration ID (\`students.id\`: how campers are recognised next time), division, bunk, grade, T-shirt, medical, allergies, EpiPen, medications, notes from parents, address, parent and emergency contacts…
+- **A Kinus field**: first name, last name, registration ID (\`students.id\`: how campers are recognised next time; map the names, the ID, or both: with the ID, a row with no name still updates the camper with that ID, keeping their name, though a new camper needs a name), division, bunk, grade, T-shirt, medical, allergies, EpiPen, medications, notes from parents, address, parent and emergency contacts…
 - **Show in Kinus**: every other column is kept with the camper and shown on the camper page, in lists and on labels (this is the default: every column is used unless you say otherwise).
 - **Not needed**: left out, and stays out on later imports (bring it back in Settings → Extra fields → Left out).
 
