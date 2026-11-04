@@ -120,3 +120,24 @@ export async function staffLongest(user: CurrentUser, keys?: string[], top = 5) 
     return { key: f.key, label: f.label, filled: filled.length, longest: longest.map((p) => ({ value: p.values[f.key], letters: p.values[f.key].length, person: p.name })) };
   });
 }
+
+/** A blank badge's values: a division's design (its picture, its name), with no name on it. */
+export const blankStaffValues = (division: string) => staffValues({ name: "", role: "staff", title: null, phone: null, email: null, details: { "Division (name tag)": division }, places: [] }, () => "");
+
+/**
+ * Staff tags for the print queue: these people (only those this person may print for) as
+ * their tags read now, and blank badges for a division.
+ */
+export async function staffQueueItems(me: CurrentUser, opts: { ids?: string[]; copies?: number; blank?: { count: number; division: string } | null }) {
+  const copies = Math.min(10, Math.max(1, Math.round(opts.copies ?? 1)));
+  const items: { name: string; division: string; values: Record<string, string>; copies: number }[] = [];
+  if (opts.ids?.length) {
+    const want = new Set(opts.ids);
+    for (const p of await staffInView(me)) if (want.has(p.id)) items.push({ name: p.name, division: p.values.DIVISION ?? "", values: p.values, copies });
+  }
+  if (opts.blank && opts.blank.count > 0 && opts.blank.division.trim()) {
+    const values = blankStaffValues(opts.blank.division.trim());
+    for (let i = 0; i < Math.min(300, opts.blank.count); i++) items.push({ name: "", division: opts.blank.division.trim(), values, copies: 1 });
+  }
+  return items;
+}

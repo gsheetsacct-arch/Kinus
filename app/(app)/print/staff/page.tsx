@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
-import { StaffTags } from "@/components/print/staff-tags";
+import { BlankStaffTags, StaffTags } from "@/components/print/staff-tags";
+import { getActiveSession } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/current-user";
 import { canUsePrintArea } from "@/lib/auth/permissions";
@@ -19,11 +20,15 @@ export default async function StaffTagsPage() {
   const user = await requireUser();
   if (!canUsePrintArea(user)) redirect("/print/templates");
   const admin = createAdminClient();
-  const [{ data: rows }, people, designs] = await Promise.all([
+  const session = await getActiveSession();
+  const [{ data: rows }, people, designs, { data: divisionRows }] = await Promise.all([
     admin.from("print_templates").select("*").not("name", "like", "(retired)%").order("sort_order").order("name"),
     staffInView(user),
     canDesign(user),
+    session ? admin.from("divisions").select("name").eq("session_id", session.id).order("sort_order") : Promise.resolve({ data: [] as { name: string }[] }),
   ]);
+  // the divisions a blank badge can be for: this session's, and the name-tag ones on the staff sheet (Ohel Rally…)
+  const divisions = [...new Set([...(divisionRows ?? []).map((d) => d.name), ...people.map((p) => p.values.DIVISION ?? "").filter(Boolean)])];
   const templates = (rows ?? []).filter((t) => !forCampers(t)).map((t) => ({ id: t.id, name: t.name, copies: Number((t as { copies?: number }).copies) || 1, sheet: Boolean(t.sheet_layout) }));
   return (
     <div>
@@ -46,11 +51,14 @@ export default async function StaffTagsPage() {
           }
         />
       ) : (
+        <div className="space-y-6">
         <StaffTags
           templates={templates}
           // the division each name tag says (the office's staff sheet: teams like Ohel Rally too)
           people={people.map(({ id, name, role, title, values }) => ({ id, name, role, title, label: values.DIVISION ?? "" }))}
         />
+          <BlankStaffTags templates={templates} divisions={divisions} />
+        </div>
       )}
     </div>
   );
