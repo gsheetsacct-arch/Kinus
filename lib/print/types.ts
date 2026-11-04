@@ -134,7 +134,12 @@ const sameDivision = (a: string, b: string) => a.trim().toLowerCase() === b.trim
 
 /** The picture a picture part shows for a camper of this division ("" = none). */
 export function pictureFor(l: { path: string; byDivision?: Record<string, string> }, division: string | null | undefined): string {
-  if (division && l.byDivision) for (const [name, path] of Object.entries(l.byDivision)) if (sameDivision(name, division)) return path;
+  if (division && l.byDivision) {
+    for (const [name, path] of Object.entries(l.byDivision)) if (sameDivision(name, division)) return path;
+    // "Thursday Program - English" with no picture of its own: the one for "Thursday Program"
+    const family = division.split(/\s+[-–]\s+/)[0];
+    if (family !== division) for (const [name, path] of Object.entries(l.byDivision)) if (sameDivision(name, family)) return path;
+  }
   return l.path;
 }
 

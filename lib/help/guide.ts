@@ -82,6 +82,8 @@ Kinus remembers each kind of export (the main one, a separate program's) and mat
 
 Options on this step: **a separate program's export** (everyone in it goes into one division, with registration IDs of its own), **take bunks from the file**, **empty cells mean "don't know"** (keep what Kinus has), and **our corrected copy** (see Protected columns).
 
+**The Thursday Program.** The main export's Thursday columns (Thursday program yes/no, the Thursday group "Thursday Program - English / French / Hebrew", and Thursday bunks) put each camper with a Thursday group in it a second time: they stay in their regular division, and get a Thursday record in their Thursday division, in its own camp (**Thursday American**, **Thursday French**, **Thursday Hebrew**, made by the first import that has them, after the other camps). The Thursday record has its own registration ID (the same number, kept apart), its own check-in and tags, and prints with the regular camp's templates (Thursday American with American's) and the Thursday Program's badge picture. A camper whose group says Thursday but who answered No, or who answered Yes with no group yet, isn't put in, and the preview says so on their row. Dropping out of Thursday marks only the Thursday record "not in the latest export".
+
 ### 2. Review
 - **New**: campers added.
 - **Updated**: what changes, grouped by field ("Bunk: 34 campers"), each camper old → new. The export's own columns are listed the same way ("Sleeping at the Kinus (export): 12 campers"). A camper whose only change is in those columns counts as updated.

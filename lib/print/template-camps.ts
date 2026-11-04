@@ -15,10 +15,16 @@ export function templateCamps(t: unknown): string[] {
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
+/**
+ * Whether a template kept to camp `want` ("American") is for camp `camp`: that camp, or its
+ * Thursday Program camp ("Thursday American" prints with American's templates; lib/import/thursday).
+ */
+export const campMatches = (want: string, camp: string) => same(want, camp) || same(want, camp.trim().replace(/^thursday\s+/i, ""));
+
 /** Whether a template is for this camp (by name; null = no camp chosen: every template). */
 export const forCamp = (t: unknown, camp: string | null | undefined) => {
   const camps = templateCamps(t);
-  return !camps.length || !camp || camps.some((c) => same(c, camp));
+  return !camps.length || !camp || camps.some((c) => campMatches(c, camp));
 };
 
 /** This session's camps by name, with their divisions (a division with no camp belongs to the first, as everywhere). */
@@ -35,7 +41,7 @@ export async function campDivisions(db: DB, sessionId: string): Promise<{ name: 
 export function templateDivisionIds(t: unknown, camps: { name: string; divisionIds: string[] }[]): string[] | null {
   const want = templateCamps(t);
   if (!want.length) return null;
-  return camps.filter((c) => want.some((w) => same(w, c.name))).flatMap((c) => c.divisionIds);
+  return camps.filter((c) => want.some((w) => campMatches(w, c.name))).flatMap((c) => c.divisionIds);
 }
 
 /** The camp a camper's division is in (by name), or null. */
