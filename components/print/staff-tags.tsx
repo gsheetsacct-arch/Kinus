@@ -169,3 +169,43 @@ export function StaffTags({ templates, people }: { templates: Template[]; people
     </form>
   );
 }
+
+/**
+ * Blank badges: a template's design for a division (its picture, its name), with no name on
+ * it, so many: for staff not on the list yet (a program with no staff entered), to write on.
+ */
+export function BlankStaffTags({ templates, divisions }: { templates: Template[]; divisions: string[] }) {
+  const [count, setCount] = React.useState(10);
+  return (
+    <form method="post" action="/print/staff/sheet" target="_blank">
+      <Section title="Blank badges" description="The design for a division, with no name: for staff who aren't on the list yet.">
+        <div className="grid gap-4 sm:grid-cols-[1fr_1fr_8rem_auto] sm:items-end">
+          <Field label="Template" htmlFor="blank-template">
+            <Select id="blank-template" name="template" defaultValue={templates[0]?.id}>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Division (its design)" htmlFor="blank-division">
+            <Select id="blank-division" name="blank_division" defaultValue={divisions[0]}>
+              {divisions.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="How many" htmlFor="blank-count">
+            <Input id="blank-count" name="blank" type="number" min={1} max={300} value={count} onChange={(e) => setCount(Math.max(1, Math.min(300, Number(e.target.value) || 1)))} />
+          </Field>
+          <Button type="submit" disabled={!templates.length || !divisions.length}>
+            <Printer /> Print {count} blank
+          </Button>
+        </div>
+      </Section>
+    </form>
+  );
+}
