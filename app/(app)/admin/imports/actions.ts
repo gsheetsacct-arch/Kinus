@@ -212,8 +212,10 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
       if (t === EXTRA) extra.push(h);
       else if (t) columnMap[h] = t;
     }
-    if (!Object.values(columnMap).includes("first_name") || !Object.values(columnMap).includes("last_name")) {
-      return fail("Map at least first name and last name.");
+    // names, or the registration id (it alone matches and updates the campers already here)
+    const mapped = Object.values(columnMap);
+    if (!(mapped.includes("first_name") && mapped.includes("last_name")) && !mapped.includes("source_id")) {
+      return fail("Map first name and last name, or the registration ID.");
     }
     // a separate program's division must be one of this session's
     let fixedDivision: string | null = null;
