@@ -307,10 +307,12 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
     const thursdayDivisions = new Set<string>();
     // a file just for the Thursday Program (its bunks): rows are Thursday records only (below)
     const thursdayOnly = !fixedDivision && isThursdayOnlyFile(headers);
-    if (!fixedDivision && !thursdayOnly && hasThursdayColumns(headers)) {
+    // the registration's one list of groups (students.group), when mapped: who's in the Thursday Program
+    const groupsColumn = Object.keys(columnMap).find((c) => columnMap[c] === "groups");
+    if (!fixedDivision && !thursdayOnly && (groupsColumn || hasThursdayColumns(headers))) {
       for (const r of [...parsedRows]) {
         const raw = rawRows.find((x) => x.id === r.id)!;
-        const pick = thursdayOf(raw.raw as Record<string, string>);
+        const pick = thursdayOf(raw.raw as Record<string, string>, groupsColumn);
         if (!pick) continue;
         if ("skip" in pick) {
           r.parsed.warnings.push(pick.skip);

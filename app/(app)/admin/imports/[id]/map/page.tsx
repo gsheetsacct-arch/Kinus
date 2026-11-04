@@ -22,7 +22,7 @@ const EXTRA = "__extra";
 /** Kinus fields in plain words ("tshirt_size" → "T-shirt", "contact[mother].phone" → "Mother: phone"). */
 const targetLabel = (value: string, raw: string) => {
   if (FIELD_BY_KEY[value]) return FIELD_BY_KEY[value].label;
-  const known: Record<string, string> = { division: "Division", bunk: "Bunk", source_id: "Registration ID" };
+  const known: Record<string, string> = { division: "Division", bunk: "Bunk", source_id: "Registration ID", groups: "Division, bunk and Thursday Program (one list)" };
   if (known[value]) return known[value];
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 };
@@ -89,7 +89,7 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
   const seen = Boolean(opts.columnMap || imp.mapping_id);
   for (const h of headers) {
     const k = h in presetMap ? undefined : knownTarget(h);
-    if (k && (!seen || k === "source_id" || k === "first_name" || k === "last_name")) presetMap[h] = k;
+    if (k && (!seen || k === "source_id" || k === "first_name" || k === "last_name" || k === "groups")) presetMap[h] = k;
   }
   // a kind of export Kinus hasn't seen: guess the usual columns (first name, last name, id…)
   if (!opts.columnMap && !imp.mapping_id) {
