@@ -1,3 +1,2 @@
-select id, file_name, status, created_at, mapping_id, jsonb_array_length(coalesce(options->'headers','[]'::jsonb)) as n_headers, options->'headers' as headers, options->'columnMap' as column_map from imports order by created_at desc limit 4;
-select id, name, is_default, column_map->'students.id' as sid, options->'fixedDivision' as fixed, jsonb_object_keys(column_map) is not null as x from import_mappings limit 0;
+select id, file_name, status, uploaded_at, mapping_id, options->'headers' as headers, options->'columnMap' as column_map, summary from imports order by uploaded_at desc limit 3;
 select id, name, is_default, column_map->>'students.id' as sid, options->>'fixedDivision' as fixed, (select count(*) from jsonb_object_keys(column_map)) as n from import_mappings order by created_at;
