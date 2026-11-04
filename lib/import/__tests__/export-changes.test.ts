@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exportColumnChanges } from "../export-changes";
+import { exportColumnChanges, keepFilledColumns } from "../export-changes";
 
 const row = (source_data: Record<string, string>, action = "unchanged") => ({ matchedCamperId: "c1", action, changes: [] as { field: string; old: string | null; new: string | null }[], parsed: { source_data } });
 
@@ -23,5 +23,25 @@ describe("export columns as changes", () => {
     const r = row({ "ppa.hebrew_name": "Levi" });
     const fixes = new Map([["c1", { "ppa.hebrew_name": { value: "לוי", was: "Levi" } }]]);
     expect(exportColumnChanges([r], new Map([["c1", { "ppa.hebrew_name": "Levi" }]]), fixes, [])).toBe(0);
+  });
+});
+
+describe("empty cells change nothing: the export's own columns", () => {
+  const before = { "ppa.sleeping_at_the_kinus": "Yes", "Family.city": "Montreal", "ppa.yarmulka_size": "M" };
+  it("an empty cell keeps what an earlier export gave; a filled one takes the file's", () => {
+    expect(keepFilledColumns(before, { "ppa.sleeping_at_the_kinus": "", "Family.city": "Toronto", "ppa.new_column": "x" })).toEqual({
+      "ppa.sleeping_at_the_kinus": "Yes",
+      "Family.city": "Toronto",
+      "ppa.yarmulka_size": "M",
+      "ppa.new_column": "x",
+    });
+  });
+  it("a protected column in our corrected copy can still be cleared", () => {
+    expect(keepFilledColumns(before, { "Family.city": " " }, ["family.city"])["Family.city"]).toBe(" ");
+  });
+  it("so the review shows no change to empty for it", () => {
+    const rows = [{ matchedCamperId: "c1", action: "unchanged", changes: [], parsed: { source_data: keepFilledColumns(before, { "ppa.sleeping_at_the_kinus": "" }) } }];
+    expect(exportColumnChanges(rows, new Map([["c1", before]]), new Map(), [])).toBe(0);
+    expect(rows[0].action).toBe("unchanged");
   });
 });

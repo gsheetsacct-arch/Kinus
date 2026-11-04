@@ -230,7 +230,7 @@ export default async function MapPage({ params }: { params: Promise<{ id: string
               <input type="checkbox" name="emptyMeansUnknown" defaultChecked={opts.emptyMeansUnknown ?? presetOptions.emptyMeansUnknown ?? true} className="mt-0.5 size-4" />
               <span>
                 <span className="font-medium">Keep what Kinus has when a cell is empty</span>
-                <span className="block text-muted-foreground">Recommended. An empty cell in the file never erases a phone number or detail already saved.</span>
+                <span className="block text-muted-foreground">Recommended. An empty cell in the file never erases a phone number, detail or export column already saved (from an earlier export).</span>
               </span>
             </label>
             <label className="flex items-start gap-3">
