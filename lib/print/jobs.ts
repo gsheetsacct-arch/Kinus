@@ -9,7 +9,7 @@ import { renderPdf } from "./chromium";
 import { sendEmail } from "./email";
 import { backgroundDataUrl, byBunkThenName, imageDataUrls, loadMergeSetup, loadPrintCampers, loadPrintCampersBrief, parseOrder, sortFor, toSpec, type PrintOrder } from "./data";
 import { contentHash, labelValues, sameContent, templateKeys } from "./content";
-import type { TemplateSpec } from "./types";
+import { DIVISION_VALUE, type TemplateSpec } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 import { isProgressMark, RETRY_MARK, STARTED_MARK } from "./labels";
 import { cleanUsed, sheetStock, usedBefore } from "./sheet-position";
@@ -122,7 +122,8 @@ export async function createStaffPrintJob(
   const admin = createAdminClient();
   const { data: template } = await admin.from("print_templates").select("*").eq("id", opts.templateId).single();
   if (!template) throw new Error("That template no longer exists.");
-  if (forCampers(template)) throw new Error(`${template.name} is a camper tag, not a staff one.`);
+  // a camper template takes only blank tags this way (its design, no name: to write on)
+  if (forCampers(template) && opts.items.some((i) => i.name)) throw new Error(`${template.name} is a camper tag, not a staff one.`);
   if (!opts.items.length) throw new Error("Nobody to print for.");
   const { data: job, error } = await admin
     .from("print_jobs")
@@ -143,6 +144,10 @@ export async function createStaffPrintJob(
   if (error) throw /staff_items/.test(error.message) ? new Error("Staff tags in the queue need a database update first (migration 0060).") : error;
   return { id: (job as { id: string }).id, count: opts.items.length, tags: opts.items.reduce((n, i) => n + i.copies, 0) };
 }
+
+/** A blank camper tag: a division's design (its pictures), nothing filled in, no QR or code: to write on. */
+export const blankCamperItems = (division: string, count: number): StaffItem[] =>
+  Array.from({ length: Math.min(300, Math.max(0, count)) }, () => ({ name: "", division, values: { [DIVISION_VALUE]: division }, copies: 1 }));
 
 /** A staff tag in a print set, shaped like a camper (to sort, count by division and print). */
 const staffAsCamper = (s: StaffItem & { id: string }) =>

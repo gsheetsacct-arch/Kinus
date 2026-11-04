@@ -64,7 +64,10 @@ function layerHtml(l: Layer, values: Record<string, string>, at?: string): strin
       return `<div class="l im ${imageClass(path)}"${pdf} style="${pos}background-size:${l.fit === "cover" ? "cover" : "contain"}"></div>`;
     }
     case "qr": {
-      const code = l.shape === "round" ? qrRoundSvg(fill(l.text, get)) : qrSvg(fill(l.text, get));
+      // nothing to encode (a blank tag): no code
+      const data = fill(l.text, get);
+      if (!data.trim()) return "";
+      const code = l.shape === "round" ? qrRoundSvg(data) : qrSvg(data);
       const svg = tintCode(code, l.color).replace("<svg ", '<svg preserveAspectRatio="xMidYMid meet" ');
       return `<div class="l qr" style="${pos}">${svg}</div>`;
     }

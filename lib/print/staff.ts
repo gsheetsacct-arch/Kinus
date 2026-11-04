@@ -158,10 +158,12 @@ export async function staffQueueItems(me: CurrentUser, opts: { ids?: string[]; c
  */
 export async function staffChangedSince(templateId: string, people: { id: string; name: string; values: Record<string, string> }[]): Promise<Set<string>> {
   const admin = createAdminClient();
-  const [{ data: template }, { data: jobs }] = await Promise.all([
+  const [{ data: template }, { data: jobs, error }] = await Promise.all([
     admin.from("print_templates").select("*").eq("id", templateId).maybeSingle(),
-    admin.from("print_jobs").select("staff_items, created_at, status").eq("template_id", templateId).neq("status", "cancelled").order("created_at", { ascending: false }),
+    admin.from("print_jobs").select("staff_items, requested_at, status").eq("template_id", templateId).neq("status", "cancelled").order("requested_at", { ascending: false }),
   ]);
+  // never "everyone changed" because the queue couldn't be read
+  if (error) throw new Error(`Couldn't read what was printed before: ${error.message}`);
   if (!template) return new Set(people.map((p) => p.id));
   const [{ toSpec }, { templateKeys, labelValues, contentHash }, { parseStaffItems }] = await Promise.all([import("./data"), import("./content"), import("./jobs")]);
   const spec = toSpec(template);
