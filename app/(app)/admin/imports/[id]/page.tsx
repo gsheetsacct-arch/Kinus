@@ -77,6 +77,9 @@ function Tile({ label, value, tone }: { label: string; value: number; tone?: "wa
   );
 }
 
+// applying or undoing a big import (hundreds of campers) takes a while: up to a minute
+export const maxDuration = 60;
+
 export default async function ImportDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
   const { id } = await params;
