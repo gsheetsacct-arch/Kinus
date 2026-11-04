@@ -101,6 +101,63 @@ export async function createPrintJob(
   return { id: job.id, count: ids.length, copies };
 }
 
+/** One staff tag in a request: who, the division their tag is for, what it says, how many. */
+export type StaffItem = { name: string; division: string; values: Record<string, string>; copies: number };
+
+const parseStaffItems = (v: unknown): StaffItem[] =>
+  Array.isArray(v)
+    ? v
+        .filter((x): x is StaffItem => Boolean(x && typeof x === "object" && typeof (x as StaffItem).values === "object"))
+        .map((x) => ({ name: String(x.name ?? ""), division: String(x.division ?? ""), values: x.values ?? {}, copies: Math.min(10, Math.max(1, Math.round(Number(x.copies) || 1))) }))
+    : [];
+
+/**
+ * Staff tags as a request in the print queue (migration 0060): each person's tag as it reads
+ * now (or blank badges for a division), saved with the request, printed like a camper request.
+ */
+export async function createStaffPrintJob(
+  user: CurrentUser,
+  opts: { sessionId: string; templateId: string; items: StaffItem[]; note?: string | null; order?: PrintOrder },
+): Promise<{ id: string; count: number; tags: number }> {
+  const admin = createAdminClient();
+  const { data: template } = await admin.from("print_templates").select("*").eq("id", opts.templateId).single();
+  if (!template) throw new Error("That template no longer exists.");
+  if (forCampers(template)) throw new Error(`${template.name} is a camper tag, not a staff one.`);
+  if (!opts.items.length) throw new Error("Nobody to print for.");
+  const { data: job, error } = await admin
+    .from("print_jobs")
+    .insert({
+      session_id: opts.sessionId,
+      kind: template.kind,
+      template_id: template.id,
+      deliver_to: user.email,
+      requested_by: user.id,
+      status: "ready",
+      item_count: opts.items.length,
+      note: opts.note ?? null,
+      staff_items: opts.items,
+      ...(opts.order && opts.order !== "bunk" ? { print_order: opts.order } : {}),
+    } as never)
+    .select("id")
+    .single();
+  if (error) throw /staff_items/.test(error.message) ? new Error("Staff tags in the queue need a database update first (migration 0060).") : error;
+  return { id: (job as { id: string }).id, count: opts.items.length, tags: opts.items.reduce((n, i) => n + i.copies, 0) };
+}
+
+/** A staff tag in a print set, shaped like a camper (to sort, count by division and print). */
+const staffAsCamper = (s: StaffItem & { id: string }) =>
+  ({
+    id: s.id,
+    first_name: s.values.FIRST ?? s.name,
+    last_name: s.values.LAST ?? "",
+    division_id: s.division ? `staff:${s.division}` : null,
+    division_name: s.division || null,
+    division_color: s.values.DIVISION_COLOR ?? null,
+    bunk_name: s.values.BUNK || null,
+    division_language: null,
+    staffValues: s.values,
+  }) as unknown as Awaited<ReturnType<typeof loadPrintCampers>>[number] & { staffValues: Record<string, string> };
+
 type PrintSet = Awaited<ReturnType<typeof loadPrintSet>>;
 
 /** The requests, their template and who's on them (camper → most copies asked), checked to print as one. */
@@ -122,7 +179,12 @@ async function loadRequests(jobIds: string[]) {
   const spec = toSpec(template as never);
   const copiesOf = new Map<string, number>();
   for (const i of items) copiesOf.set(i.camper_id, Math.max(copiesOf.get(i.camper_id) ?? 0, i.copies));
-  return { admin, jobs, spec, copiesOf, askedMoreThanOnce: items.length > copiesOf.size };
+  // staff tag requests (migration 0060): their people are saved with the request
+  const staffJobs = jobs.filter((j) => Array.isArray((j as { staff_items?: unknown }).staff_items));
+  if (staffJobs.length && staffJobs.length !== jobs.length) throw new Error("Staff tags and camper tags can't be printed together.");
+  const staff = staffJobs.length ? staffJobs.flatMap((j) => parseStaffItems((j as { staff_items?: unknown }).staff_items).map((s, i) => ({ ...s, id: `staff:${j.id}:${i}` }))) : null;
+  for (const s of staff ?? []) copiesOf.set(s.id, s.copies);
+  return { admin, jobs, spec, copiesOf, staff, askedMoreThanOnce: items.length > copiesOf.size && !staff };
 }
 
 /**
@@ -130,9 +192,9 @@ async function loadRequests(jobIds: string[]) {
  * two requests (a double tap, or two people asking) prints once, with the most copies asked.
  */
 async function loadPrintSet(jobIds: string[]) {
-  const { admin, jobs, spec, copiesOf, askedMoreThanOnce } = await loadRequests(jobIds);
+  const { admin, jobs, spec, copiesOf, askedMoreThanOnce, staff } = await loadRequests(jobIds);
   const [campers, setup, background, images, fontCss, art] = await Promise.all([
-    loadPrintCampers(admin, [...copiesOf.keys()]),
+    staff ? Promise.resolve(staff.map(staffAsCamper)) : loadPrintCampers(admin, [...copiesOf.keys()]),
     loadMergeSetup(admin),
     backgroundDataUrl(admin, spec.background_path),
     imageDataUrls(admin, spec.layers),
@@ -159,7 +221,8 @@ function itemsOf(set: PrintSet, opts: SetOpts) {
   const picked = opts.divisionId === undefined ? set.campers : set.campers.filter((c) => divisionOf(c as never) === opts.divisionId);
   // another order when asked (on the print page), else the one the request was made with
   const order = opts.order ?? set.order;
-  const values = new Map(picked.map((c) => [c.id, mergeValues(c, set.setup.fields, set.setup.maps)]));
+  // a staff tag says what it said when asked for; a camper's tag is filled now
+  const values = new Map(picked.map((c) => [c.id, (c as { staffValues?: Record<string, string> }).staffValues ?? mergeValues(c, set.setup.fields, set.setup.maps)]));
   // sorted by the names the tags print (a template's last name may read another export column
   // than the camper's last name in Kinus), falling back to Kinus' own: in a Hebrew or French
   // division (its language) the Hebrew name, elsewhere (and by last name across camp) the English
@@ -232,7 +295,7 @@ export async function printSetPdf(jobIds: string[], opts: SetOpts & { part?: num
 export async function printSetSummary(jobIds: string[]) {
   // only counts and divisions: not every camper's whole record, background or merge fields
   const req = await loadRequests(jobIds);
-  const campers = await loadPrintCampersBrief(req.admin, [...req.copiesOf.keys()]);
+  const campers = req.staff ? req.staff.map(staffAsCamper) : await loadPrintCampersBrief(req.admin, [...req.copiesOf.keys()]);
   campers.sort(byBunkThenName);
   const order = savedOrder(req.jobs);
   const set = { ...req, campers };

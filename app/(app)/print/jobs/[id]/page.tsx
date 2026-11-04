@@ -32,6 +32,9 @@ export default async function JobPage({ params, searchParams }: { params: Promis
   const items = await fetchAll((from, to) =>
     supabase.from("print_job_items").select("copies, campers(id, display_name, bunks(name))").eq("job_id", id).order("camper_id").range(from, to),
   );
+  // a staff tag request keeps its people with it (migration 0060)
+  const { data: staffRow } = await supabase.from("print_jobs").select("staff_items").eq("id", id).maybeSingle().then((r) => r, () => ({ data: null }));
+  const staff = ((staffRow as { staff_items?: { name: string; division: string; copies: number }[] | null } | null)?.staff_items ?? null) as { name: string; division: string; copies: number }[] | null;
   const st = JOB_STATUS[job.status] ?? { label: job.status, variant: "outline" as const };
   const template = (job.print_templates as { name: string } | null)?.name ?? "Deleted template";
   const requester = (job.requester as { full_name: string } | null)?.full_name ?? "someone";
@@ -65,6 +68,23 @@ export default async function JobPage({ params, searchParams }: { params: Promis
           <Section title="Actions">
             <JobActions id={job.id} status={job.status} pdf={Boolean(job.pdf_path)} deliverTo={job.deliver_to} />
           </Section>
+          {staff ? (
+            <Section title={`Staff (${staff.length})`} bodyClassName="p-0">
+              <ul className="max-h-80 divide-y overflow-y-auto text-sm">
+                {staff.map((p, i) => (
+                  <li key={i} className="flex justify-between gap-2 px-4 py-2">
+                    <span className="truncate" dir="auto">
+                      {p.name || "Blank badge"}
+                      {p.copies > 1 && <span className="text-muted-foreground"> × {p.copies}</span>}
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground" dir="auto">
+                      {p.division}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          ) : (
           <Section title={`Campers (${items.length})`} bodyClassName="p-0">
             <ul className="max-h-80 divide-y overflow-y-auto text-sm">
               {items.map((i) => {
@@ -83,6 +103,7 @@ export default async function JobPage({ params, searchParams }: { params: Promis
               })}
             </ul>
           </Section>
+          )}
         </div>
       </div>
     </div>

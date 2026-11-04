@@ -1,6 +1,9 @@
 "use client";
 import * as React from "react";
-import { Printer, Search } from "lucide-react";
+import { ListPlus, Printer, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { queueStaffTags } from "@/app/(app)/print/staff/actions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
@@ -28,6 +31,8 @@ export function StaffTags({ templates, people }: { templates: Template[]; people
   const [role, setRole] = React.useState("");
   const [q, setQ] = React.useState("");
   const [picked, setPicked] = React.useState<Set<string>>(() => new Set(people.map((p) => p.id)));
+  const router = useRouter();
+  const [queuing, startQueue] = React.useTransition();
   const roles = [...new Set(people.map((p) => p.role))];
   const needle = normalizeName(q);
   const shown = people.filter(
@@ -162,9 +167,28 @@ export function StaffTags({ templates, people }: { templates: Template[]; people
       {chosen.map((p) => (
         <input key={p.id} type="hidden" name="ids" value={p.id} />
       ))}
-      <Button type="submit" size="lg" disabled={!chosen.length || !templateId}>
-        <Printer /> Print {chosen.length * copies} {chosen.length * copies === 1 ? "tag" : "tags"}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" size="lg" disabled={!chosen.length || !templateId}>
+          <Printer /> Print {chosen.length * copies} {chosen.length * copies === 1 ? "tag" : "tags"}
+        </Button>
+        {/* or into the print queue, to print with the rest (as the tags read now) */}
+        <Button
+          type="button"
+          size="lg"
+          variant="outline"
+          disabled={!chosen.length || !templateId || queuing}
+          onClick={() =>
+            startQueue(async () => {
+              const r = await queueStaffTags({ templateId, ids: chosen.map((p) => p.id), copies, order });
+              if (!r.ok) return void toast.error(r.error);
+              toast.success(r.message);
+              if (r.redirect) router.push(r.redirect);
+            })
+          }
+        >
+          <ListPlus /> {queuing ? "Adding…" : "Add to the print queue"}
+        </Button>
+      </div>
       <p className="text-xs text-muted-foreground">Opens the tags in a new tab and brings up printing. Choose “Save as PDF” there to keep a file instead.</p>
     </form>
   );
@@ -176,12 +200,16 @@ export function StaffTags({ templates, people }: { templates: Template[]; people
  */
 export function BlankStaffTags({ templates, divisions }: { templates: Template[]; divisions: string[] }) {
   const [count, setCount] = React.useState(10);
+  const [templateId, setTemplateId] = React.useState(templates[0]?.id ?? "");
+  const [division, setDivision] = React.useState(divisions[0] ?? "");
+  const router = useRouter();
+  const [queuing, startQueue] = React.useTransition();
   return (
     <form method="post" action="/print/staff/sheet" target="_blank">
       <Section title="Blank badges" description="The design for a division, with no name: for staff who aren't on the list yet.">
-        <div className="grid gap-4 sm:grid-cols-[1fr_1fr_8rem_auto] sm:items-end">
+        <div className="grid gap-4 sm:grid-cols-[1fr_1fr_8rem] sm:items-end">
           <Field label="Template" htmlFor="blank-template">
-            <Select id="blank-template" name="template" defaultValue={templates[0]?.id}>
+            <Select id="blank-template" name="template" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
               {templates.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
@@ -190,7 +218,7 @@ export function BlankStaffTags({ templates, divisions }: { templates: Template[]
             </Select>
           </Field>
           <Field label="Division (its design)" htmlFor="blank-division">
-            <Select id="blank-division" name="blank_division" defaultValue={divisions[0]}>
+            <Select id="blank-division" name="blank_division" value={division} onChange={(e) => setDivision(e.target.value)}>
               {divisions.map((d) => (
                 <option key={d} value={d}>
                   {d}
@@ -201,8 +229,25 @@ export function BlankStaffTags({ templates, divisions }: { templates: Template[]
           <Field label="How many" htmlFor="blank-count">
             <Input id="blank-count" name="blank" type="number" min={1} max={300} value={count} onChange={(e) => setCount(Math.max(1, Math.min(300, Number(e.target.value) || 1)))} />
           </Field>
-          <Button type="submit" disabled={!templates.length || !divisions.length}>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button type="submit" disabled={!templateId || !division}>
             <Printer /> Print {count} blank
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!templateId || !division || queuing}
+            onClick={() =>
+              startQueue(async () => {
+                const r = await queueStaffTags({ templateId, blank: { count, division } });
+                if (!r.ok) return void toast.error(r.error);
+                toast.success(r.message);
+                if (r.redirect) router.push(r.redirect);
+              })
+            }
+          >
+            <ListPlus /> {queuing ? "Adding…" : "Add to the print queue"}
           </Button>
         </div>
       </Section>

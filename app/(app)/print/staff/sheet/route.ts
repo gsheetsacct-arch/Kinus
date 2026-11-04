@@ -5,8 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { toSpec } from "@/lib/print/data";
 import { parseOrder, sortStaff } from "@/lib/print/order";
 import { forCampers } from "@/lib/print/staff-values";
-import { staffInView, staffSheetHtml } from "@/lib/print/staff";
-import { staffValues } from "@/lib/print/staff-values";
+import { blankStaffValues, staffInView, staffSheetHtml } from "@/lib/print/staff";
 
 const PRINT_SCRIPT = `<script>(function w(){document.body.getAttribute("data-fitted")?setTimeout(function(){window.print()},200):setTimeout(w,100)})()</script>`;
 const HEADERS = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex" };
@@ -32,7 +31,7 @@ export async function POST(request: NextRequest) {
   const { data: t } = await createAdminClient().from("print_templates").select("*").eq("id", templateId).maybeSingle();
   if (!t || forCampers(t)) return new NextResponse("That isn't a staff template.", { status: 404 });
   if (blank && blankDivision) {
-    const values = staffValues({ name: "", role: "staff", title: null, phone: null, email: null, details: { "Division (name tag)": blankDivision }, places: [] }, () => "");
+    const values = blankStaffValues(blankDivision);
     const html = await staffSheetHtml(toSpec(t), Array.from({ length: blank }, () => ({ values, copies: 1 })));
     return new NextResponse(html.replace("</body>", `${PRINT_SCRIPT}</body>`), { headers: HEADERS });
   }
