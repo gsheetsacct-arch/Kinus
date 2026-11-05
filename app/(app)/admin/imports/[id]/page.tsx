@@ -87,9 +87,35 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
   const { data: imp } = await supabase.from("imports").select("*, profiles:uploaded_by(full_name)").eq("id", id).maybeSingle();
   if (!imp) notFound();
   if (imp.status === "uploaded") redirect(`/admin/imports/${id}/map`);
-  const rows = (await fetchAll((from, to) =>
-    supabase.from("import_rows").select("id, row_number, action, matched_camper_id, match_method, parsed, changes, warnings").eq("import_id", id).order("row_number").range(from, to),
-  )) as unknown as Row[];
+  // the file's columns, worked out when it was previewed; an older preview reads every row's export
+  const fileColumns = ((imp.summary ?? {}) as { fileColumns?: { present: string[]; filled: string[] } }).fileColumns;
+  // only what the page shows of each row (its whole export, every column, is big: read only when needed)
+  const [rows, extraFields, { data: mergeFields }, { data: latest }] = await Promise.all([
+    fetchAll((from, to) =>
+      supabase
+        .from("import_rows")
+        .select(
+          fileColumns
+            ? "id, row_number, action, matched_camper_id, match_method, changes, warnings, first_name:parsed->>first_name, last_name:parsed->>last_name, source_id:parsed->>source_id, division_name:parsed->>division_name, bunk_name:parsed->>bunk_name"
+            : "id, row_number, action, matched_camper_id, match_method, parsed, changes, warnings",
+        )
+        .eq("import_id", id)
+        .order("row_number")
+        .range(from, to),
+    ).then((list) =>
+      (list as unknown as (Row & { first_name?: string | null; last_name?: string | null; source_id?: string | null; division_name?: string | null; bunk_name?: string | null })[]).map((r) =>
+        fileColumns
+          ? ({
+              ...r,
+              parsed: [r.first_name, r.last_name, r.source_id].some((v) => v !== null && v !== undefined) ? ({ first_name: r.first_name ?? "", last_name: r.last_name ?? "", source_id: r.source_id ?? null, division_name: r.division_name ?? null, bunk_name: r.bunk_name ?? null } as unknown as ParsedCamper) : null,
+            } as Row)
+          : (r as Row),
+      ),
+    ),
+    loadExtraFields(),
+    supabase.from("merge_fields").select("label, source_field"),
+    supabase.from("imports").select("id").eq("session_id", imp.session_id).eq("status", "applied").order("applied_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
   const by = (a: string) => rows.filter((r) => r.action === a);
   const summary = (imp.summary ?? {}) as {
     missingList?: Candidate[];
@@ -107,7 +133,7 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
   const options = (imp.options ?? {}) as { partialWarning?: string[]; divisionsInFile?: string[]; lostTextOverride?: boolean; lostTextCells?: number; repeatedColumns?: string[]; fixedDivision?: string | null };
   // drafts previewed before export columns were listed change by change still say "refreshed"
   const columnsChange = summary.exportChanged === undefined ? (summary.columns?.campers ?? 0) : 0;
-  const extraLabels = new Map((await loadExtraFields()).map((f) => [f.column.trim().toLowerCase().replace(/#/g, "."), f.label]));
+  const extraLabels = new Map(extraFields.map((f) => [f.column.trim().toLowerCase().replace(/#/g, "."), f.label]));
   const label = (f: string) => {
     if (!f.startsWith("source.")) return fieldLabel(f);
     const col = f.slice(7);
@@ -125,7 +151,6 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
   const flagged = rows.filter((r) => notes(r).length > 0);
   const conflicts = by("conflict");
   const previewed = imp.status === "previewed";
-  const { data: latest } = await supabase.from("imports").select("id").eq("session_id", imp.session_id).eq("status", "applied").order("applied_at", { ascending: false }).limit(1).maybeSingle();
   const isLatest = latest?.id === imp.id;
   const candidateCampers = conflicts.length
     ? await fetchAll((from, to) =>
@@ -147,14 +172,14 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
   for (const r of by("update")) for (const c of r.changes) fieldMap.set(c.field, [...(fieldMap.get(c.field) ?? []), { r, c }]);
   const byField = [...fieldMap.entries()].sort((a, b) => b[1].length - a[1].length);
   // export columns the labels read ("source.ppa.yarmulka_size"): say when this file lacks one
-  const { data: mergeFields } = await supabase.from("merge_fields").select("label, source_field");
   const colKey = (k: string) => k.trim().toLowerCase().replace(/#/g, ".");
-  const withData = rows.filter((r) => r.parsed?.source_data);
-  const inFile = new Set(withData.flatMap((r) => Object.keys(r.parsed!.source_data ?? {}).map(colKey)));
-  const filled = (col: string) => withData.some((r) => Object.entries(r.parsed!.source_data ?? {}).some(([k, v]) => colKey(k) === col && String(v ?? "").trim() !== ""));
+  const withData = fileColumns ? [] : rows.filter((r) => r.parsed?.source_data);
+  const inFile = new Set(fileColumns ? fileColumns.present : withData.flatMap((r) => Object.keys(r.parsed!.source_data ?? {}).map(colKey)));
+  const filledSet = fileColumns ? new Set(fileColumns.filled) : null;
+  const filled = (col: string) => (filledSet ? filledSet.has(col) : withData.some((r) => Object.entries(r.parsed!.source_data ?? {}).some(([k, v]) => colKey(k) === col && String(v ?? "").trim() !== "")));
   const labelColumns = new Map<string, string[]>();
   for (const f of mergeFields ?? []) for (const m of f.source_field.matchAll(/source\.([^{}|\s]+)/g)) labelColumns.set(colKey(m[1]), [...(labelColumns.get(colKey(m[1])) ?? []), f.label]);
-  const columnGaps = withData.length
+  const columnGaps = inFile.size
     ? [...labelColumns.entries()].map(([col, used]) => ({ col, used: [...new Set(used)], state: !inFile.has(col) ? "missing" : filled(col) ? "ok" : "empty" })).filter((c) => c.state !== "ok")
     : [];
   const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;

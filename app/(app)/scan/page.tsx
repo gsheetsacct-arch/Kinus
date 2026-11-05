@@ -16,8 +16,8 @@ export const metadata = { title: "Check in" };
 export const maxDuration = 60;
 
 export default async function ScanPage() {
-  const user = await requireUser();
-  const session = await getActiveSession();
+  // everything that doesn't depend on something else is asked for at once (each wait is a round trip)
+  const [user, session, camp] = await Promise.all([requireUser(), getActiveSession(), getCampContext()]);
   if (!session) return <EmptyState icon={ScanLine} title="No active session" description="Camp hasn't been set up yet." action={<Button asChild><Link href="/">Home</Link></Button>} />;
   const supabase = await createClient();
   const [rows, tree, { data: templates }] = await Promise.all([
@@ -37,7 +37,6 @@ export default async function ScanPage() {
   });
   // the divisions this person checks in (more than one: they pick which line they're at)
   // (only the camp chosen at the top of the menu: American, Hebrew…)
-  const camp = await getCampContext();
   const present = new Set(rows.map((c) => c.division_id));
   const divisions = tree.divisions.filter((d) => present.has(d.id) && (!camp.divisionIds || camp.divisionIds.includes(d.id))).map((d) => ({ id: d.id, name: d.name, color: d.color }));
   return <Scanner roster={roster} templates={templates ?? []} canScan={LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan} divisions={divisions} printQueue={canUsePrintArea(user) || canPrintCheckin(user)} />;
