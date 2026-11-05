@@ -1,17 +1,22 @@
 import { logActivity } from "@/lib/audit/log";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { told } from "@/lib/print/download-signal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { visibleJob } from "@/lib/print/access";
 
 /** The emailed PDF, from storage. */
-export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const sp = request.nextUrl.searchParams;
+  // from a PDF button (dl=…): downloaded, and the button told when it starts
+  const fail = (text: string, status: number) => told(new NextResponse(text, { status }), sp, "err");
   const job = await visibleJob(id);
-  if (!job?.pdf_path) return new NextResponse("No PDF for this job. Use Print instead.", { status: 404 });
+  if (!job?.pdf_path) return fail("No PDF for this job. Use Print instead.", 404);
   const { data, error } = await createAdminClient().storage.from("print-output").download(job.pdf_path);
-  if (error || !data) return new NextResponse("The PDF couldn't be loaded.", { status: 502 });
+  if (error || !data) return fail("The PDF couldn't be loaded.", 502);
   await logActivity("download", { what: "Print request PDF", job: id });
-  return new NextResponse(Buffer.from(await data.arrayBuffer()), {
-    headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="kinus-${id.slice(0, 8)}.pdf"`, "Cache-Control": "private, no-store" },
+  const res = new NextResponse(Buffer.from(await data.arrayBuffer()), {
+    headers: { "Content-Type": "application/pdf", "Content-Disposition": `${sp.get("dl") ? "attachment" : "inline"}; filename="kinus-${id.slice(0, 8)}.pdf"`, "Cache-Control": "private, no-store" },
   });
+  return told(res, sp, "ok");
 }

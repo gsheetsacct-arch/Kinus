@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCheck, FileDown, Layers, Printer, RotateCcw, X } from "lucide-react";
+import { CheckCheck, Layers, Printer, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatWhen } from "@/lib/utils";
@@ -208,11 +208,7 @@ export function PrintQueue({
                   </Button>
                 )}
                 {j.pdf ? (
-                  <Button size="sm" variant="outline" asChild>
-                    <a href={`/print/jobs/${j.id}/pdf`} target="_blank" rel="noopener">
-                      <FileDown /> PDF
-                    </a>
-                  </Button>
+                  <PdfButton size="sm" href={`/print/jobs/${j.id}/pdf`} label="PDF" />
                 ) : (
                   // this request on its own, as a PDF (a big one in parts of PDF_PART labels)
                   j.status !== "cancelled" &&

@@ -35,7 +35,7 @@ Each person has a **role** (what they can do and which details they see) and **a
 |---|---|
 | Owner | Everything, everywhere. |
 | Director | Runs camp or part of it; over all of camp also imports, settings, templates. |
-| Division head | Runs a division: its campers, staff, check-in and its print queue. |
+| Division head | Runs a division: its campers, staff and check-in. Prints its divisions' label-printer labels (Print labels), as a check-in login does; the rest of the print queue is the office's. |
 | Kloli / Head counselor / Counselor | Their division's or bunk's campers. |
 | Office | The print queue and printing for their area. |
 | Logistics | Printing (bus tags, labels) and lists for their area. |

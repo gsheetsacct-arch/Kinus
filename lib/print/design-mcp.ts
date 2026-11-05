@@ -639,7 +639,7 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
     },
     async ({ template_id, camp, division, bunk, camper_codes, which, order, copies, purpose, deliver, email_to, dry_run, blank }) => {
       try {
-        if (!canUsePrintArea(user)) return problem(`${user.fullName} can't ask for prints (printing is for the office, directors and division heads).`);
+        if (!canUsePrintArea(user)) return problem(`${user.fullName} can't ask for prints (printing is for the office and directors).`);
         const session = await activeSession();
         if (!session) return problem("No active session.");
         const admin = createAdminClient();
@@ -744,7 +744,7 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
     },
     async ({ template_id, division, camp, names, everyone, which, blank_count, blank_division, copies, order, purpose, dry_run }) => {
       try {
-        if (!canUsePrintArea(user)) return problem(`${user.fullName} can't ask for prints (printing is for the office, directors and division heads).`);
+        if (!canUsePrintArea(user)) return problem(`${user.fullName} can't ask for prints (printing is for the office and directors).`);
         const session = await activeSession();
         if (!session) return problem("No active session.");
         const { staffInView, staffQueueItems, staffChangedSince } = await import("./staff");
