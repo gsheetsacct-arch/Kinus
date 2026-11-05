@@ -124,12 +124,30 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                 ))}
               </Select>
             </Field>
-            <Field label="Sort campers by" htmlFor="sort_field">
+            <Field label="Sort campers by" htmlFor="sort_field" hint="Any field, an export column or a combined column on the layout; campers with the same answer go by name.">
               <Select id="sort_field" name="sort_field" defaultValue={sortField}>
                 <option value="last_name">Last name</option>
                 <option value="first_name">First name</option>
-                <option value="grade">Grade</option>
-                <option value="camper_code">Camper code</option>
+                {combos.length > 0 && (
+                  <optgroup label="Combined columns">
+                    {combos.map((c) => (
+                      <option key={c.id} value={`combo:${c.id}`}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {byKind.map((k) => (
+                  <optgroup key={k.title} label={k.title}>
+                    {k.options
+                      .filter((o) => o.key !== "last_name" && o.key !== "first_name" && !o.key.startsWith("contact."))
+                      .map((o) => (
+                        <option key={o.key} value={o.key}>
+                          {o.label}
+                        </option>
+                      ))}
+                  </optgroup>
+                ))}
               </Select>
             </Field>
             <fieldset className="space-y-2 rounded-xl border p-3">
