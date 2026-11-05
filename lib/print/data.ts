@@ -159,7 +159,7 @@ import type { PrintOrder } from "./order";
 /** heb: sorted by the Hebrew name (a Hebrew or French division's camper who has one, lib/print/jobs). */
 type Sortable = { division_name: string | null; bunk_name: string | null; last_name: string; first_name: string; heb?: boolean };
 /** Last name, then first: in a Hebrew or French division those with a Hebrew name (א–ת) first, the rest after. */
-const byNameInPlace = (a: Sortable, b: Sortable) => Number(!a.heb) - Number(!b.heb) || a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name);
+const byNameInPlace = (a: Sortable, b: Sortable) => Number(!a.heb) - Number(!b.heb) || a.last_name.localeCompare(b.last_name, "he") || a.first_name.localeCompare(b.first_name, "he");
 export const byBunkThenName = (a: Sortable, b: Sortable) =>
   Number(!a.division_name) - Number(!b.division_name) ||
   compareDivisionNames(a.division_name ?? "", b.division_name ?? "") ||
@@ -167,7 +167,8 @@ export const byBunkThenName = (a: Sortable, b: Sortable) =>
   compareBunkNames(a.bunk_name ?? "", b.bunk_name ?? "") ||
   byNameInPlace(a, b);
 
-const byName = (a: Sortable, b: Sortable) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name);
+/** By last name: Hebrew names (a Hebrew or French division's, alef-beis) first, then the English ones A–Z. */
+const byName = (a: Sortable, b: Sortable) => Number(!a.heb) - Number(!b.heb) || a.last_name.localeCompare(b.last_name, "he") || a.first_name.localeCompare(b.first_name, "he");
 const byDivision = (a: Sortable, b: Sortable) => Number(!a.division_name) - Number(!b.division_name) || compareDivisionNames(a.division_name ?? "", b.division_name ?? "");
 /** The comparer for a print order. */
 export const sortFor = (order: PrintOrder) => (order === "name" ? byName : order === "division" ? (a: Sortable, b: Sortable) => byDivision(a, b) || byNameInPlace(a, b) : byBunkThenName);
