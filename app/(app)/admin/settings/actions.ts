@@ -42,13 +42,37 @@ export async function saveImportSettings(fd: FormData): Promise<ActionResult> {
   }
 }
 
+const timeOrNull = z
+  .string()
+  .trim()
+  .nullish()
+  .transform((v) => (v && /^\d{2}:\d{2}$/.test(v) ? v : null));
+const dateOrNull = z
+  .string()
+  .trim()
+  .nullish()
+  .transform((v) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null));
 const missingRules = z.object({
   percent: z.coerce.number().int().min(0).max(100),
-  after_time: z
+  after_time: timeOrNull,
+  after_date: dateOrNull,
+  // camps and divisions with their own rule ("camp:<id>" / "div:<id>")
+  overrides: z
     .string()
-    .trim()
     .optional()
-    .transform((v) => (v && /^\d{2}:\d{2}$/.test(v) ? v : null)),
+    .transform((v) => {
+      try {
+        return JSON.parse(v || "[]");
+      } catch {
+        return [];
+      }
+    })
+    .pipe(
+      z
+        .array(z.object({ key: z.string().regex(/^(camp|div):[0-9a-f-]{36}$/), percent: z.coerce.number().int().min(0).max(100), after_time: timeOrNull, after_date: dateOrNull }))
+        .max(100)
+        .transform((list) => list.filter((o, i) => list.findIndex((x) => x.key === o.key) === i)),
+    ),
 });
 
 /** When a camper who hasn't arrived gets flagged "check up on". */

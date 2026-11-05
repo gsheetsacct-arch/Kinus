@@ -16,6 +16,7 @@ import { resetAttendance, saveExtraFields, saveImportSettings, saveMissingRules,
 import { parseProtected, PROTECTABLE_FIELDS } from "@/lib/import/protected";
 import { FormDialog } from "@/components/form-dialog";
 import { ResetPicker, type ResetCamp } from "@/components/settings/reset-picker";
+import { MissingOverrides } from "@/components/settings/missing-overrides";
 import { isOwner } from "@/lib/auth/permissions";
 import { emailSetup } from "@/lib/print/email";
 import { loadExtraFields, loadHiddenColumns } from "@/lib/data/extra-fields";
@@ -51,7 +52,7 @@ export default async function SettingsPage() {
   const answers = session ? await extraAnswers(session.id, extraFields) : new Map();
   // the reset's picker: each camp and its divisions (a division with no camp is in the first), with how many campers
   let resetCamps: ResetCamp[] = [];
-  if (session && isOwner(me)) {
+  if (session) {
     const { createAdminClient } = await import("@/lib/supabase/admin");
     const { fetchAll } = await import("@/lib/supabase/fetch-all");
     const admin = createAdminClient();
@@ -99,9 +100,21 @@ export default async function SettingsPage() {
               <span className="text-sm text-muted-foreground">%</span>
             </div>
           </Field>
-          <Field label="Or flag everyone still missing after" htmlFor="after_time" hint={`${campZoneLabel()} time (camp time), whatever time zone a phone or the server is in. Leave empty to only use the percentage.`}>
-            <Input id="after_time" name="after_time" type="time" defaultValue={missing.after_time ?? ""} className="w-36" />
+          <Field
+            label="Or flag everyone still missing after"
+            htmlFor="after_time"
+            hint={`${campZoneLabel()} time (camp time). With a date, from that moment on; without one, that time once the first camper has arrived (and every day after). Leave both empty to only use the percentage.`}
+          >
+            <span className="flex flex-wrap items-center gap-2">
+              <Input id="after_date" name="after_date" type="date" defaultValue={missing.after_date ?? ""} className="w-40" aria-label="Cut-off date" />
+              <Input id="after_time" name="after_time" type="time" defaultValue={missing.after_time ?? ""} className="w-36" aria-label="Cut-off time" />
+            </span>
           </Field>
+          <div className="space-y-1.5 sm:col-span-2">
+            <p className="text-sm font-medium">Different for some camps or divisions</p>
+            <p className="text-xs text-muted-foreground">A camp or division that arrives on another day or time gets its own share and cut-off. A division&apos;s own rule wins over its camp&apos;s; everyone else follows the rule above.</p>
+            <MissingOverrides camps={resetCamps.map((c) => ({ id: c.id, name: c.name, divisions: c.divisions.map((d) => ({ id: d.id, name: d.name })) }))} initial={missing.overrides ?? []} defaults={{ percent: missing.percent }} />
+          </div>
           <div className="sm:col-span-2">
             <span className="flex items-center gap-3">
               <Button type="submit">Save</Button>

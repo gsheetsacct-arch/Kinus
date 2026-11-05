@@ -6,7 +6,7 @@ import { loadRoles } from "@/lib/data/roles";
 import { extraGroupOf, loadExtraFields, loadHiddenColumns } from "@/lib/data/extra-fields";
 import { groupOfKey } from "@/lib/fields";
 import { parseProtected, PROTECTABLE_FIELDS } from "@/lib/import/protected";
-import { DEFAULT_RULES, type MissingRules } from "@/lib/attendance/missing";
+import { DEFAULT_RULES, cutoffLabel, type MissingRules } from "@/lib/attendance/missing";
 import { presetById } from "@/lib/print/presets";
 import { loadDesigners } from "@/lib/print/designers";
 
@@ -97,7 +97,7 @@ export async function liveSetup(): Promise<string> {
   const threshold = (setting("import") as { missingThresholdPct?: number } | undefined)?.missingThresholdPct ?? 20;
   out.push(`### Settings\nOn **Settings**.\n`);
   out.push(`- **Office email**: ${office.to ? `${office.to}${office.cc?.length ? ` (copy to ${office.cc.join(", ")})` : ""}` : "not set: requests wait in the print queue"}. Asking for labels from a camper's card emails them only when "Email it to the office as a PDF" is ticked (off by default).`);
-  out.push(`- **Campers who haven't arrived** are flagged "check up" once ${rules.percent ? `${rules.percent}% of their division is here` : "(percentage off)"}${rules.after_time ? `, or after ${rules.after_time} camp time` : ""}.`);
+  out.push(`- **Campers who haven't arrived** are flagged "check up" once ${rules.percent ? `${rules.percent}% of their division is here` : "(percentage off)"}${rules.after_time || rules.after_date ? `, or after ${cutoffLabel(rules)} camp time` : ""}${rules.overrides?.length ? ` (${rules.overrides.length} camp or division ${rules.overrides.length === 1 ? "rule" : "rules"} of their own)` : ""}.`);
   out.push(`- **Protected columns** (change only from our corrected copy): ${[...guarded.fields.map(fieldName), ...guarded.columns.map((c) => `\`${c}\``)].join(", ") || "none"}.`);
   out.push(`- **A partial export**: an import that would mark more than ${threshold}% of a division missing warns first.`);
   return out.join("\n");

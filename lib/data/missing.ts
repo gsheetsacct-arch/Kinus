@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { CAMP_TIME_ZONE } from "@/lib/utils";
-import { DEFAULT_RULES, campClock, missingStates, type CampStart, type DivisionCount, type Followup, type MissingRules, type MissingState } from "@/lib/attendance/missing";
+import { DEFAULT_RULES, campNow, missingStates, rulesByDivision, type CampStart, type DivisionCount, type Followup, type MissingRules, type MissingState } from "@/lib/attendance/missing";
 import { campToday } from "@/lib/time";
 import type { BoardRow } from "./board";
 
@@ -46,9 +46,16 @@ export async function divisionCounts(sessionId: string, divisionIds: Iterable<st
   return out;
 }
 
-export async function loadRules(db: DB): Promise<MissingRules> {
+/** The rules, with each division's own (a camp's or division's override) worked out for this session. */
+export async function loadRules(db: DB, sessionId?: string): Promise<MissingRules> {
   const { data } = await db.from("settings").select("value").eq("key", "missing_rules").maybeSingle();
-  return { ...DEFAULT_RULES, ...((data?.value ?? {}) as Partial<MissingRules>) };
+  const rules: MissingRules = { ...DEFAULT_RULES, ...((data?.value ?? {}) as Partial<MissingRules>) };
+  if (!sessionId || !rules.overrides?.length) return rules;
+  const [{ data: divisions }, { data: groups }] = await Promise.all([
+    db.from("divisions").select("id, group_id").eq("session_id", sessionId),
+    db.from("division_groups").select("id").eq("session_id", sessionId).order("sort_order").order("name").limit(1),
+  ]);
+  return { ...rules, byDivision: rulesByDivision(rules.overrides, divisions ?? [], groups?.[0]?.id ?? null) };
 }
 
 /** Follow-ups (coming later, notes) for a session's campers the user can see. */
@@ -68,5 +75,5 @@ export function flagRows(
   counts?: Record<string, DivisionCount>,
   now = new Date(),
 ): Record<string, MissingState> {
-  return Object.fromEntries(missingStates(rows, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE), started, counts));
+  return Object.fromEntries(missingStates(rows, rules, new Map(Object.entries(followups)), now, campNow(now, CAMP_TIME_ZONE), started, counts));
 }

@@ -188,7 +188,7 @@ A scan shows the result over the picture. Scanning someone already checked in sa
 At the bottom, **the last 50 check-ins** (kept across reloads and sign-outs; on a division's check-in login, every phone's and login's at its divisions, with who, updated every 20 seconds): pull up to see them, **Undo** (your own, for 15 minutes, while it's still the camper's latest record; after that a director corrects it on the camper page), or open one to request labels.
 
 ### Who's here
-Every camper of a place, live: counts by status (here, out, expected, check up, coming later, gone home, not coming), search, sort, parent phones (if allowed). "Check up" flags campers still missing once enough of their division has arrived or after a time (**⚙ Setting**: Settings → Campers who haven't arrived; the current rule is in How it's set up now). Directors can change many at once.
+Every camper of a place, live: counts by status (here, out, expected, check up, coming later, gone home, not coming), search, sort, parent phones (if allowed). "Check up" flags campers still missing once enough of their division has arrived or after a cut-off (a time, or a date and time), for all of camp or with a camp or division of its own (**⚙ Setting**: Settings → Campers who haven't arrived; the current rule is in How it's set up now). Directors can change many at once.
 
 ### Final check-out
 Check-in logins can be given final check-out (Staff → check-in logins): every scan records "gone home" for any division of the camp, with progress per division.
@@ -303,7 +303,7 @@ Pick a **list** (a layout), a division and a bunk. **Filter by** any of the list
     body: `
 Everything here is a **⚙ Setting**; the current values are in How it's set up now.
 - **Who can see and do what**: opens Roles.
-- **Campers who haven't arrived**: when "check up" flags start (share of the division arrived, or a time).
+- **Campers who haven't arrived**: when "check up" flags start (share of the division arrived, or a cut-off date and time), and camps or divisions with a rule of their own.
 - **Extra fields from the export**: names, Show, who sees each, short answers, Hide (see Registration columns).
 - **Office email** (where emailed requests go), with a test email.
 - **Protected columns**: details our corrected copy may change (and later exports keep), e.g. cleaned medical notes.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { campClock, missingStates, type Followup } from "../missing";
+import { campClock, campNow, missingStates, rulesByDivision, type Followup } from "../missing";
 import type { CamperStatus } from "../machine";
 
 const bunk = (id: string, statuses: CamperStatus[], divisionId = `d-${id}`) => statuses.map((status, i) => ({ id: `${id}${i}`, divisionId, bunkId: id, status }));
@@ -72,5 +72,38 @@ describe("campStarted", () => {
     const rows = bunk("a", ["present", "expected"]);
     expect(missingStates(rows, rules, none, now, "08:00", true).get("a1")?.kind).toBe("waiting");
     expect(missingStates(rows, rules, none, now, "08:00", "earlier").get("a1")).toEqual({ kind: "check", reason: "Still not here since camp started" });
+  });
+
+  it("a dated cut-off: from that moment on, even before anyone arrived", () => {
+    const rows = bunk("a", ["expected", "expected"]);
+    const rules = { percent: 0, after_time: "10:30", after_date: "2026-11-03" };
+    expect(missingStates(rows, rules, none, now, "2026-11-03 10:29", false).get("a0")?.kind).toBe("waiting");
+    expect(missingStates(rows, rules, none, now, "2026-11-03 10:30", false).get("a0")).toEqual({ kind: "check", reason: "Still not here after Nov 3 10:30" });
+    expect(missingStates(rows, rules, none, now, "2026-11-04 08:00", true).get("a0")?.kind).toBe("check");
+    expect(missingStates(rows, rules, none, now, "2026-11-02 23:00", true).get("a0")?.kind).toBe("waiting");
+  });
+  it("a camp's or division's own rule: the division's beats its camp's, which beats the general one", () => {
+    const by = rulesByDivision(
+      [
+        { key: "camp:hebrew", percent: 0, after_time: "09:00", after_date: "2026-11-04" },
+        { key: "div:d-b", percent: 50, after_time: null, after_date: null },
+      ],
+      [
+        { id: "d-a", group_id: null },
+        { id: "d-b", group_id: "hebrew" },
+        { id: "d-c", group_id: "hebrew" },
+      ],
+      "american",
+    );
+    expect(by).toEqual({ "d-b": { percent: 50, after_time: null, after_date: null }, "d-c": { percent: 0, after_time: "09:00", after_date: "2026-11-04" } });
+    const rules = { percent: 90, after_time: null, after_date: null, byDivision: by };
+    const rows = [...bunk("a", ["present", "expected"]), ...bunk("b", ["present", "expected"]), ...bunk("c", ["expected"])];
+    const s = missingStates(rows, rules, none, now, "2026-11-04 09:30", true);
+    expect(s.get("a1")?.kind).toBe("waiting"); // the general 90%: half isn't enough
+    expect(s.get("b1")?.kind).toBe("check"); // its division: 50%
+    expect(s.get("c0")).toEqual({ kind: "check", reason: "Still not here after Nov 4 09:00" }); // its camp's dated cut-off
+  });
+  it("camp time now, with the day", () => {
+    expect(campNow(new Date("2026-11-05T03:05:00Z"), "America/New_York")).toBe("2026-11-04 22:05");
   });
 });
