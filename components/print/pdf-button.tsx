@@ -3,6 +3,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { FileDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { jobsPrinted } from "@/app/(app)/print/actions";
 
 export const phoneOf = () => {
   const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
@@ -18,46 +19,88 @@ const dropCookie = (name: string) => (document.cookie = `${name}=; path=/; max-a
 /**
  * Download a PDF: a plain link the browser downloads itself, on the tap (a download started
  * later, after fetching the file in the page, is quietly blocked by phone browsers). While the
- * PDF is being made it says so; the server tells it (a short cookie, see the combined PDF route)
- * when the download starts, or that it failed. On a phone it then says how to print it on the
- * label printer (NIIMBOT).
+ * PDF is being made it says so. With mark (request ids), the server marks them printed as it
+ * sends the PDF, and the button waits for that (asking the server): a phone that downloads in
+ * a view of its own (Kinus opened from the home screen) never passes the page the server's
+ * other word, a short cookie (see the combined PDF route), which is still read when it comes.
+ * On a phone it then says how to print it on the label printer (NIIMBOT).
  */
-export function PdfButton({ href, label, size = "lg", onDone }: { href: string; label: string; size?: "lg" | "default" | "sm"; onDone?: () => void }) {
+export function PdfButton({ href, label, size = "lg", onDone, mark }: { href: string; label: string; size?: "lg" | "default" | "sm"; onDone?: () => void; /** requests the server marks printed as it sends the PDF */ mark?: string[] }) {
   const [phone, setPhone] = React.useState<"android" | "ios" | null>(null);
   const [done, setDone] = React.useState(false);
   const [making, setMaking] = React.useState<string | null>(null);
   const [tok, setTok] = React.useState(token);
   React.useEffect(() => setPhone(phoneOf()), []);
-  // the latest onDone, without restarting the wait each time the page draws again
+  // the latest onDone and ids, without restarting the wait each time the page draws again
   const doneRef = React.useRef(onDone);
+  const markRef = React.useRef(mark);
   React.useEffect(() => {
     doneRef.current = onDone;
+    markRef.current = mark;
   });
   React.useEffect(() => setDone(false), [href]);
-  // waiting for the server's word that the download started (or failed); 3 minutes at most,
-  // and shown for a moment at least so a quick one is seen too
+  // waiting for the download: the server's cookie, or (marking) the requests marked printed, or
+  // (neither can be heard) the page coming back after the download took it away; 3 minutes at most
   React.useEffect(() => {
     if (!making) return;
     const name = `kdl_${making}`;
     const started = Date.now();
-    const t = setInterval(() => {
-      const v = readCookie(name);
-      if (!v && Date.now() - started < 180_000) return;
-      if (v && Date.now() - started < 1200) return;
-      clearInterval(t);
+    let left = false; // the page was hidden or lost focus (a download sheet, a separate view)
+    let finished = false;
+    const finish = (outcome: "ok" | "err" | "unknown") => {
+      if (finished) return;
+      finished = true;
       dropCookie(name);
       setMaking(null);
       setTok(token());
-      if (v === "err") toast.error("Couldn't make the PDF. Try again, or print from the page.");
-      else if (v === "ok") {
+      if (outcome === "err") toast.error("Couldn't make the PDF. Try again, or print from the page.");
+      else if (outcome === "ok") {
         // the caller says what happens next (the queue's note); otherwise the phone steps here
         if (doneRef.current) doneRef.current();
         else if (phone) setDone(true);
+      } else if (phone && !doneRef.current) setDone(true);
+    };
+    const away = () => (left = true);
+    const back = () => {
+      // came back from the download: without a way to hear it (no marking), it's done
+      if (left && !markRef.current?.length) setTimeout(() => finish("unknown"), 1500);
+    };
+    const onVis = () => (document.visibilityState === "hidden" ? away() : back());
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("blur", away);
+    window.addEventListener("focus", back);
+    let asking = false;
+    const t = setInterval(() => {
+      const v = readCookie(name);
+      if (v && Date.now() - started >= 1200) return finish(v === "err" ? "err" : "ok");
+      if (Date.now() - started > 180_000) return finish("unknown");
+      // marking: ask the server whether they're printed now (every second or so)
+      const ids = markRef.current;
+      if (ids?.length && !asking && Date.now() - started >= 1200) {
+        asking = true;
+        jobsPrinted(ids)
+          .then((yes) => yes && finish("ok"))
+          .catch(() => undefined)
+          .finally(() => (asking = false));
       }
-    }, 300);
-    return () => clearInterval(t);
+    }, 1000);
+    return () => {
+      clearInterval(t);
+      // taken off the page while waiting (the queue read again, its requests now printed): the
+      // note still comes, once the server says they're printed
+      const ids = markRef.current;
+      if (!finished && ids?.length) {
+        finished = true;
+        jobsPrinted(ids)
+          .then((yes) => yes && doneRef.current?.())
+          .catch(() => undefined);
+      }
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("blur", away);
+      window.removeEventListener("focus", back);
+    };
   }, [making, phone]);
-  const url = `${href}${href.includes("?") ? "&" : "?"}dl=${tok}`;
+  const url = `${href}${href.includes("?") ? "&" : "?"}dl=${tok}${mark?.length ? "&mark=1" : ""}`;
   // the same link stays on the page while it loads (a link taken off the page as it's tapped
   // may not download on some phones); tapping it again meanwhile does nothing
   const link = (

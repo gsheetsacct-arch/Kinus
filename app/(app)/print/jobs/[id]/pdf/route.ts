@@ -18,5 +18,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const res = new NextResponse(Buffer.from(await data.arrayBuffer()), {
     headers: { "Content-Type": "application/pdf", "Content-Disposition": `${sp.get("dl") ? "attachment" : "inline"}; filename="kinus-${id.slice(0, 8)}.pdf"`, "Cache-Control": "private, no-store" },
   });
+  if (sp.get("mark") === "1") {
+    const { getCurrentUser } = await import("@/lib/auth/current-user");
+    const user = await getCurrentUser();
+    if (user) await (await import("@/lib/print/mark-printed")).markSentPrinted(user, [id]);
+  }
   return told(res, sp, "ok");
 }

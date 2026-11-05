@@ -33,6 +33,19 @@ export function useMarkDownloaded() {
   );
 }
 
+/** After a "Download PDF and mark printed" the server marked: the note, and the page read again. */
+export function useNoteMarked() {
+  const router = useRouter();
+  return React.useCallback(
+    (ids: string[]) => {
+      if (!ids.length) return;
+      set({ ids, at: Date.now() });
+      router.refresh();
+    },
+    [router],
+  );
+}
+
 /** The note at the top of the queue after a download (see useMarkDownloaded). */
 export function DownloadNote() {
   const router = useRouter();

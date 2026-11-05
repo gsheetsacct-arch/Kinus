@@ -2,7 +2,7 @@
 import * as React from "react";
 import type { WaitingSet } from "@/lib/print/queue";
 import { PdfButton } from "./pdf-button";
-import { useMarkDownloaded } from "./download-note";
+import { useMarkDownloaded, useNoteMarked } from "./download-note";
 
 /** Labels in one PDF (as COMBINED_PDF_PART in lib/print/jobs). */
 const PART = 400;
@@ -14,6 +14,7 @@ const PART = 400;
  */
 export function WaitingAll({ set, where, query }: { set: WaitingSet; where: string | null; query: string }) {
   const markDownloaded = useMarkDownloaded();
+  const noteMarked = useNoteMarked();
   const parts = Math.ceil(set.tags / PART);
   // in parts: marked printed once every part is downloaded
   const got = React.useRef(new Set<number>());
@@ -38,7 +39,8 @@ export function WaitingAll({ set, where, query }: { set: WaitingSet; where: stri
         </div>
         <div className="flex flex-wrap gap-2">
           {parts <= 1 ? (
-            <PdfButton href={`/print/combined/pdf?${query}`} label="Download PDF and mark printed" onDone={() => took(1)} />
+            // one PDF: the server marks its requests printed as it sends it
+            <PdfButton href={`/print/combined/pdf?${query}`} label="Download PDF and mark printed" mark={set.ids} onDone={() => noteMarked(set.ids)} />
           ) : (
             Array.from({ length: parts }, (_, i) => <PdfButton key={i} size="default" href={`/print/combined/pdf?${query}&part=${i + 1}`} label={`Download PDF ${i + 1} of ${parts}`} onDone={() => took(i + 1)} />)
           )}
