@@ -12,7 +12,7 @@ import { activeSession, allCamperValues, camperValues, longestPerField, previewD
 import type { PartFit } from "./pdf";
 import { renderPng } from "./chromium";
 import { renderDocument } from "./render";
-import { thermalLayers, thermalValues } from "./thermal";
+import { thermalLayers, thermalValues, turnsOnPage } from "./thermal";
 import type { Layer, TemplateSpec } from "./types";
 import { DESIGN_GUIDE } from "./design-guide";
 import { audienceOf, STAFF_FIELDS, type Audience } from "./staff-values";
@@ -352,7 +352,7 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
           label = r.label;
         }
         // the design as it stands (a thermal label's page turn is for the printer, not the picture)
-        const html = await previewDocument({ ...spec, sheet_layout: null, ...(spec.thermal && spec.page_width_mm > spec.page_height_mm ? { thermal: false, layers: thermalLayers(spec.layers) } : {}) }, [{ values: spec.thermal ? thermalItems(values) : values, copies: 1 }], { outlines: false });
+        const html = await previewDocument({ ...spec, sheet_layout: null, ...(turnsOnPage(spec) ? { thermal: false, layers: thermalLayers(spec.layers) } : {}) }, [{ values: spec.thermal ? thermalItems(values) : values, copies: 1 }], { outlines: false });
         const { images, fit } = await renderPng(html, { tags: spec.back ? 2 : 1, base: appUrl });
         return {
           content: [

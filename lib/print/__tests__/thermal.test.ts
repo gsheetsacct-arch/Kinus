@@ -37,6 +37,8 @@ describe("thermal printers: black and white only", () => {
   it("a label wider than tall goes on a page turned the way the printer feeds it", () => {
     expect(turnsOnPage({ thermal: true, sheet_layout: null, page_width_mm: 152.4, page_height_mm: 101.6 })).toBe(true);
     expect(turnsOnPage({ thermal: true, sheet_layout: null, page_width_mm: 101.6, page_height_mm: 152.4 })).toBe(false);
+    expect(turnsOnPage({ thermal: true, sheet_layout: null, page_width_mm: 50, page_height_mm: 80 })).toBe(true);
+    expect(turnsOnPage({ thermal: true, sheet_layout: null, page_width_mm: 38, page_height_mm: 38 })).toBe(false);
     expect(turnsOnPage({ thermal: false, sheet_layout: null, page_width_mm: 152.4, page_height_mm: 101.6 })).toBe(false);
     expect(turnsOnPage({ thermal: true, sheet_layout: { paper: "letter", cols: 1, rows: 2 }, page_width_mm: 152.4, page_height_mm: 101.6 })).toBe(false);
   });

@@ -187,7 +187,7 @@ export function renderDocument(
     }
     body = pages.join("");
   } else if (turnsOnPage(t)) {
-    // a label printer fed the narrow way (a 6″ × 4″ design on 4″ × 6″ labels): each page is the
+    // a label printer (a 6″ × 4″ design on 4″ × 6″ labels, 50 × 80 on 80 × 50): each page is the
     // label as the printer feeds it, with the design turned a quarter onto it
     const [w, h] = [t.page_width_mm, t.page_height_mm];
     pageCss = `@page{size:${h}mm ${w}mm;margin:0}.pg{position:relative;width:${h}mm;height:${w}mm;overflow:hidden;break-after:page}.pg>.tag{position:absolute;left:0;top:0;transform-origin:0 0;transform:translateX(${h}mm) rotate(90deg)}`;

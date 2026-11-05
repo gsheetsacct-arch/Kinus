@@ -227,7 +227,7 @@ Check-in logins can be given final check-out (Staff → check-in logins): every 
 ### The templates
 | Folder | Template | Paper | What's on it |
 |---|---|---|---|
-| Check-in labels (thermal 50×80) | Name Tag 50×80 | 50 × 80 mm thermal label, one per label | QR code, camper code, name (wraps when long), from, Bunk (Hebrew letters), division. Print button at check-in. |
+| Check-in labels (thermal 50×80) | Name Tag 50×80 | 50 × 80 mm thermal label, one per label; its PDF pages are 80 × 50, turned a quarter for the label printer | QR code, camper code, name (wraps when long), from, Bunk (Hebrew letters), division. Print button at check-in. |
 | Check-in labels (thermal 50×80) | Bag Label 50×80 fold | 50 × 80 mm thermal, folded in half round the bag handle | The same details twice: the top half upside down, so both faces read the right way once folded; fold marks at the middle. |
 | Name badges | Name Tag/Badge (and Hebrew, French), Virtual Kinus Badge | 110 × 142 mm badge, two-sided (flip on the long edge) | Division artwork behind (a picture per division), QR, code, name, from, bunk on both sides. |
 | Luggage tags | Luggage Tag (Colored Labels) | 1″ × 2⅝″ address labels, 30 per sheet (OnlineLabels OL875) | Last, first; from; Bunk (letters); division; bunk number large; code. **2 per camper.** |

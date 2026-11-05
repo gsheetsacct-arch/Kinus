@@ -42,7 +42,7 @@ export async function htmlToPdf(html: string, onFit?: (notes: FitNotes) => void,
           cut: [...document.querySelectorAll("[data-cut]")].map((el) => (el.textContent ?? "").trim()),
         })),
       );
-    // a 6″ × 4″ design on 4″ × 6″ labels: laid out as designed, each PDF page then turned a
+    // a label printer's label (6″ × 4″ on 4″ × 6″, 50 × 80 on 80 × 50): laid out as designed, each PDF page then turned a
     // quarter (the server's Chromium shrinks a page whose tag is turned with CSS to about 3/4)
     const turn = await page.$eval("body", (b) => b.getAttribute("data-turn")).catch(() => null);
     if (turn) {
