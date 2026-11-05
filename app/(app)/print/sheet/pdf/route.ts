@@ -3,6 +3,7 @@ import { parseOrder } from "@/lib/print/data";
 import { NextResponse, type NextRequest } from "next/server";
 import { printSetPdf } from "@/lib/print/jobs";
 import { visibleJobs } from "@/lib/print/access";
+import { told } from "@/lib/print/download-signal";
 
 export const maxDuration = 60;
 
@@ -14,8 +15,10 @@ export const maxDuration = 60;
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
   const ids = (sp.get("jobs") ?? "").split(",").filter(Boolean).slice(0, 300);
-  if (!ids.length) return new NextResponse("Nothing to print.", { status: 400 });
-  if (!(await visibleJobs(ids))) return new NextResponse("Not found", { status: 404 });
+  // a PDF button's dl=… hears whether it worked (download-signal)
+  const fail = (text: string, status: number) => told(new NextResponse(text, { status }), sp, "err");
+  if (!ids.length) return fail("Nothing to print.", 400);
+  if (!(await visibleJobs(ids))) return fail("Not found", 404);
   const division = sp.get("division");
   const used = sp.get("used");
   try {
@@ -30,7 +33,13 @@ export async function GET(request: NextRequest) {
     });
     if (!Number(sp.get("part"))) await logActivity("download", { what: `Labels PDF: ${r.fileName}`, jobs: ids, parts: r.parts });
     const ascii = r.fileName.replace(/[^\x20-\x7e]+/g, "_").replace(/"/g, "");
-    return new NextResponse(new Uint8Array(r.pdf), {
+    // "Download PDF and mark printed" (one part: the whole request): marked as it's sent
+    if (sp.get("mark") === "1" && r.parts === 1) {
+      const { getCurrentUser } = await import("@/lib/auth/current-user");
+      const user = await getCurrentUser();
+      if (user) await (await import("@/lib/print/mark-printed")).markSentPrinted(user, ids);
+    }
+    const res = new NextResponse(new Uint8Array(r.pdf), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(r.fileName)}`,
@@ -39,7 +48,9 @@ export async function GET(request: NextRequest) {
         "Cache-Control": "private, no-store",
       },
     });
+    return told(res, sp, "ok");
   } catch (e) {
-    return new NextResponse(e instanceof Error ? e.message : "Couldn't make the PDF.", { status: 400 });
+    console.error("Sheet labels PDF failed", e);
+    return fail(e instanceof Error ? e.message : "Couldn't make the PDF.", 400);
   }
 }

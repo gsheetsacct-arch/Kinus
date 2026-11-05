@@ -21,6 +21,8 @@ export type QueueJob = {
   count: number;
   /** labels it prints (each camper's copies added up) */
   labels: number;
+  /** on label sheets: how many parts its PDF comes in (from the print page's route); null otherwise */
+  sheetParts?: number | null;
   at: string;
   to: string;
   error: string | null;
@@ -233,7 +235,14 @@ export function PrintQueue({
                   j.status !== "cancelled" &&
                   j.status !== "queued" &&
                   j.status !== "rendering" &&
-                  (j.labels <= PDF_PART ? (
+                  (j.sheetParts ? (
+                    // label sheets (luggage tags, buzzer stickers…): the print page's PDF, whole sheets
+                    j.sheetParts === 1 ? (
+                      <PdfButton size="sm" href={`/print/sheet/pdf?jobs=${j.id}`} label={open ? "Download PDF and mark printed" : "PDF"} mark={open ? [j.id] : undefined} onDone={open ? () => noteMarked([j.id]) : undefined} />
+                    ) : (
+                      Array.from({ length: j.sheetParts }, (_, i) => <PdfButton key={i} size="sm" href={`/print/sheet/pdf?jobs=${j.id}&part=${i}`} label={`PDF ${i + 1} of ${j.sheetParts}`} />)
+                    )
+                  ) : j.labels <= PDF_PART ? (
                     <PdfButton size="sm" href={`/print/combined/pdf?jobs=${j.id}`} label={open ? "Download PDF and mark printed" : "PDF"} mark={open ? [j.id] : undefined} onDone={open ? () => noteMarked([j.id]) : undefined} />
                   ) : (
                     Array.from({ length: Math.ceil(j.labels / PDF_PART) }, (_, i) => (
