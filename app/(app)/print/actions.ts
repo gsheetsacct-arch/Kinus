@@ -34,7 +34,7 @@ const NOT_YOURS = "That's a request for campers outside your part of camp.";
 async function requirePrinter(opts: { checkin?: boolean } = {}) {
   const user = await requireUser();
   // a check-in login may mark its own check-in labels printed (visibleJobs keeps it to those)
-  if (!canUsePrintArea(user) && !(opts.checkin && canPrintCheckin(user))) throw new Error("Printing is for the office, directors and division heads.");
+  if (!canUsePrintArea(user) && !(opts.checkin && canPrintCheckin(user))) throw new Error("Printing is for the office and directors.");
   return user;
 }
 
@@ -356,7 +356,7 @@ export async function removeDesignLink(id: string): Promise<ActionResult> {
 /** Previews: people who print, and people who design. */
 async function requirePreviewer() {
   const user = await requireUser();
-  if (!canUsePrintArea(user) && !(await canDesign(user))) throw new Error("Printing is for the office, directors and division heads.");
+  if (!canUsePrintArea(user) && !(await canDesign(user))) throw new Error("Printing is for the office and directors.");
   return user;
 }
 

@@ -63,12 +63,14 @@ export function thermalValues(items: PrintItem[]): PrintItem[] {
 }
 
 /**
- * A label printer is fed the narrow way: a label wider than tall (6″ × 4″ as Kinus measures the
- * Zebra 4×6) goes on a page as tall as it is wide (4″ × 6″), turned a quarter, so the printer
- * gets a page exactly the size of its label.
+ * A label printer gets each label the way it takes it. A label wider than tall (6″ × 4″ as
+ * Kinus measures the Zebra 4×6) goes on a page as tall as it is wide (4″ × 6″), turned a
+ * quarter; so does a small one taller than wide (the 50 × 80 check-in labels, at most 60 mm
+ * wide), on a page as wide as it is tall (80 × 50). An upright 4″ × 6″ design stays as it is.
  */
+export const SMALL_LABEL_MM = 60;
 export const turnsOnPage = (t: Pick<TemplateSpec, "thermal" | "sheet_layout" | "page_width_mm" | "page_height_mm">) =>
-  Boolean(t.thermal) && !t.sheet_layout && t.page_width_mm > t.page_height_mm;
+  Boolean(t.thermal) && !t.sheet_layout && (t.page_width_mm > t.page_height_mm + 0.5 || (t.page_height_mm > t.page_width_mm + 0.5 && t.page_width_mm <= SMALL_LABEL_MM));
 
 /** Pictures and the background, for the page's CSS: grey, then pushed to black and white. */
 export const THERMAL_PICTURE_CSS = ".bg,.im{filter:grayscale(1) contrast(1.8)}";

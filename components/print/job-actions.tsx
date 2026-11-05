@@ -2,7 +2,8 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCheck, FileDown, Send } from "lucide-react";
+import { CheckCheck, Send } from "lucide-react";
+import { PdfButton } from "./pdf-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cancelJobs, markPrinted, resendJob } from "@/app/(app)/print/actions";
@@ -34,11 +35,7 @@ export function JobActions({ id, status, pdf, deliverTo }: { id: string; status:
           )
         )}
         {pdf && (
-          <Button variant="outline" asChild>
-            <a href={`/print/jobs/${id}/pdf`} target="_blank" rel="noopener">
-              <FileDown /> PDF
-            </a>
-          </Button>
+          <PdfButton size="default" href={`/print/jobs/${id}/pdf`} label="PDF" />
         )}
         {open && (
           <Button variant="ghost" className="text-destructive" disabled={pending} onClick={() => run(() => cancelJobs([id]))}>

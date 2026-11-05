@@ -24,9 +24,11 @@ export async function visibleJobs(ids: string[]): Promise<boolean> {
   const jobs = await inChunks(unique, (c) => supabase.from("print_jobs").select("id, requested_by").in("id", c)).catch(() => null);
   if (!jobs || jobs.length !== unique.length) return false;
   // a check-in login: only label-printer labels (and their campers in its divisions, below)
+  // (what they asked for themselves, from a camper's card, they open too)
   if (checkinOnly(user)) {
-    const made = await thermalJobIds(unique);
-    if (unique.some((id) => !made.has(id))) return false;
+    const notMine = jobs.filter((j) => j.requested_by !== user.id).map((j) => j.id);
+    const made = await thermalJobIds(notMine);
+    if (notMine.some((id) => !made.has(id))) return false;
   }
   if (seesAllCamp(user)) return true;
   const others = jobs.filter((j) => j.requested_by !== user.id).map((j) => j.id);
@@ -130,7 +132,7 @@ export async function jobIdsInDivisions(sessionId: string, divisionIds: string[]
   return inside;
 }
 
-/** A check-in login without the print area: sees only its divisions' label-printer labels. */
+/** A check-in login or division head (no print area): sees only their divisions' label-printer labels. */
 export const checkinOnly = (user: CurrentUser) => canPrintCheckin(user) && !canUsePrintArea(user);
 
 /** What a request made by itself at a first check-in says about itself (scan/actions). */

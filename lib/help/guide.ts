@@ -35,7 +35,7 @@ Each person has a **role** (what they can do and which details they see) and **a
 |---|---|
 | Owner | Everything, everywhere. |
 | Director | Runs camp or part of it; over all of camp also imports, settings, templates. |
-| Division head | Runs a division: its campers, staff, check-in and its print queue. |
+| Division head | Runs a division: its campers, staff and check-in. Prints its divisions' label-printer labels (Print labels), as a check-in login does; the rest of the print queue is the office's. |
 | Kloli / Head counselor / Counselor | Their division's or bunk's campers. |
 | Office | The print queue and printing for their area. |
 | Logistics | Printing (bus tags, labels) and lists for their area. |
@@ -227,7 +227,7 @@ Check-in logins can be given final check-out (Staff → check-in logins): every 
 ### The templates
 | Folder | Template | Paper | What's on it |
 |---|---|---|---|
-| Check-in labels (thermal 50×80) | Name Tag 50×80 | 50 × 80 mm thermal label, one per label | QR code, camper code, name (wraps when long), from, Bunk (Hebrew letters), division. Print button at check-in. |
+| Check-in labels (thermal 50×80) | Name Tag 50×80 | 50 × 80 mm thermal label, one per label; its PDF pages are 80 × 50, turned a quarter for the label printer | QR code, camper code, name (wraps when long), from, Bunk (Hebrew letters), division. Print button at check-in. |
 | Check-in labels (thermal 50×80) | Bag Label 50×80 fold | 50 × 80 mm thermal, folded in half round the bag handle | The same details twice: the top half upside down, so both faces read the right way once folded; fold marks at the middle. |
 | Name badges | Name Tag/Badge (and Hebrew, French), Virtual Kinus Badge | 110 × 142 mm badge, two-sided (flip on the long edge) | Division artwork behind (a picture per division), QR, code, name, from, bunk on both sides. |
 | Luggage tags | Luggage Tag (Colored Labels) | 1″ × 2⅝″ address labels, 30 per sheet (OnlineLabels OL875) | Last, first; from; Bunk (letters); division; bunk number large; code. **2 per camper.** |

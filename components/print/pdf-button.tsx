@@ -29,7 +29,8 @@ export function PdfButton({ href, label, size = "lg", onDone }: { href: string; 
   const [tok, setTok] = React.useState(token);
   React.useEffect(() => setPhone(phoneOf()), []);
   React.useEffect(() => setDone(false), [href]);
-  // waiting for the server's word that the download started (or failed); 3 minutes at most
+  // waiting for the server's word that the download started (or failed); 3 minutes at most,
+  // and shown for a moment at least so a quick one is seen too
   React.useEffect(() => {
     if (!making) return;
     const name = `kdl_${making}`;
@@ -37,6 +38,7 @@ export function PdfButton({ href, label, size = "lg", onDone }: { href: string; 
     const t = setInterval(() => {
       const v = readCookie(name);
       if (!v && Date.now() - started < 180_000) return;
+      if (v && Date.now() - started < 1200) return;
       clearInterval(t);
       dropCookie(name);
       setMaking(null);
@@ -46,20 +48,34 @@ export function PdfButton({ href, label, size = "lg", onDone }: { href: string; 
         onDone?.();
         if (phone) setDone(true);
       }
-    }, 400);
+    }, 300);
     return () => clearInterval(t);
   }, [making, phone, onDone]);
   const url = `${href}${href.includes("?") ? "&" : "?"}dl=${tok}`;
-  if (making)
-    return (
-      <Button size={size} variant="outline" disabled>
-        <Loader2 className="animate-spin" /> Making the PDF…
-      </Button>
-    );
+  // the same link stays on the page while it loads (a link taken off the page as it's tapped
+  // may not download on some phones); tapping it again meanwhile does nothing
   const link = (
     <Button size={size} variant="outline" asChild>
-      <a href={url} download onClick={() => setMaking(tok)}>
-        <FileDown /> {label}
+      <a
+        href={url}
+        download
+        aria-disabled={making ? true : undefined}
+        className={making ? "pointer-events-none opacity-80" : undefined}
+        onClick={(e) => {
+          if (making) return void e.preventDefault();
+          setDone(false);
+          setMaking(tok);
+        }}
+      >
+        {making ? (
+          <>
+            <Loader2 className="animate-spin" /> Making the PDF…
+          </>
+        ) : (
+          <>
+            <FileDown /> {label}
+          </>
+        )}
       </a>
     </Button>
   );
@@ -67,9 +83,7 @@ export function PdfButton({ href, label, size = "lg", onDone }: { href: string; 
   return (
     <span className="flex flex-col gap-1.5">
       <AfterDownload phone={phone} />
-      <a href={url} download onClick={() => { setDone(false); setMaking(tok); }} className="self-start text-xs text-muted-foreground underline">
-        Download again
-      </a>
+      <span className="self-start">{link}</span>
     </span>
   );
 }

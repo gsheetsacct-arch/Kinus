@@ -16,7 +16,9 @@ describe("labels printed as sets", () => {
   it("puts each camper's labels one after another, the bottom half upside down", () => {
     const v = (FIRST: string) => ({ FIRST, LAST: "Cohen", BARCODE: "KN0001" });
     const html = renderCombined([{ spec: tag }, { spec: bag }], [{ part: 0, values: v("Ari"), copies: 1 }, { part: 1, values: v("Ari"), copies: 1 }, { part: 0, values: v("Ben"), copies: 1 }, { part: 1, values: v("Ben"), copies: 1 }]);
-    expect(html).toContain("@page{size:50mm 80mm");
+    // the check-in labels go to the label printer turned a quarter: 80 × 50 pages
+    expect(html).toContain("@page{size:80mm 50mm");
+    expect(html).toContain(`data-turn="50x80"`);
     expect(html.match(/class="tag"/g)?.length).toBe(4);
     expect(html.indexOf(">Ari Cohen<")).toBeLessThan(html.indexOf(">Ben Cohen<"));
     expect(html).toContain("rotate(180deg)");

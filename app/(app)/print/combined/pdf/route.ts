@@ -4,18 +4,9 @@ import { parseOrder } from "@/lib/print/data";
 import { combinedSetPdf } from "@/lib/print/jobs";
 import { visibleJobs } from "@/lib/print/access";
 import { waitingIds } from "@/lib/print/waiting-ids";
+import { told } from "@/lib/print/download-signal";
 
 export const maxDuration = 60;
-
-/**
- * Tells the page that asked (PdfButton) the download has started, or failed: a short cookie
- * named after its token. A plain download link has no other way to know.
- */
-function told(res: NextResponse, sp: URLSearchParams, outcome: "ok" | "err") {
-  const token = sp.get("dl");
-  if (token && /^[a-z0-9]{6,24}$/.test(token)) res.cookies.set(`kdl_${token}`, outcome, { path: "/", maxAge: 120, sameSite: "lax" });
-  return res;
-}
 
 /** A combined set (see /print/combined) as a PDF to download. */
 export async function GET(request: NextRequest) {

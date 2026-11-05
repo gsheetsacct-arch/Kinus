@@ -77,7 +77,9 @@ Zebra, Rollo and other thermal printers print black only: a colour or grey comes
 black and pictures black and white; preview_template shows it so. Design for it: black text, solid
 black bands with white text, no pale tints. The Zebra 4×6 (list_label_stock "4×6") is 101.6 mm
 wide and 152.4 mm tall as it comes out of the printer: design it that way up (or 152.4 × 101.6 and
-Kinus turns each label onto a 4″ × 6″ page). A QR code of {{BARCODE}} at least 25 mm wide scans
+Kinus turns each label onto a 4″ × 6″ page). A small upright thermal label (at most 60 mm wide,
+like the 50 × 80 check-in labels) goes on a page turned a quarter (80 × 50), as that printer takes it.
+A QR code of {{BARCODE}} at least 25 mm wide scans
 well on a 203 dpi printer.
 
 ## Fonts and colours
