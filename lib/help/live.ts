@@ -7,6 +7,7 @@ import { extraGroupOf, loadExtraFields, loadHiddenColumns } from "@/lib/data/ext
 import { groupOfKey } from "@/lib/fields";
 import { parseProtected, PROTECTABLE_FIELDS } from "@/lib/import/protected";
 import { DEFAULT_RULES, cutoffLabel, type MissingRules } from "@/lib/attendance/missing";
+import { nameTagsOnlyRule } from "@/lib/print/name-tags-only";
 import { presetById } from "@/lib/print/presets";
 import { loadDesigners } from "@/lib/print/designers";
 
@@ -28,7 +29,7 @@ export async function liveSetup(): Promise<string> {
     loadExtraFields(),
     loadHiddenColumns(),
     admin.from("print_templates").select("*").not("name", "like", "(retired)%").order("sort_order").order("name"),
-    admin.from("settings").select("key, value").in("key", ["office_email", "missing_rules", "protected_columns", "import"]),
+    admin.from("settings").select("key, value").in("key", ["office_email", "missing_rules", "protected_columns", "import", "name_tag_only_camps"]),
     loadDesigners(),
   ]);
   const setting = (k: string) => settingsRows?.find((r) => r.key === k)?.value;
@@ -100,5 +101,8 @@ export async function liveSetup(): Promise<string> {
   out.push(`- **Campers who haven't arrived** are flagged "check up" once ${rules.percent ? `${rules.percent}% of their division is here` : "(percentage off)"}${rules.after_time || rules.after_date ? `, or after ${cutoffLabel(rules)} camp time` : ""}${rules.overrides?.length ? ` (${rules.overrides.length} camp or division ${rules.overrides.length === 1 ? "rule" : "rules"} of their own)` : ""}.`);
   out.push(`- **Protected columns** (change only from our corrected copy): ${[...guarded.fields.map(fieldName), ...guarded.columns.map((c) => `\`${c}\``)].join(", ") || "none"}.`);
   out.push(`- **A partial export**: an import that would mark more than ${threshold}% of a division missing warns first.`);
+  const tagsOnly = nameTagsOnlyRule(setting("name_tag_only_camps"));
+  const campNames = (groups ?? []).map((g) => g.name);
+  out.push(`- **Camps that get name tags only** (no other printing, buzzer numbers or continuing numbers): ${campNames.filter(tagsOnly).join(", ") || "none"}${setting("name_tag_only_camps") === undefined ? " (never saved: the Thursday camps and Virtual by default)" : ""}.`);
   return out.join("\n");
 }
