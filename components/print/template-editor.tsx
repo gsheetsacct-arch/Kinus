@@ -1640,7 +1640,9 @@ export function TemplateEditor({
                   <p className="text-xs text-muted-foreground">
                     {t.camps?.length
                       ? `Offered and printed only for ${t.camps.join(" and ")}: in Print a batch, on camper cards and at first check-in.`
-                      : "None ticked: every camp."}
+                      : t.kind === "name_tag"
+                        ? "None ticked: every camp."
+                        : "None ticked: every camp but those that get name tags only (Settings), since this isn't a Name tag kind."}
                   </p>
                 </fieldset>
               )}

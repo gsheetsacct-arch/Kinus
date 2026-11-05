@@ -169,7 +169,7 @@ A division's language is a **⚙ Setting** on **Divisions & bunks** (English, He
 
 **Buzzer numbers** are given in this order: division by name (1, 2, 3, then A–Z), then bunk (in Alef-Beis order), then last name. The Thursday Program's second records get none (the camper has theirs on their regular record), nor do camps that get name tags only.
 
-**Camps that get name tags only** ⚙ Setting (Settings → Camps that get name tags only): a tick per camp, kept by camp name so it carries over to next session's camps. A ticked camp (the Thursday Program's camps and Virtual, until changed) gets its name tags (name-tag templates) and nothing else: no luggage tags, packing labels, buzzers or other printing (not in a batch, on the camper card, on Updates or on first check-in), no buzzer numbers, and its bunks and divisions don't move the continuing bunk and staff numbers. A template set to print for that camp by name still does.
+**Camps that get name tags only** ⚙ Setting (Settings → Camps that get name tags only): a tick per camp, kept by camp name so it carries over to next session's camps. A ticked camp (the Thursday Program's camps and Virtual, until changed) gets its name tags and nothing else: no luggage tags, packing labels, buzzers or other printing (not in a batch, on the camper card, on Updates or on first check-in), no buzzer numbers, and its bunks and divisions don't move the continuing bunk and staff numbers. What counts: a template that ticks that camp still prints for it (the badges tick their Thursday camps); a template that ticks no camp prints for it only when its Kind is Name tag (the Virtual badge), otherwise it leaves those camps out.
 `,
   },
   {
