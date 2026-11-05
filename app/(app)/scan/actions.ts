@@ -299,7 +299,7 @@ export async function lookupCode(code: string): Promise<CodeLookup> {
   return { found: false, message: division ? `Wrong line: this camper checks in with ${division}.` : "This camper has no division yet. Send them to the office." };
 }
 
-export type RecentScan = { eventId: string; camperId: string; name: string; verb: string; tone: "in" | "out" | "home" | "already"; at: string; undoable: boolean; undone: boolean };
+export type RecentScan = { eventId: string; camperId: string; name: string; verb: string; tone: "in" | "out" | "home" | "already"; at: string; undoable: boolean; undone: boolean; by: string | null };
 
 const RECENT_VERB: Partial<Record<AttendanceEventType, [string, RecentScan["tone"]]>> = {
   arrival: ["Checked in", "in"],
@@ -308,29 +308,38 @@ const RECENT_VERB: Partial<Record<AttendanceEventType, [string, RecentScan["tone
   pickup: ["Checked out · not coming back", "home"],
 };
 
+const RECENT_FIELDS = "id, camper_id, event_type, created_at, corrects_event_id, recorded_by, campers!inner(first_name, last_name, last_event_id, division_id), recorder:recorded_by(full_name, email)";
+
 /**
- * The last 50 check-ins and outs this person recorded today (the check-in page's list, kept
- * across reloads): each with whether it can still be undone (theirs, within 15 minutes, and
- * still the camper's latest record) or was undone.
+ * The check-in page's list, kept across reloads and sign-ins: the last 50 check-ins and outs
+ * today this person recorded and, on a division's check-in login, every one at its divisions
+ * (another phone's or another login's too, with who). Each says whether it can still be undone
+ * (theirs, within 15 minutes, and still the camper's latest record) or was undone.
  */
 export async function recentScans(): Promise<RecentScan[]> {
   const user = await requireUser();
   const supabase = await createClient();
   const since = new Date(Date.now() - 16 * 3600_000).toISOString();
-  const { data: events } = await supabase
-    .from("attendance_events")
-    .select("id, camper_id, event_type, created_at, corrects_event_id, campers(first_name, last_name, last_event_id)")
-    .eq("recorded_by", user.id)
-    .gte("created_at", since)
-    .order("created_at", { ascending: false })
-    .limit(80);
-  const undone = new Set((events ?? []).filter((e) => e.event_type === "correction" && e.corrects_event_id).map((e) => e.corrects_event_id!));
-  return (events ?? [])
+  const divisions = [...new Set(user.coverage.map((c) => c.division_id))];
+  const [{ data: mine }, { data: line }] = await Promise.all([
+    supabase.from("attendance_events").select(RECENT_FIELDS).eq("recorded_by", user.id).gte("created_at", since).order("created_at", { ascending: false }).limit(80),
+    user.checkinLogin && divisions.length
+      ? supabase.from("attendance_events").select(RECENT_FIELDS).in("campers.division_id", divisions).gte("created_at", since).order("created_at", { ascending: false }).limit(150)
+      : Promise.resolve({ data: [] as never[] }),
+  ]);
+  const seen = new Set<string>();
+  const events = [...(mine ?? []), ...(line ?? [])].filter((e) => !seen.has(e.id) && Boolean(seen.add(e.id))).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const undone = new Set(events.filter((e) => e.event_type === "correction" && e.corrects_event_id).map((e) => e.corrects_event_id!));
+  return events
     .filter((e) => RECENT_VERB[e.event_type as AttendanceEventType])
     .slice(0, 50)
     .map((e) => {
       const c = e.campers as { first_name: string; last_name: string; last_event_id: string | null } | null;
+      const r = e.recorder as { full_name: string | null; email: string | null } | null;
       const [verb, tone] = RECENT_VERB[e.event_type as AttendanceEventType]!;
+      const own = e.recorded_by === user.id;
+      // a check-in login shows by its name (gate-2), anyone else by theirs
+      const by = own || !r ? null : r.email?.startsWith("checkin.") ? r.email.slice(8, r.email.indexOf("@")) : r.full_name;
       return {
         eventId: e.id,
         camperId: e.camper_id,
@@ -338,8 +347,9 @@ export async function recentScans(): Promise<RecentScan[]> {
         verb,
         tone,
         at: e.created_at,
-        undoable: !undone.has(e.id) && c?.last_event_id === e.id && Date.now() - Date.parse(e.created_at) < 15 * 60_000,
+        undoable: own && !undone.has(e.id) && c?.last_event_id === e.id && Date.now() - Date.parse(e.created_at) < 15 * 60_000,
         undone: undone.has(e.id),
+        by,
       };
     });
 }

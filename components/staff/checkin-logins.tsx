@@ -2,7 +2,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Copy, DoorOpen, KeyRound, Plus, RefreshCw, ScanLine, Trash2 } from "lucide-react";
+import { Copy, DoorOpen, KeyRound, Plus, RefreshCw, ScanLine, Share2, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { checkinLoginProblem, checkinName, generatePassword } from "@/lib/staff/login-kinds";
@@ -288,6 +288,9 @@ export function CheckinLogins({ logins }: { logins: CheckinLoginRow[] }) {
                   </Button>
                 </div>
               ))}
+              <Button className="w-full" onClick={() => shareLogin(shown)}>
+                <Share2 /> Share the link and sign-in
+              </Button>
               <p className="text-xs text-muted-foreground">Tip: after signing in, add Kinus to the phone&apos;s home screen so it opens like an app.</p>
             </div>
           )}
@@ -295,4 +298,20 @@ export function CheckinLogins({ logins }: { logins: CheckinLoginRow[] }) {
       </Dialog>
     </section>
   );
+}
+
+/**
+ * Sends a check-in login to the person running the line: the sign-in link, the name and the
+ * password, through the phone's share sheet (WhatsApp, Messages…), or copied where there's none.
+ */
+function shareLogin(l: { division: string; username: string; password: string }) {
+  const url = `${window.location.origin}/login`;
+  const text = `Kinus check-in for ${l.division}\nOpen: ${url}\nCheck-in name: ${l.username}\nPassword: ${l.password}`;
+  const copy = () => navigator.clipboard?.writeText(text).then(() => toast.success("Copied the link, name and password. Paste them in a message."), () => toast.error("Couldn't copy. Read them out instead."));
+  if (typeof navigator.share === "function")
+    navigator.share({ title: `Kinus check-in: ${l.division}`, text }).catch((e: unknown) => {
+      // closing the share sheet isn't a problem; anything else: copy instead
+      if (!(e instanceof DOMException && e.name === "AbortError")) copy();
+    });
+  else copy();
 }
