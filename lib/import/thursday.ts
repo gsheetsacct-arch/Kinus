@@ -98,6 +98,7 @@ export function thursdayCopy(parsed: ParsedCamper, pick: { division: string; bun
     bunk_candidates: pick.bunk ? [thursdayBunk(pick.bunk)!] : [],
     contacts: parsed.contacts.map((c) => ({ ...c })),
     source_data: { ...parsed.source_data },
-    warnings: [`Thursday Program: a second record for Thursday (${pick.division}), next to their regular one.`],
+    // no note: every Thursday camper has this second record, so it isn't worth a look (it hid the rows that were)
+    warnings: [],
   };
 }
