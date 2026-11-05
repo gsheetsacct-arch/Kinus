@@ -28,7 +28,7 @@ export type CheckinLoginRow = {
  * can have as many as it needs (one per gate or per phone), each with its own name and
  * password. Head staff and directors check in with their own accounts.
  */
-export function CheckinLogins({ logins }: { logins: CheckinLoginRow[] }) {
+export function CheckinLogins({ logins, helper = false }: { logins: CheckinLoginRow[]; /** a check-in helper's own page: add and share logins only */ helper?: boolean }) {
   const [busy, setBusy] = React.useState<string | null>(null);
   const [shown, setShown] = React.useState<{ division: string; username: string; password: string } | null>(null);
   const [removing, setRemoving] = React.useState<CheckinAccount | null>(null);
@@ -93,11 +93,17 @@ export function CheckinLogins({ logins }: { logins: CheckinLoginRow[] }) {
         <h2 className="flex items-center gap-2 font-semibold">
           <ScanLine className="size-4 text-muted-foreground" /> Check-in logins
         </h2>
+        {helper ? (
+          <p className="text-sm text-muted-foreground">
+            Another phone at your check-in line? Add a login for it and share the link, name and password. To remove one or change its password, ask your division head.
+          </p>
+        ) : (
         <p className="text-sm text-muted-foreground">
           For the phones at a division&apos;s check-in line: they sign in with a check-in name and password. Add as many as you need, one per gate or per phone. Head staff and directors
           check in with their own accounts. <strong className="font-medium text-foreground">Final check-out</strong> on a login adds a page for going home at the end of camp, where it
           checks out every division of its camp (American, Hebrew…) at one place; everything else stays its own division.
         </p>
+        )}
       </div>
       <ul className="divide-y">
         {logins.map((l) => (
@@ -123,7 +129,7 @@ export function CheckinLogins({ logins }: { logins: CheckinLoginRow[] }) {
                       {!a.active && " · deactivated"}
                       {a.lastSignIn ? ` · last used ${formatDateTime(a.lastSignIn)}` : " · not used yet"}
                     </span>
-                    {(l.canGiveFinal || a.finalCheckout) && (
+                    {!helper && (l.canGiveFinal || a.finalCheckout) && (
                       <Button
                         size="sm"
                         variant={a.finalCheckout ? "default" : "outline"}
@@ -146,12 +152,16 @@ export function CheckinLogins({ logins }: { logins: CheckinLoginRow[] }) {
                         <DoorOpen /> Final check-out{a.finalCheckout ? ": on" : ""}
                       </Button>
                     )}
+                    {!helper && (
+                    <>
                     <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => setEditing({ division: l, account: a, name: a.name, password: "" })}>
                       <KeyRound /> {busy === a.id ? "Working…" : "New password"}
                     </Button>
                     <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive" disabled={busy !== null} onClick={() => setRemoving(a)} aria-label={`Remove ${a.name}`}>
                       <Trash2 />
                     </Button>
+                    </>
+                    )}
                   </li>
                 ))}
               </ul>
