@@ -12,7 +12,7 @@ import { matchScore, searchEntry } from "@/lib/search";
 import { findScanCode, looksLikeScan, type ScanMode } from "@/lib/attendance/scan";
 import type { CamperStatus } from "@/lib/attendance/machine";
 import { cn, formatTime } from "@/lib/utils";
-import { lookupCode, recentScans, rosterStatuses, scanCamper, undoScan } from "@/app/(app)/scan/actions";
+import { lookupCode, recentScansAndResets, rosterStatuses, scanCamper, undoScan } from "@/app/(app)/scan/actions";
 import { checkoutStatuses, finalCheckout, lookupCheckoutCode } from "@/app/(app)/checkout/actions";
 import { CamperCard, type TemplateButton } from "./camper-card";
 import { Camera } from "./camera";
@@ -59,7 +59,10 @@ export function Scanner({
   final,
   printQueue = false,
   campDivisionIds = null,
+  resets = {},
 }: {
+  /** When divisions' check-ins were reset (Settings): their Recent entries from before are dropped. */
+  resets?: Record<string, string>;
   /** The camp chosen at the top of the menu: its divisions (null: every camp). The recent list shows only its campers. */
   campDivisionIds?: string[] | null;
   /** This person uses the print queue: a quick way there (their line's labels). */
@@ -316,6 +319,17 @@ export function Scanner({
   // list, and from the server this person's and, on a check-in login, its divisions' (other
   // phones too), refreshed every 20 seconds
   const rosterIds = React.useMemo(() => new Set(roster.map((r) => r.id)), [roster]);
+  // check-ins reset (Settings): what this list had from before is gone for those divisions
+  const rosterDiv = React.useMemo(() => new Map(roster.map((r) => [r.id, r.div])), [roster]);
+  const sinceReset = React.useCallback(
+    (list: Recent[], resetAt: Record<string, string>) =>
+      list.filter((r) => {
+        const d = rosterDiv.get(r.camperId);
+        const at = d ? resetAt[d] : undefined;
+        return !at || r.at > Date.parse(at);
+      }),
+    [rosterDiv],
+  );
   const [recentReady, setRecentReady] = React.useState(false);
   React.useEffect(() => {
     try {
@@ -323,7 +337,7 @@ export function Scanner({
       // only campers this page shows (another login on this phone may see other campers)
       const keep = Array.isArray(saved) ? saved.filter((r) => r && rosterIds.has(r.camperId) && Date.now() - r.at < RECENT_KEEP_MS) : [];
       // Undo comes back from the server, for the one who recorded it
-      if (keep.length) setRecent((cur) => mergeRecent(cur, keep.map((r) => ({ ...r, undoable: false }))));
+      if (keep.length) setRecent((cur) => sinceReset(mergeRecent(cur, keep.map((r) => ({ ...r, undoable: false }))), resets));
     } catch {}
     setRecentReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -339,12 +353,15 @@ export function Scanner({
   }, [recent, recentReady, rosterIds]);
   React.useEffect(() => {
     const load = () =>
-      recentScans()
-        .then((list) =>
+      recentScansAndResets()
+        .then(({ scans: list, resets: resetAt }) =>
           setRecent((cur) =>
-            mergeRecent(
-              cur,
-              list.map((r) => ({ key: r.eventId, camperId: r.camperId, name: hebOf.get(r.camperId) ?? r.name, verb: r.verb, tone: r.tone, eventId: r.eventId, at: Date.parse(r.at), undone: r.undone, undoable: r.undoable, by: r.by })),
+            sinceReset(
+              mergeRecent(
+                cur,
+                list.map((r) => ({ key: r.eventId, camperId: r.camperId, name: hebOf.get(r.camperId) ?? r.name, verb: r.verb, tone: r.tone, eventId: r.eventId, at: Date.parse(r.at), undone: r.undone, undoable: r.undoable, by: r.by })),
+              ),
+              resetAt,
             ),
           ),
         )
@@ -352,7 +369,7 @@ export function Scanner({
     load();
     const t = setInterval(() => document.visibilityState === "visible" && load(), 20000);
     return () => clearInterval(t);
-  }, [hebOf]);
+  }, [hebOf, sinceReset]);
 
   // the page is the camera: it fills the space between the app's bars and doesn't scroll
   const frame = useFullFrame();

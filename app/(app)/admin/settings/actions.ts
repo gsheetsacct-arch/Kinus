@@ -250,6 +250,14 @@ export async function resetAttendance(fd: FormData): Promise<ActionResult> {
       const followups = await admin.from("camper_followups").delete().in("camper_id", chunk);
       if (followups.error) throw followups.error;
     }
+    // when each division was reset: check-in pages clear their Recent list for it (kept 3 days)
+    const { data: before } = await admin.from("settings").select("value").eq("key", "checkin_resets").maybeSingle();
+    const now = new Date().toISOString();
+    const resets = Object.fromEntries(
+      Object.entries({ ...((before?.value ?? {}) as Record<string, string>), ...Object.fromEntries(picked.map((d) => [d, now])) }).filter(([, at]) => Date.now() - Date.parse(at) < 3 * 86400_000),
+    );
+    const saved = await admin.from("settings").upsert({ key: "checkin_resets", value: resets, updated_by: me.id, updated_at: now });
+    if (saved.error) throw saved.error;
     for (const p of ["/", "/status", "/scan", "/campers", "/checkout"]) revalidatePath(p);
     const where = divs.length <= 3 ? divs.map((d) => d.name).join(", ") : `${divs.length} divisions`;
     return ok(`Check-ins reset for ${where}: ${removed.toLocaleString("en-US")} check-ins and check-outs removed, and their ${ids.length.toLocaleString("en-US")} campers are not here yet.`);
