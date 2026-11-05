@@ -15,6 +15,7 @@ import { camperCampName, forCamp, loadNameTagsOnly, templateCamps } from "@/lib/
 import { canUsePrintArea } from "@/lib/auth/permissions";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { formatWhen } from "@/lib/utils";
+import { getCampContext } from "@/lib/data/camp";
 import { forCampers } from "@/lib/print/staff-values";
 
 export type ScanOutcome =
@@ -64,16 +65,32 @@ async function autoPrintOnFirstArrival(camperId: string, sessionId: string): Pro
 }
 
 /** One scan or tap in Check in / Check out mode. */
+/**
+ * Check-in works only for the camp picked at the top of the menu (someone over several camps):
+ * a camper of another camp is refused, saying which camp they're in. "All camps": everyone.
+ */
+async function otherCamp(divisionId: string | null): Promise<string | null> {
+  const ctx = await getCampContext();
+  if (ctx.camps.length <= 1 || !ctx.current) return null;
+  if (divisionId && ctx.current.divisionIds.includes(divisionId)) return null;
+  const theirs = divisionId ? ctx.camps.find((c) => c.divisionIds.includes(divisionId))?.name : null;
+  return theirs
+    ? `In ${theirs}, not ${ctx.current.name}. Switch to ${theirs} at the top of the menu to check them in or out.`
+    : `Not in ${ctx.current.name}. Switch camp at the top of the menu to check them in or out.`;
+}
+
 export async function scanCamper(camperId: string, mode: "in" | "out", outKind: OutKind, method: "scan" | "manual"): Promise<ScanOutcome> {
   await requireUser();
   const supabase = await createClient();
-  const { data: c } = await supabase.from("campers_board").select("id, display_name, status, session_id, last_event_at, last_event_by, archived_at").eq("id", camperId).maybeSingle();
+  const { data: c } = await supabase.from("campers_board").select("id, display_name, status, session_id, division_id, last_event_at, last_event_by, archived_at").eq("id", camperId).maybeSingle();
   if (!c?.id) return { ok: false, error: "This camper isn't in your area." };
   // a gate page loaded before the office archived them still has them on its list
   if (c.archived_at) return { ok: false, error: "This camper was archived. Send them to the office." };
   // a page opened before the office switched to a new session still lists last session's campers
   const session = await getActiveSession();
   if (c.session_id !== session?.id) return { ok: false, error: "This page is from an earlier session. Reload it." };
+  const elsewhere = await otherCamp(c.division_id);
+  if (elsewhere) return { ok: false, error: elsewhere };
   // going home is recorded on Final check-out; the Check in page only checks out "coming back"
   if (outKind === "home") outKind = "back";
   const d = decide(mode, outKind, c.status!);
@@ -96,10 +113,12 @@ export async function scanCamper(camperId: string, mode: "in" | "out", outKind: 
 export async function recordFromCard(camperId: string, event: AttendanceEventType, note?: string): Promise<ScanOutcome> {
   const user = await requireUser();
   const supabase = await createClient();
-  const { data: c } = await supabase.from("campers_board").select("id, display_name, session_id, archived_at").eq("id", camperId).maybeSingle();
+  const { data: c } = await supabase.from("campers_board").select("id, display_name, session_id, division_id, archived_at").eq("id", camperId).maybeSingle();
   if (!c?.id) return { ok: false, error: "This camper isn't in your area." };
   if (c.archived_at) return { ok: false, error: "This camper is archived. Restore them from their page first." };
   if (c.session_id !== (await getActiveSession())?.id) return { ok: false, error: "This camper is from an earlier session." };
+  const elsewhere = await otherCamp(c.division_id);
+  if (elsewhere) return { ok: false, error: elsewhere };
   if (event === "pickup" && user.checkinLogin) return { ok: false, error: "Going home is recorded on Final check-out." };
   const verb = event === "arrival" ? "Checked in" : event === "return" ? "Back in" : event === "pickup" ? "Checked out · not coming back" : "Checked out · coming back";
   const tone = event === "pickup" ? "home" : event === "leave" ? "out" : "in";
