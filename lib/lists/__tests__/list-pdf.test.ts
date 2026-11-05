@@ -22,4 +22,9 @@ describe("list PDF", () => {
     expect(html).toContain("2 copies of each");
     expect(html).toContain("data-fitted");
   });
+  it("follows the layout's orientation", () => {
+    const o = { session: null, camp: null, by: "Office", copies: 1 };
+    expect(listHtml(list, o)).toContain("size:letter portrait");
+    expect(listHtml({ ...list, preset: { ...list.preset, orientation: "landscape" } } as BuiltList, o)).toContain("size:letter landscape");
+  });
 });

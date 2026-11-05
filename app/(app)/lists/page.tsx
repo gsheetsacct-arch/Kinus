@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { visibleDivisionIds, visibleFieldGroups } from "@/lib/auth/permissions";
 import { flagsFor, isFlag } from "@/lib/camper-flags";
-import { buildList, getPresetsFor, parseCopies } from "@/lib/data/lists";
+import { buildList, getPresetsFor, parseCopies, printsLandscape } from "@/lib/data/lists";
 import { PrintButton } from "./print-button";
 import { PdfButton } from "@/components/print/pdf-button";
 import { LIST_PAGE_MARGIN } from "@/lib/lists/list-pdf";
@@ -205,11 +205,11 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
         </noscript>
       </ListFilters>
       {!preset && <p className="text-sm text-muted-foreground">No list layouts are set up for your role yet. Ask an admin.</p>}
-      {/* wide lists (a division head's 20+ columns) print sideways and a little smaller */}
-      {/* a margin all round on paper (the browser's own is thin) */}
-      {list && list.columns.length <= 10 && <style>{`@media print { @page { margin: ${LIST_PAGE_MARGIN} } }`}</style>}
+      {/* the page as the layout says (upright, sideways, or sideways for wide lists), with a margin all round
+          (the browser's own is thin); wide lists (a division head's 20+ columns) a little smaller */}
+      {list && <style>{`@media print { @page { size: letter ${printsLandscape(list.preset.orientation, list.columns.length) ? "landscape" : "portrait"}; margin: ${LIST_PAGE_MARGIN} } }`}</style>}
       {list && list.columns.length > 10 && (
-        <style>{`@media print { @page { size: landscape; margin: ${LIST_PAGE_MARGIN} } .list-table { font-size: ${list.columns.length > 16 ? 6.5 : 8}pt; table-layout: fixed; width: 100% } .list-table th, .list-table td { padding-right: 3px; overflow-wrap: anywhere; } }`}</style>
+        <style>{`@media print { .list-table { font-size: ${list.columns.length > 16 ? 6.5 : 8}pt; table-layout: fixed; width: 100% } .list-table th, .list-table td { padding-right: 3px; overflow-wrap: anywhere; } }`}</style>
       )}
       {list && <ListGroups columns={list.columns} groups={list.groups} copies={copies} />}
     </div>
