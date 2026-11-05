@@ -83,18 +83,22 @@ export const scopedQueue = (user: import("@/lib/auth/permissions").CurrentUser) 
  * The requests of this session a division head sees: their own, and those whose campers are
  * all in their divisions (the labels from their division's check-in, whoever scanned them).
  */
-export async function myAreaJobIds(user: import("@/lib/auth/permissions").CurrentUser, sessionId: string): Promise<Set<string>> {
+export async function myAreaJobIds(user: import("@/lib/auth/permissions").CurrentUser, sessionId: string, statuses?: readonly string[]): Promise<Set<string>> {
   const { fetchAll } = await import("@/lib/supabase/fetch-all");
   const admin = createAdminClient();
-  const items = await fetchAll((from, to) =>
-    admin
+  // only the requests the page shows (still to print…): reading every item of the session, printed
+  // ones too, on each refresh of each open queue slowed the whole database
+  const items = await fetchAll((from, to) => {
+    let q = admin
       .from("print_job_items")
-      .select("job_id, camper_id, campers(division_id, bunk_id), print_jobs!inner(session_id, requested_by)")
-      .eq("print_jobs.session_id", sessionId)
+      .select("job_id, camper_id, campers(division_id, bunk_id), print_jobs!inner(session_id, requested_by, status)")
+      .eq("print_jobs.session_id", sessionId);
+    if (statuses) q = q.in("print_jobs.status", [...statuses] as never);
+    return q
       .order("job_id")
       .order("camper_id")
-      .range(from, to),
-  );
+      .range(from, to);
+  });
   const mine = new Set<string>();
   const outside = new Set<string>();
   for (const i of items) {
@@ -113,18 +117,20 @@ export async function myAreaJobIds(user: import("@/lib/auth/permissions").Curren
 }
 
 /** The requests of this session whose campers are all in these divisions (a check-in location, or a camp). */
-export async function jobIdsInDivisions(sessionId: string, divisionIds: string[]): Promise<Set<string>> {
+export async function jobIdsInDivisions(sessionId: string, divisionIds: string[], statuses?: readonly string[]): Promise<Set<string>> {
   const { fetchAll } = await import("@/lib/supabase/fetch-all");
   const wanted = new Set(divisionIds);
-  const items = await fetchAll((from, to) =>
-    createAdminClient()
+  const items = await fetchAll((from, to) => {
+    let q = createAdminClient()
       .from("print_job_items")
-      .select("job_id, camper_id, campers(division_id), print_jobs!inner(session_id)")
-      .eq("print_jobs.session_id", sessionId)
+      .select("job_id, camper_id, campers(division_id), print_jobs!inner(session_id, status)")
+      .eq("print_jobs.session_id", sessionId);
+    if (statuses) q = q.in("print_jobs.status", [...statuses] as never);
+    return q
       .order("job_id")
       .order("camper_id")
-      .range(from, to),
-  );
+      .range(from, to);
+  });
   const inside = new Set<string>();
   const outside = new Set<string>();
   for (const i of items) (wanted.has((i.campers as { division_id: string | null } | null)?.division_id ?? "") ? inside : outside).add(i.job_id);

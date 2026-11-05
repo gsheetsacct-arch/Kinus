@@ -60,10 +60,18 @@ export function PrintQueue({
   const [now, setNow] = React.useState<Date | null>(null);
   React.useEffect(() => setNow(new Date()), []);
 
-  // new requests arrive while the office has this open
+  // new requests arrive while the office has this open: every 30 seconds while it's on screen
+  // (not in a background tab or a phone's locked screen), and at once when it comes back
   React.useEffect(() => {
-    const t = setInterval(() => router.refresh(), 15000);
-    return () => clearInterval(t);
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") router.refresh();
+    }, 30000);
+    const back = () => document.visibilityState === "visible" && router.refresh();
+    document.addEventListener("visibilitychange", back);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", back);
+    };
   }, [router]);
 
   const run = (fn: () => Promise<{ ok: boolean; message?: string; error?: string }>) =>

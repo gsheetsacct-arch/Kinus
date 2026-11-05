@@ -11,11 +11,11 @@ export const TO_PRINT = ["queued", "rendering", "ready", "sent"] as const;
  * Which part of the print queue this person is looking at: someone over part of camp only
  * their divisions' requests (and their own); then the camp, or division, picked in the bars.
  */
-export async function queueScope(user: CurrentUser, sessionId: string, pick: { camp?: string | null; division?: string | null }) {
+export async function queueScope(user: CurrentUser, sessionId: string, pick: { camp?: string | null; division?: string | null }, statuses?: readonly string[]) {
   const scoped = scopedQueue(user);
   const admin = createAdminClient();
   const [mine, { data: divisionRows }, { data: groupRows }] = await Promise.all([
-    scoped ? myAreaJobIds(user, sessionId) : Promise.resolve(null),
+    scoped ? myAreaJobIds(user, sessionId, statuses) : Promise.resolve(null),
     admin.from("divisions").select("id, name, group_id").eq("session_id", sessionId).order("sort_order"),
     admin.from("division_groups").select("id, name").eq("session_id", sessionId).order("sort_order").order("name"),
   ]);
@@ -28,7 +28,7 @@ export async function queueScope(user: CurrentUser, sessionId: string, pick: { c
   const camp = camps.find((g) => g.id === (division ? campOf(division) : pick.camp)) ?? null;
   const campDivisions = camp ? divisions.filter((d) => campOf(d) === camp.id) : divisions;
   const only = division ? [division.id] : camp && camps.length > 1 ? campDivisions.map((d) => d.id) : null;
-  const inDivision = only ? await jobIdsInDivisions(sessionId, only) : null;
+  const inDivision = only ? await jobIdsInDivisions(sessionId, only, statuses) : null;
   const shows = (id: string) => (!mine || mine.has(id)) && (!inDivision || inDivision.has(id));
   return { scoped, mine, divisions, camps, camp, division, campDivisions, shows };
 }

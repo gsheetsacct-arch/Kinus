@@ -8,7 +8,7 @@ import { LabelUpdates } from "@/components/print/label-updates";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { canUsePrintArea } from "@/lib/auth/permissions";
-import { queueScope, waitingSets } from "@/lib/print/queue";
+import { TO_PRINT, queueScope, waitingSets } from "@/lib/print/queue";
 import { WaitingAll } from "@/components/print/waiting-all";
 import { DownloadNote } from "@/components/print/download-note";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -45,7 +45,9 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
   const base = await appUrl();
   await retryStuckJobs(session.id, base, (fn) => after(fn)).catch((e) => console.error("Retrying stuck print jobs failed", e));
   // someone over part of camp: only their divisions' requests (and their own), read with the server's key
-  const scope = await queueScope(user, session.id, { camp: sp.camp, division: sp.division });
+  // only the requests this view shows (and failed ones, for the Problems count)
+  const statuses = SHOW[show].statuses;
+  const scope = await queueScope(user, session.id, { camp: sp.camp, division: sp.division }, statuses ? [...statuses, "failed"] : undefined);
   const { scoped, mine, camps, camp, division, campDivisions } = scope;
   const supabase = scoped ? createAdminClient() : await createClient();
   let q = supabase
@@ -54,7 +56,6 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
     .eq("session_id", session.id)
     .order("requested_at", { ascending: false })
     .limit(mine || scope.division || scope.camp ? 1000 : 150);
-  const statuses = SHOW[show].statuses;
   if (statuses) q = q.in("status", [...statuses]);
   const [{ data: all }, office, { data: failed }, sets] = await Promise.all([
     q,
@@ -140,7 +141,7 @@ function Bar({ items }: { items: { href: string; label: string; on: boolean }[] 
  * all in one go. Nothing else from the queue.
  */
 async function CheckinLabels({ user, sessionId }: { user: CurrentUser; sessionId: string }) {
-  const { shows } = await queueScope(user, sessionId, {});
+  const { shows } = await queueScope(user, sessionId, {}, TO_PRINT);
   const admin = createAdminClient();
   const [sets, { data: rows }] = await Promise.all([
     checkinWaitingSets(sessionId, shows),
