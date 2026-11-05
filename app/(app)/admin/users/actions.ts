@@ -4,8 +4,8 @@ import { z } from "zod";
 import * as XLSX from "xlsx";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { appUrl } from "@/lib/auth/app-url";
-import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
-import { canGiveFinalCheckout, canGrantAreas, canManageRole, isAdmin, type AccessLevel, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
+import { getActiveSession, requireStaffManager, requireUser } from "@/lib/auth/current-user";
+import { canAddCheckinLogins, canGiveFinalCheckout, canGrantAreas, canManageRole, checkinDivisionIds, isAdmin, type AccessLevel, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
 import { STAFF_ROLES } from "@/lib/labels";
 import { decodeArea, grantableTree, loadAreaTree, type AreaValue } from "@/lib/data/areas";
 import { errorsFor, planRows, readRows, type BulkPlanRow } from "@/lib/staff/bulk";
@@ -495,6 +495,11 @@ export async function removePasskeys(fd: FormData): Promise<ActionResult> {
 export type CheckinResult = ActionResult & { username?: string; password?: string };
 
 async function assertCheckinDivision(me: CurrentUser, divisionId: string) {
+  // a check-in helper adds logins for its own divisions (see /checkin-logins)
+  if (canAddCheckinLogins(me)) {
+    if (!checkinDivisionIds(me).includes(divisionId)) throw new Error("That division isn't yours.");
+    return;
+  }
   if (!canManageRole(me, "scanner")) throw new Error("You can't set up check-in logins.");
   if (!canGrantAreas(me, [{ group_id: null, division_id: divisionId, bunk_id: null }], false, await divisionGroupLookup())) throw new Error("That division isn't yours.");
 }
@@ -504,7 +509,8 @@ async function assertCheckinDivision(me: CurrentUser, divisionId: string) {
  * chose (or, left empty, "division-1", "division-1-2"… and a generated password).
  */
 export async function createCheckinLogin(divisionId: string, chosen?: { name?: string; password?: string }): Promise<CheckinResult> {
-  const me = await requireStaffManager();
+  // staff managers, and check-in helpers for their own divisions (checked below)
+  const me = await requireUser();
   try {
     await assertCheckinDivision(me, divisionId);
     if ((await removedRoles()).has("scanner")) return fail(notInUse("scanner"));
@@ -530,6 +536,7 @@ export async function createCheckinLogin(divisionId: string, chosen?: { name?: s
     await writeAccess(id, { role: "scanner", allAreas: false, areas: [{ group_id: null, division_id: divisionId, bunk_id: null }], full_name: fullName, title: "Check-in phones" });
     await setLoginKind(id, "shared");
     revalidatePath("/admin/users");
+    revalidatePath("/checkin-logins");
     return { ok: true, message: "Check-in login created.", username: name, password };
   } catch (e) {
     return fail(errorMessage(e));

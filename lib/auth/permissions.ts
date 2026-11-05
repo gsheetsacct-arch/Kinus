@@ -130,6 +130,14 @@ export const canUsePrintArea = (u: CurrentUser) => ["owner", "director", "office
  */
 export const canPrintCheckin = (u: CurrentUser) => u.role === "scanner" || u.role === "division_head";
 
+/**
+ * A check-in helper (a division's check-in login, or a check-in role): adds more check-in logins
+ * for the divisions it checks in (a phone per gate), and shares them. Nothing else of staff.
+ */
+export const canAddCheckinLogins = (u: CurrentUser) => u.role === "scanner";
+/** The divisions a check-in helper checks in (whole divisions only). */
+export const checkinDivisionIds = (u: CurrentUser) => [...new Set(u.coverage.filter((c) => c.bunk_id === null).map((c) => c.division_id))];
+
 /** The staff phone book: everyone. Counselors and check-in helpers see their own head staff; head staff and the office see all their divisions' staff. */
 export const canUsePhoneBook = (u: CurrentUser) => Boolean(u.role);
 /** A short phone book: just the head counselors and division heads of their division. */
