@@ -53,6 +53,12 @@ export function formatPhone(raw: string | null | undefined): string {
 /** What a tel: link needs: digits and a leading plus. */
 export const telHref = (raw: string) => `tel:${raw.replace(/[^\d+]/g, "")}`;
 
+/** A WhatsApp chat with this number (wa.me wants the country code: a 10-digit number is taken as US/Canada). */
+export function whatsAppHref(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  return `https://wa.me/${!raw.trim().startsWith("+") && digits.length === 10 ? `1${digits}` : digits}`;
+}
+
 /** "1 bunk", "3 bunks". */
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 

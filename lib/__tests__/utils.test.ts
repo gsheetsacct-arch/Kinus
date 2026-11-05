@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatTime, formatWhen } from "../utils";
+import { formatTime, formatWhen, whatsAppHref } from "../utils";
 
 describe("camp time", () => {
   it("shows camp time, not the server's", () => {
@@ -43,5 +43,13 @@ describe("campDateTimeToIso", () => {
     expect(campDateTimeToIso("2026-03-08", "01:30")).toBe("2026-03-08T06:30:00.000Z");
     // fall back (1 Nov 2026): noon is standard time
     expect(campDateTimeToIso("2026-11-01", "12:00")).toBe("2026-11-01T17:00:00.000Z");
+  });
+});
+
+describe("whatsAppHref", () => {
+  it("adds the US country code to a 10-digit number", () => {
+    expect(whatsAppHref("(718) 555-1234")).toBe("https://wa.me/17185551234");
+    expect(whatsAppHref("+1 718 555 1234")).toBe("https://wa.me/17185551234");
+    expect(whatsAppHref("+972 52 123 4567")).toBe("https://wa.me/972521234567");
   });
 });
