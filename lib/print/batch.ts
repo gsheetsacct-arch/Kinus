@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { startOfCampDay } from "@/lib/time";
-import { campDivisions, templateCamps, templateDivisionIds } from "./template-camps";
+import { campDivisions, templateDivisionIds, templateSkipsDivisionIds } from "./template-camps";
 export { startOfCampDay };
 
 type DB = SupabaseClient<Database>;
@@ -26,12 +26,16 @@ export async function batchCampers(db: DB, sessionId: string, where: BatchWhere,
   let kinds: Map<string, "new" | "updated"> | null = null;
   // a template for some camps only: just their campers
   const { data: tpl } = await db.from("print_templates").select("*").eq("id", templateId).maybeSingle();
-  const only = tpl && templateCamps(tpl).length ? (templateDivisionIds(tpl, await campDivisions(db, sessionId)) ?? []) : null;
+  // (and no camp that gets name tags only, for anything but name tags: Settings)
+  const campList = tpl ? await campDivisions(db, sessionId) : [];
+  const only = tpl ? templateDivisionIds(tpl, campList) : null;
+  const skip = tpl ? templateSkipsDivisionIds(tpl, campList) : [];
   if (only) where = { ...where, divisionIds: where.divisionIds ? where.divisionIds.filter((d) => only.includes(d)) : only };
   if (where.divisionIds && !where.divisionIds.length) return { ids: [], kinds };
   const rows = await fetchAll((from, to) => {
     let q = db.from("campers").select("id, status").eq("session_id", sessionId).is("archived_at", null);
     if (where.divisionIds) q = q.in("division_id", where.divisionIds);
+    if (skip.length) q = q.or(`division_id.is.null,division_id.not.in.(${skip.join(",")})`);
     if (where.divisionId) q = q.eq("division_id", where.divisionId);
     if (where.bunkId) q = q.eq("bunk_id", where.bunkId);
     if (which === "present") q = q.eq("status", "present");

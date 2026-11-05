@@ -3,9 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { seesAllCamp, type CurrentUser } from "@/lib/auth/permissions";
 import { loadAreaTree } from "@/lib/data/areas";
 import { continuedDivisionNumbers } from "./bunk-continued";
-
-/** A Thursday Program camp ("Thursday American"…): its records are second copies of campers. */
-const isThursdayCamp = (name: string) => /^thursday\b/i.test(name.trim());
+import { loadNameTagsOnly } from "./template-camps";
 import { STAFF_ROLES } from "@/lib/labels";
 import { shownEmail } from "@/lib/staff/login-kinds";
 import { withNameTagDivision } from "@/lib/staff/name-tag";
@@ -30,7 +28,7 @@ const roleLabel = (r: string) => STAFF_ROLES[r as keyof typeof STAFF_ROLES]?.lab
 export async function staffInView(me: CurrentUser): Promise<StaffToPrint[]> {
   const admin = createAdminClient();
   const { data: session } = await admin.from("sessions").select("id").eq("is_active", true).maybeSingle();
-  const [tree, { data: people }, { data: scopes }, reg, tagSet] = await Promise.all([
+  const [tree, { data: people }, { data: scopes }, reg, tagSet, nameTagsOnly] = await Promise.all([
     loadAreaTree(admin, session?.id),
     admin.from("profiles").select("id, full_name, role, title, phone, email, all_areas").eq("is_active", true).neq("login", "shared").order("full_name"),
     admin.from("staff_scopes").select("user_id, group_id, division_id, bunk_id"),
@@ -42,6 +40,7 @@ export async function staffInView(me: CurrentUser): Promise<StaffToPrint[]> {
       .select("id, name_tag_division")
       .not("name_tag_division", "is", null)
       .then((r) => (r.error ? [] : (r.data ?? [])), () => []),
+    loadNameTagsOnly(),
   ]);
   const tagDivisionOf = new Map(tagSet.map((r) => [r.id, r.name_tag_division]));
   const regOf = new Map(reg.map((r) => [r.id, r]));
@@ -50,10 +49,10 @@ export async function staffInView(me: CurrentUser): Promise<StaffToPrint[]> {
   const bunk = new Map(tree.divisions.flatMap((d) => d.bunks.map((b) => [b.id, b.name] as const)));
   const mine = new Set(me.coverage.map((c) => c.division_id));
   // each division's staff number, after the last bunk number (camps in order; a division with no camp is in the first).
-  // The Thursday Program's camps don't count: no luggage tags there, so their bunks don't move
-  // the numbers, and their divisions get none
+  // Camps that get name tags only (Settings: the Thursday Program, Virtual) don't count: no luggage
+  // tags there, so their bunks don't move the numbers, and their divisions get none
   const firstCamp = tree.groups[0]?.id ?? null;
-  const counted = tree.groups.filter((g) => !isThursdayCamp(g.name)).map((g) => g.id);
+  const counted = tree.groups.filter((g) => !nameTagsOnly(g.name)).map((g) => g.id);
   const number = continuedDivisionNumbers((tree.groups.length ? counted : [null]).map((gid) => tree.divisions.filter((d) => (d.group_id ?? firstCamp) === gid)));
   const out: StaffToPrint[] = [];
   for (const p of people ?? []) {

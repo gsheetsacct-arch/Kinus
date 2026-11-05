@@ -18,7 +18,8 @@ export type { TemplateButton } from "@/lib/print/card-templates";
 import type { TemplateButton } from "@/lib/print/card-templates";
 
 /** The buttons for one camper: the templates for their camp (null divisions: every camp's). */
-const buttonsFor = (templates: TemplateButton[], divisionId: string | null) => templates.filter((t) => !t.divisionIds || (divisionId !== null && t.divisionIds.includes(divisionId)));
+const buttonsFor = (templates: TemplateButton[], divisionId: string | null) =>
+  templates.filter((t) => (!t.divisionIds || (divisionId !== null && t.divisionIds.includes(divisionId))) && !(divisionId && t.skipDivisionIds?.includes(divisionId)));
 const TONE: Record<string, string> = {
   in: "bg-status-present text-white hover:bg-status-present/90",
   out: "bg-status-out text-amber-950 hover:bg-status-out/90",

@@ -13,7 +13,7 @@ import { DIVISION_VALUE, type TemplateSpec } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 import { isProgressMark, RETRY_MARK, STARTED_MARK } from "./labels";
 import { cleanUsed, sheetStock, usedBefore } from "./sheet-position";
-import { campDivisions, templateCamps, templateDivisionIds } from "./template-camps";
+import { campDivisions, campOfDivision, templateCamps, templateDivisionIds, templateSkipsDivisionIds } from "./template-camps";
 import { customFontCss } from "./custom-fonts";
 import { pdfArtPaths } from "./pdf-art";
 import { forCampers } from "./staff-values";
@@ -65,11 +65,17 @@ export async function createPrintJob(
   for (const { data } of checked) for (const c of data ?? []) if (!canPrintFor(user, c)) throw new Error("You can only request tags for campers in your own division or bunk.");
   // a template for some camps only prints for their campers
   const camps = templateCamps(template);
+  const campList = await campDivisions(admin, opts.sessionId);
+  const everyone = checked.flatMap(({ data }) => data ?? []);
   if (camps.length) {
-    const divisions = templateDivisionIds(template, await campDivisions(admin, opts.sessionId)) ?? [];
-    const other = checked.flatMap(({ data }) => data ?? []).find((c) => !c.division_id || !divisions.includes(c.division_id));
-    if (other) throw new Error(`${template.name} is only for ${camps.join(" and ")}${checked.flatMap(({ data }) => data ?? []).length > 1 ? `, and ${other.first_name} ${other.last_name} isn't in it` : ""}.`);
+    const divisions = templateDivisionIds(template, campList) ?? [];
+    const other = everyone.find((c) => !c.division_id || !divisions.includes(c.division_id));
+    if (other) throw new Error(`${template.name} is only for ${camps.join(" and ")}${everyone.length > 1 ? `, and ${other.first_name} ${other.last_name} isn't in it` : ""}.`);
   }
+  // a camp that gets name tags only (Settings) gets nothing else
+  const skip = templateSkipsDivisionIds(template, campList);
+  const left = everyone.find((c) => c.division_id && skip.includes(c.division_id));
+  if (left) throw new Error(`${campOfDivision(campList, left.division_id)} gets name tags only (Settings), so ${template.name} isn't printed for ${everyone.length > 1 ? `${left.first_name} ${left.last_name}` : "them"}.`);
   // a tag with the buzzer number: everyone on it needs one first. Numbers are given on purpose
   // (Print → Batch, in division/bunk/name order), never by printing, and kept for good.
   if (JSON.stringify(toSpec(template)).includes("BUZZER")) {

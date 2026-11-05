@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { byBunkThenName } from "@/lib/print/data";
 import { formatBuzzer } from "@/lib/buzzer-format";
 import { THURSDAY_PREFIX } from "@/lib/import/thursday";
+import { campDivisions } from "@/lib/print/template-camps";
 
 export { formatBuzzer };
 
@@ -33,21 +34,23 @@ export async function assignBuzzers(sessionId: string, camperIds?: string[], opt
   const rows = await fetchAll((from, to) =>
     admin
       .from("campers")
-      .select("id, first_name, last_name, current_buzzer_number, source_id, divisions(name), bunks(name)")
+      .select("id, first_name, last_name, current_buzzer_number, source_id, division_id, divisions(name), bunks(name)")
       .eq("session_id", sessionId)
       .is("archived_at", null)
       .order("id")
       .range(from, to),
   );
   // the Thursday Program's second records (lib/import/thursday) get no buzzer: the camper has
-  // theirs on their regular record; any they were given before are taken off
-  const thursday = rows.filter(isThursdayRecord);
+  // theirs on their regular record; nor do camps that get name tags only (Settings: Thursday,
+  // Virtual). Any they were given before are taken off
+  const noBuzzer = await withoutBuzzers(sessionId);
+  const thursday = rows.filter(noBuzzer);
   const numbered = thursday.filter((c) => c.current_buzzer_number !== null).map((c) => c.id);
   for (let i = 0; i < numbered.length; i += 200) {
     const { error } = await admin.from("campers").update({ current_buzzer_number: null }).in("id", numbered.slice(i, i + 200));
     if (error) throw error;
   }
-  rows.splice(0, rows.length, ...rows.filter((c) => !isThursdayRecord(c)));
+  rows.splice(0, rows.length, ...rows.filter((c) => !noBuzzer(c)));
   const wanted = camperIds ? new Set(camperIds) : null;
   const redo = Boolean(opts.redo);
   // numbering a few again from 001 would give them numbers others have
@@ -93,15 +96,22 @@ export async function setBuzzer(camperId: string, number: number | null): Promis
 
 /** A Thursday Program record ("thursday:1234"): no buzzer of its own. */
 const isThursdayRecord = (c: { source_id: string | null }) => Boolean(c.source_id?.startsWith(THURSDAY_PREFIX));
-const NOT_THURSDAY = `source_id.is.null,source_id.not.like.${THURSDAY_PREFIX}*`;
 
-/** How many campers of the session have a number, and how many don't yet (Thursday Program records aside). */
+/** Who gets no buzzer: Thursday Program records, and campers of camps that get name tags only (Settings). */
+async function withoutBuzzers(sessionId: string): Promise<(c: { source_id: string | null; division_id: string | null }) => boolean> {
+  const skip = new Set((await campDivisions(createAdminClient(), sessionId)).filter((c) => c.nameTagsOnly).flatMap((c) => c.divisionIds));
+  return (c) => isThursdayRecord(c) || Boolean(c.division_id && skip.has(c.division_id));
+}
+
+/** How many campers of the session have a number, and how many don't yet (those who get none aside). */
 export async function buzzerCounts(sessionId: string): Promise<{ with: number; without: number; highest: number | null }> {
   const admin = createAdminClient();
-  const [{ count: all }, { count: without }, { data: top }] = await Promise.all([
-    admin.from("campers").select("id", { count: "exact", head: true }).eq("session_id", sessionId).is("archived_at", null).or(NOT_THURSDAY),
-    admin.from("campers").select("id", { count: "exact", head: true }).eq("session_id", sessionId).is("archived_at", null).is("current_buzzer_number", null).or(NOT_THURSDAY),
-    admin.from("campers").select("current_buzzer_number").eq("session_id", sessionId).not("current_buzzer_number", "is", null).order("current_buzzer_number", { ascending: false }).limit(1),
+  const { fetchAll } = await import("@/lib/supabase/fetch-all");
+  const [rows, noBuzzer] = await Promise.all([
+    fetchAll((from, to) => admin.from("campers").select("id, source_id, division_id, current_buzzer_number").eq("session_id", sessionId).is("archived_at", null).order("id").range(from, to)),
+    withoutBuzzers(sessionId),
   ]);
-  return { with: (all ?? 0) - (without ?? 0), without: without ?? 0, highest: top?.[0]?.current_buzzer_number ?? null };
+  const counted = rows.filter((c) => !noBuzzer(c));
+  const withNumber = counted.filter((c) => c.current_buzzer_number !== null);
+  return { with: withNumber.length, without: counted.length - withNumber.length, highest: withNumber.reduce<number | null>((n, c) => Math.max(n ?? 0, c.current_buzzer_number!), null) };
 }

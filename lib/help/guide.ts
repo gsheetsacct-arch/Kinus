@@ -167,7 +167,9 @@ A division's language is a **⚙ Setting** on **Divisions & bunks** (English, He
 - Empty bunks fold into "N empty bunks"; **Remove empty ones** removes bunks with no campers (archived campers don't count).
 - The export's bunk format ("Bunk סה - Online School Only") is read into the bunk's name.
 
-**Buzzer numbers** are given in this order: division by name (1, 2, 3, then A–Z), then bunk (in Alef-Beis order), then last name. The Thursday Program's second records get none (the camper has theirs on their regular record).
+**Buzzer numbers** are given in this order: division by name (1, 2, 3, then A–Z), then bunk (in Alef-Beis order), then last name. The Thursday Program's second records get none (the camper has theirs on their regular record), nor do camps that get name tags only.
+
+**Camps that get name tags only** ⚙ Setting (Settings → Camps that get name tags only): a tick per camp, kept by camp name so it carries over to next session's camps. A ticked camp (the Thursday Program's camps and Virtual, until changed) gets its name tags (name-tag templates) and nothing else: no luggage tags, packing labels, buzzers or other printing (not in a batch, on the camper card, on Updates or on first check-in), no buzzer numbers, and its bunks and divisions don't move the continuing bunk and staff numbers. A template set to print for that camp by name still does.
 `,
   },
   {

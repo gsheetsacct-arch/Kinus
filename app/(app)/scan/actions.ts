@@ -11,7 +11,7 @@ import { STATUS_LABEL, type AttendanceEventType, type CamperStatus } from "@/lib
 import { effectiveLevel, visibleFieldGroups } from "@/lib/auth/permissions";
 import { createPrintJob, officeEmail, processPrintJob } from "@/lib/print/jobs";
 import { AUTO_CHECKIN_NOTE } from "@/lib/print/access";
-import { camperCampName, forCamp, templateCamps } from "@/lib/print/template-camps";
+import { camperCampName, forCamp, loadNameTagsOnly, templateCamps } from "@/lib/print/template-camps";
 import { canUsePrintArea } from "@/lib/auth/permissions";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { formatWhen } from "@/lib/utils";
@@ -44,8 +44,9 @@ async function autoPrintOnFirstArrival(camperId: string, sessionId: string): Pro
   if (count !== 1 || !templates?.length) return [];
   // only the tags for the camper's camp (templates for some camps only)
   const { data: camper } = await admin.from("campers").select("division_id").eq("id", camperId).maybeSingle();
-  const campName = await camperCampName(admin, camper?.division_id ?? null);
-  const mine = templates.filter((t) => forCampers(t) && forCamp(t, campName) && (campName !== null || !templateCamps(t).length));
+  const [campName, nameTagsOnly] = await Promise.all([camperCampName(admin, camper?.division_id ?? null), loadNameTagsOnly()]);
+  // a camp that gets name tags only (Settings): just its name tags
+  const mine = templates.filter((t) => forCampers(t) && forCamp(t, campName, campName !== null && nameTagsOnly(campName)) && (campName !== null || !templateCamps(t).length));
   if (!mine.length) return [];
   const user = await requireUser();
   after(async () => {
