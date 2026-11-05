@@ -23,9 +23,9 @@ export async function visibleJobs(ids: string[]): Promise<boolean> {
   const supabase = scopedQueue(user) ? createAdminClient() : await createClient();
   const jobs = await inChunks(unique, (c) => supabase.from("print_jobs").select("id, requested_by").in("id", c)).catch(() => null);
   if (!jobs || jobs.length !== unique.length) return false;
-  // a check-in login: only the labels made at check-in (and their campers in its divisions, below)
+  // a check-in login: only label-printer labels (and their campers in its divisions, below)
   if (checkinOnly(user)) {
-    const made = await checkinJobIds(unique);
+    const made = await thermalJobIds(unique);
     if (unique.some((id) => !made.has(id))) return false;
   }
   if (seesAllCamp(user)) return true;
@@ -130,27 +130,19 @@ export async function jobIdsInDivisions(sessionId: string, divisionIds: string[]
   return inside;
 }
 
-/** A check-in login without the print area: sees only the labels made at check-in. */
+/** A check-in login without the print area: sees only its divisions' label-printer labels. */
 export const checkinOnly = (user: CurrentUser) => canPrintCheckin(user) && !canUsePrintArea(user);
 
-/** What a request made at check-in says about itself (see createPrintJob's callers in scan/actions). */
+/** What a request made by itself at a first check-in says about itself (scan/actions). */
 export const AUTO_CHECKIN_NOTE = "Automatic on first check-in";
 
 /**
- * Of these requests, the ones made at check-in: label-printer (thermal) labels, made by
- * themselves at a camper's first check-in, or asked for from a camper card by a check-in login.
+ * Of these requests, the label-printer (thermal) ones: the labels a division's check-in prints
+ * (the name tag and bag label at registration), whoever asked for them.
  */
-export async function checkinJobIds(ids: string[]): Promise<Set<string>> {
+export async function thermalJobIds(ids: string[]): Promise<Set<string>> {
   const unique = [...new Set(ids)].filter((id) => UUID.test(id));
   if (!unique.length) return new Set();
-  const admin = createAdminClient();
-  const jobs = await inChunks(unique, (c) => admin.from("print_jobs").select("id, note, requested_by, print_templates(thermal)").in("id", c));
-  const askers = [...new Set(jobs.map((j) => j.requested_by).filter((x): x is string => Boolean(x)))];
-  const roles = askers.length ? await inChunks(askers, (c) => admin.from("profiles").select("id, role").in("id", c)) : [];
-  const checkinLogin = new Set(roles.filter((p) => p.role === "scanner").map((p) => p.id));
-  return new Set(
-    jobs
-      .filter((j) => (j.print_templates as { thermal: boolean | null } | null)?.thermal && (j.note === AUTO_CHECKIN_NOTE || (j.requested_by && checkinLogin.has(j.requested_by))))
-      .map((j) => j.id),
-  );
+  const jobs = await inChunks(unique, (c) => createAdminClient().from("print_jobs").select("id, print_templates(thermal)").in("id", c));
+  return new Set(jobs.filter((j) => (j.print_templates as { thermal: boolean | null } | null)?.thermal).map((j) => j.id));
 }

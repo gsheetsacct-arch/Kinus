@@ -1,7 +1,7 @@
 import "server-only";
 import { getActiveSession, getCurrentUser } from "@/lib/auth/current-user";
 import { canUsePrintArea } from "@/lib/auth/permissions";
-import { checkinJobIds, checkinOnly } from "./access";
+import { checkinOnly } from "./access";
 import { queueScope, waitingSets } from "./queue";
 
 /**
@@ -17,10 +17,7 @@ export async function waitingIds(sp: URLSearchParams): Promise<string[] | null> 
   return sets.find((s) => s.key === sp.get("waiting"))?.ids ?? [];
 }
 
-/** A check-in login's labels to print: the label-printer ones made at check-in, in its divisions. */
+/** A check-in login's labels to print: every label-printer (thermal) label queued for its divisions. */
 export async function checkinWaitingSets(sessionId: string, shows: (jobId: string) => boolean) {
-  const candidates = (await waitingSets(sessionId, shows)).filter((s) => s.key.endsWith("t")).flatMap((s) => s.ids);
-  const made = await checkinJobIds(candidates);
-  // the sets again, of those only (their counts and tags)
-  return (await waitingSets(sessionId, (id) => made.has(id) && shows(id))).filter((s) => s.key.endsWith("t"));
+  return (await waitingSets(sessionId, shows)).filter((s) => s.key.endsWith("t"));
 }

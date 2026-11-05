@@ -35,7 +35,7 @@ const SHOW = {
 export default async function PrintQueuePage({ searchParams }: { searchParams: Promise<{ show?: string; camp?: string; division?: string }> }) {
   const [user, session, sp] = await Promise.all([requireUser(), getActiveSession(), searchParams]);
   if (!session) return <EmptyState icon={Printer} title="No active session" description="Camp hasn't been set up yet." />;
-  // a division's check-in login: only the labels made at its check-in, to print on the label printer
+  // a division's check-in login: only its divisions' label-printer labels
   if (checkinOnly(user)) return <CheckinLabels user={user} sessionId={session.id} />;
   // staff who only design templates start there
   if (!canUsePrintArea(user)) redirect("/print/templates");
@@ -70,6 +70,22 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
   const { data: items } = few.length
     ? await supabase.from("print_job_items").select("job_id, copies, campers(first_name, last_name, camper_code, divisions(name), bunks(name))").in("job_id", few)
     : { data: [] as never[] };
+  // how many labels each request prints (each camper's copies added up): its PDF, in parts when big
+  const labelsOf = new Map<string, number>();
+  const shownIds = (data ?? []).map((j) => j.id);
+  if (shownIds.length) {
+    const { inChunks } = await import("@/lib/supabase/in-chunks");
+    const { fetchAll } = await import("@/lib/supabase/fetch-all");
+    const copies = await inChunks(shownIds, (c) => fetchAll((from, to) => supabase.from("print_job_items").select("job_id, copies").in("job_id", c).order("job_id").order("camper_id").range(from, to))).catch(() => []);
+    for (const r of copies) labelsOf.set(r.job_id, (labelsOf.get(r.job_id) ?? 0) + (r.copies ?? 1));
+    // staff tag requests keep their people (and copies) on the request itself
+    const staffIds = shownIds.filter((id) => !labelsOf.has(id));
+    if (staffIds.length) {
+      const { data: staffRows } = await supabase.from("print_jobs").select("id, staff_items").in("id", staffIds);
+      for (const r of (staffRows ?? []) as unknown as { id: string; staff_items?: unknown }[])
+        if (Array.isArray(r.staff_items)) labelsOf.set(r.id, (r.staff_items as { copies?: number }[]).reduce((n, i) => n + Math.max(1, Number(i?.copies) || 1), 0));
+    }
+  }
   const whoByJob = new Map<string, string[]>();
   // Unicode isolates: a Hebrew name or bunk keeps its own direction inside an English line
   const iso = (t: string) => `\u2068${t}\u2069`;
@@ -84,6 +100,7 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
     id: j.id,
     status: j.status,
     count: j.item_count,
+    labels: labelsOf.get(j.id) ?? j.item_count,
     at: j.requested_at,
     to: j.deliver_to,
     error: shownJobError(j.error),
@@ -164,19 +181,19 @@ function Bar({ items }: { items: { href: string; label: string; on: boolean }[] 
 }
 
 /**
- * A check-in login's print page: the label-printer labels made at its check-in (first check-in,
- * or a camper card's print buttons), for its divisions, all in one go. Nothing else from the queue.
+ * A check-in login's print page: every label-printer (thermal) label queued for its divisions,
+ * all in one go. Nothing else from the queue.
  */
 async function CheckinLabels({ user, sessionId }: { user: CurrentUser; sessionId: string }) {
   const { shows } = await queueScope(user, sessionId, {});
   const sets = await checkinWaitingSets(sessionId, shows);
   return (
     <div>
-      <PageHeader title="Labels to print" description="The labels made at check-in (by themselves at a first check-in, or with a camper's print button), for your divisions." />
+      <PageHeader title="Labels to print" description="The label-printer labels waiting for your divisions: the name tags and bag labels for registration, however they were asked for." />
       {sets.length ? (
         sets.map((set) => <WaitingAll key={set.key} set={set} where={null} query={new URLSearchParams({ waiting: set.key, order: "name" }).toString()} />)
       ) : (
-        <EmptyState icon={Printer} title="Nothing to print" description="Labels from check-in show up here as they're made." />
+        <EmptyState icon={Printer} title="Nothing to print" description="Label-printer labels for your divisions show up here as they're asked for." />
       )}
     </div>
   );

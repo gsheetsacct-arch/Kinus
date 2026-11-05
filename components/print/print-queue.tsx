@@ -11,10 +11,15 @@ import { cn, formatWhen } from "@/lib/utils";
 import { cancelJobs, markPrinted, resendJob } from "@/app/(app)/print/actions";
 import { JOB_STATUS } from "@/lib/print/labels";
 
+/** Labels in one PDF (as COMBINED_PDF_PART in lib/print/jobs). */
+const PDF_PART = 400;
+
 export type QueueJob = {
   id: string;
   status: string;
   count: number;
+  /** labels it prints (each camper's copies added up) */
+  labels: number;
   at: string;
   to: string;
   error: string | null;
@@ -186,12 +191,24 @@ export function PrintQueue({ jobs, show, together = [] }: { jobs: QueueJob[]; sh
                     </Link>
                   </Button>
                 )}
-                {j.pdf && (
+                {j.pdf ? (
                   <Button size="sm" variant="outline" asChild>
                     <a href={`/print/jobs/${j.id}/pdf`} target="_blank" rel="noopener">
                       <FileDown /> PDF
                     </a>
                   </Button>
+                ) : (
+                  // this request on its own, as a PDF (a big one in parts of PDF_PART labels)
+                  j.status !== "cancelled" &&
+                  j.status !== "queued" &&
+                  j.status !== "rendering" &&
+                  (j.labels <= PDF_PART ? (
+                    <PdfButton size="sm" href={`/print/combined/pdf?jobs=${j.id}`} label="PDF" />
+                  ) : (
+                    Array.from({ length: Math.ceil(j.labels / PDF_PART) }, (_, i) => (
+                      <PdfButton key={i} size="sm" href={`/print/combined/pdf?jobs=${j.id}&part=${i + 1}`} label={`PDF ${i + 1} of ${Math.ceil(j.labels / PDF_PART)}`} />
+                    ))
+                  ))
                 )}
                 {open && j.status !== "queued" && j.status !== "rendering" && (
                   <Button size="sm" variant="outline" onClick={() => run(() => markPrinted([j.id]))}>
