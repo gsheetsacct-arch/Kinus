@@ -7,7 +7,7 @@ select '##BUNKS' as tag, g.name as camp, g.sort_order as camp_order, d.name as d
   (select count(*) from campers c where c.bunk_id = b.id and c.archived_at is null and c.status <> 'no_show') as coming,
   coalesce((select string_agg(p.full_name || case when coalesce(p.phone,'') <> '' then ' (' || p.phone || ')' else '' end, ' ; ' order by p.full_name)
     from staff_scopes s join profiles p on p.id = s.user_id where s.bunk_id = b.id and p.is_active and coalesce(p.login,'') <> 'shared'), '') as counselors,
-  coalesce((select string_agg(distinct s.scope_role::text, ',') from staff_scopes s join profiles p on p.id = s.user_id where s.bunk_id = b.id and p.is_active and coalesce(p.login,'') <> 'shared'), '') as roles
+  coalesce((select string_agg(distinct p.role::text, ',') from staff_scopes s join profiles p on p.id = s.user_id where s.bunk_id = b.id and p.is_active and coalesce(p.login,'') <> 'shared'), '') as roles
 from bunks b join divisions d on d.id = b.division_id join sessions se on se.id = d.session_id and se.is_active
 left join division_groups g on g.id = d.group_id
 where coalesce(g.name, 'American') in ('American','French','Hebrew')
