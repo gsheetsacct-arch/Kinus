@@ -13,7 +13,16 @@ const HEBREW = /[א-ת]/;
  * For campers the person can already see (the caller's own list).
  */
 export async function hebrewNamesFor(campers: { id: string; division_id: string | null }[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+  const parts = await hebrewNamePartsFor(campers);
+  return new Map([...parts].map(([id, p]) => [id, p.full]));
+}
+
+/** A Hebrew name in parts: first and last (each only when written in Hebrew), and the whole name. */
+export type HebrewName = { first: string; last: string; full: string };
+
+/** hebrewNamesFor, keeping the first and last names apart (for lists with First / Last columns). */
+export async function hebrewNamePartsFor(campers: { id: string; division_id: string | null }[]): Promise<Map<string, HebrewName>> {
+  const out = new Map<string, HebrewName>();
   const divisionIds = [...new Set(campers.map((c) => c.division_id).filter((x): x is string => Boolean(x)))];
   if (!divisionIds.length) return out;
   const admin = createAdminClient();
@@ -48,7 +57,7 @@ export async function hebrewNamesFor(campers: { id: string; division_id: string 
     const f = he(first ? row.get(columnKey(first.column)) : undefined);
     const l = he(last ? row.get(columnKey(last.column)) : undefined);
     const name = f || l ? [f, l].filter(Boolean).join(" ") : he(full ? row.get(columnKey(full.column)) : undefined);
-    if (name) out.set(id, name.replace(/\s+/g, " "));
+    if (name) out.set(id, { first: f, last: l, full: name.replace(/\s+/g, " ") });
   }
   return out;
 }

@@ -149,10 +149,24 @@ export async function buildList(
   // "Sleeping here" / "Going home", from the registration's Sleeping At The Kinus
   const sleeping = partKeys.includes(SLEEPING_COLUMN) ? await import("./sleeping").then((m) => m.sleepingAtKinus(scope.sessionId, campers.map((c) => String(c.id)))) : null;
   const extraValues = extraCols.length ? await import("./extra-fields").then((m) => m.extraValuesFor(campers.map((c) => String(c.id)), extraCols)) : new Map<string, Record<string, string>>();
+  // campers in Hebrew-language divisions (Hebrew, French): their names in Hebrew, where the export has them
+  const nameKeys = new Set(["display_name", "first_name", "last_name"]);
+  const hebrew = [...partKeys, ...sortKeys.map((s) => s.field), "last_name"].some((k) => nameKeys.has(k))
+    ? await import("./hebrew-display").then((m) => m.hebrewNamePartsFor(campers.map((c) => ({ id: String(c.id), division_id: (c.division_id as string | null) ?? null })))).catch(() => new Map())
+    : new Map();
+  const hebrewName = (c: (typeof campers)[number], key: string): string | null => {
+    const h = hebrew.get(String(c.id));
+    if (!h) return null;
+    return (key === "display_name" ? h.full : key === "first_name" ? h.first : key === "last_name" ? h.last : "") || null;
+  };
 
   const cellOf = (c: (typeof campers)[number], key: string): string | boolean | null => {
     if (key.startsWith("source.")) return extraValues.get(String(c.id))?.[key.slice(7)] || null;
     if (key === SLEEPING_COLUMN) return sleepingText(sleeping?.get(String(c.id)));
+    if (nameKeys.has(key)) {
+      const h = hebrewName(c, key);
+      if (h) return h;
+    }
     const v = getFieldValue(c, key);
     if (key === "status" && typeof v === "string") return STATUS_LABEL[v as keyof typeof STATUS_LABEL] ?? v;
     if (key.endsWith(".phone") && typeof v === "string") return formatPhone(v);
@@ -205,7 +219,7 @@ export async function buildList(
       })
     : campers;
   // Kinus' own fields by their value (a grade as a number); anything else by what the list shows
-  const sortValue = (c: (typeof campers)[number], key: string) => (FIELD_BY_KEY[key] ? getFieldValue(c, key) : textOf(c, key) || null);
+  const sortValue = (c: (typeof campers)[number], key: string) => (nameKeys.has(key) ? (hebrewName(c, key) ?? getFieldValue(c, key)) : FIELD_BY_KEY[key] ? getFieldValue(c, key) : textOf(c, key) || null);
   const sorted = [...shownCampers].sort((a, b) => {
     // then by name, so campers with the same answer are in order
     for (const s of [...sortBy, { field: "last_name", dir: "asc" }, { field: "first_name", dir: "asc" }]) {
