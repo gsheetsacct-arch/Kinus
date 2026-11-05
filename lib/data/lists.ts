@@ -104,7 +104,7 @@ export async function buildList(
   // combined columns: their parts are loaded like columns of their own
   const combos = new Map((preset.combos ?? []).map((c) => [`combo:${c.id}`, c]));
   const whereKeys = (preset.where ?? []).map((w) => w.key);
-  const allKeys = [...preset.columns, ...preset.columns.flatMap((k) => combos.get(k)?.parts ?? []), ...(preset.group_by ? [preset.group_by] : []), ...whereKeys];
+  const allKeys = [...preset.columns, ...preset.columns.flatMap((k) => combos.get(k)?.parts ?? []), ...(preset.group_by ? [preset.group_by] : []), ...whereKeys, ...sortKeys.map((k) => k.field)];
   const extraDefs = allKeys.some((k) => k.startsWith("source."))
     ? await import("./extra-fields").then(async (m) => (await m.loadExtraFields()).map((f) => ({ key: `source.${f.column}`, label: f.label, group: m.extraGroupOf(f), kind: "text" as const, answers: f.answers, hide: f.hide })))
     : [];
@@ -127,6 +127,10 @@ export async function buildList(
     return def && allowed(def);
   });
   const partKeys = [...shownColumns.flatMap((f) => (combos.has(f.key) ? comboParts.get(f.key)!.map((p) => p.key) : [f.key])), ...(groupKey ? [groupKey] : []), ...where.map((w) => w.key)];
+  // sorted by any field this person may see (an export column, Sleeping, a combined column on the
+  // layout…); one they may not see doesn't sort (its order would give it away)
+  const sortBy = sortKeys.filter((k) => (combos.has(k.field) ? shownColumns.some((f) => f.key === k.field) : Boolean(defOf(k.field)) && allowed(defOf(k.field)!)));
+  partKeys.push(...sortBy.map((k) => k.field).filter((k) => !combos.has(k) && !partKeys.includes(k)));
   const fields = [...new Set([...partKeys, ...sortKeys.map((s) => s.field), ...(preset.group_by ? [preset.group_by] : [])])].filter((k) => FIELD_BY_KEY[k]);
   // the layout's filters: all of them, or (by default) any one of them; the page's choice narrows it further
   const anyOf = preset.match === "any" && preset.only.length > 1 ? preset.only : [];
@@ -200,9 +204,12 @@ export async function buildList(
         return scope.filter!.value === FILTER_ANY ? hasContent(t) : scope.filter!.value === FILTER_NONE ? !hasContent(t) : t === scope.filter!.value;
       })
     : campers;
+  // Kinus' own fields by their value (a grade as a number); anything else by what the list shows
+  const sortValue = (c: (typeof campers)[number], key: string) => (FIELD_BY_KEY[key] ? getFieldValue(c, key) : textOf(c, key) || null);
   const sorted = [...shownCampers].sort((a, b) => {
-    for (const s of sortKeys) {
-      const r = cmp(getFieldValue(a, s.field), getFieldValue(b, s.field));
+    // then by name, so campers with the same answer are in order
+    for (const s of [...sortBy, { field: "last_name", dir: "asc" }, { field: "first_name", dir: "asc" }]) {
+      const r = cmp(sortValue(a, s.field), sortValue(b, s.field));
       if (r !== 0) return s.dir === "desc" ? -r : r;
     }
     return 0;

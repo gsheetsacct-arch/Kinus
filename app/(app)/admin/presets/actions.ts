@@ -19,7 +19,8 @@ const schema = z.object({
   audience: z.enum(["counselor", "head_counselor", "division_head", "director", "office", "custom"]),
   // bunk, division, or any field: a Kinus one, Sleeping, or an export column
   group_by: z.string().max(210).refine((k) => k === "" || isListKey(k, own), "Pick what to group by."),
-  sort_field: z.string().default("last_name"),
+  // any field, or a combined column (checked against the layout's combined columns below)
+  sort_field: z.string().max(210).default("last_name"),
   is_default: z.enum(["on"]).optional(),
 });
 
@@ -42,13 +43,14 @@ export async function savePreset(fd: FormData): Promise<ActionResult> {
       if (fd.get(`combo_show_${i}`) === "on") columns.push(`combo:${id}`);
     }
     if (columns.length === 0) return fail("Tick at least one column.");
+    const sortField = isListKey(d.sort_field, own) || combos.some((c) => `combo:${c.id}` === d.sort_field) ? d.sort_field : "last_name";
     const supabase = await createClient();
     const row = {
       name: d.name,
       audience: d.audience,
       columns,
       group_by: d.group_by || null,
-      sort: [...(d.group_by ? [{ field: d.group_by, dir: "asc" }] : []), { field: d.sort_field, dir: "asc" }],
+      sort: [...(d.group_by ? [{ field: d.group_by, dir: "asc" }] : []), { field: sortField, dir: "asc" }],
       is_default: d.is_default === "on",
       filters: {
         only: parseFlags(fd.getAll("only").map(String).join(",")),
