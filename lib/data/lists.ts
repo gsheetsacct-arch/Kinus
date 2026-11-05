@@ -49,8 +49,10 @@ export type BuiltList = {
   scopeLabel: string;
   /** What the page can filter by: the list's columns (a combined column whole, or a field in it). */
   filterOptions: { key: string; label: string }[];
-  /** The answers of the column filtered by, with how many campers have each (before filtering). */
+  /** The answers of the (first) column filtered by, with how many campers have each (before filtering). */
   filterValues: { value: string; count: number }[];
+  /** The same for each column filtered by, by its key. */
+  filterValuesBy: Record<string, { value: string; count: number }[]>;
 };
 
 /** "Has anything" and "Empty", for the page's column filter. */
@@ -94,7 +96,7 @@ export async function buildList(
   supabase: DB,
   user: CurrentUser,
   preset: ListPreset,
-  scope: { sessionId: string; divisionId?: string; bunkId?: string; divisionIds?: string[] | null; campName?: string; /** Also only these, chosen on the page. */ only?: CamperFlag[]; /** Each bunk's counselors (and phones) under its title: a switch on the page, off by default. */ counselors?: boolean; /** Only campers whose column (key) has this answer (or FILTER_ANY / FILTER_NONE). */ filter?: { key: string; value: string } },
+  scope: { sessionId: string; divisionId?: string; bunkId?: string; divisionIds?: string[] | null; campName?: string; /** Also only these, chosen on the page. */ only?: CamperFlag[]; /** Each bunk's counselors (and phones) under its title: a switch on the page, off by default. */ counselors?: boolean; /** Only campers whose column (key) has this answer (or FILTER_ANY / FILTER_NONE). */ filter?: { key: string; value: string }; /** Several such filters (the page's), all of them or any one (filterMatch). */ filters?: { key: string; value: string }[]; filterMatch?: "all" | "any" },
   fv: FieldVisibilityRow[],
 ): Promise<BuiltList> {
   // sensitive columns only appear for roles allowed to see them (the data is masked anyway)
@@ -149,10 +151,24 @@ export async function buildList(
   // "Sleeping here" / "Going home", from the registration's Sleeping At The Kinus
   const sleeping = partKeys.includes(SLEEPING_COLUMN) ? await import("./sleeping").then((m) => m.sleepingAtKinus(scope.sessionId, campers.map((c) => String(c.id)))) : null;
   const extraValues = extraCols.length ? await import("./extra-fields").then((m) => m.extraValuesFor(campers.map((c) => String(c.id)), extraCols)) : new Map<string, Record<string, string>>();
+  // campers in Hebrew-language divisions (Hebrew, French): their names in Hebrew, where the export has them
+  const nameKeys = new Set(["display_name", "first_name", "last_name"]);
+  const hebrew = [...partKeys, ...sortKeys.map((s) => s.field), "last_name"].some((k) => nameKeys.has(k))
+    ? await import("./hebrew-display").then((m) => m.hebrewNamePartsFor(campers.map((c) => ({ id: String(c.id), division_id: (c.division_id as string | null) ?? null })))).catch(() => new Map())
+    : new Map();
+  const hebrewName = (c: (typeof campers)[number], key: string): string | null => {
+    const h = hebrew.get(String(c.id));
+    if (!h) return null;
+    return (key === "display_name" ? h.full : key === "first_name" ? h.first : key === "last_name" ? h.last : "") || null;
+  };
 
   const cellOf = (c: (typeof campers)[number], key: string): string | boolean | null => {
     if (key.startsWith("source.")) return extraValues.get(String(c.id))?.[key.slice(7)] || null;
     if (key === SLEEPING_COLUMN) return sleepingText(sleeping?.get(String(c.id)));
+    if (nameKeys.has(key)) {
+      const h = hebrewName(c, key);
+      if (h) return h;
+    }
     const v = getFieldValue(c, key);
     if (key === "status" && typeof v === "string") return STATUS_LABEL[v as keyof typeof STATUS_LABEL] ?? v;
     if (key.endsWith(".phone") && typeof v === "string") return formatPhone(v);
@@ -173,7 +189,9 @@ export async function buildList(
   const filterOptions = shownColumns.flatMap((f) =>
     combos.has(f.key) ? [{ key: f.key, label: f.label }, ...comboParts.get(f.key)!.map((p) => ({ key: p.key, label: `${f.label} → ${p.label}` }))] : [{ key: f.key, label: f.label }],
   );
-  const fKey = scope.filter && filterOptions.some((o) => o.key === scope.filter!.key) ? scope.filter.key : null;
+  // the page's filters (on columns of this list): every one, or any one of them
+  const pageFilters = [...(scope.filter ? [scope.filter] : []), ...(scope.filters ?? [])].filter((f) => filterOptions.some((o) => o.key === f.key));
+  const fKey = pageFilters[0]?.key ?? null;
   const textOf = (c: (typeof campers)[number], key: string) => {
     const v = combos.has(key) ? comboText(c, key) : cellOf(c, key);
     return v === null || v === undefined || v === "" ? "" : typeof v === "boolean" ? (v ? "Yes" : "No") : Array.isArray(v) ? (v as string[]).join(", ") : String(v);
@@ -192,20 +210,25 @@ export async function buildList(
     );
   }
   const whereText = (w: ColumnFilter) => `${defOf(w.key)?.label ?? w.key}: ${w.values.map((v) => (v === WHERE_EMPTY ? "empty" : v === WHERE_ANY ? "has something" : v)).join(" or ")}`;
-  const counts = new Map<string, number>();
-  if (fKey) for (const c of campers) {
-    const t = textOf(c, fKey);
-    if (hasContent(t)) counts.set(t, (counts.get(t) ?? 0) + 1);
-  }
-  const filterValues = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], undefined, { numeric: true })).slice(0, 200).map(([value, count]) => ({ value, count }));
-  const shownCampers = fKey
-    ? campers.filter((c) => {
-        const t = textOf(c, fKey);
-        return scope.filter!.value === FILTER_ANY ? hasContent(t) : scope.filter!.value === FILTER_NONE ? !hasContent(t) : t === scope.filter!.value;
-      })
-    : campers;
+  const valuesOf = (key: string) => {
+    const counts = new Map<string, number>();
+    for (const c of campers) {
+      const t = textOf(c, key);
+      if (hasContent(t)) counts.set(t, (counts.get(t) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], undefined, { numeric: true })).slice(0, 200).map(([value, count]) => ({ value, count }));
+  };
+  const filterValuesBy = Object.fromEntries([...new Set(pageFilters.map((f) => f.key))].map((k) => [k, valuesOf(k)]));
+  const filterValues = fKey ? filterValuesBy[fKey] : [];
+  const passes = (c: (typeof campers)[number], f: { key: string; value: string }) => {
+    const t = textOf(c, f.key);
+    return f.value === FILTER_ANY ? hasContent(t) : f.value === FILTER_NONE ? !hasContent(t) : t === f.value;
+  };
+  const anyFilter = scope.filterMatch === "any" && pageFilters.length > 1;
+  const shownCampers = pageFilters.length ? campers.filter((c) => (anyFilter ? pageFilters.some((f) => passes(c, f)) : pageFilters.every((f) => passes(c, f)))) : campers;
+  const filterText = pageFilters.map((f) => `${filterOptions.find((o) => o.key === f.key)!.label}: ${f.value === FILTER_ANY ? "has something" : f.value === FILTER_NONE ? "empty" : f.value}`);
   // Kinus' own fields by their value (a grade as a number); anything else by what the list shows
-  const sortValue = (c: (typeof campers)[number], key: string) => (FIELD_BY_KEY[key] ? getFieldValue(c, key) : textOf(c, key) || null);
+  const sortValue = (c: (typeof campers)[number], key: string) => (nameKeys.has(key) ? (hebrewName(c, key) ?? getFieldValue(c, key)) : FIELD_BY_KEY[key] ? getFieldValue(c, key) : textOf(c, key) || null);
   const sorted = [...shownCampers].sort((a, b) => {
     // then by name, so campers with the same answer are in order
     for (const s of [...sortBy, { field: "last_name", dir: "asc" }, { field: "first_name", dir: "asc" }]) {
@@ -254,8 +277,9 @@ export async function buildList(
       groupKey === "bunk" || groupKey === "division" || !groupKey
         ? await inCampOrder(supabase, scope.sessionId, groupKey, [...groupsMap.values()])
         : [...groupsMap.values()].sort((a, b) => Number(a.title.startsWith("No ")) - Number(b.title.startsWith("No ")) || a.title.localeCompare(b.title, undefined, { numeric: true })),
-    scopeLabel: [[divName, bunkName].filter(Boolean).join(" · ") || (scope.campName ? `All of ${scope.campName}` : "All divisions"), ...(anyOf.length ? [anyOf.map((k) => CAMPER_FLAGS[k].label).join(" or ")] : []), ...only.map((k) => CAMPER_FLAGS[k].label), ...where.map(whereText), ...(fKey ? [`${filterOptions.find((o) => o.key === fKey)!.label}: ${scope.filter!.value === FILTER_ANY ? "has something" : scope.filter!.value === FILTER_NONE ? "empty" : scope.filter!.value}`] : [])].join(" · "),
+    scopeLabel: [[divName, bunkName].filter(Boolean).join(" · ") || (scope.campName ? `All of ${scope.campName}` : "All divisions"), ...(anyOf.length ? [anyOf.map((k) => CAMPER_FLAGS[k].label).join(" or ")] : []), ...only.map((k) => CAMPER_FLAGS[k].label), ...where.map(whereText), ...(filterText.length ? [filterText.join(anyFilter ? " or " : " · ")] : [])].join(" · "),
     filterOptions,
     filterValues,
+    filterValuesBy,
   };
 }

@@ -15,6 +15,7 @@ import { PdfButton } from "@/components/print/pdf-button";
 import { LIST_PAGE_MARGIN } from "@/lib/lists/list-pdf";
 import { ListGroups } from "@/components/lists/list-groups";
 import { FILTER_ANY, FILTER_NONE } from "@/lib/data/lists";
+import { MAX_LIST_FILTERS, filterFieldNames, listFiltersQuery, parseListFilters } from "@/lib/lists/filters";
 import { ListFilters } from "@/components/lists/list-filters";
 import { getCampContext } from "@/lib/data/camp";
 import { occupiedPlaces } from "@/lib/data/occupied";
@@ -59,14 +60,14 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
   const onlyFlag = sp.only && isFlag(sp.only) && flags.includes(sp.only) ? sp.only : undefined;
   // each bunk's counselors and their phones under its title: only when asked for
   const counselors = sp.counselors === "1";
-  // the page's column filter (fcol: a column of the list; fval: an answer, has anything, or empty)
-  const filter = sp.fcol ? { key: String(sp.fcol).slice(0, 210), value: sp.fval ? String(sp.fval).slice(0, 300) : FILTER_ANY } : undefined;
+  // the page's column filters (fcol/fval, fcol2/fval2…: a column of the list and an answer, has anything, or empty), all or any
+  const { filters, match: filterMatch } = parseListFilters((k) => sp[k]);
   // copies of each group when printed: the layout's own number, or this page's
   const copies = parseCopies(sp.copies ?? preset?.copies);
   const list = preset
-    ? await buildList(supabase, user, preset, { sessionId: session.id, divisionId: divisionId || undefined, bunkId: bunkId || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name, only: onlyFlag ? [onlyFlag] : [], counselors, filter }, fv ?? [])
+    ? await buildList(supabase, user, preset, { sessionId: session.id, divisionId: divisionId || undefined, bunkId: bunkId || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name, only: onlyFlag ? [onlyFlag] : [], counselors, filters, filterMatch }, fv ?? [])
     : null;
-  const qs = new URLSearchParams({ ...(preset ? { preset: preset.id } : {}), ...(divisionId ? { division: divisionId } : {}), ...(bunkId ? { bunk: bunkId } : {}), ...(onlyFlag ? { only: onlyFlag } : {}), ...(counselors ? { counselors: "1" } : {}), ...(filter ? { fcol: filter.key, fval: filter.value } : {}) }).toString();
+  const qs = new URLSearchParams({ ...(preset ? { preset: preset.id } : {}), ...(divisionId ? { division: divisionId } : {}), ...(bunkId ? { bunk: bunkId } : {}), ...(onlyFlag ? { only: onlyFlag } : {}), ...(counselors ? { counselors: "1" } : {}), ...listFiltersQuery(filters, filterMatch) }).toString();
   const groupWord = preset?.group_by === "bunk" ? "bunk" : preset?.group_by === "division" ? "division" : preset?.group_by ? "group" : "list";
 
   return (
@@ -133,30 +134,47 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
             ))}
           </Select>
         </label>
-        {/* filter by the list's own columns (a combined column whole, or a field in it) */}
-        <div className="grid gap-2 sm:grid-cols-2 md:col-span-4 md:grid-cols-[1fr_1fr_3fr]">
-          <label className="space-y-1">
-            <span className="block text-xs font-medium text-muted-foreground">Filter by</span>
-            <Select name="fcol" defaultValue={filter?.key ?? ""}>
-              <option value="">Nothing: every camper</option>
-              {(list?.filterOptions ?? []).map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
-          </label>
-          {filter && (
-            <label className="space-y-1">
-              <span className="block text-xs font-medium text-muted-foreground">Is</span>
-              <Select name="fval" defaultValue={filter.value}>
-                <option value={FILTER_ANY}>Has anything</option>
-                <option value={FILTER_NONE}>Empty</option>
-                {(list?.filterValues ?? []).map((v) => (
-                  <option key={v.value} value={v.value}>
-                    {v.value.length > 60 ? `${v.value.slice(0, 60)}…` : v.value} ({v.count})
-                  </option>
-                ))}
+        {/* filter by the list's own columns (a combined column whole, or a field in it): several, all or any of them */}
+        <div className="space-y-2 md:col-span-4">
+          {[...filters, ...(filters.length < MAX_LIST_FILTERS && list?.filterOptions.length ? [null] : [])].map((f, i) => {
+            const names = filterFieldNames(i);
+            return (
+              <div key={i} className="grid items-end gap-2 sm:grid-cols-2 md:grid-cols-[auto_1fr_1fr_2fr]">
+                <span className="hidden w-14 pb-2 text-xs font-medium text-muted-foreground md:block">{i === 0 ? "" : filterMatch === "any" ? "or" : "and"}</span>
+                <label className="space-y-1">
+                  <span className="block text-xs font-medium text-muted-foreground">{i === 0 ? "Filter by" : f ? "Also filter by" : filters.length ? "Add a filter" : "Filter by"}</span>
+                  <Select name={names.col} defaultValue={f?.key ?? ""}>
+                    <option value="">{f ? "No filter (remove)" : i === 0 ? "Nothing: every camper" : "Pick a column…"}</option>
+                    {(list?.filterOptions ?? []).map((o) => (
+                      <option key={o.key} value={o.key}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+                {f && (
+                  <label className="space-y-1">
+                    <span className="block text-xs font-medium text-muted-foreground">Is</span>
+                    <Select name={names.val} defaultValue={f.value}>
+                      <option value={FILTER_ANY}>Has anything</option>
+                      <option value={FILTER_NONE}>Empty</option>
+                      {(list?.filterValuesBy[f.key] ?? []).map((v) => (
+                        <option key={v.value} value={v.value}>
+                          {v.value.length > 60 ? `${v.value.slice(0, 60)}…` : v.value} ({v.count})
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                )}
+              </div>
+            );
+          })}
+          {filters.length > 1 && (
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Show campers who match</span>
+              <Select name="fmatch" defaultValue={filterMatch} className="w-auto">
+                <option value="all">all of these filters (and)</option>
+                <option value="any">any one of them (or)</option>
               </Select>
             </label>
           )}

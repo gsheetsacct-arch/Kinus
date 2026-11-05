@@ -5,6 +5,7 @@ import { getActiveSession, getCurrentUser } from "@/lib/auth/current-user";
 import { buildList, getPresetsFor, parseCopies } from "@/lib/data/lists";
 import { getCampContext } from "@/lib/data/camp";
 import { parseFlags } from "@/lib/camper-flags";
+import { parseListFilters } from "@/lib/lists/filters";
 import { listHtml } from "@/lib/lists/list-pdf";
 import { renderPdf } from "@/lib/print/chromium";
 import { pdfFailed, told } from "@/lib/print/download-signal";
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
   if (!preset) return pdfFailed("No list layouts are set up for your role yet.", 404, sp);
   const [{ data: fv }, camp] = await Promise.all([supabase.from("field_visibility").select("field_group, roles"), getCampContext()]);
   try {
-    const list = await buildList(supabase, user, preset, { sessionId: session.id, divisionId: sp.get("division") || undefined, bunkId: sp.get("bunk") || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name, only: parseFlags(sp.get("only")), counselors: sp.get("counselors") === "1", filter: sp.get("fcol") ? { key: sp.get("fcol")!.slice(0, 210), value: (sp.get("fval") ?? "__any").slice(0, 300) } : undefined }, fv ?? []);
+    const list = await buildList(supabase, user, preset, { sessionId: session.id, divisionId: sp.get("division") || undefined, bunkId: sp.get("bunk") || undefined, divisionIds: camp.divisionIds, campName: camp.current?.name, only: parseFlags(sp.get("only")), counselors: sp.get("counselors") === "1", ...(() => { const f = parseListFilters((k) => sp.get(k)); return { filters: f.filters, filterMatch: f.match }; })() }, fv ?? []);
     const copies = parseCopies(sp.get("copies") ?? preset.copies);
     const { pdf } = await renderPdf(listHtml(list, { session: session.name ?? null, camp: camp.current?.name ?? null, by: user.fullName, copies }));
     await logActivity("download", { what: `List “${preset.name}” (${list.scopeLabel})`, format: "pdf", rows: list.groups.reduce((n, g) => n + g.rows.length, 0) });
