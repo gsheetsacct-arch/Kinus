@@ -183,7 +183,7 @@ The whole page is the camera. Over it:
 
 A scan shows the result over the picture. Scanning someone already checked in says so, offers **Check out**, and offers their **Labels** (a new name tag…).
 
-At the bottom, **the last 50 check-ins** (kept across reloads): pull up to see them, **Undo** (for 15 minutes, while it's still the camper's latest record; after that a director corrects it on the camper page), or open one to request labels.
+At the bottom, **the last 50 check-ins** (kept across reloads and sign-outs; on a division's check-in login, every phone's and login's at its divisions, with who, updated every 20 seconds): pull up to see them, **Undo** (your own, for 15 minutes, while it's still the camper's latest record; after that a director corrects it on the camper page), or open one to request labels.
 
 ### Who's here
 Every camper of a place, live: counts by status (here, out, expected, check up, coming later, gone home, not coming), search, sort, parent phones (if allowed). "Check up" flags campers still missing once enough of their division has arrived or after a time (**⚙ Setting**: Settings → Campers who haven't arrived; the current rule is in How it's set up now). Directors can change many at once.

@@ -25,7 +25,7 @@ const ANY = "any";
 /** ask: an already checked-in camper scanned at check-in, offered a check-out */
 /** labels: a camper scanned again, offered their labels (a new name tag…) */
 type Flash = { tone: "in" | "out" | "home" | "already" | "error"; title: string; detail: string; ask?: RosterEntry; labels?: RosterEntry };
-type Recent = { key: string; camperId: string; name: string; verb: string; tone: Flash["tone"]; eventId?: string; at: number; undone?: boolean; undoable?: boolean };
+type Recent = { key: string; camperId: string; name: string; verb: string; tone: Flash["tone"]; eventId?: string; at: number; undone?: boolean; undoable?: boolean; by?: string | null };
 
 const FLASH: Record<Flash["tone"], string> = {
   in: "bg-status-present text-white",
@@ -45,6 +45,9 @@ const FLASH_RING: Record<Flash["tone"], string> = {
 // the server allows 15 minutes (migration 0053); the button goes a little earlier
 const UNDO_MS = 14 * 60_000;
 const RECENT_MAX = 50;
+/** The list on this device: kept across reloads and sign-ins (as the check-ins, 16 hours). */
+const RECENT_KEY = "kinus:recent";
+const RECENT_KEEP_MS = 16 * 3600_000;
 const MAX_RESULTS = 12;
 const MODE_KEEP_MS = 3 * 60 * 60 * 1000;
 
@@ -305,20 +308,47 @@ export function Scanner({
   };
 
   const hebOf = React.useMemo(() => new Map(roster.filter((r) => r.heb).map((r) => [r.id, r.heb!])), [roster]);
-  // this person's check-ins today, kept across reloads (the newest first)
+  // the check-ins today, kept across reloads and sign-ins (the newest first): this device's
+  // list, and from the server this person's and, on a check-in login, its divisions' (other
+  // phones too), refreshed every 20 seconds
+  const rosterIds = React.useMemo(() => new Set(roster.map((r) => r.id)), [roster]);
+  const [recentReady, setRecentReady] = React.useState(false);
   React.useEffect(() => {
-    if (final) return;
-    recentScans()
-      .then((list) =>
-        setRecent((cur) => {
-          const have = new Set(cur.map((r) => r.eventId).filter(Boolean));
-          const loaded: Recent[] = list.filter((r) => !have.has(r.eventId)).map((r) => ({ key: r.eventId, camperId: r.camperId, name: hebOf.get(r.camperId) ?? r.name, verb: r.verb, tone: r.tone, eventId: r.eventId, at: Date.parse(r.at), undone: r.undone, undoable: r.undoable }));
-          return [...cur, ...loaded].sort((x, y) => y.at - x.at).slice(0, RECENT_MAX);
-        }),
-      )
-      .catch(() => undefined);
+    try {
+      const saved = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]") as Recent[];
+      // only campers this page shows (another login on this phone may see other campers)
+      const keep = Array.isArray(saved) ? saved.filter((r) => r && rosterIds.has(r.camperId) && Date.now() - r.at < RECENT_KEEP_MS) : [];
+      // Undo comes back from the server, for the one who recorded it
+      if (keep.length) setRecent((cur) => mergeRecent(cur, keep.map((r) => ({ ...r, undoable: false }))));
+    } catch {}
+    setRecentReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [final]);
+  }, []);
+  React.useEffect(() => {
+    if (!recentReady) return;
+    try {
+      // what this page doesn't show stays saved for the login that does
+      const saved = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]") as Recent[];
+      const others = Array.isArray(saved) ? saved.filter((r) => r && !rosterIds.has(r.camperId) && Date.now() - r.at < RECENT_KEEP_MS) : [];
+      localStorage.setItem(RECENT_KEY, JSON.stringify(mergeRecent(recent, others)));
+    } catch {}
+  }, [recent, recentReady, rosterIds]);
+  React.useEffect(() => {
+    const load = () =>
+      recentScans()
+        .then((list) =>
+          setRecent((cur) =>
+            mergeRecent(
+              cur,
+              list.map((r) => ({ key: r.eventId, camperId: r.camperId, name: hebOf.get(r.camperId) ?? r.name, verb: r.verb, tone: r.tone, eventId: r.eventId, at: Date.parse(r.at), undone: r.undone, undoable: r.undoable, by: r.by })),
+            ),
+          ),
+        )
+        .catch(() => undefined);
+    load();
+    const t = setInterval(load, 20000);
+    return () => clearInterval(t);
+  }, [hebOf]);
 
   // the page is the camera: it fills the space between the app's bars and doesn't scroll
   const frame = useFullFrame();
@@ -580,6 +610,7 @@ export function Scanner({
                       </span>
                       <span className="block text-xs text-muted-foreground">
                         {r.undone ? "Undone" : r.verb} · {formatTime(new Date(r.at).toISOString())}
+                        {r.by && ` · ${r.by}`}
                       </span>
                     </button>
                     {r.eventId && !r.undone && r.undoable !== false && Date.now() - r.at < UNDO_MS && (
@@ -775,4 +806,19 @@ function CheckoutProgress({ campName, divisions, roster, statuses }: { campName:
       )}
     </section>
   );
+}
+
+/**
+ * The list from two places (this device, the server) as one, newest first: the server's
+ * copy of a check-in wins (it knows whether it was undone since), and "already" entries
+ * (not recorded on the server) stay.
+ */
+function mergeRecent(cur: Recent[], incoming: Recent[]): Recent[] {
+  const byKey = new Map(cur.map((r) => [r.key, r]));
+  for (const r of incoming) {
+    const had = byKey.get(r.key);
+    // an undo made here before the server's list caught up stays undone
+    byKey.set(r.key, had ? { ...had, ...r, undone: Boolean(had.undone || r.undone) } : r);
+  }
+  return [...byKey.values()].sort((x, y) => y.at - x.at).slice(0, RECENT_MAX);
 }
