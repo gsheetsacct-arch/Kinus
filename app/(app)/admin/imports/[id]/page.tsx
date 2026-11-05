@@ -52,7 +52,9 @@ const fieldLabel = (f: string) => {
   return FIELD_LABEL[f] ?? f;
 };
 const show = (v: string | null) => (v === "true" ? "Yes" : v === "false" ? "No" : v && /^\+\d{8,15}$/.test(v) ? formatPhone(v) : v);
-const notes = (r: Row) => r.warnings.filter((w) => !w.startsWith("candidates:"));
+// what's worth a look on a row (not the routine "a second record for Thursday", which every Thursday
+// camper's row said in previews made before it was dropped: it buried the rest)
+const notes = (r: Row) => r.warnings.filter((w) => !w.startsWith("candidates:") && !w.startsWith("Thursday Program: a second record"));
 
 function Who({ p }: { p: ParsedCamper | null }) {
   if (!p) return <span className="text-muted-foreground">(unreadable row)</span>;
