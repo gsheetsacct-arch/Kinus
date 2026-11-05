@@ -23,6 +23,12 @@ export async function GET(request: NextRequest) {
     const res = new NextResponse(new Uint8Array(r.pdf), {
       headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(r.fileName)}`, "Cache-Control": "private, no-store" },
     });
+    // "Download PDF and mark printed": the requests in it are marked as it's sent
+    if (sp.get("mark") === "1") {
+      const { getCurrentUser } = await import("@/lib/auth/current-user");
+      const user = await getCurrentUser();
+      if (user) await (await import("@/lib/print/mark-printed")).markSentPrinted(user, ids);
+    }
     return told(res, sp, "ok");
   } catch (e) {
     console.error("Merged labels PDF failed", e);

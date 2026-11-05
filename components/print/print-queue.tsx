@@ -1,6 +1,6 @@
 "use client";
 import { PdfButton } from "./pdf-button";
-import { useMarkDownloaded } from "./download-note";
+import { useNoteMarked } from "./download-note";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -57,7 +57,7 @@ export function PrintQueue({
   checkin?: boolean;
 }) {
   const router = useRouter();
-  const markDownloaded = useMarkDownloaded();
+  const noteMarked = useNoteMarked();
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [pending, start] = React.useTransition();
   const [now, setNow] = React.useState<Date | null>(null);
@@ -138,7 +138,7 @@ export function PrintQueue({
                   <Printer /> Print as sets
                 </a>
               </Button>
-              <PdfButton size="sm" href={`/print/combined/pdf?jobs=${ids.join(",")}`} label="Download PDF and mark printed" onDone={() => { setSelected(new Set()); void markDownloaded(ids); }} />
+              <PdfButton size="sm" href={`/print/combined/pdf?jobs=${ids.join(",")}`} label="Download PDF and mark printed" mark={ids} onDone={() => { setSelected(new Set()); noteMarked(ids); }} />
             </>
           )}
           {chosen.length > 1 && (
@@ -227,14 +227,14 @@ export function PrintQueue({
                 )}
                 {/* a request still to print: downloading it marks it printed (Undo on the note) */}
                 {j.pdf ? (
-                  <PdfButton size="sm" href={`/print/jobs/${j.id}/pdf`} label={open ? "Download PDF and mark printed" : "PDF"} onDone={open ? () => void markDownloaded([j.id]) : undefined} />
+                  <PdfButton size="sm" href={`/print/jobs/${j.id}/pdf`} label={open ? "Download PDF and mark printed" : "PDF"} mark={open ? [j.id] : undefined} onDone={open ? () => noteMarked([j.id]) : undefined} />
                 ) : (
                   // this request on its own, as a PDF (a big one in parts of PDF_PART labels)
                   j.status !== "cancelled" &&
                   j.status !== "queued" &&
                   j.status !== "rendering" &&
                   (j.labels <= PDF_PART ? (
-                    <PdfButton size="sm" href={`/print/combined/pdf?jobs=${j.id}`} label={open ? "Download PDF and mark printed" : "PDF"} onDone={open ? () => void markDownloaded([j.id]) : undefined} />
+                    <PdfButton size="sm" href={`/print/combined/pdf?jobs=${j.id}`} label={open ? "Download PDF and mark printed" : "PDF"} mark={open ? [j.id] : undefined} onDone={open ? () => noteMarked([j.id]) : undefined} />
                   ) : (
                     Array.from({ length: Math.ceil(j.labels / PDF_PART) }, (_, i) => (
                       <PdfButton key={i} size="sm" href={`/print/combined/pdf?jobs=${j.id}&part=${i + 1}`} label={`PDF ${i + 1} of ${Math.ceil(j.labels / PDF_PART)}`} />

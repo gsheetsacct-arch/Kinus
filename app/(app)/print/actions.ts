@@ -752,3 +752,15 @@ export async function organizeTemplatesAction(ops: import("@/lib/print/folders")
     return fail(errorMessage(e));
   }
 }
+
+/**
+ * Whether these requests are printed now (a "Download PDF and mark printed" button waits for
+ * the server to mark them as it sends the PDF; read with the person's own access).
+ */
+export async function jobsPrinted(ids: string[]): Promise<boolean> {
+  const user = await requireUser();
+  if (!ids.length || !(await visibleJobs(ids))) return false;
+  void user;
+  const rows = await inChunks(ids, (c) => createAdminClient().from("print_jobs").select("id, status").in("id", c));
+  return rows.length === new Set(ids).size && rows.every((r) => r.status === "printed" || r.status === "cancelled");
+}
