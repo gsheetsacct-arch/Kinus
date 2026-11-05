@@ -2,7 +2,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCheck, Printer } from "lucide-react";
+import { CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { markPrinted } from "@/app/(app)/print/actions";
 import type { WaitingSet } from "@/lib/print/queue";
@@ -14,7 +14,7 @@ const PART = 400;
 /**
  * Every label-printer label still to print (name tags and bag labels from check-in…), all
  * together, sorted by name: each camper's labels one after another. Printing them remembers
- * which requests went out, so "Mark these printed" doesn't take ones that came in since.
+ * which requests went out (as a PDF to download), so "Mark these printed" doesn't take ones that came in since.
  */
 export function WaitingAll({ set, where, query }: { set: WaitingSet; where: string | null; query: string }) {
   const router = useRouter();
@@ -43,14 +43,9 @@ export function WaitingAll({ set, where, query }: { set: WaitingSet; where: stri
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button size="lg" asChild>
-            <a href={`/print/combined?${query}`} target="_blank" rel="noreferrer" onClick={took}>
-              <Printer /> Print all
-            </a>
-          </Button>
           {parts <= 1 ? (
             // on a phone it turns into "Open NIIMBOT" once downloaded
-            <PdfButton href={`/print/combined/pdf?${query}`} label="Merged PDF" onDone={took} />
+            <PdfButton href={`/print/combined/pdf?${query}`} label="Download PDF" onDone={took} />
           ) : (
             Array.from({ length: parts }, (_, i) => <PdfButton key={i} size="default" href={`/print/combined/pdf?${query}&part=${i + 1}`} label={`PDF ${i + 1} of ${parts}`} onDone={took} />)
           )}
