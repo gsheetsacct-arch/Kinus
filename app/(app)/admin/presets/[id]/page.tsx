@@ -124,6 +124,13 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                 ))}
               </Select>
             </Field>
+            <Field label="Page orientation" htmlFor="orientation" hint="How it prints and downloads as a PDF. Automatic: sideways when the list has more than 10 columns.">
+              <Select id="orientation" name="orientation" defaultValue={String((preset?.filters as { orientation?: string } | null)?.orientation ?? "auto")}>
+                <option value="auto">Automatic</option>
+                <option value="portrait">Portrait (upright)</option>
+                <option value="landscape">Landscape (sideways)</option>
+              </Select>
+            </Field>
             <Field label="Sort campers by" htmlFor="sort_field" hint="Any field, an export column or a combined column on the layout; campers with the same answer go by name.">
               <Select id="sort_field" name="sort_field" defaultValue={sortField}>
                 <option value="last_name">Last name</option>

@@ -61,6 +61,8 @@ export async function savePreset(fd: FormData): Promise<ActionResult> {
         combos,
         // printed: each group (each bunk…) this many times, one after another
         copies: Math.min(10, Math.max(1, Math.round(Number(fd.get("copies"))) || 1)),
+        // the printed page (and PDF): sideways or upright, or by how many columns
+        orientation: ["portrait", "landscape"].includes(String(fd.get("orientation"))) ? String(fd.get("orientation")) : "auto",
       },
     };
     const { error } = d.id ? await supabase.from("list_presets").update(row).eq("id", d.id) : await supabase.from("list_presets").insert({ ...row, created_by: me.id });

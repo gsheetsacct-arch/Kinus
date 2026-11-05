@@ -10,7 +10,9 @@ import { SLEEPING_COLUMN, SLEEPING_COLUMN_LABEL, sleepingText } from "@/lib/slee
 
 type DB = SupabaseClient<Database>;
 
-export type ListPreset = { id: string; name: string; audience: string; columns: string[]; sort: { field: string; dir: string }[]; group_by: string | null; is_default: boolean; /** Only campers with these (lib/camper-flags): any one of them, or all of them. */ only: CamperFlag[]; match: "any" | "all"; /** Only campers whose field is one of these answers (WHERE_EMPTY: nothing in it; WHERE_ANY: anything). Every filter must match. */ where: ColumnFilter[]; /** Combined columns ("combo:<id>" in columns). */ combos?: Combo[]; /** How many copies of each group (each bunk…) print, one after another. */ copies?: number };
+export type ListPreset = { id: string; name: string; audience: string; columns: string[]; sort: { field: string; dir: string }[]; group_by: string | null; is_default: boolean; /** Only campers with these (lib/camper-flags): any one of them, or all of them. */ only: CamperFlag[]; match: "any" | "all"; /** Only campers whose field is one of these answers (WHERE_EMPTY: nothing in it; WHERE_ANY: anything). Every filter must match. */ where: ColumnFilter[]; /** Combined columns ("combo:<id>" in columns). */ combos?: Combo[]; /** How many copies of each group (each bunk…) print, one after another. */ copies?: number; /** The printed page: "auto" (sideways when more than 10 columns), "portrait" or "landscape". */ orientation?: ListOrientation };
+import { parseOrientation, type ListOrientation } from "@/lib/lists/orientation";
+export { parseOrientation, printsLandscape, type ListOrientation } from "@/lib/lists/orientation";
 
 export { WHERE_ANY, WHERE_EMPTY, parseWhere, type ColumnFilter } from "@/lib/list-where";
 import { WHERE_ANY, WHERE_EMPTY, hasContent, parseWhere, type ColumnFilter } from "@/lib/list-where";
@@ -74,6 +76,7 @@ export async function getPresetsFor(supabase: DB, user: CurrentUser): Promise<Li
     where: parseWhere(filters),
     combos: parseCombos(filters),
     copies: parseCopies((filters as { copies?: unknown } | null)?.copies),
+    orientation: parseOrientation((filters as { orientation?: unknown } | null)?.orientation),
   }));
 }
 
