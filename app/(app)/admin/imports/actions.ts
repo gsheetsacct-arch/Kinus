@@ -418,6 +418,17 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
       const { error: e3 } = await admin.from("import_rows").upsert(chunk, { onConflict: "id" });
       if (e3) throw e3;
     }
+    // the export columns this file has, and those with anything in them (normalised: "ppa#size" =
+    // "ppa.size"): the review page checks label fields against them without loading every row's export
+    const colKey = (k: string) => k.trim().toLowerCase().replace(/#/g, ".");
+    const present = new Set<string>();
+    const filledCols = new Set<string>();
+    for (const r of result.rows)
+      for (const [k, v] of Object.entries((r.parsed as { source_data?: Record<string, unknown> } | null)?.source_data ?? {})) {
+        present.add(colKey(k));
+        if (String(v ?? "").trim() !== "") filledCols.add(colKey(k));
+      }
+    const fileColumns = { present: [...present], filled: [...filledCols] };
     const { data: thresholdRow } = await admin.from("settings").select("value").eq("key", "import").maybeSingle();
     const threshold = Number((thresholdRow?.value as { missingThresholdPct?: number })?.missingThresholdPct ?? 20);
     const perDivision = result.summary.divisionsInFile.map((name) => {
@@ -431,7 +442,7 @@ export async function previewImport(fd: FormData): Promise<ActionResult> {
       .update({
         status: "previewed",
         options: { ...(imp.options as object), columnMap, mappingOptions, fixedDivision, thursdayDivisions: [...thursdayDivisions], thursdayOnly, takeBunksFromFile: thursdayOnly || d.takeBunksFromFile === "on", emptyMeansUnknown: thursdayOnly || d.emptyMeansUnknown === "on", correctedCopy: corrected, protected: corrected ? guarded : null, divisionsInFile: result.summary.divisionsInFile, partialWarning },
-        summary: { ...result.summary, missing: result.summary.missing.length, missingList: result.summary.missing, columns, exportChanged: exported, locked, correctedCopy: corrected } as unknown as J,
+        summary: { ...result.summary, missing: result.summary.missing.length, missingList: result.summary.missing, columns, exportChanged: exported, locked, correctedCopy: corrected, fileColumns } as unknown as J,
       })
       .eq("id", imp.id);
     if (e4) throw e4;
