@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import { NAME_TAGS_ONLY_KEY, isNameTag, nameTagsOnlyRule } from "./name-tags-only";
 
 type DB = SupabaseClient<Database>;
 
@@ -22,28 +23,54 @@ const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLow
  */
 export const campMatches = (want: string, camp: string) => same(want, camp);
 
-/** Whether a template is for this camp (by name; null = no camp chosen: every template). */
-export const forCamp = (t: unknown, camp: string | null | undefined) => {
+/**
+ * Whether a template is for this camp (by name; null = no camp chosen: every template). A camp
+ * that gets name tags only (`nameTagsOnly`) gets just name tags, and templates that list it.
+ */
+export const forCamp = (t: unknown, camp: string | null | undefined, nameTagsOnly = false) => {
   const camps = templateCamps(t);
-  return !camps.length || !camp || camps.some((c) => campMatches(c, camp));
+  if (camps.length) return !camp || camps.some((c) => campMatches(c, camp));
+  return !camp || !nameTagsOnly || isNameTag(t);
 };
 
-/** This session's camps by name, with their divisions (a division with no camp belongs to the first, as everywhere). */
-export async function campDivisions(db: DB, sessionId: string): Promise<{ name: string; divisionIds: string[] }[]> {
-  const [{ data: groups }, { data: divisions }] = await Promise.all([
-    db.from("division_groups").select("id, name").eq("session_id", sessionId).order("sort_order").order("name"),
-    db.from("divisions").select("id, group_id").eq("session_id", sessionId),
-  ]);
-  const first = groups?.[0]?.id;
-  return (groups ?? []).map((g) => ({ name: g.name, divisionIds: (divisions ?? []).filter((d) => (d.group_id ?? first) === g.id).map((d) => d.id) }));
+/** Which camps (by name) get name tags only (Settings), as a test. */
+export async function loadNameTagsOnly(): Promise<(camp: string) => boolean> {
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const { data } = await createAdminClient().from("settings").select("value").eq("key", NAME_TAGS_ONLY_KEY).maybeSingle();
+  return nameTagsOnlyRule(data?.value);
 }
 
-/** The divisions a template prints for (null: all of them). */
-export function templateDivisionIds(t: unknown, camps: { name: string; divisionIds: string[] }[]): string[] | null {
+export type CampDivisions = { name: string; divisionIds: string[]; /** gets name tags only (Settings) */ nameTagsOnly?: boolean };
+
+/** This session's camps by name, with their divisions (a division with no camp belongs to the first, as everywhere). */
+export async function campDivisions(db: DB, sessionId: string): Promise<CampDivisions[]> {
+  const [{ data: groups }, { data: divisions }, only] = await Promise.all([
+    db.from("division_groups").select("id, name").eq("session_id", sessionId).order("sort_order").order("name"),
+    db.from("divisions").select("id, group_id").eq("session_id", sessionId),
+    loadNameTagsOnly(),
+  ]);
+  const first = groups?.[0]?.id;
+  return (groups ?? []).map((g) => ({ name: g.name, divisionIds: (divisions ?? []).filter((d) => (d.group_id ?? first) === g.id).map((d) => d.id), nameTagsOnly: only(g.name) }));
+}
+
+/** The divisions a template prints for, when it lists camps (null: it doesn't). */
+export function templateDivisionIds(t: unknown, camps: CampDivisions[]): string[] | null {
   const want = templateCamps(t);
   if (!want.length) return null;
   return camps.filter((c) => want.some((w) => campMatches(w, c.name))).flatMap((c) => c.divisionIds);
 }
+
+/**
+ * The divisions a template that lists no camps leaves out: those of the camps that get name tags
+ * only, unless it's a name tag. (A template that lists camps prints for just those.)
+ */
+export function templateSkipsDivisionIds(t: unknown, camps: CampDivisions[]): string[] {
+  if (templateCamps(t).length || isNameTag(t)) return [];
+  return camps.filter((c) => c.nameTagsOnly).flatMap((c) => c.divisionIds);
+}
+
+/** The camp (by name) a division is in. */
+export const campOfDivision = (camps: CampDivisions[], divisionId: string | null | undefined) => (divisionId ? (camps.find((c) => c.divisionIds.includes(divisionId))?.name ?? null) : null);
 
 /** The camp a camper's division is in (by name), or null. */
 export async function camperCampName(db: DB, divisionId: string | null): Promise<string | null> {

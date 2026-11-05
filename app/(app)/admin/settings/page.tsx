@@ -12,7 +12,8 @@ import { getActiveSession, requireAdmin } from "@/lib/auth/current-user";
 import { extraAnswers } from "@/lib/data/extra-fields";
 import { EXTRA_GROUPS, type ExtraField } from "@/lib/import/extra-fields";
 import Link from "next/link";
-import { resetAttendance, saveExtraFields, saveImportSettings, saveMissingRules, saveOfficeEmail, saveProtectedColumns, sendTestEmail } from "./actions";
+import { resetAttendance, saveExtraFields, saveImportSettings, saveMissingRules, saveNameTagsOnly, saveOfficeEmail, saveProtectedColumns, sendTestEmail } from "./actions";
+import { NAME_TAGS_ONLY_KEY, nameTagsOnlyRule, savedNameTagsOnly } from "@/lib/print/name-tags-only";
 import { parseProtected, PROTECTABLE_FIELDS } from "@/lib/import/protected";
 import { FormDialog } from "@/components/form-dialog";
 import { ResetPicker, type ResetCamp } from "@/components/settings/reset-picker";
@@ -71,6 +72,11 @@ export default async function SettingsPage() {
     ].filter((c) => c.divisions.length);
   }
   const missing = { ...DEFAULT_RULES, ...(setting("missing_rules") as Partial<MissingRules>) };
+  // camps that get name tags only: this session's, and names saved before that aren't in it (kept)
+  const tagsOnlyValue = settings?.find((s) => s.key === NAME_TAGS_ONLY_KEY)?.value;
+  const tagsOnly = nameTagsOnlyRule(tagsOnlyValue);
+  const campNames = resetCamps.filter((c) => c.id !== "all").map((c) => c.name);
+  const otherTagsOnly = (savedNameTagsOnly(tagsOnlyValue) ?? []).filter((n) => !campNames.some((c) => c.trim().toLowerCase() === n.trim().toLowerCase()));
   // who sees each detail group now (Staff → Roles), for "Who sees this"
   const roles = await loadRoles(supabase);
   const seenBy = (g: string) =>
@@ -123,6 +129,31 @@ export default async function SettingsPage() {
           </div>
         </ActionForm>
       </Section>
+
+      {campNames.length > 0 && (
+        <Section
+          title="Camps that get name tags only"
+          description="Ticked camps (the Thursday Program, Virtual…) get their name tags and nothing else: no luggage tags, packing labels, buzzers or other printing, no buzzer numbers, and their bunks don't move the continuing bunk numbers. Kept by camp name, so it carries over to next session's camps of the same name. A template set to print for that camp by name still does."
+        >
+          <ActionForm action={saveNameTagsOnly} warnUnsaved className="group space-y-3">
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              {campNames.map((c) => (
+                <label key={c} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="camp" value={c} defaultChecked={tagsOnly(c)} className="size-4 accent-[var(--primary)]" /> {c}
+                </label>
+              ))}
+            </div>
+            {otherTagsOnly.map((c) => (
+              <input key={c} type="hidden" name="other" value={c} />
+            ))}
+            {otherTagsOnly.length > 0 && <p className="text-xs text-muted-foreground">Also kept for a later session: {otherTagsOnly.join(", ")}.</p>}
+            <span className="flex items-center gap-3">
+              <Button type="submit">Save</Button>
+              <span className="hidden text-sm font-medium text-amber-700 group-data-[dirty=true]:inline dark:text-amber-300">Unsaved changes</span>
+            </span>
+          </ActionForm>
+        </Section>
+      )}
 
       <Section
         title="Extra fields from the export"

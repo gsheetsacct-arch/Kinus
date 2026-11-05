@@ -1,5 +1,5 @@
 import "server-only";
-import { campDivisions, templateCamps, templateDivisionIds } from "./template-camps";
+import { campDivisions, templateDivisionIds, templateSkipsDivisionIds } from "./template-camps";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { loadMergeSetup, loadPrintCampers, toSpec, byBunkThenName } from "./data";
@@ -91,10 +91,12 @@ export async function labelUpdates(sessionId: string, divisionIds: string[] | nu
   // (so a field added to the template later isn't mistaken for every camper changing)
   const upgrades: { job_id: string; camper_id: string; was: string; content_hash: string }[] = [];
   // templates for some camps only: just their campers
-  const campList = used.some((t) => templateCamps(t).length) ? await campDivisions(admin, sessionId) : [];
+  // (and, for anything but name tags, none of a camp that gets name tags only)
+  const campList = await campDivisions(admin, sessionId);
   const result = used
     .map((t) => {
       const onlyIn = templateDivisionIds(t, campList);
+      const skipIn = templateSkipsDivisionIds(t, campList);
       const spec = toSpec(t);
       const keys = templateKeys(spec);
       const done = printed.get(t.id)!;
@@ -107,6 +109,7 @@ export async function labelUpdates(sessionId: string, divisionIds: string[] | nu
       for (const c of full) {
         if (waiting.has(c.id)) continue;
         if (onlyIn && !onlyIn.includes(divisionOf.get(c.id) ?? "")) continue;
+        if (skipIn.includes(divisionOf.get(c.id) ?? "")) continue;
         const vals = labelValues(spec, values.get(c.id)!);
         if (skip[c.id] && sameContent(skip[c.id], keys, vals)) continue;
         const was = done.get(c.id);

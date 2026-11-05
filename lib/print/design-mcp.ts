@@ -81,6 +81,50 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
   const design = (designer ? server.registerTool.bind(server) : () => undefined) as typeof server.registerTool;
 
   server.registerTool(
+    "name_tags_only_camps",
+    {
+      title: "Camps that get name tags only",
+      description:
+        "Settings → Camps that get name tags only: camps (by name, carried over to next session's camps of the same name) that get their name tags and nothing else: no luggage tags, packing labels, buzzers or other printing, no buzzer numbers, and their bunks don't move the continuing bunk or staff numbers. Without camps: what's set now, for this session's camps. With camps: sets exactly that list (owners and directors over all of camp, who have Settings); [] turns it off for every camp. Names saved before that aren't in this session stay unless keep_others is false.",
+      inputSchema: { camps: z.array(z.string().min(1).max(80)).max(50).optional(), keep_others: z.boolean().optional() },
+    },
+    async ({ camps, keep_others }) => {
+      try {
+        const { NAME_TAGS_ONLY_KEY, nameTagsOnlyRule, savedNameTagsOnly } = await import("./name-tags-only");
+        const { isAdmin } = await import("@/lib/auth/permissions");
+        const db = createAdminClient();
+        const { data: session } = await db.from("sessions").select("id").eq("is_active", true).maybeSingle();
+        const { data: groups } = session ? await db.from("division_groups").select("name").eq("session_id", session.id).order("sort_order").order("name") : { data: [] };
+        const names = (groups ?? []).map((g) => g.name);
+        const { data: row } = await db.from("settings").select("value").eq("key", NAME_TAGS_ONLY_KEY).maybeSingle();
+        const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+        const saved = savedNameTagsOnly(row?.value);
+        const others = (saved ?? []).filter((n) => !names.some((c) => same(c, n)));
+        const show = (value: unknown, lead: string) => {
+          const rule = nameTagsOnlyRule(value);
+          const on = names.filter(rule);
+          const kept = (savedNameTagsOnly(value) ?? []).filter((n) => !names.some((c) => same(c, n)));
+          return `${lead}\nName tags only: ${on.join(", ") || "none"}.\nEverything: ${names.filter((n) => !rule(n)).join(", ") || "none"}.${kept.length ? `\nAlso kept for a later session: ${kept.join(", ")}.` : ""}${savedNameTagsOnly(value) === null ? "\n(Never saved: the Thursday camps and Virtual, by default.)" : ""}`;
+        };
+        if (!camps) return text(show(row?.value, "Camps that get name tags only (Settings):"));
+        if (!isAdmin(user)) return problem("Changing this is for owners and directors over all of camp (Settings).");
+        const unknown = camps.filter((c) => !names.some((n) => same(n, c)));
+        if (unknown.length && names.length) return problem(`No camp called ${unknown.map((c) => `"${c}"`).join(", ")} this session. Camps: ${names.join(", ")}.`);
+        // this session's spelling, plus the names kept from before
+        const list = [...new Set([...camps.map((c) => names.find((n) => same(n, c)) ?? c.trim()), ...(keep_others === false ? [] : others)])];
+        const { error } = await db.from("settings").upsert({ key: NAME_TAGS_ONLY_KEY, value: { camps: list }, updated_by: user.id, updated_at: new Date().toISOString() });
+        if (error) throw error;
+        const { revalidatePath } = await import("next/cache");
+        revalidatePath("/admin/settings");
+        revalidatePath("/print", "layout");
+        return text(show({ camps: list }, "Saved."));
+      } catch (e) {
+        return problem(e instanceof Error ? e.message : "Couldn't read or save the setting.");
+      }
+    },
+  );
+
+  server.registerTool(
     "kinus_guide",
     {
       title: "The Kinus guide",

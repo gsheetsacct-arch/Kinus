@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { EXTRA_GROUPS, parseExtraFields, type ExtraGroup } from "@/lib/import/extra-fields";
 import { forCampers } from "@/lib/print/staff-values";
+import { NAME_TAGS_ONLY_KEY } from "@/lib/print/name-tags-only";
 
 const office = z.object({ to: z.string().trim().email("Enter a valid email address.").or(z.literal("")), cc: z.string().trim().optional() });
 
@@ -86,6 +87,27 @@ export async function saveMissingRules(fd: FormData): Promise<ActionResult> {
     revalidatePath("/admin/settings");
     revalidatePath("/status");
     return ok("Saved.");
+  } catch (e) {
+    return fail(errorMessage(e));
+  }
+}
+
+/**
+ * Camps that get name tags only (no other printing, continuing numbers or buzzers), by camp
+ * name so it carries over to next session. Names saved before that aren't in this session stay.
+ */
+export async function saveNameTagsOnly(fd: FormData): Promise<ActionResult> {
+  const me = await requireAdmin();
+  try {
+    const ticked = fd.getAll("camp").map((c) => String(c).trim()).filter(Boolean);
+    const kept = fd.getAll("other").map((c) => String(c).trim()).filter(Boolean);
+    const camps = [...new Set([...ticked, ...kept])];
+    const supabase = await createClient();
+    const { error } = await supabase.from("settings").upsert({ key: NAME_TAGS_ONLY_KEY, value: { camps }, updated_by: me.id, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    revalidatePath("/admin/settings");
+    revalidatePath("/print", "layout");
+    return ok(camps.length ? `Saved: ${camps.join(", ")} get${camps.length === 1 ? "s" : ""} name tags only.` : "Saved: every camp gets everything.");
   } catch (e) {
     return fail(errorMessage(e));
   }

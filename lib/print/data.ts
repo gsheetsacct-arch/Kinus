@@ -5,6 +5,7 @@ import type { ContactLike, CamperLike } from "@/lib/fields";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { compareBunkNames, compareDivisionNames } from "@/lib/bunk-order";
 import { continuedBunkNumbers } from "./bunk-continued";
+import { NAME_TAGS_ONLY_KEY, nameTagsOnlyRule } from "./name-tags-only";
 import { picturesOf, type BackSide, type MergeField, type Transform, type ValueMap, type TemplateSpec, type Layer, type SheetLayout } from "./types";
 
 type DB = SupabaseClient<Database>;
@@ -99,19 +100,24 @@ export async function loadPrintCampers(admin: DB, ids: string[]): Promise<PrintC
 /**
  * Each bunk's number running on across camps (lib/print/bunk-continued), for the sessions
  * given: bunk id → number. Camps in their usual order; a division with no camp is in the first.
+ * Camps that get name tags only (Settings) don't count: their bunks get no number.
  */
 async function sessionBunkNumbers(admin: DB, sessionIds: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
+  if (!sessionIds.length) return out;
+  const { data: rule } = await admin.from("settings").select("value").eq("key", NAME_TAGS_ONLY_KEY).maybeSingle();
+  const nameTagsOnly = nameTagsOnlyRule(rule?.value);
   await Promise.all(
     sessionIds.map(async (sessionId) => {
       const [{ data: groups, error: ge }, { data: divisions, error: de }] = await Promise.all([
-        admin.from("division_groups").select("id").eq("session_id", sessionId).order("sort_order").order("name"),
+        admin.from("division_groups").select("id, name").eq("session_id", sessionId).order("sort_order").order("name"),
         admin.from("divisions").select("id, group_id, bunks(id, name)").eq("session_id", sessionId),
       ]);
       if (ge) throw ge;
       if (de) throw de;
       const first = groups?.[0]?.id ?? null;
-      const camps = (groups?.length ? groups.map((g) => g.id) : [null]).map((gid) =>
+      const counted = (groups ?? []).filter((g) => !nameTagsOnly(g.name)).map((g) => g.id);
+      const camps = (groups?.length ? counted : [null]).map((gid) =>
         (divisions ?? []).filter((d) => (d.group_id ?? first) === gid).flatMap((d) => (d.bunks ?? []) as { id: string; name: string }[]),
       );
       for (const [id, n] of continuedBunkNumbers(camps)) out.set(id, n);
