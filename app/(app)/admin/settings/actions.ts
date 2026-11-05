@@ -42,13 +42,37 @@ export async function saveImportSettings(fd: FormData): Promise<ActionResult> {
   }
 }
 
+const timeOrNull = z
+  .string()
+  .trim()
+  .nullish()
+  .transform((v) => (v && /^\d{2}:\d{2}$/.test(v) ? v : null));
+const dateOrNull = z
+  .string()
+  .trim()
+  .nullish()
+  .transform((v) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null));
 const missingRules = z.object({
   percent: z.coerce.number().int().min(0).max(100),
-  after_time: z
+  after_time: timeOrNull,
+  after_date: dateOrNull,
+  // camps and divisions with their own rule ("camp:<id>" / "div:<id>")
+  overrides: z
     .string()
-    .trim()
     .optional()
-    .transform((v) => (v && /^\d{2}:\d{2}$/.test(v) ? v : null)),
+    .transform((v) => {
+      try {
+        return JSON.parse(v || "[]");
+      } catch {
+        return [];
+      }
+    })
+    .pipe(
+      z
+        .array(z.object({ key: z.string().regex(/^(camp|div):[0-9a-f-]{36}$/), percent: z.coerce.number().int().min(0).max(100), after_time: timeOrNull, after_date: dateOrNull }))
+        .max(100)
+        .transform((list) => list.filter((o, i) => list.findIndex((x) => x.key === o.key) === i)),
+    ),
 });
 
 /** When a camper who hasn't arrived gets flagged "check up on". */
@@ -173,9 +197,9 @@ export async function sendTestEmail(): Promise<ActionResult> {
 }
 
 /**
- * The owner starts check-in over (after a practice run, say): every check-in and check-out of
- * the active session is removed, with the follow-ups (coming later, notes), and every camper is
- * "not here yet" again. Campers, bunks, tags and buzzer numbers stay as they are.
+ * The owner starts check-in over (after a practice run, say) for the divisions picked: their
+ * campers' check-ins and check-outs in the active session are removed, with the follow-ups
+ * (coming later, notes), and those campers are "not here yet" again. Campers, bunks, tags and buzzer numbers stay as they are.
  */
 export async function resetAttendance(fd: FormData): Promise<ActionResult> {
   const me = await requireUser();
@@ -186,7 +210,12 @@ export async function resetAttendance(fd: FormData): Promise<ActionResult> {
   try {
     const admin = createAdminClient();
     const { fetchAll } = await import("@/lib/supabase/fetch-all");
-    const ids = (await fetchAll((from, to) => admin.from("campers").select("id").eq("session_id", session.id).order("id").range(from, to))).map((c) => c.id);
+    // only the divisions picked (of this session)
+    const picked = [...new Set(fd.getAll("division").map(String))];
+    if (!picked.length) return fail("Tick the camps or divisions to reset.");
+    const { data: divs } = await admin.from("divisions").select("id, name").eq("session_id", session.id).in("id", picked);
+    if (!divs?.length || divs.length !== picked.length) return fail("Those divisions aren't in this session. Reload the page and try again.");
+    const ids = (await fetchAll((from, to) => admin.from("campers").select("id").eq("session_id", session.id).in("division_id", picked).order("id").range(from, to))).map((c) => c.id);
     let removed = 0;
     for (let i = 0; i < ids.length; i += 200) {
       const chunk = ids.slice(i, i + 200);
@@ -200,7 +229,8 @@ export async function resetAttendance(fd: FormData): Promise<ActionResult> {
       if (followups.error) throw followups.error;
     }
     for (const p of ["/", "/status", "/scan", "/campers", "/checkout"]) revalidatePath(p);
-    return ok(`Check-ins reset: ${removed.toLocaleString("en-US")} check-ins and check-outs removed, and all ${ids.length.toLocaleString("en-US")} campers are not here yet.`);
+    const where = divs.length <= 3 ? divs.map((d) => d.name).join(", ") : `${divs.length} divisions`;
+    return ok(`Check-ins reset for ${where}: ${removed.toLocaleString("en-US")} check-ins and check-outs removed, and their ${ids.length.toLocaleString("en-US")} campers are not here yet.`);
   } catch (e) {
     return fail(errorMessage(e));
   }

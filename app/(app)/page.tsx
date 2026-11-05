@@ -72,7 +72,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   // campers who should be here by now (same rules as "Not here yet")
   let toCheck = 0;
   if (session && canFollowUp(user) && campers.some((c) => c.status === "expected")) {
-    const [rules, followups, started] = await Promise.all([loadRules(supabase), loadFollowups(supabase, session.id), campStarted(session.id)]);
+    const [rules, followups, started] = await Promise.all([loadRules(supabase, session.id), loadFollowups(supabase, session.id), campStarted(session.id)]);
     const counts = await divisionCounts(session.id, campers.map((c) => c.division_id));
     const flags = flagRows(campers.map((c) => ({ id: c.id, divisionId: c.division_id, bunkId: c.bunk_id, status: c.status })), rules, followups, started, counts);
     toCheck = Object.values(flags).filter((f) => f.kind === "check").length;

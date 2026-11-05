@@ -16,7 +16,7 @@ import type { BoardRow } from "@/lib/data/board";
 import { matchScore, searchEntry } from "@/lib/search";
 import { createClient } from "@/lib/supabase/client";
 import { CAMP_TIME_ZONE, cn, formatPhone, formatWhen } from "@/lib/utils";
-import { campClock, missingStates, type CampStart, type DivisionCount, type Followup, type MissingRules } from "@/lib/attendance/missing";
+import { campNow, missingStates, type CampStart, type DivisionCount, type Followup, type MissingRules } from "@/lib/attendance/missing";
 import { boardChanges, bulkAttendance } from "@/app/(app)/status/actions";
 import { checkInNow, clearFollowup, markNotComing, saveFollowup, undoNotComing } from "@/app/(app)/missing/actions";
 import { FollowupDialog, type FollowupDlg } from "./followup-dialog";
@@ -208,7 +208,7 @@ export function StatusBoard({
   // who should be checked up on, recomputed as check-ins arrive
   // measured on every camper this person sees (whole divisions), counted for the part on screen
   const flags = React.useMemo(
-    () => missingStates(rows, rules, new Map(Object.entries(followups)), now, campClock(now, CAMP_TIME_ZONE), started, divisionCounts),
+    () => missingStates(rows, rules, new Map(Object.entries(followups)), now, campNow(now, CAMP_TIME_ZONE), started, divisionCounts),
     [rows, rules, followups, now, started, divisionCounts],
   );
   const kindOf = React.useCallback((r: BoardRow) => (r.status === "expected" ? (flags.get(r.id)?.kind ?? "waiting") : null), [flags]);

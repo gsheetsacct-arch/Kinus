@@ -15,6 +15,8 @@ import Link from "next/link";
 import { resetAttendance, saveExtraFields, saveImportSettings, saveMissingRules, saveOfficeEmail, saveProtectedColumns, sendTestEmail } from "./actions";
 import { parseProtected, PROTECTABLE_FIELDS } from "@/lib/import/protected";
 import { FormDialog } from "@/components/form-dialog";
+import { ResetPicker, type ResetCamp } from "@/components/settings/reset-picker";
+import { MissingOverrides } from "@/components/settings/missing-overrides";
 import { isOwner } from "@/lib/auth/permissions";
 import { emailSetup } from "@/lib/print/email";
 import { loadExtraFields, loadHiddenColumns } from "@/lib/data/extra-fields";
@@ -48,6 +50,26 @@ export default async function SettingsPage() {
   const [extraFields, hiddenColumns] = await Promise.all([loadExtraFields(), loadHiddenColumns()]);
   const session = await getActiveSession();
   const answers = session ? await extraAnswers(session.id, extraFields) : new Map();
+  // the reset's picker: each camp and its divisions (a division with no camp is in the first), with how many campers
+  let resetCamps: ResetCamp[] = [];
+  if (session) {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const { fetchAll } = await import("@/lib/supabase/fetch-all");
+    const admin = createAdminClient();
+    const [{ data: groups }, { data: divs }, rows] = await Promise.all([
+      admin.from("division_groups").select("id, name").eq("session_id", session.id).order("sort_order").order("name"),
+      admin.from("divisions").select("id, name, group_id").eq("session_id", session.id).order("sort_order"),
+      fetchAll((from, to) => admin.from("campers").select("id, division_id").eq("session_id", session.id).order("id").range(from, to)),
+    ]);
+    const count = new Map<string, number>();
+    for (const r of rows) if (r.division_id) count.set(r.division_id, (count.get(r.division_id) ?? 0) + 1);
+    const first = groups?.[0]?.id ?? null;
+    const campOf = (d: { group_id: string | null }) => d.group_id ?? first;
+    resetCamps = [
+      ...(groups ?? []).map((g) => ({ id: g.id, name: g.name, divisions: (divs ?? []).filter((d) => campOf(d) === g.id).map((d) => ({ id: d.id, name: d.name, campers: count.get(d.id) ?? 0 })) })),
+      ...(first ? [] : [{ id: "all", name: "Divisions", divisions: (divs ?? []).map((d) => ({ id: d.id, name: d.name, campers: count.get(d.id) ?? 0 })) }]),
+    ].filter((c) => c.divisions.length);
+  }
   const missing = { ...DEFAULT_RULES, ...(setting("missing_rules") as Partial<MissingRules>) };
   // who sees each detail group now (Staff → Roles), for "Who sees this"
   const roles = await loadRoles(supabase);
@@ -78,9 +100,21 @@ export default async function SettingsPage() {
               <span className="text-sm text-muted-foreground">%</span>
             </div>
           </Field>
-          <Field label="Or flag everyone still missing after" htmlFor="after_time" hint={`${campZoneLabel()} time (camp time), whatever time zone a phone or the server is in. Leave empty to only use the percentage.`}>
-            <Input id="after_time" name="after_time" type="time" defaultValue={missing.after_time ?? ""} className="w-36" />
+          <Field
+            label="Or flag everyone still missing after"
+            htmlFor="after_time"
+            hint={`${campZoneLabel()} time (camp time). With a date, from that moment on; without one, that time once the first camper has arrived (and every day after). Leave both empty to only use the percentage.`}
+          >
+            <span className="flex flex-wrap items-center gap-2">
+              <Input id="after_date" name="after_date" type="date" defaultValue={missing.after_date ?? ""} className="w-40" aria-label="Cut-off date" />
+              <Input id="after_time" name="after_time" type="time" defaultValue={missing.after_time ?? ""} className="w-36" aria-label="Cut-off time" />
+            </span>
           </Field>
+          <div className="space-y-1.5 sm:col-span-2">
+            <p className="text-sm font-medium">Different for some camps or divisions</p>
+            <p className="text-xs text-muted-foreground">A camp or division that arrives on another day or time gets its own share and cut-off. A division&apos;s own rule wins over its camp&apos;s; everyone else follows the rule above.</p>
+            <MissingOverrides camps={resetCamps.map((c) => ({ id: c.id, name: c.name, divisions: c.divisions.map((d) => ({ id: d.id, name: d.name })) }))} initial={missing.overrides ?? []} defaults={{ percent: missing.percent }} />
+          </div>
           <div className="sm:col-span-2">
             <span className="flex items-center gap-3">
               <Button type="submit">Save</Button>
@@ -238,17 +272,20 @@ export default async function SettingsPage() {
         <Section
           tone="danger"
           title="Reset check-ins"
-          description={`Starts check-in over for ${session.name}: every check-in and check-out is removed, with the follow-ups (coming later, notes), and every camper is not here yet again. Campers, bunks, tags and buzzer numbers stay. Only the owner can do this, and it can't be undone.`}
+          description={`Starts check-in over for the camps or divisions you pick in ${session.name}: their check-ins and check-outs are removed, with the follow-ups (coming later, notes), and their campers are not here yet again. Campers, bunks, tags and buzzer numbers stay. Only the owner can do this, and it can't be undone.`}
         >
           <FormDialog
-            trigger={<Button variant="destructive">Reset all check-ins…</Button>}
-            title="Reset every check-in and check-out?"
-            description={`Everyone in ${session.name} goes back to not here yet, and their check-in history is gone for good.`}
+            trigger={<Button variant="destructive">Reset check-ins…</Button>}
+            title="Reset check-ins and check-outs"
+            description={`Pick which camps or divisions in ${session.name} start over. Their campers go back to not here yet, and their check-in history is gone for good.`}
             action={resetAttendance}
             submitLabel="Reset check-ins"
             destructive
             confirmText="RESET"
-          />
+            wide
+          >
+            <ResetPicker camps={resetCamps} />
+          </FormDialog>
         </Section>
       )}
     </div>

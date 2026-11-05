@@ -1,3 +1,4 @@
+import { cutoffLabel } from "@/lib/attendance/missing";
 import Link from "next/link";
 import { Activity } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
@@ -30,7 +31,7 @@ export default async function StatusPage({ searchParams }: { searchParams: Promi
   ]);
   const [rows, rules, followups, started] = await Promise.all([
     loadBoard(supabase, session.id, visibleFieldGroups(user, fv ?? []).has("contacts"), camp.divisionIds),
-    loadRules(supabase),
+    loadRules(supabase, session.id),
     loadFollowups(supabase, session.id),
     campStarted(session.id),
   ]);
@@ -38,7 +39,9 @@ export default async function StatusPage({ searchParams }: { searchParams: Promi
   const inCamp = (id: string | null) => !camp.divisionIds || (id !== null && camp.divisionIds.includes(id));
   const campTree = { groups: tree.groups, divisions: tree.divisions.filter((d) => inCamp(d.id)) };
   const label = everyoneLabel(camp);
-  const ruleText = [rules.percent ? `${rules.percent}% of their division is here` : null, rules.after_time ? `it's past ${rules.after_time}` : null].filter(Boolean).join(" or ");
+  const ruleText =
+    [rules.percent ? `${rules.percent}% of their division is here` : null, rules.after_time || rules.after_date ? `it's past ${cutoffLabel(rules)}` : null].filter(Boolean).join(" or ") +
+    (rules.overrides?.length ? " (some camps or divisions have their own)" : "");
   const views = ["check", "later", ...Object.keys(STATUS_LABEL)];
   const linkView = sp.status === "all" ? "" : sp.status && views.includes(sp.status) ? (sp.status as CamperStatus | "check" | "later") : undefined;
   return (
