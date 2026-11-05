@@ -39,7 +39,19 @@ export type QueueJob = {
 const printable = (j: QueueJob) => j.status === "ready" || j.status === "sent";
 const togetherHref = (ids: string[]) => `/print/together?jobs=${ids.join(",")}`;
 
-export function PrintQueue({ jobs, show, together = [] }: { jobs: QueueJob[]; show: string; /** templates printed all together at the top (on-the-spot labels): no group of their own */ together?: string[] }) {
+export function PrintQueue({
+  jobs,
+  show,
+  together = [],
+  checkin = false,
+}: {
+  jobs: QueueJob[];
+  show: string;
+  /** templates printed all together at the top (on-the-spot labels): no group of their own */
+  together?: string[];
+  /** a check-in login's labels: print, download and mark printed only (no cancelling or emailing) */
+  checkin?: boolean;
+}) {
   const router = useRouter();
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [pending, start] = React.useTransition();
@@ -65,9 +77,11 @@ export function PrintQueue({ jobs, show, together = [] }: { jobs: QueueJob[]; sh
     return (
       <p className="rounded-xl border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
         {show === "todo" ? "Nothing waiting to print." : "Nothing here."}{" "}
-        <Link href="/print/batch" className="text-primary hover:underline">
-          Print a batch
-        </Link>
+        {!checkin && (
+          <Link href="/print/batch" className="text-primary hover:underline">
+            Print a batch
+          </Link>
+        )}
       </p>
     );
 
@@ -130,9 +144,11 @@ export function PrintQueue({ jobs, show, together = [] }: { jobs: QueueJob[]; sh
           <Button size="sm" variant="outline" onClick={() => run(() => markPrinted(ids))}>
             <CheckCheck /> Mark printed
           </Button>
-          <Button size="sm" variant="ghost" className="text-destructive" onClick={() => run(() => cancelJobs(ids))}>
-            Cancel
-          </Button>
+          {!checkin && (
+            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => run(() => cancelJobs(ids))}>
+              Cancel
+            </Button>
+          )}
         </div>
       )}
       <ul className="divide-y overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-card)]">
@@ -215,7 +231,7 @@ export function PrintQueue({ jobs, show, together = [] }: { jobs: QueueJob[]; sh
                     <CheckCheck /> Mark printed
                   </Button>
                 )}
-                {(j.status === "failed" || (j.status === "ready" && j.error)) && (
+                {!checkin && (j.status === "failed" || (j.status === "ready" && j.error)) && (
                   <Button size="sm" variant="outline" onClick={() => run(() => resendJob(j.id))}>
                     <RotateCcw /> {j.status === "failed" ? "Try again" : "Email again"}
                   </Button>
