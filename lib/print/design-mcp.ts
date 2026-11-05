@@ -662,6 +662,8 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
         }
         let ids: string[];
         let place: string;
+        // who's new and who's updated, for the job's note
+        let kinds: Map<string, "new" | "updated"> | null = null;
         if (camper_codes?.length) {
           const codes = [...new Set(camper_codes.map((c) => c.trim()).filter(Boolean))];
           const { data } = await admin.from("campers").select("id, camper_code, division_id").eq("session_id", session.id).is("archived_at", null).in("camper_code", codes);
@@ -670,6 +672,7 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
           if (missing.length) return problem(`No camper of yours with code ${missing.slice(0, 10).join(", ")}${missing.length > 10 ? "…" : ""}.`);
           ids = found.map((c) => c.id);
           place = `${ids.length} chosen`;
+          kinds = ids.length ? await import("./batch").then((m) => m.camperTagKinds(template_id, ids)) : null;
         } else {
           const { data: divs } = await admin.from("divisions").select("id, name, bunks(id, name)").eq("session_id", session.id);
           const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -688,8 +691,8 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
             inCamp = scope ? c.divisionIds.filter((x) => scope.includes(x)) : c.divisionIds;
             if (!inCamp.length) return text(`No campers of yours in ${c.name}: nothing to print.`);
           }
-          const { batchCamperIds } = await import("./batch");
-          ids = await batchCamperIds(admin, session.id, { divisionIds: inCamp ?? scope, divisionId: d?.id, bunkId: b[0]?.id }, which, template_id);
+          const { batchCampers } = await import("./batch");
+          ({ ids, kinds } = await batchCampers(admin, session.id, { divisionIds: inCamp ?? scope, divisionId: d?.id, bunkId: b[0]?.id }, which, template_id));
           place = b[0] ? `${b[0].division} · ${b[0].name}` : d ? d.name : inCamp ? `All of ${camp}` : "Everyone";
         }
         if (!ids.length) return text(`No campers match (${place}, ${which}): nothing to print.`);
@@ -706,7 +709,7 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
           camperIds: ids,
           copies,
           deliverTo: deliver === "email" ? email_to?.trim() || null : user.email,
-          note: [purpose, place, WHICH[which], "asked through Claude"].filter(Boolean).join(" · "),
+          note: [purpose, place, WHICH[which], "asked through Claude"].filter(Boolean).join(" · ") + (await import("./change-note").then((m) => m.camperChangeNote(kinds))),
           order,
         });
         if (deliver === "email") {
@@ -747,7 +750,7 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
         if (!canUsePrintArea(user)) return problem(`${user.fullName} can't ask for prints (printing is for the office and directors).`);
         const session = await activeSession();
         if (!session) return problem("No active session.");
-        const { staffInView, staffQueueItems, staffChangedSince } = await import("./staff");
+        const { staffInView, staffQueueItems, staffTagKinds } = await import("./staff");
         const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
         const pick = division || camp || names?.length || everyone;
         let people = pick
@@ -762,10 +765,9 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
           const missing = names.filter((n) => !people.some((p) => same(p.name, n)));
           if (missing.length) return problem(`No staff member of yours called ${missing.slice(0, 10).join(", ")}.`);
         }
-        if (which === "changed" && people.length) {
-          const changed = await staffChangedSince(template_id, people);
-          people = people.filter((p) => changed.has(p.id));
-        }
+        // who's new and who's updated, for the job's note (any request: a reprint of an unchanged tag is neither)
+        const staffKinds = people.length ? await staffTagKinds(template_id, people) : new Map<string, "new" | "updated">();
+        if (which === "changed") people = people.filter((p) => staffKinds.has(p.id));
         const blank = blank_count && blank_division ? { count: blank_count, division: blank_division } : null;
         if (!people.length && !blank) return text("Nobody matches (and no blank badges asked for): nothing to print.");
         if (dry_run)
@@ -782,7 +784,9 @@ export function designServer(user: CurrentUser, appUrl: string, opts: { designer
           templateId: template_id,
           items,
           order,
-          note: [purpose, division ?? camp ?? (names?.length ? `${names.length} chosen` : people.length ? "Everyone" : null), which === "changed" ? "new or changed" : null, blank ? `${blank.count} blank (${blank.division})` : null, "asked through Claude"].filter(Boolean).join(" · "),
+          note:
+            [purpose, division ?? camp ?? (names?.length ? `${names.length} chosen` : people.length ? "Everyone" : null), which === "changed" ? "new or changed" : null, blank ? `${blank.count} blank (${blank.division})` : null, "asked through Claude"].filter(Boolean).join(" · ") +
+            (await import("./change-note").then((m) => m.changeNote(people.filter((p) => staffKinds.has(p.id)).map((p) => ({ name: p.name, kind: staffKinds.get(p.id)! }))))),
         });
         return text(`Added to the print queue: ${job.tags} staff tags (${job.count} ${job.count === 1 ? "badge" : "badges"}). ${appUrl}/print/jobs/${job.id}`);
       } catch (e) {

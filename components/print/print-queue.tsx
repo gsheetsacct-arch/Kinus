@@ -33,6 +33,9 @@ export type QueueJob = {
   template: string;
   by: string;
   printedBy: string | null;
+  /** how many get this tag for the first time (new package) and how many changed (an existing bag) */
+  newCount?: number;
+  updatedCount?: number;
 };
 
 
@@ -191,6 +194,11 @@ export function PrintQueue({
                     {j.count > 1 && ` · ${j.count} tags`}
                   </span>
                   <Badge variant={st.variant}>{st.label}</Badge>
+                  {(j.newCount || j.updatedCount) ? (
+                    <span className="text-xs text-muted-foreground">
+                      {[j.newCount ? `${j.newCount} new` : null, j.updatedCount ? `${j.updatedCount} updated` : null].filter(Boolean).join(" · ")}
+                    </span>
+                  ) : null}
                 </span>
                 {/* a single camper's request: what it's for, as the person wrote it */}
                 {j.who && j.note && (

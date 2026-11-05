@@ -163,6 +163,14 @@ export async function staffQueueItems(me: CurrentUser, opts: { ids?: string[]; c
  * Kinus kept the person on it is matched by name.
  */
 export async function staffChangedSince(templateId: string, people: { id: string; name: string; values: Record<string, string> }[]): Promise<Set<string>> {
+  return new Set((await staffTagKinds(templateId, people)).keys());
+}
+
+/**
+ * Whose tag on this template is new (never printed or queued) and whose was printed before but
+ * says something else now ("updated"); those whose last tag says the same aren't in it.
+ */
+export async function staffTagKinds(templateId: string, people: { id: string; name: string; values: Record<string, string> }[]): Promise<Map<string, "new" | "updated">> {
   const admin = createAdminClient();
   const [{ data: template }, { data: jobs, error }] = await Promise.all([
     admin.from("print_templates").select("*").eq("id", templateId).maybeSingle(),
@@ -170,7 +178,7 @@ export async function staffChangedSince(templateId: string, people: { id: string
   ]);
   // never "everyone changed" because the queue couldn't be read
   if (error) throw new Error(`Couldn't read what was printed before: ${error.message}`);
-  if (!template) return new Set(people.map((p) => p.id));
+  if (!template) return new Map(people.map((p) => [p.id, "new" as const]));
   const [{ toSpec }, { templateKeys, labelValues, contentHash }, { parseStaffItems }] = await Promise.all([import("./data"), import("./content"), import("./jobs")]);
   const spec = toSpec(template);
   const keys = templateKeys(spec);
@@ -195,13 +203,15 @@ export async function staffChangedSince(templateId: string, people: { id: string
       namedJobs.set(n, j);
       byName.set(n, (byName.get(n) ?? new Set()).add(said(it.values)));
     }
-  return new Set(
-    people
-      .filter((p) => {
-        const now = said(p.values);
-        const last = byId.get(p.id);
-        return last !== undefined ? last !== now : !byName.get(name(p.name))?.has(now);
-      })
-      .map((p) => p.id),
-  );
+  const kinds = new Map<string, "new" | "updated">();
+  for (const p of people) {
+    const now = said(p.values);
+    const last = byId.get(p.id);
+    const named = byName.get(name(p.name));
+    if (last !== undefined) {
+      if (last !== now) kinds.set(p.id, "updated");
+    } else if (!named) kinds.set(p.id, "new");
+    else if (!named.has(now)) kinds.set(p.id, "updated");
+  }
+  return kinds;
 }
