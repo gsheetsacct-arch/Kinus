@@ -47,13 +47,14 @@ export function PdfButton({ href, label, size = "lg", onDone, mark }: { href: st
     const started = Date.now();
     let left = false; // the page was hidden or lost focus (a download sheet, a separate view)
     let finished = false;
-    const finish = (outcome: "ok" | "err" | "unknown") => {
+    const finish = (outcome: "ok" | "err" | "unknown" | "missing") => {
       if (finished) return;
       finished = true;
       dropCookie(name);
       setMaking(null);
       setTok(token());
       if (outcome === "err") toast.error("Couldn't make the PDF. Try again, or print from the page.");
+      else if (outcome === "missing") toast.error("The PDF didn't come through, so nothing was marked printed. Try again.");
       else if (outcome === "ok") {
         // the caller says what happens next (the queue's note); otherwise the phone steps here
         if (doneRef.current) doneRef.current();
@@ -64,6 +65,8 @@ export function PdfButton({ href, label, size = "lg", onDone, mark }: { href: st
     const back = () => {
       // came back from the download: without a way to hear it (no marking), it's done
       if (left && !markRef.current?.length) setTimeout(() => finish("unknown"), 1500);
+      // marking, but they're still not printed a while after coming back: it didn't download
+      else if (left) setTimeout(() => !finished && finish("missing"), 10_000);
     };
     const onVis = () => (document.visibilityState === "hidden" ? away() : back());
     document.addEventListener("visibilitychange", onVis);

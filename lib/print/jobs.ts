@@ -338,6 +338,18 @@ const PDF_MAX_TAGS = 3000;
 /** Resend takes up to 40 MB an email; a bigger PDF is linked instead of attached. */
 const ATTACH_MAX_BYTES = 30 * 1024 * 1024;
 
+/**
+ * How many parts a sheet request's PDF comes in (/print/sheet/pdf, parts 0, 1…), with no part-used
+ * first sheet: the queue's PDF buttons. Null for a label-printer template (not on sheets).
+ */
+export function sheetPdfParts(sheetLayout: unknown, labels: number): number | null {
+  const s = sheetLayout as { cols?: number; rows?: number } | null;
+  const per = s && s.cols && s.rows ? s.cols * s.rows : 0;
+  if (per < 2) return null;
+  const size = Math.max(per, Math.floor(PART_TAGS / per) * per);
+  return Math.max(1, Math.ceil(labels / size));
+}
+
 const tagsPerPart = (spec: TemplateSpec) => {
   const per = sheetStock(spec)?.perSheet ?? 1;
   return Math.max(per, Math.floor(PART_TAGS / per) * per);

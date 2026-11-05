@@ -4,7 +4,7 @@ import type { QueueJob } from "@/components/print/print-queue";
 import { shownJobError } from "./labels";
 
 /** A print request as the queue reads it (the fields queueJobs needs). */
-export const QUEUE_JOB_FIELDS = "id, status, item_count, requested_at, deliver_to, error, pdf_path, printed_at, note, template_id, print_templates(name), requester:requested_by(full_name), printer:printed_by(full_name)";
+export const QUEUE_JOB_FIELDS = "id, status, item_count, requested_at, deliver_to, error, pdf_path, printed_at, note, template_id, print_templates(name, sheet_layout), requester:requested_by(full_name), printer:printed_by(full_name)";
 
 type Row = {
   id: string;
@@ -27,6 +27,7 @@ type Row = {
  * many labels each prints (copies added up, staff requests' too), and the rest as shown.
  */
 export async function queueJobs(supabase: ReturnType<typeof createAdminClient>, data: Row[]): Promise<QueueJob[]> {
+  const { sheetPdfParts } = await import("./jobs");
   // a request for one camper (or a few) names them; a batch says what it covered (its note)
   const few = (data ?? []).filter((j) => j.item_count <= 3).map((j) => j.id);
   const { data: items } = few.length
@@ -63,6 +64,8 @@ export async function queueJobs(supabase: ReturnType<typeof createAdminClient>, 
     status: j.status,
     count: j.item_count,
     labels: labelsOf.get(j.id) ?? j.item_count,
+    // a template on label sheets: its PDF (and how many parts) comes from the print page's route
+    sheetParts: sheetPdfParts((j.print_templates as { sheet_layout?: unknown } | null)?.sheet_layout ?? null, labelsOf.get(j.id) ?? j.item_count),
     at: j.requested_at,
     to: j.deliver_to,
     error: shownJobError(j.error),
