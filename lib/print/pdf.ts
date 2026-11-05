@@ -13,22 +13,10 @@ import type { Box } from "./pdf-art";
 export type FitNotes = { smaller: { text: string; pt: number }[]; cut: string[] };
 
 export async function htmlToPdf(html: string, onFit?: (notes: FitNotes) => void, art?: Record<string, Uint8Array>): Promise<Buffer> {
-  const puppeteer = (await import("puppeteer-core")).default;
-  let executablePath = process.env.CHROMIUM_PATH;
-  let args = ["--no-sandbox", "--disable-gpu", "--font-render-hinting=none"];
-  // Vercel's build is chrome-headless-shell, which runs as "shell"; a full Chromium (local) runs new headless
-  let headless: boolean | "shell" = true;
-  if (!executablePath) {
-    const chromium = (await import("@sparticuz/chromium")).default;
-    executablePath = await chromium.executablePath();
-    args = chromium.args;
-    headless = "shell";
-  }
   // all of it stays well inside the 60 s a page may run, so a slow PDF fails cleanly
   // (the request still reaches the office, without the PDF) instead of being cut off
-  const browser = await puppeteer.launch({ executablePath, args, headless, timeout: 15000 });
+  const { browser, page } = await openPage();
   try {
-    const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "load", timeout: 15000 });
     // long names are shrunk to fit by the page's script: never send a PDF where that didn't finish
     await page.waitForSelector("body[data-fitted]", { timeout: 8000 }).catch(() => {
@@ -64,10 +52,21 @@ export async function htmlToPdf(html: string, onFit?: (notes: FitNotes) => void,
 /** What happened to each text part when fitting (by part id): its smallest size, and names that shrank or were cut. */
 export type PartFit = Record<string, { smallestPt: number | null; shrunk: { text: string; pt: number }[]; cut: string[] }>;
 
-export async function launchBrowser() {
+type Browser = Awaited<ReturnType<typeof import("puppeteer-core")["default"]["launch"]>>;
+type Page = Awaited<ReturnType<Browser["newPage"]>>;
+
+/**
+ * One Chromium for this server instance, started once and reused (starting it takes seconds; a
+ * tab each request is quick). Several requests at once share it. If it went away (crashed, or the
+ * instance slept and it lost its connection), the next request starts a new one.
+ */
+let shared: Promise<Browser> | null = null;
+
+async function startBrowser(): Promise<Browser> {
   const puppeteer = (await import("puppeteer-core")).default;
   let executablePath = process.env.CHROMIUM_PATH;
   let args = ["--no-sandbox", "--disable-gpu", "--font-render-hinting=none"];
+  // Vercel's build is chrome-headless-shell, which runs as "shell"; a full Chromium (local) runs new headless
   let headless: boolean | "shell" = true;
   if (!executablePath) {
     const chromium = (await import("@sparticuz/chromium")).default;
@@ -75,7 +74,43 @@ export async function launchBrowser() {
     args = chromium.args;
     headless = "shell";
   }
-  return puppeteer.launch({ executablePath, args, headless, timeout: 15000 });
+  // just unpacked, the program can still be busy being written ("spawn ETXTBSY"): wait a moment, try again
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await puppeteer.launch({ executablePath, args, headless, timeout: 15000 });
+    } catch (e) {
+      if (attempt >= 5 || !/ETXTBSY/.test(String((e as Error)?.message ?? e))) throw e;
+      await new Promise((r) => setTimeout(r, 250 * attempt));
+    }
+  }
+}
+
+async function getBrowser(): Promise<Browser> {
+  if (shared) {
+    const b = await shared.catch(() => null);
+    if (b?.connected) return b;
+    shared = null;
+  }
+  const starting = startBrowser();
+  shared = starting;
+  starting.catch(() => {
+    if (shared === starting) shared = null;
+  });
+  return starting;
+}
+
+/** A new tab in the shared browser (a new browser if that one is gone); close it with closePage. */
+export async function openPage(): Promise<{ browser: { close: () => Promise<void> }; page: Page }> {
+  let page: Page;
+  try {
+    page = await (await getBrowser()).newPage();
+  } catch {
+    // the shared one broke: once more with a fresh browser
+    shared = null;
+    page = await (await getBrowser()).newPage();
+  }
+  // "closing the browser" closes this tab only; the browser stays for the next request
+  return { browser: { close: () => page.close().catch(() => undefined) }, page };
 }
 
 /**
@@ -83,9 +118,8 @@ export async function launchBrowser() {
  * text part fitted: for the design connector, so Claude sees its design.
  */
 export async function htmlToPng(html: string, opts: { tags?: number; scale?: number } = {}): Promise<{ images: Buffer[]; fit: PartFit }> {
-  const browser = await launchBrowser();
+  const { browser, page } = await openPage();
   try {
-    const page = await browser.newPage();
     await page.setViewport({ width: 1400, height: 1000, deviceScaleFactor: opts.scale ?? 3 });
     await page.setContent(html, { waitUntil: "load", timeout: 15000 });
     await page.waitForSelector("body[data-fitted]", { timeout: 8000 }).catch(() => {
@@ -186,9 +220,8 @@ const pdfjsSource = () =>
 /** Pictures (PNG) of PDF pages, each cropped to its box, about 300 dpi (at most 3000 px long). */
 export async function pdfPictures(bytes: Uint8Array, boxes: Box[]): Promise<Buffer[]> {
   const src = pdfjsSource();
-  const browser = await launchBrowser();
+  const { browser, page } = await openPage();
   try {
-    const page = await browser.newPage();
     await page.setContent("<!doctype html><html><body></body></html>");
     await page.addScriptTag({ content: src.lib });
     const pngs = (await page.evaluate(
