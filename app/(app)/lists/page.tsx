@@ -207,7 +207,7 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
       {!preset && <p className="text-sm text-muted-foreground">No list layouts are set up for your role yet. Ask an admin.</p>}
       {/* the page as the layout says (upright, sideways, or sideways for wide lists), with a margin all round
           (the browser's own is thin); wide lists (a division head's 20+ columns) a little smaller */}
-      {list && <style>{`@media print { @page { size: letter ${printsLandscape(list.preset.orientation, list.columns.length) ? "landscape" : "portrait"}; margin: ${LIST_PAGE_MARGIN} } }`}</style>}
+      {list && <style>{`@media print { @page { size: letter ${printsLandscape(list.preset.orientation) ? "landscape" : "portrait"}; margin: ${LIST_PAGE_MARGIN} } }`}</style>}
       {list && list.columns.length > 10 && (
         <style>{`@media print { .list-table { font-size: ${list.columns.length > 16 ? 6.5 : 8}pt; table-layout: fixed; width: 100% } .list-table th, .list-table td { padding-right: 3px; overflow-wrap: anywhere; } }`}</style>
       )}
