@@ -240,9 +240,11 @@ export function matchAndDiff(
 
     if (match) {
       matchedIds.add(match.id);
-      if (match.archived) warnings.push("archived in Kinus, so they stay archived; restore them from their page if they're coming");
+      if (match.archived) warnings.push("archived in Kinus, and in this export again: applying brings them back");
       if (method === "name" && !match.source_id) warnings.push("linked by name to the camper added in Kinus (a walk-in); from now on they're matched by registration id");
       const d = diffOne(parsed, match, opts);
+      // archived, but in the export again: applying brings them back (apply_import, migration 0062)
+      if (match.archived) d.changes.unshift({ field: "archived", old: "Archived", new: "Back (in the export)" });
       results.push({
         rowNumber,
         parsed,

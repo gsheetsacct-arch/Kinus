@@ -44,6 +44,7 @@ const FIELD_LABEL: Record<string, string> = {
   has_epipen: "EpiPen",
   has_medications: "Medications",
   notes_from_parents: "Notes from parents",
+  archived: "Archived",
 };
 const fieldLabel = (f: string) => {
   const m = /^contact\[(\w+),(\d+)\](?:\.(\w+))?$/.exec(f);

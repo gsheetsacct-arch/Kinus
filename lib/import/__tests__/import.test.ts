@@ -282,9 +282,10 @@ describe("staff-locked placement", () => {
     // a camper the office didn't touch: nothing locked, the export keeps updating them
     expect(locksFor([], registration, registration, registration, p)).toEqual({ fields: [], columns: [] });
   });
-  it("matches an archived camper by registration id instead of adding them again", () => {
+  it("matches an archived camper by registration id instead of adding them again, and brings them back", () => {
     const r = matchAndDiff([{ rowNumber: 2, parsed: parsedFor() }], [{ ...base, archived: true }], known, opts);
-    expect(r.rows[0].action).toBe("unchanged");
+    expect(r.rows[0].action).toBe("update");
+    expect(r.rows[0].changes[0]).toEqual({ field: "archived", old: "Archived", new: "Back (in the export)" });
     expect(r.rows[0].matchedCamperId).toBe("c1");
     expect(r.rows[0].warnings.join(" ")).toMatch(/archived in Kinus/);
   });

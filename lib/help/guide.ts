@@ -93,6 +93,8 @@ Options on this step: **a separate program's export** (everyone in it goes into 
 - **Conflicts**: rows Kinus can't match for sure (two campers with that name…): choose the camper or "add as new". Apply waits until there are none.
 
 ### 3. Apply, and undo
+An archived camper who is in the export again comes back when you apply it (the preview lists them as **Archived → Back**); Undo archives them again.
+
 Apply makes the changes. **Undo** on the import (Import roster) takes the latest import back: added campers go (or are archived if they've checked in), changed fields return, unless someone changed them since.
 
 ### What an import never overwrites

@@ -531,10 +531,10 @@ export async function applyImportAction(fd: FormData): Promise<ActionResult> {
   await slotNewDivisions(supabase, imp.session_id, divisionsBefore).catch(() => undefined);
   // the first import into a new session makes its divisions: staff areas follow them there
   await carryAreasTo(imp.session_id);
-  const r = data as { added: number; updated: number; missing: number };
+  const r = data as { added: number; updated: number; missing: number; restored?: number };
   revalidatePath("/", "layout");
   return ok(
-    `Done: ${r.added} added, ${r.updated} updated, ${r.missing} marked “not in the latest export”.`,
+    `Done: ${r.added} added, ${r.updated} updated${r.restored ? ` (${r.restored} archived ${r.restored === 1 ? "camper" : "campers"} brought back)` : ""}, ${r.missing} marked “not in the latest export”.`,
     `/admin/imports/${id}`,
   );
 }
