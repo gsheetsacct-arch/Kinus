@@ -16,16 +16,17 @@ export function ListFilters({ children, className }: { children: React.ReactNode
         }
         // another column (or another list) to filter by: its answers differ, so start from "has anything"
         const name = (e.target as unknown as HTMLSelectElement).name;
-        if (name === "fcol" || name === "preset") {
-          const val = form.elements.namedItem("fval") as HTMLSelectElement | null;
+        // the filters: fcol/fval, fcol2/fval2… (lib/lists/filters)
+        const field = (n: string) => form.elements.namedItem(n) as HTMLSelectElement | null;
+        if (/^fcol\d*$/.test(name)) {
+          const val = field(name.replace("fcol", "fval"));
           if (val) val.disabled = true;
-          if (name === "preset") {
-            const col = form.elements.namedItem("fcol") as HTMLSelectElement | null;
-            if (col) col.value = "";
-            // another list: its own number of copies
-            const copies = form.elements.namedItem("copies") as HTMLSelectElement | null;
-            if (copies) copies.disabled = true;
-          }
+        }
+        if (name === "preset") {
+          // another list: other columns, so no filters, and its own number of copies
+          for (const el of [...form.elements] as HTMLSelectElement[]) if (/^f(col|val|match)\d*$/.test(el.name)) el.disabled = true;
+          const copies = field("copies");
+          if (copies) copies.disabled = true;
         }
         form.requestSubmit();
       }}
