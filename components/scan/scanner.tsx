@@ -128,7 +128,8 @@ export function Scanner({
 
   // keep statuses fresh while the screen is open
   React.useEffect(() => {
-    const t = setInterval(() => (final ? checkoutStatuses() : rosterStatuses()).then((s) => setStatuses((cur) => ({ ...cur, ...s }))).catch(() => undefined), 20000);
+    // only while the page is on screen (a locked phone doesn't keep asking)
+    const t = setInterval(() => document.visibilityState === "visible" && (final ? checkoutStatuses() : rosterStatuses()).then((s) => setStatuses((cur) => ({ ...cur, ...s }))).catch(() => undefined), 20000);
     const u = setInterval(() => setTick((x) => x + 1), 5000);
     return () => {
       clearInterval(t);
@@ -346,7 +347,7 @@ export function Scanner({
         )
         .catch(() => undefined);
     load();
-    const t = setInterval(load, 20000);
+    const t = setInterval(() => document.visibilityState === "visible" && load(), 20000);
     return () => clearInterval(t);
   }, [hebOf]);
 
