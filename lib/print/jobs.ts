@@ -231,13 +231,14 @@ function itemsOf(set: PrintSet, opts: SetOpts) {
   const values = new Map(picked.map((c) => [c.id, (c as { staffValues?: Record<string, string> }).staffValues ?? mergeValues(c, set.setup.fields, set.setup.maps)]));
   // sorted by the names the tags print (a template's last name may read another export column
   // than the camper's last name in Kinus), falling back to Kinus' own: in a Hebrew or French
-  // division (its language) the Hebrew name, elsewhere (and by last name across camp) the English
+  // division (its language) the Hebrew name, alef-beis, in every order; elsewhere the English
   const keys = printedNameKeys(set.spec, set.setup.fields);
   // a stray space, quote or invisible mark before a name doesn't move it ("'Ohana" sorts with the O's)
   const clean = (v: string | undefined) => (v ?? "").replace(/^[^\p{L}\p{N}]+/u, "");
   const printed = (c: (typeof picked)[number]) => {
     const v = values.get(c.id)!;
-    const hebLast = order !== "name" && (c.division_language === "he" || c.division_language === "fr") && keys.hebLast ? clean(v[keys.hebLast]) : "";
+    // by bunk, division or last name alike: a Hebrew or French division's camper by the Hebrew name the tag prints
+    const hebLast = (c.division_language === "he" || c.division_language === "fr") && keys.hebLast ? clean(v[keys.hebLast]) : "";
     // a "Hebrew" last name typed in English letters ("Djian") sorts with the English ones, after
     if (hebLast && /[\u05D0-\u05EA]/.test(hebLast)) return { ...c, last_name: hebLast, first_name: clean(keys.hebFirst ? v[keys.hebFirst] : "") || clean(c.first_name), heb: true };
     return { ...c, last_name: clean(keys.last ? v[keys.last] : "") || clean(c.last_name), first_name: clean(keys.first ? v[keys.first] : "") || clean(c.first_name), heb: false };
