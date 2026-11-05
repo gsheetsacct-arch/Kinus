@@ -173,9 +173,9 @@ export async function sendTestEmail(): Promise<ActionResult> {
 }
 
 /**
- * The owner starts check-in over (after a practice run, say): every check-in and check-out of
- * the active session is removed, with the follow-ups (coming later, notes), and every camper is
- * "not here yet" again. Campers, bunks, tags and buzzer numbers stay as they are.
+ * The owner starts check-in over (after a practice run, say) for the divisions picked: their
+ * campers' check-ins and check-outs in the active session are removed, with the follow-ups
+ * (coming later, notes), and those campers are "not here yet" again. Campers, bunks, tags and buzzer numbers stay as they are.
  */
 export async function resetAttendance(fd: FormData): Promise<ActionResult> {
   const me = await requireUser();
@@ -186,7 +186,12 @@ export async function resetAttendance(fd: FormData): Promise<ActionResult> {
   try {
     const admin = createAdminClient();
     const { fetchAll } = await import("@/lib/supabase/fetch-all");
-    const ids = (await fetchAll((from, to) => admin.from("campers").select("id").eq("session_id", session.id).order("id").range(from, to))).map((c) => c.id);
+    // only the divisions picked (of this session)
+    const picked = [...new Set(fd.getAll("division").map(String))];
+    if (!picked.length) return fail("Tick the camps or divisions to reset.");
+    const { data: divs } = await admin.from("divisions").select("id, name").eq("session_id", session.id).in("id", picked);
+    if (!divs?.length || divs.length !== picked.length) return fail("Those divisions aren't in this session. Reload the page and try again.");
+    const ids = (await fetchAll((from, to) => admin.from("campers").select("id").eq("session_id", session.id).in("division_id", picked).order("id").range(from, to))).map((c) => c.id);
     let removed = 0;
     for (let i = 0; i < ids.length; i += 200) {
       const chunk = ids.slice(i, i + 200);
@@ -200,7 +205,8 @@ export async function resetAttendance(fd: FormData): Promise<ActionResult> {
       if (followups.error) throw followups.error;
     }
     for (const p of ["/", "/status", "/scan", "/campers", "/checkout"]) revalidatePath(p);
-    return ok(`Check-ins reset: ${removed.toLocaleString("en-US")} check-ins and check-outs removed, and all ${ids.length.toLocaleString("en-US")} campers are not here yet.`);
+    const where = divs.length <= 3 ? divs.map((d) => d.name).join(", ") : `${divs.length} divisions`;
+    return ok(`Check-ins reset for ${where}: ${removed.toLocaleString("en-US")} check-ins and check-outs removed, and their ${ids.length.toLocaleString("en-US")} campers are not here yet.`);
   } catch (e) {
     return fail(errorMessage(e));
   }
