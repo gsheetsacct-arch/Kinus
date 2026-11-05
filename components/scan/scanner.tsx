@@ -58,7 +58,10 @@ export function Scanner({
   divisions = [],
   final,
   printQueue = false,
+  campDivisionIds = null,
 }: {
+  /** The camp chosen at the top of the menu: its divisions (null: every camp). The recent list shows only its campers. */
+  campDivisionIds?: string[] | null;
   /** This person uses the print queue: a quick way there (their line's labels). */
   printQueue?: boolean;
   roster: RosterEntry[];
@@ -403,7 +406,10 @@ export function Scanner({
       feedback("ok");
     }
   };
-  const latest = recent[0];
+  // the recent list: just the camp being looked at (an owner switching camps sees that camp's)
+  const divOf = new Map([...roster, ...extra].map((r) => [r.id, r.div]));
+  const shown = campDivisionIds ? recent.filter((r) => !divOf.has(r.camperId) || campDivisionIds.includes(divOf.get(r.camperId) ?? "")) : recent;
+  const latest = shown[0];
 
   return (
     <div
@@ -569,7 +575,7 @@ export function Scanner({
       )}
 
       {/* at the bottom: the last 50, peeking; pull up (or tap) to see them, undo, or open one */}
-      {(recent.length > 0 || final) && (
+      {(shown.length > 0 || final) && (
         <section
           className={cn("absolute inset-x-0 bottom-0 z-20 flex flex-col rounded-t-2xl bg-card shadow-[0_-8px_24px_rgb(0_0_0/0.25)] transition-[height] duration-200", sheet ? "h-[70%]" : "h-16")}
           onTouchStart={(e) => (touch.current = e.touches[0].clientY)}
@@ -584,7 +590,7 @@ export function Scanner({
           <button type="button" className="flex h-16 shrink-0 items-center gap-3 px-4 text-left" onClick={() => setSheet(!sheet)} aria-expanded={sheet}>
             <span className="absolute left-1/2 top-1.5 h-1 w-10 -translate-x-1/2 rounded-full bg-muted-foreground/30" />
             <span className="min-w-0 flex-1">
-              <span className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">{final ? "Going home" : `Recent · ${recent.length}`}</span>
+              <span className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">{final ? "Going home" : `Recent · ${shown.length}`}</span>
               {latest ? (
                 <span className="block truncate text-sm" dir="auto">
                   <span className={cn("font-medium", latest.undone && "line-through opacity-60")}>{latest.name}</span> · {latest.undone ? "Undone" : latest.verb} · {formatTime(new Date(latest.at).toISOString())}
@@ -603,7 +609,7 @@ export function Scanner({
                 </div>
               )}
               <ul className="divide-y">
-                {recent.map((r) => (
+                {shown.map((r) => (
                   <li key={r.key} className="flex items-center gap-2 px-4 py-2.5">
                     <button className="min-w-0 flex-1 text-left disabled:cursor-default" disabled={Boolean(final)} onClick={() => openCard(r.camperId)}>
                       <span className={cn("block truncate font-medium", r.undone && "line-through opacity-60")} dir="auto">

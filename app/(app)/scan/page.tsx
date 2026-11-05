@@ -39,5 +39,5 @@ export default async function ScanPage() {
   // (only the camp chosen at the top of the menu: American, Hebrew…)
   const present = new Set(rows.map((c) => c.division_id));
   const divisions = tree.divisions.filter((d) => present.has(d.id) && (!camp.divisionIds || camp.divisionIds.includes(d.id))).map((d) => ({ id: d.id, name: d.name, color: d.color }));
-  return <Scanner roster={roster} templates={templates ?? []} canScan={LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan} divisions={divisions} printQueue={canUsePrintArea(user) || canPrintCheckin(user)} />;
+  return <Scanner roster={roster} templates={templates ?? []} canScan={LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan} divisions={divisions} printQueue={canUsePrintArea(user) || canPrintCheckin(user)} campDivisionIds={camp.divisionIds} />;
 }
