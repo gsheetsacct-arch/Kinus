@@ -1,5 +1,5 @@
 import { extraGroupOf, loadExtraFields } from "@/lib/data/extra-fields";
-import { parseCombos, parseCopies, parseWhere } from "@/lib/data/lists";
+import { parseCombos, parseCopies, parseOrientation, parseWhere } from "@/lib/data/lists";
 import { ComboBuilder } from "@/components/lists/combo-builder";
 import { LayoutFilters } from "@/components/lists/layout-filters";
 import { notFound } from "next/navigation";
@@ -124,11 +124,10 @@ export default async function PresetEditPage({ params }: { params: Promise<{ id:
                 ))}
               </Select>
             </Field>
-            <Field label="Page orientation" htmlFor="orientation" hint="How it prints and downloads as a PDF. Automatic: sideways when the list has more than 10 columns.">
-              <Select id="orientation" name="orientation" defaultValue={String((preset?.filters as { orientation?: string } | null)?.orientation ?? "auto")}>
-                <option value="auto">Automatic</option>
-                <option value="portrait">Portrait (upright)</option>
+            <Field label="Page orientation" htmlFor="orientation" hint="How it prints and downloads as a PDF. Lists print sideways unless set to portrait.">
+              <Select id="orientation" name="orientation" defaultValue={parseOrientation((preset?.filters as { orientation?: string } | null)?.orientation)}>
                 <option value="landscape">Landscape (sideways)</option>
+                <option value="portrait">Portrait (upright)</option>
               </Select>
             </Field>
             <Field label="Sort campers by" htmlFor="sort_field" hint="Any field, an export column or a combined column on the layout; campers with the same answer go by name.">

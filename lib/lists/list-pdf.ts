@@ -16,7 +16,7 @@ export const LIST_PAGE_MARGIN = "15mm";
  * Wide lists (more than 10 columns) go sideways and a little smaller.
  */
 export function listHtml(list: BuiltList, o: { session: string | null; camp: string | null; by: string; copies: number }): string {
-  const wide = printsLandscape(list.preset.orientation, list.columns.length);
+  const wide = printsLandscape(list.preset.orientation);
   const campers = list.groups.reduce((n, g) => n + g.rows.length, 0);
   const named = list.groups.filter((g) => g.title);
   const kind = list.preset.group_by === "bunk" ? "bunks" : list.preset.group_by === "division" ? "divisions" : "groups";

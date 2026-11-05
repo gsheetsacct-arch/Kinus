@@ -1,5 +1,6 @@
-/** A list layout's printed page: "auto" (sideways when more than 10 columns), "portrait" or "landscape". */
-export type ListOrientation = "auto" | "portrait" | "landscape";
-export const parseOrientation = (v: unknown): ListOrientation => (v === "portrait" || v === "landscape" ? v : "auto");
-/** Whether a list prints sideways: as the layout says, else when it has more than 10 columns. */
-export const printsLandscape = (orientation: ListOrientation | undefined, columns: number) => (orientation === "landscape" ? true : orientation === "portrait" ? false : columns > 10);
+/** A list layout's printed page: landscape (sideways, the default) or portrait (upright). */
+export type ListOrientation = "portrait" | "landscape";
+/** Landscape unless the layout says portrait (older layouts, and "automatic", print landscape too). */
+export const parseOrientation = (v: unknown): ListOrientation => (v === "portrait" ? "portrait" : "landscape");
+/** Whether a list prints sideways: every list does, unless its layout says portrait. */
+export const printsLandscape = (orientation: ListOrientation | undefined) => orientation !== "portrait";
