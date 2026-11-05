@@ -6,7 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { canUsePrintArea, isAdmin, visibleDivisionIds, type CurrentUser } from "@/lib/auth/permissions";
+import { canPrintCheckin, canUsePrintArea, isAdmin, visibleDivisionIds, type CurrentUser } from "@/lib/auth/permissions";
 import type { Audience } from "@/lib/print/staff-values";
 import { sampleStaffValues, staffInView, staffPreview } from "@/lib/print/staff";
 import { canDesign, loadDesigners, saveDesigners } from "@/lib/print/designers";
@@ -31,9 +31,10 @@ import { anyCode } from "@/lib/attendance/scan";
 
 const NOT_YOURS = "That's a request for campers outside your part of camp.";
 
-async function requirePrinter() {
+async function requirePrinter(opts: { checkin?: boolean } = {}) {
   const user = await requireUser();
-  if (!canUsePrintArea(user)) throw new Error("Printing is for the office, directors and division heads.");
+  // a check-in login may mark its own check-in labels printed (visibleJobs keeps it to those)
+  if (!canUsePrintArea(user) && !(opts.checkin && canPrintCheckin(user))) throw new Error("Printing is for the office, directors and division heads.");
   return user;
 }
 
@@ -67,7 +68,7 @@ export async function giveBuzzerNumbers(redo = false): Promise<ActionResult> {
  */
 export async function markPrinted(ids: string[], printed = true, sheet?: { stock: string; used: number[] }, printedNow = false): Promise<ActionResult> {
   try {
-    const user = await requirePrinter();
+    const user = await requirePrinter({ checkin: true });
     if (!(await visibleJobs(ids))) return fail(NOT_YOURS);
     if (sheet) await rememberSheetPosition(z.string().min(1).max(120).parse(sheet.stock), usedSchema.parse(sheet.used), user.id);
     const change = printed ? { status: "printed" as const, printed_at: new Date().toISOString(), printed_by: user.id } : { status: "ready" as const, printed_at: null, printed_by: null };

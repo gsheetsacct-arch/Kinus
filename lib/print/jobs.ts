@@ -165,7 +165,7 @@ const staffAsCamper = (s: StaffItem & { id: string }) =>
 
 type PrintSet = Awaited<ReturnType<typeof loadPrintSet>>;
 
-/** The requests, their template and who's on them (camper → most copies asked), checked to print as one. */
+/** The requests, their template and who's on them (camper → copies asked, added up), checked to print as one. */
 async function loadRequests(jobIds: string[]) {
   const admin = createAdminClient();
   const ids = [...new Set(jobIds)];
@@ -183,7 +183,8 @@ async function loadRequests(jobIds: string[]) {
   if (!template) throw new Error("The template for this job was deleted.");
   const spec = toSpec(template as never);
   const copiesOf = new Map<string, number>();
-  for (const i of items) copiesOf.set(i.camper_id, Math.max(copiesOf.get(i.camper_id) ?? 0, i.copies));
+  // asked for twice (print tapped twice, or two people asking): printed twice
+  for (const i of items) copiesOf.set(i.camper_id, (copiesOf.get(i.camper_id) ?? 0) + i.copies);
   // staff tag requests (migration 0060): their people are saved with the request
   const staffJobs = jobs.filter((j) => Array.isArray((j as { staff_items?: unknown }).staff_items));
   if (staffJobs.length && staffJobs.length !== jobs.length) throw new Error("Staff tags and camper tags can't be printed together.");
@@ -194,7 +195,7 @@ async function loadRequests(jobIds: string[]) {
 
 /**
  * One or more requests for the same template, as one thing to print. A camper asked for in
- * two requests (a double tap, or two people asking) prints once, with the most copies asked.
+ * two requests (print tapped twice, or two people asking) prints that many times: the copies add up.
  */
 async function loadPrintSet(jobIds: string[]) {
   const { admin, jobs, spec, copiesOf, askedMoreThanOnce, staff } = await loadRequests(jobIds);

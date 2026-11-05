@@ -1,7 +1,6 @@
 "use client";
 import * as React from "react";
-import { toast } from "sonner";
-import { FileDown, Loader2 } from "lucide-react";
+import { FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const phoneOf = () => {
@@ -12,59 +11,40 @@ export const phoneOf = () => {
 };
 
 /**
- * Download a PDF. On a phone it then says how to print it on the label printer (NIIMBOT).
+ * Download a PDF: a plain link the browser downloads itself, on the tap (a download started
+ * later, after fetching the file in the page, is quietly blocked by phone browsers). On a phone
+ * it then says how to print it on the label printer (NIIMBOT).
  */
 export function PdfButton({ href, label, size = "lg", onDone }: { href: string; label: string; size?: "lg" | "default" | "sm"; onDone?: () => void }) {
   const [phone, setPhone] = React.useState<"android" | "ios" | null>(null);
-  const [busy, setBusy] = React.useState(false);
   const [done, setDone] = React.useState(false);
   React.useEffect(() => setPhone(phoneOf()), []);
   React.useEffect(() => setDone(false), [href]);
-
-  // on a computer: a plain download
-  if (!phone)
-    return (
-      <Button size={size} variant="outline" asChild>
-        <a href={href} onClick={onDone}>
-          <FileDown /> {label}
-        </a>
-      </Button>
-    );
-  if (done)
-    return (
-      <span className="flex flex-col gap-1.5">
-        <AfterDownload phone={phone} />
-        <button type="button" className="self-start text-xs text-muted-foreground underline" onClick={() => setDone(false)}>
-          Download again
-        </button>
-      </span>
-    );
-  const download = async () => {
-    setBusy(true);
-    try {
-      const r = await fetch(href);
-      if (!r.ok) throw new Error((await r.text()) || "Couldn't make the PDF.");
-      const name = /filename\*=UTF-8''([^;]+)/.exec(r.headers.get("Content-Disposition") ?? "")?.[1];
-      const url = URL.createObjectURL(await r.blob());
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = name ? decodeURIComponent(name) : "labels.pdf";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      setDone(true);
-      onDone?.();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't make the PDF.");
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Button size={size} variant="outline" onClick={download} disabled={busy}>
-      {busy ? <Loader2 className="animate-spin" /> : <FileDown />} {busy ? "Making the PDF…" : label}
+  const link = (
+    <Button size={size} variant="outline" asChild>
+      <a
+        href={href}
+        download
+        onClick={() => {
+          onDone?.();
+          if (phone) setDone(true);
+        }}
+      >
+        <FileDown /> {label}
+      </a>
     </Button>
+  );
+  if (!phone || !done) return link;
+  return (
+    <span className="flex flex-col gap-1.5">
+      <AfterDownload phone={phone} />
+      <span className="text-xs text-muted-foreground">
+        The PDF is made first, so it can take a moment to start.{" "}
+        <a href={href} download className="underline">
+          Download again
+        </a>
+      </span>
+    </span>
   );
 }
 

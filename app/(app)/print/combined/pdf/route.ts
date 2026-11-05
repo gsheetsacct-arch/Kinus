@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
       headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(r.fileName)}`, "Cache-Control": "private, no-store" },
     });
   } catch (e) {
+    console.error("Merged labels PDF failed", e);
     return new NextResponse(e instanceof Error ? e.message : "Couldn't make the PDF.", { status: 400 });
   }
 }
