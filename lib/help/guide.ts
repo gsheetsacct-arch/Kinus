@@ -160,7 +160,7 @@ A division's language is a **⚙ Setting** on **Divisions & bunks** (English, He
     summary: "Names, order, colours, language, empty bunks, camps.",
     body: `
 **Setup → Divisions & bunks.**
-- Divisions belong to a **camp** (American, Hebrew, French…): the camp switcher at the top of the menu narrows every page to one camp.
+- Divisions belong to a **camp** (American, Hebrew, French…): the camp switcher at the top of the menu narrows every page to one camp. Check-in and out (scanning, or the camper card's buttons) works only for the camp picked there: a camper of another camp is refused, saying which camp they're in; "All camps" checks in everyone.
 - Order: divisions and bunks are listed (and print) in the order set here; bunk numbers follow their order (Alef = 1, Beis = 2…), giving \`{{BUNK_NUMBER}}\`, \`{{BUNK_LETTERS}}\` (11 → יא) and \`{{BUNK_CONTINUED}}\` (numbers continuing from camp to camp; staff get one number per division after the last bunk).
 - **Colour**: used on Who's here, the check-in line and labels (\`{{DIVISION_COLOR}}\`).
 - **Language**: see Hebrew divisions.
