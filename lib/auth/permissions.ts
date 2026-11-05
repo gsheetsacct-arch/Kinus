@@ -125,8 +125,8 @@ export function canManageRole(me: CurrentUser, role: StaffRole): boolean {
 /** The print area (queue, batches, templates). Everyone else requests tags from a camper card. */
 export const canUsePrintArea = (u: CurrentUser) => ["owner", "director", "division_head", "office", "logistics"].includes(u.role);
 /**
- * A division's check-in login: prints the labels made at check-in (the label-printer ones, made
- * by itself at a first check-in or from a camper card at check-in) for its divisions, nothing else.
+ * A division's check-in login: prints the label-printer (thermal) labels queued for its divisions
+ * (the name tag and bag label at registration), nothing else.
  */
 export const canPrintCheckin = (u: CurrentUser) => u.role === "scanner";
 
