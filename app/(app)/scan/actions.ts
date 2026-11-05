@@ -336,6 +336,20 @@ const RECENT_FIELDS = "id, camper_id, event_type, created_at, corrects_event_id,
  * (another phone's or another login's too, with who). Each says whether it can still be undone
  * (theirs, within 15 minutes, and still the camper's latest record) or was undone.
  */
+/** When divisions' check-ins were last reset (Settings): division id → time. */
+export async function checkinResets(): Promise<Record<string, string>> {
+  await requireUser();
+  const { data } = await createAdminClient().from("settings").select("value").eq("key", "checkin_resets").maybeSingle();
+  return (data?.value ?? {}) as Record<string, string>;
+}
+
+/** The recent list, and when divisions were reset (the page drops what's older for them). */
+export async function recentScansAndResets(): Promise<{ scans: RecentScan[]; resets: Record<string, string> }> {
+  await requireUser();
+  const [scans, resets] = await Promise.all([recentScans(), checkinResets()]);
+  return { scans, resets };
+}
+
 export async function recentScans(): Promise<RecentScan[]> {
   const user = await requireUser();
   const supabase = await createClient();
