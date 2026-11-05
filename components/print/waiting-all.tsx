@@ -1,36 +1,29 @@
 "use client";
 import * as React from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { CheckCheck, Printer } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { markPrinted } from "@/app/(app)/print/actions";
 import type { WaitingSet } from "@/lib/print/queue";
 import { PdfButton } from "./pdf-button";
+import { useMarkDownloaded } from "./download-note";
 
 /** Labels in one PDF (as COMBINED_PDF_PART in lib/print/jobs). */
 const PART = 400;
 
 /**
  * Every label-printer label still to print (name tags and bag labels from check-in…), all
- * together, sorted by name: each camper's labels one after another. Printing them remembers
- * which requests went out, so "Mark these printed" doesn't take ones that came in since.
+ * together, sorted by name: each camper's labels one after another, as a PDF to download. Once
+ * it's downloaded, the requests in it are marked printed (Undo on the page's note).
  */
 export function WaitingAll({ set, where, query }: { set: WaitingSet; where: string | null; query: string }) {
-  const router = useRouter();
-  const [sent, setSent] = React.useState<string[] | null>(null);
-  const [pending, start] = React.useTransition();
+  const markDownloaded = useMarkDownloaded();
   const parts = Math.ceil(set.tags / PART);
-  const took = () => setSent((cur) => (cur && cur.length >= set.ids.length ? cur : set.ids));
-  const mark = (ids: string[]) =>
-    start(async () => {
-      const r = await markPrinted(ids).catch(() => ({ ok: false as const, error: "That didn't go through. Check the connection and try again." }));
-      if (!r.ok) return void toast.error(r.error);
-      toast.success(r.message ?? "Marked printed.");
-      setSent(null);
-      router.refresh();
-    });
-  const newer = sent ? set.ids.filter((id) => !sent.includes(id)).length : 0;
+  // in parts: marked printed once every part is downloaded
+  const got = React.useRef(new Set<number>());
+  const took = (part: number) => {
+    got.current.add(part);
+    if (got.current.size >= parts) {
+      got.current = new Set();
+      void markDownloaded(set.ids);
+    }
+  };
   return (
     <section className="mb-4 rounded-xl border-2 border-primary/40 bg-primary-soft/40 p-4">
       <div className="flex flex-wrap items-start gap-3">
@@ -40,36 +33,17 @@ export function WaitingAll({ set, where, query }: { set: WaitingSet; where: stri
           </h2>
           <p className="text-sm text-muted-foreground">
             {set.templates.join(" + ")} ({set.size}), all together, sorted by name: each camper&apos;s labels come out one after another.
+            {parts > 1 && " They're marked printed once every part is downloaded."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button size="lg" asChild>
-            <a href={`/print/combined?${query}`} target="_blank" rel="noreferrer" onClick={took}>
-              <Printer /> Print all
-            </a>
-          </Button>
           {parts <= 1 ? (
-            // on a phone it turns into "Open NIIMBOT" once downloaded
-            <PdfButton href={`/print/combined/pdf?${query}`} label="Merged PDF" onDone={took} />
+            <PdfButton href={`/print/combined/pdf?${query}`} label="Download PDF and mark printed" onDone={() => took(1)} />
           ) : (
-            Array.from({ length: parts }, (_, i) => <PdfButton key={i} size="default" href={`/print/combined/pdf?${query}&part=${i + 1}`} label={`PDF ${i + 1} of ${parts}`} onDone={took} />)
+            Array.from({ length: parts }, (_, i) => <PdfButton key={i} size="default" href={`/print/combined/pdf?${query}&part=${i + 1}`} label={`Download PDF ${i + 1} of ${parts}`} onDone={() => took(i + 1)} />)
           )}
         </div>
       </div>
-      {sent && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-primary/20 pt-3 text-sm">
-          <span className="min-w-0 flex-1">
-            Printed them? Mark those {sent.length} {sent.length === 1 ? "request" : "requests"} printed.
-            {newer > 0 && <span className="block text-xs text-muted-foreground">{newer} came in since: they stay waiting.</span>}
-          </span>
-          <Button size="sm" disabled={pending} onClick={() => mark(sent)}>
-            <CheckCheck /> Mark printed
-          </Button>
-          <Button size="sm" variant="ghost" disabled={pending} onClick={() => setSent(null)}>
-            Not yet
-          </Button>
-        </div>
-      )}
     </section>
   );
 }
