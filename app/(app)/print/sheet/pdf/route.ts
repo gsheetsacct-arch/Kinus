@@ -3,7 +3,7 @@ import { parseOrder } from "@/lib/print/data";
 import { NextResponse, type NextRequest } from "next/server";
 import { printSetPdf } from "@/lib/print/jobs";
 import { visibleJobs } from "@/lib/print/access";
-import { told } from "@/lib/print/download-signal";
+import { pdfFailed, told } from "@/lib/print/download-signal";
 
 export const maxDuration = 60;
 
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
   const ids = (sp.get("jobs") ?? "").split(",").filter(Boolean).slice(0, 300);
   // a PDF button's dl=… hears whether it worked (download-signal)
-  const fail = (text: string, status: number) => told(new NextResponse(text, { status }), sp, "err");
+  const fail = (text: string, status: number) => pdfFailed(text, status, sp);
   if (!ids.length) return fail("Nothing to print.", 400);
   if (!(await visibleJobs(ids))) return fail("Not found", 404);
   const division = sp.get("division");

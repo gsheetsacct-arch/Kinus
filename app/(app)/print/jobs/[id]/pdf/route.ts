@@ -1,6 +1,6 @@
 import { logActivity } from "@/lib/audit/log";
 import { NextResponse, type NextRequest } from "next/server";
-import { told } from "@/lib/print/download-signal";
+import { pdfFailed, told } from "@/lib/print/download-signal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { visibleJob } from "@/lib/print/access";
 
@@ -9,7 +9,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
   const sp = request.nextUrl.searchParams;
   // from a PDF button (dl=…): downloaded, and the button told when it starts
-  const fail = (text: string, status: number) => told(new NextResponse(text, { status }), sp, "err");
+  const fail = (text: string, status: number) => pdfFailed(text, status, sp);
   const job = await visibleJob(id);
   if (!job?.pdf_path) return fail("No PDF for this job. Use Print instead.", 404);
   const { data, error } = await createAdminClient().storage.from("print-output").download(job.pdf_path);

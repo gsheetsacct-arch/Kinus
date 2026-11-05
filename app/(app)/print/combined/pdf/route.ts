@@ -4,14 +4,14 @@ import { parseOrder } from "@/lib/print/data";
 import { combinedSetPdf } from "@/lib/print/jobs";
 import { visibleJobs } from "@/lib/print/access";
 import { waitingIds } from "@/lib/print/waiting-ids";
-import { told } from "@/lib/print/download-signal";
+import { pdfFailed, told } from "@/lib/print/download-signal";
 
 export const maxDuration = 60;
 
 /** A combined set (see /print/combined) as a PDF to download. */
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
-  const fail = (text: string, status: number) => told(new NextResponse(text, { status }), sp, "err");
+  const fail = (text: string, status: number) => pdfFailed(text, status, sp);
   const ids = sp.get("waiting") ? await waitingIds(sp) : (sp.get("jobs") ?? "").split(",").filter(Boolean).slice(0, 600);
   if (!ids) return fail("Not found", 404);
   if (!ids.length) return fail("Nothing waiting to print.", 400);
