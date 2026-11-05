@@ -11,6 +11,8 @@ import { visibleDivisionIds, visibleFieldGroups } from "@/lib/auth/permissions";
 import { flagsFor, isFlag } from "@/lib/camper-flags";
 import { buildList, getPresetsFor, parseCopies } from "@/lib/data/lists";
 import { PrintButton } from "./print-button";
+import { PdfButton } from "@/components/print/pdf-button";
+import { LIST_PAGE_MARGIN } from "@/lib/lists/list-pdf";
 import { ListGroups } from "@/components/lists/list-groups";
 import { FILTER_ANY, FILTER_NONE } from "@/lib/data/lists";
 import { ListFilters } from "@/components/lists/list-filters";
@@ -78,6 +80,7 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
         actions={
           list ? (
             <>
+              <PdfButton href={`/lists/pdf?${qs}&copies=${copies}`} label={copies > 1 ? `Download PDF (${copies} of each ${groupWord})` : "Download PDF"} size="sm" labelPrinter={false} />
               <PrintButton label={copies > 1 ? `Print (${copies} of each ${groupWord})` : undefined} />
               <Button asChild variant="outline" size="sm">
                 <Link href={`/lists/export?${qs}&format=xlsx`} prefetch={false}>
@@ -185,8 +188,10 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
       </ListFilters>
       {!preset && <p className="text-sm text-muted-foreground">No list layouts are set up for your role yet. Ask an admin.</p>}
       {/* wide lists (a division head's 20+ columns) print sideways and a little smaller */}
+      {/* a margin all round on paper (the browser's own is thin) */}
+      {list && list.columns.length <= 10 && <style>{`@media print { @page { margin: ${LIST_PAGE_MARGIN} } }`}</style>}
       {list && list.columns.length > 10 && (
-        <style>{`@media print { @page { size: landscape; margin: 8mm } .list-table { font-size: ${list.columns.length > 16 ? 6.5 : 8}pt; table-layout: fixed; width: 100% } .list-table th, .list-table td { padding-right: 3px; overflow-wrap: anywhere; } }`}</style>
+        <style>{`@media print { @page { size: landscape; margin: ${LIST_PAGE_MARGIN} } .list-table { font-size: ${list.columns.length > 16 ? 6.5 : 8}pt; table-layout: fixed; width: 100% } .list-table th, .list-table td { padding-right: 3px; overflow-wrap: anywhere; } }`}</style>
       )}
       {list && <ListGroups columns={list.columns} groups={list.groups} copies={copies} />}
     </div>

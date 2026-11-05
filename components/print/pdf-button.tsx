@@ -25,7 +25,7 @@ const dropCookie = (name: string) => (document.cookie = `${name}=; path=/; max-a
  * other word, a short cookie (see the combined PDF route), which is still read when it comes.
  * On a phone it then says how to print it on the label printer (NIIMBOT).
  */
-export function PdfButton({ href, label, size = "lg", onDone, mark }: { href: string; label: string; size?: "lg" | "default" | "sm"; onDone?: () => void; /** requests the server marks printed as it sends the PDF */ mark?: string[] }) {
+export function PdfButton({ href, label, size = "lg", onDone, mark, labelPrinter = true }: { href: string; label: string; size?: "lg" | "default" | "sm"; onDone?: () => void; /** requests the server marks printed as it sends the PDF */ mark?: string[]; /** false: a page for a regular printer (a list), no label-printer steps after */ labelPrinter?: boolean }) {
   const [phone, setPhone] = React.useState<"android" | "ios" | null>(null);
   const [done, setDone] = React.useState(false);
   const [making, setMaking] = React.useState<string | null>(null);
@@ -131,7 +131,7 @@ export function PdfButton({ href, label, size = "lg", onDone, mark }: { href: st
       </a>
     </Button>
   );
-  if (!phone || !done) return link;
+  if (!phone || !done || !labelPrinter) return link;
   return (
     <span className="flex flex-col gap-1.5">
       <AfterDownload phone={phone} />
