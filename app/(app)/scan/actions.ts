@@ -10,6 +10,7 @@ import { decide, isCamperCode, type OutKind } from "@/lib/attendance/scan";
 import { STATUS_LABEL, type AttendanceEventType, type CamperStatus } from "@/lib/attendance/machine";
 import { effectiveLevel, visibleFieldGroups } from "@/lib/auth/permissions";
 import { createPrintJob, officeEmail, processPrintJob } from "@/lib/print/jobs";
+import { AUTO_CHECKIN_NOTE } from "@/lib/print/access";
 import { camperCampName, forCamp, templateCamps } from "@/lib/print/template-camps";
 import { canUsePrintArea } from "@/lib/auth/permissions";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
@@ -50,7 +51,7 @@ async function autoPrintOnFirstArrival(camperId: string, sessionId: string): Pro
   after(async () => {
     for (const t of mine) {
       try {
-        const job = await createPrintJob(user, { sessionId, templateId: t.id, camperIds: [camperId], note: "Automatic on first check-in" });
+        const job = await createPrintJob(user, { sessionId, templateId: t.id, camperIds: [camperId], note: AUTO_CHECKIN_NOTE });
         await admin.from("print_jobs").update({ status: "ready" }).eq("id", job.id).eq("status", "queued");
       } catch (e) {
         // never blocks a check-in, but is never silent either

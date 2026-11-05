@@ -38,7 +38,7 @@ export default async function PrintTogetherPage({ searchParams }: { searchParams
       <PageHeader
         back={{ href: "/print", label: "Print queue" }}
         title={`${summary.tags} × ${summary.templateName}`}
-        description={`${plural(summary.requests, "request")} printed together, sorted by division and bunk.${doubled ? " A camper asked for more than once prints once." : ""}`}
+        description={`${plural(summary.requests, "request")} printed together, sorted by division and bunk.${doubled ? " A camper asked for more than once prints that many times." : ""}`}
       />
       <PrintPanel
         jobIds={ids}

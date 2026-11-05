@@ -39,7 +39,7 @@ Each person has a **role** (what they can do and which details they see) and **a
 | Kloli / Head counselor / Counselor | Their division's or bunk's campers. |
 | Office | The print queue and printing for their area. |
 | Logistics | Printing (bus tags, labels) and lists for their area. |
-| Scanner / check-in logins | Only check-in: the phones at a check-in line. |
+| Scanner / check-in logins | Only check-in: the phones at a check-in line. They also print their check-in labels (Print labels). |
 
 The level of each role (view, check in & out, edit) and which kinds of detail it sees (contacts, medical, notes from parents, address, staff notes, family situations) are **⚙ settings** per role on **Setup → Roles**, and apply to everyone with that role at once.
 `,
@@ -205,6 +205,7 @@ Check-in logins can be given final check-out (Staff → check-in logins): every 
 ### The print queue (Print)
 - Someone over part of camp (a division head, an office person for one camp…) sees only their divisions' requests and their own; the camp and division bars show only theirs.
 - **Print all waiting** (top of the page): every label-printer label still to print, by label size, **sorted by name, each camper's labels together** (name tag, then bag label). Buttons: **Print all**, **Merged PDF** (in parts of 400 labels), and after printing **Mark printed** (only what went out; requests that came in since stay waiting).
+- A label asked for twice (print tapped twice, or two people asking) prints twice.
 - On a phone, the PDF buttons (Print all waiting, the queue's PDF, a request's Download PDF) download the file and then say how to print it on the label printer. On **Android**: **open** the PDF (Open in the download bar, or Files → Downloads) and choose NIIMBOT; don't share it, as sharing doesn't list NIIMBOT. **If opening it doesn't offer NIIMBOT, open the NIIMBOT app and print the PDF from there.** On an **iPhone**: open the NIIMBOT app and pick the PDF.
 - Label sheets print on their own (Print together), with "where the sheet starts" for a part-used sheet.
 - Asking for a camper's labels from their card emails the office a PDF only when **"Email it to the office as a PDF"** is ticked (off by default): otherwise they wait in the queue. Batches choose queue or email each time. The office's address is a **⚙ Setting** (Settings → Office email).
@@ -274,7 +275,7 @@ Pick a **list** (a layout), a division and a bunk. **Filter by** any of the list
     body: `
 - **Add a person**, or **Add many at once**: paste or upload a sheet (name, email, role, division, bunk, title, phone) or the staff registration export / master sheet. Counselors are usually **listed only** (in the phone book and bunk lists, without signing in) unless the sheet says they sign in. Someone on the sheet several times with **different staff IDs** (e.g. a counselor and a Thursday Program head) gets a record for each, with its own role, division and badge: the first row signs in with their email, the others are listed only.
 - **Areas**: all of camp, a camp, a division or a bunk; they decide which campers a person sees.
-- **Check-in logins**: shared logins for the phones at a division's check-in line (check-in pages only); one can be given final check-out.
+- **Check-in logins**: shared logins for the phones at a division's check-in line (check-in pages only); one can be given final check-out. They also have **Print labels**: the label-printer labels made at their check-in (by themselves at a first check-in, or with a camper's print button), for their divisions, all in one go (Print all, Merged PDF, Mark printed). Nothing else from the print queue.
 - **Same person twice?** (someone added by hand, then again by the staff import): Staff lists "Possibly the same person twice" (same name or phone); **Review and merge** keeps the one that signs in and the import's phone and details, moves areas and history over, and deletes the copy.
 - **Phone book**: the staff of your divisions, searchable, with pills for division and role; one tap to call, text or email.
 - **Texts to staff** (Text staff): to everyone (directors over all of camp) or the staff of chosen divisions, every role or only some (just the counselors, or the head counselors and division heads). What people text back is listed under **Replies** on Text staff (newest first, with the person's division and the text it probably answers) and under that text. Texts don't say which message they answer: Kinus takes the latest text that person got in the week before. Replies show only for the head staff of the replier's own division and up (its division head, kloli, head counselors, directors over that part of camp and over all of camp), never another division's or camp's. A text from someone in no division (a sign-up, an unknown number) is for directors over all of camp.

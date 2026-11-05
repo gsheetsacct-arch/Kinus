@@ -16,6 +16,9 @@ import { shownJobError } from "@/lib/print/labels";
 import { after } from "next/server";
 import { appUrl } from "@/lib/auth/app-url";
 import { cn } from "@/lib/utils";
+import { checkinOnly } from "@/lib/print/access";
+import { checkinWaitingSets } from "@/lib/print/waiting-ids";
+import type { CurrentUser } from "@/lib/auth/permissions";
 
 export const metadata = { title: "Print queue" };
 export const dynamic = "force-dynamic";
@@ -31,9 +34,11 @@ const SHOW = {
 
 export default async function PrintQueuePage({ searchParams }: { searchParams: Promise<{ show?: string; camp?: string; division?: string }> }) {
   const [user, session, sp] = await Promise.all([requireUser(), getActiveSession(), searchParams]);
+  if (!session) return <EmptyState icon={Printer} title="No active session" description="Camp hasn't been set up yet." />;
+  // a division's check-in login: only the labels made at its check-in, to print on the label printer
+  if (checkinOnly(user)) return <CheckinLabels user={user} sessionId={session.id} />;
   // staff who only design templates start there
   if (!canUsePrintArea(user)) redirect("/print/templates");
-  if (!session) return <EmptyState icon={Printer} title="No active session" description="Camp hasn't been set up yet." />;
   const show = (sp.show && sp.show in SHOW ? sp.show : "todo") as keyof typeof SHOW;
   // requests cut off while making their PDF get one more try (after the page is sent)
   const base = await appUrl();
@@ -155,5 +160,24 @@ function Bar({ items }: { items: { href: string; label: string; on: boolean }[] 
         </Link>
       ))}
     </nav>
+  );
+}
+
+/**
+ * A check-in login's print page: the label-printer labels made at its check-in (first check-in,
+ * or a camper card's print buttons), for its divisions, all in one go. Nothing else from the queue.
+ */
+async function CheckinLabels({ user, sessionId }: { user: CurrentUser; sessionId: string }) {
+  const { shows } = await queueScope(user, sessionId, {});
+  const sets = await checkinWaitingSets(sessionId, shows);
+  return (
+    <div>
+      <PageHeader title="Labels to print" description="The labels made at check-in (by themselves at a first check-in, or with a camper's print button), for your divisions." />
+      {sets.length ? (
+        sets.map((set) => <WaitingAll key={set.key} set={set} where={null} query={new URLSearchParams({ waiting: set.key, order: "name" }).toString()} />)
+      ) : (
+        <EmptyState icon={Printer} title="Nothing to print" description="Labels from check-in show up here as they're made." />
+      )}
+    </div>
   );
 }

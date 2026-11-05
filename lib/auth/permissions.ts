@@ -124,6 +124,11 @@ export function canManageRole(me: CurrentUser, role: StaffRole): boolean {
 
 /** The print area (queue, batches, templates). Everyone else requests tags from a camper card. */
 export const canUsePrintArea = (u: CurrentUser) => ["owner", "director", "division_head", "office", "logistics"].includes(u.role);
+/**
+ * A division's check-in login: prints the labels made at check-in (the label-printer ones, made
+ * by itself at a first check-in or from a camper card at check-in) for its divisions, nothing else.
+ */
+export const canPrintCheckin = (u: CurrentUser) => u.role === "scanner";
 
 /** The staff phone book: everyone. Counselors and check-in helpers see their own head staff; head staff and the office see all their divisions' staff. */
 export const canUsePhoneBook = (u: CurrentUser) => Boolean(u.role);
