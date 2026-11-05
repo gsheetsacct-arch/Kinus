@@ -28,6 +28,11 @@ export function PdfButton({ href, label, size = "lg", onDone }: { href: string; 
   const [making, setMaking] = React.useState<string | null>(null);
   const [tok, setTok] = React.useState(token);
   React.useEffect(() => setPhone(phoneOf()), []);
+  // the latest onDone, without restarting the wait each time the page draws again
+  const doneRef = React.useRef(onDone);
+  React.useEffect(() => {
+    doneRef.current = onDone;
+  });
   React.useEffect(() => setDone(false), [href]);
   // waiting for the server's word that the download started (or failed); 3 minutes at most,
   // and shown for a moment at least so a quick one is seen too
@@ -45,12 +50,13 @@ export function PdfButton({ href, label, size = "lg", onDone }: { href: string; 
       setTok(token());
       if (v === "err") toast.error("Couldn't make the PDF. Try again, or print from the page.");
       else if (v === "ok") {
-        onDone?.();
-        if (phone) setDone(true);
+        // the caller says what happens next (the queue's note); otherwise the phone steps here
+        if (doneRef.current) doneRef.current();
+        else if (phone) setDone(true);
       }
     }, 300);
     return () => clearInterval(t);
-  }, [making, phone, onDone]);
+  }, [making, phone]);
   const url = `${href}${href.includes("?") ? "&" : "?"}dl=${tok}`;
   // the same link stays on the page while it loads (a link taken off the page as it's tapped
   // may not download on some phones); tapping it again meanwhile does nothing

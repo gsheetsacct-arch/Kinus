@@ -10,6 +10,7 @@ import { getActiveSession, requireUser } from "@/lib/auth/current-user";
 import { canUsePrintArea } from "@/lib/auth/permissions";
 import { queueScope, waitingSets } from "@/lib/print/queue";
 import { WaitingAll } from "@/components/print/waiting-all";
+import { DownloadNote } from "@/components/print/download-note";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { officeEmail, retryStuckJobs } from "@/lib/print/jobs";
 import { after } from "next/server";
@@ -72,6 +73,7 @@ export default async function PrintQueuePage({ searchParams }: { searchParams: P
         title="Print queue"
         description={office.to ? `Tag requests are emailed to ${office.to} as a PDF, and wait here until marked printed.` : "No office email is set, so requests wait here. Set one in Settings."}
       />
+      <DownloadNote />
       {/* first thing on the page: everything waiting, printed in one go (each camper's labels together) */}
       {sets.map((set) => (
         <WaitingAll key={set.key} set={set} where={division?.name ?? camp?.name ?? null} query={new URLSearchParams({ waiting: set.key, order: "name", ...(camp ? { camp: camp.id } : {}), ...(division ? { division: division.id } : {}) }).toString()} />
@@ -152,6 +154,7 @@ async function CheckinLabels({ user, sessionId }: { user: CurrentUser; sessionId
   return (
     <div>
       <PageHeader title="Labels to print" description="The label-printer labels waiting for your divisions: the name tags and bag labels for registration, however they were asked for." />
+      <DownloadNote />
       {sets.map((set) => (
         <WaitingAll key={set.key} set={set} where={null} query={new URLSearchParams({ waiting: set.key, order: "name" }).toString()} />
       ))}
