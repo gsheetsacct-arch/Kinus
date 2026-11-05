@@ -3,7 +3,7 @@ import "server-only";
 export type TagKind = "new" | "updated";
 
 /**
- * For a print job's note: who gets their first tag (a new package) and whose tag changed (an
+ * For a print job's note: who gets their first tag (a new package) and whose tag changed ("Swap out": an
  * existing bag to find), one line each under the job's summary. Empty when there's nobody.
  */
 export function changeNote(people: { name: string; kind: TagKind }[]): string {
@@ -11,7 +11,7 @@ export function changeNote(people: { name: string; kind: TagKind }[]): string {
     const names = people.filter((p) => p.kind === kind).map((p) => p.name.trim()).sort((a, b) => a.localeCompare(b));
     return names.length ? `${label} (${names.length}): ${names.join(", ")}` : null;
   };
-  const lines = [line("new", "New"), line("updated", "Updated")].filter(Boolean);
+  const lines = [line("new", "New"), line("updated", "Swap out")].filter(Boolean);
   return lines.length ? `\n${lines.join("\n")}` : "";
 }
 

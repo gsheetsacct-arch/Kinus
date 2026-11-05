@@ -170,7 +170,10 @@ export async function printLabelUpdates(templateId: string): Promise<ActionResul
     const ids = u ? [...u.fresh, ...u.changed].map((c) => c.id) : [];
     if (!ids.length) return fail("Nothing new or changed any more: it's all printed.");
     const parts = [u.fresh.length ? plural(u.fresh.length, "new camper") : null, u.changed.length ? `${u.changed.length} changed` : null].filter(Boolean).join(", ");
-    const job = await createPrintJob(user, { sessionId: session.id, templateId, camperIds: ids, deliverTo: user.email, note: `Since the last print: ${parts}` });
+    // who's new (a new package) and whose tag is swapped for the new one, by name, where they are
+    const { changeNote } = await import("@/lib/print/change-note");
+    const people = [...u.fresh.map((c) => ({ c, kind: "new" as const })), ...u.changed.map((c) => ({ c, kind: "updated" as const }))].map(({ c, kind }) => ({ name: c.where ? `${c.name} (${c.where})` : c.name, kind }));
+    const job = await createPrintJob(user, { sessionId: session.id, templateId, camperIds: ids, deliverTo: user.email, note: `Since the last print: ${parts}${changeNote(people)}` });
     await createAdminClient().from("print_jobs").update({ status: "ready" }).eq("id", job.id);
     revalidatePath("/print");
     return ok(`${plural(ids.length, "tag")} ready to print.`, `/print/jobs/${job.id}?print=1`);
