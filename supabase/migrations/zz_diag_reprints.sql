@@ -15,9 +15,12 @@ per as (
     (array_agg(content_hash order by requested_at desc))[1] as last_hash
   from items group by family, camper_id
 )
-select p.family, c.camper_code as code, c.first_name || ' ' || c.last_name as camper, d.name as division, coalesce(b.name, '') as bunk,
-  case when p.first_at > f.at + interval '2 hours' then 'new' else 'changed' end as why, p.printings
+select p.family, d.name as division,
+  count(*) filter (where p.first_at > f.at + interval '2 hours') as new,
+  count(*) filter (where p.first_at <= f.at + interval '2 hours') as changed,
+  string_agg(c.camper_code, ',' order by b.sort_order, c.last_name) as codes
 from per p join first_run f on f.family = p.family join campers c on c.id = p.camper_id
 left join divisions d on d.id = c.division_id left join bunks b on b.id = c.bunk_id
 where c.archived_at is null and (p.first_at > f.at + interval '2 hours' or p.first_hash is distinct from p.last_hash)
-order by p.family, d.sort_order, d.name, b.sort_order, c.last_name;
+group by p.family, d.name, d.sort_order
+order by p.family, d.sort_order, d.name;
