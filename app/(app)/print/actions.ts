@@ -22,7 +22,8 @@ import { createPrintJob, processPrintJob, rememberSheetPosition } from "@/lib/pr
 import { STARTED_MARK } from "@/lib/print/labels";
 import { visibleJobs } from "@/lib/print/access";
 import { inChunks } from "@/lib/supabase/in-chunks";
-import { batchCamperIds, BATCH_WHICH, type BatchWhich } from "@/lib/print/batch";
+import { batchCamperIds, batchCampers, BATCH_WHICH, type BatchWhich } from "@/lib/print/batch";
+import { camperChangeNote } from "@/lib/print/change-note";
 import { dismissLabelUpdates, labelUpdates, refreshPrintedHashes, type LabelUpdate } from "@/lib/print/updates";
 import { loadMergeSetup, loadPrintCampers } from "@/lib/print/data";
 import { mergeValues } from "@/lib/print/merge";
@@ -240,7 +241,7 @@ export async function createBatch(fd: FormData): Promise<ActionResult> {
     if (!session) return fail("No active session.");
     const d = batchSchema.parse(Object.fromEntries(fd));
     const supabase = await createClient();
-    const ids = await batchCamperIds(supabase, session.id, await resolveWhere(d.where), d.which, d.template_id);
+    const { ids, kinds } = await batchCampers(supabase, session.id, await resolveWhere(d.where), d.which, d.template_id);
     if (!ids.length) return fail("No campers match, so there's nothing to print.");
     if (ids.length > 2000) return fail("That's more than 2,000 tags. Print one division at a time.");
     const job = await createPrintJob(user, {
@@ -249,7 +250,8 @@ export async function createBatch(fd: FormData): Promise<ActionResult> {
       camperIds: ids,
       copies: d.copies,
       deliverTo: d.deliver === "email" ? d.deliver_to || null : user.email,
-      note: [d.purpose, await placeName(supabase, d.where), WHICH_SHORT[d.which]].filter(Boolean).join(" · "),
+      // "new or changed": who's new (a new package) and who's updated (an existing bag), under it
+      note: [d.purpose, await placeName(supabase, d.where), WHICH_SHORT[d.which]].filter(Boolean).join(" · ") + (await camperChangeNote(kinds)),
       order: d.order,
     });
     if (d.deliver === "email") {

@@ -44,9 +44,26 @@ export default async function JobPage({ params, searchParams }: { params: Promis
       <PageHeader
         back={{ href: "/print", label: "Print queue" }}
         title={`${job.item_count} × ${template}`}
-        description={`Asked for by ${requester} · ${formatDateTime(job.requested_at)}${job.note ? ` · ${job.note}` : ""}`}
+        description={`Asked for by ${requester} · ${formatDateTime(job.requested_at)}${job.note ? ` · ${job.note.split("\n")[0]}` : ""}`}
         actions={<Badge variant={st.variant}>{st.label}</Badge>}
       />
+      {/* who's new (a new package) and who's updated (an existing bag to find) */}
+      {job.note?.includes("\n") && (
+        <div className="space-y-1.5 rounded-xl border bg-card px-4 py-3 text-sm">
+          {job.note
+            .split("\n")
+            .slice(1)
+            .map((line) => {
+              const i = line.indexOf(":");
+              return (
+                <p key={line} dir="auto">
+                  <strong className="font-semibold">{i > 0 ? line.slice(0, i) : line}</strong>
+                  {i > 0 && line.slice(i)}
+                </p>
+              );
+            })}
+        </div>
+      )}
       {shownJobError(job.error) && <Callout tone="warning">{shownJobError(job.error)}</Callout>}
       {job.printed_at && (
         <Callout tone="success">
