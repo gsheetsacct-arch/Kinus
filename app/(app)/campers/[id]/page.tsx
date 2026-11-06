@@ -54,8 +54,12 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
   const supabase = await createClient();
   // everything at once: one round trip to the database instead of three
   const divisionsFor = (sessionId: string) => supabase.from("divisions").select("id, name, bunks(id, name, sort_order)").eq("session_id", sessionId).order("sort_order");
-  const [c, { data: fv }, { data: events }, { data: history }, activeBunks, { data: templates }, card, extraAll, { data: staffNames }, registration] = await Promise.all([
-    getCamper(supabase, id),
+  const [[c, heb], { data: fv }, { data: events }, { data: history }, activeBunks, { data: templates }, card, extraAll, { data: staffNames }, registration] = await Promise.all([
+    // the camper, and their Hebrew name as soon as their division is known (not after everything else)
+    getCamper(supabase, id).then(async (camper) => {
+      const h = camper?.id ? (await hebrewNamesFor([{ id: camper.id, division_id: camper.division_id }]).catch(() => new Map<string, string>())).get(camper.id) : undefined;
+      return [camper, h] as const;
+    }),
     supabase.from("field_visibility").select("field_group, roles"),
     supabase.from("attendance_events").select("id, event_type, method, occurred_at, note, resulting_status, profiles:recorded_by(full_name)").eq("camper_id", id).order("occurred_at", { ascending: false }).limit(100),
     supabase.rpc("camper_history", { p_camper_id: id }),
@@ -111,8 +115,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
     });
   const extra = extraAll.values;
   const canEdit = c.division_id ? canAccessBunk(user, c.division_id, c.bunk_id, "edit") : isAdmin(user);
-  // a Hebrew-language division: the Hebrew name is the title, the English one under it
-  const heb = c.id ? (await hebrewNamesFor([{ id: c.id, division_id: c.division_id }]).catch(() => new Map<string, string>())).get(c.id) : undefined;
+  // a Hebrew-language division: the Hebrew name is the title, the English one under it (heb, read above)
 
   return (
     <div>
