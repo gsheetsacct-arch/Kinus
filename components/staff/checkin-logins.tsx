@@ -34,15 +34,18 @@ export function CheckinLogins({ logins, helper = false }: { logins: CheckinLogin
   const [removing, setRemoving] = React.useState<CheckinAccount | null>(null);
   // choosing a name and password before creating a login, or a new password for one
   // mode: asked first — made up by Kinus ("random") or typed by the person ("manual")
-  const [editing, setEditing] = React.useState<{ division: CheckinLoginRow; account?: CheckinAccount; mode?: "random" | "manual"; name: string; password: string } | null>(null);
-  const choose = (mode: "random" | "manual") =>
-    editing &&
+  const [editing, setEditing] = React.useState<{ division: CheckinLoginRow; account?: CheckinAccount; mode?: "random" | "manual"; name: string; password: string; /** the name Kinus suggested ("Choose for me") */ suggested?: string } | null>(null);
+  const choose = (mode: "random" | "manual") => {
+    if (!editing) return;
+    const suggested = !editing.account && mode === "random" ? suggestName(editing.division.divisionName) : undefined;
     setEditing({
       ...editing,
       mode,
-      name: editing.account ? editing.account.name : mode === "random" ? suggestName(editing.division.divisionName) : "",
+      name: editing.account ? editing.account.name : (suggested ?? ""),
       password: mode === "random" ? generatePassword() : "",
+      suggested,
     });
+  };
   const allNames = new Set(logins.flatMap((l) => l.accounts.map((a) => a.name)));
   const suggestName = (divisionName: string) => {
     const base = checkinName(divisionName);
@@ -52,13 +55,14 @@ export function CheckinLogins({ logins, helper = false }: { logins: CheckinLogin
   };
   const save = () => {
     if (!editing) return;
-    const { division, account, name, password, mode } = editing;
+    const { division, account, name, password, mode, suggested } = editing;
     if (!mode) return;
     const problem = checkinLoginProblem(account ? account.name : name, password);
     if (problem) return void toast.error(problem);
     setEditing(null);
     if (account) run(account.id, division.divisionName, () => resetCheckinPassword(account.id, password));
-    else run(`add:${division.divisionId}`, division.divisionName, () => createCheckinLogin(division.divisionId, { name, password }));
+    // a name Kinus made up (and left as it was) that's taken by a login not on this page: the server picks the next free one
+    else run(`add:${division.divisionId}`, division.divisionName, () => createCheckinLogin(division.divisionId, { name, password, autoName: Boolean(suggested) && name.trim() === suggested }));
   };
   const router = useRouter();
   const run = async (key: string, division: string, call: () => Promise<CheckinResult>) => {

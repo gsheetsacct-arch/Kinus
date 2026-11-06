@@ -508,7 +508,7 @@ async function assertCheckinDivision(me: CurrentUser, divisionId: string) {
  * Adds a check-in login to a division, with the name and password the person creating it
  * chose (or, left empty, "division-1", "division-1-2"… and a generated password).
  */
-export async function createCheckinLogin(divisionId: string, chosen?: { name?: string; password?: string }): Promise<CheckinResult> {
+export async function createCheckinLogin(divisionId: string, chosen?: { name?: string; password?: string; /** the name was made up by Kinus ("Choose for me"): if it's taken, the next free one ("-2", "-3"…) */ autoName?: boolean }): Promise<CheckinResult> {
   // staff managers, and check-in helpers for their own divisions (checked below)
   const me = await requireUser();
   try {
@@ -517,14 +517,24 @@ export async function createCheckinLogin(divisionId: string, chosen?: { name?: s
     const admin = createAdminClient();
     const { data: division } = await admin.from("divisions").select("id, name").eq("id", divisionId).single();
     if (!division) return fail("Division not found.");
-    const taken = async (n: string) => Boolean((await admin.from("profiles").select("id").ilike("email", `checkin.${n}@%`).maybeSingle()).data);
+    // any login with that name, also one this person can't see (another division's, a removed one)
+    const taken = async (n: string) => {
+      const { data, error } = await admin.from("profiles").select("id").ilike("email", `checkin.${n}@%`).limit(1);
+      if (error) throw error;
+      return (data ?? []).length > 0;
+    };
     const password = chosen?.password?.trim() || generatePassword();
     let name: string;
     if (chosen?.name?.trim()) {
       const problem = checkinLoginProblem(chosen.name, password);
       if (problem) return fail(problem);
       name = checkinName(chosen.name);
-      if (await taken(name)) return fail(`There's already a check-in login called ${name}. Choose another name.`);
+      if (await taken(name)) {
+        if (!chosen.autoName) return fail(`There's already a check-in login called ${name}. Choose another name.`);
+        // made up for them: the next free one, as "Choose for me" means
+        const base = name.replace(/-\d+$/, "");
+        for (let n = 2; await taken(name); n++) name = `${base}-${n}`;
+      }
     } else {
       if (password.length < 8) return fail("Use a password of at least 8 characters.");
       // a short, unique name to type on the phone
