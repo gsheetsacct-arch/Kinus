@@ -55,7 +55,18 @@ export async function assignBuzzers(sessionId: string, camperIds?: string[], opt
   const redo = Boolean(opts.redo);
   // numbering a few again from 001 would give them numbers others have
   if (redo && camperIds) throw new Error("Renumbering is for everyone at once.");
-  let next = redo ? 1 : rows.reduce((n, c) => Math.max(n, c.current_buzzer_number ?? 0), 0) + 1;
+  if (redo) {
+    // archived campers give their numbers up: the numbers start again from 001, and one who comes
+    // back later (an import brings them back) then gets a new number at the end, not someone else's
+    const { error } = await admin.from("campers").update({ current_buzzer_number: null }).eq("session_id", sessionId).not("archived_at", "is", null).not("current_buzzer_number", "is", null);
+    if (error) throw error;
+  }
+  // new numbers come after every number given this session (archived campers' too: their buzzer
+  // labels may be printed), so a new one is never a number someone already has
+  const { data: top } = redo
+    ? { data: null }
+    : await admin.from("campers").select("current_buzzer_number").eq("session_id", sessionId).not("current_buzzer_number", "is", null).order("current_buzzer_number", { ascending: false }).limit(1);
+  let next = redo ? 1 : Math.max(top?.[0]?.current_buzzer_number ?? 0, rows.reduce((n, c) => Math.max(n, c.current_buzzer_number ?? 0), 0)) + 1;
   const todo = rows.filter((c) => (redo || c.current_buzzer_number === null) && (!wanted || wanted.has(c.id))).sort(byPlaceThenName);
   if (!todo.length) return { given: 0, first: null, last: null };
   const first = next;
@@ -87,6 +98,7 @@ export async function setBuzzer(camperId: string, number: number | null): Promis
       .eq("current_buzzer_number", number)
       .is("archived_at", null)
       .neq("id", camperId)
+      .limit(1)
       .maybeSingle();
     if (other) throw new Error(`Buzzer ${formatBuzzer(number)} is ${other.first_name} ${other.last_name}'s. Take it off them first.`);
   }
