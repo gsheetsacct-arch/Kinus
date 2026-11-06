@@ -113,6 +113,8 @@ export function StatusBoard({
   const [rows, setRows] = React.useState(initialRows);
   const [scope, chooseScopeRaw] = useScope(SCOPE_KEY, defaultScope, (x) => scopeExists(x, tree) && (x.kind === "all" || rows.some((r) => inScope(r, x, tree))), decodeScope, linkScope);
   const [view, setView] = React.useState<View>(linkView ?? "present");
+  // the export of Not here yet: everything, or just name and bunk
+  const [simpleList, setSimpleList] = React.useState(false);
   const [only, setOnly] = React.useState("");
   const [sort, setSort] = React.useState<"name" | "recent">("name");
   const [q, setQ] = React.useState("");
@@ -291,11 +293,15 @@ export function StatusBoard({
         <div className="no-print flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">This list:</span>
           <Button asChild size="sm" variant="outline">
-            <a href={`/status/export?${new URLSearchParams({ view, where: encodeScope(scope), format: "xlsx" })}`} download>
+            <a href={`/status/export?${new URLSearchParams({ view, where: encodeScope(scope), format: "xlsx", ...(simpleList ? { simple: "1" } : {}) })}`} download>
               <FileSpreadsheet /> Excel
             </a>
           </Button>
-          <PdfButton href={`/status/export?${new URLSearchParams({ view, where: encodeScope(scope), format: "pdf" })}`} label="PDF" size="sm" labelPrinter={false} />
+          <PdfButton href={`/status/export?${new URLSearchParams({ view, where: encodeScope(scope), format: "pdf", ...(simpleList ? { simple: "1" } : {}) })}`} label="PDF" size="sm" labelPrinter={false} />
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={simpleList} onChange={(e) => setSimpleList(e.target.checked)} className="size-4 accent-[var(--primary)]" />
+            Just name and bunk
+          </label>
         </div>
       )}
 

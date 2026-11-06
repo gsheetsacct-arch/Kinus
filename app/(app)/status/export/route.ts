@@ -31,6 +31,8 @@ export async function GET(request: NextRequest) {
   if (user.checkinLogin) return pdfFailed("Not available on check-in logins.", 403, sp);
   const view: View = sp.get("view") === "check" ? "check" : sp.get("view") === "later" ? "later" : "expected";
   const pdf = sp.get("format") === "pdf";
+  // simple: just name and bunk
+  const simple = sp.get("simple") === "1";
   try {
     const supabase = await createClient();
     const [{ data: fv }, tree] = await Promise.all([supabase.from("field_visibility").select("field_group, roles"), loadAreaTree(supabase, session.id)]);
@@ -61,8 +63,8 @@ export async function GET(request: NextRequest) {
             ? (division.get(scope.id) ?? "")
             : `${division.get(scope.divisionId) ?? ""} · ${bunk.get(scope.id) ?? ""}`;
     const title = `${VIEWS[view]} · ${where}`;
-    const header = ["#", "Name", "Division", "Bunk", "Code", "Buzzer", "Flag", "Note", ...(contacts ? ["Parents' phones"] : [])];
-    const body = list.map(({ r, div, bunk: b }, i) => [
+    const header = simple ? ["Name", "Bunk"] : ["#", "Name", "Division", "Bunk", "Code", "Buzzer", "Flag", "Note", ...(contacts ? ["Parents' phones"] : [])];
+    const full = list.map(({ r, div, bunk: b }, i) => [
       String(i + 1),
       r.heb ? `${r.heb} (${r.name})` : r.name,
       div,
@@ -73,16 +75,17 @@ export async function GET(request: NextRequest) {
       followups[r.id]?.note ?? "",
       ...(contacts ? [r.phones.map((p) => `${p.label} ${p.phone}`).join(" · ")] : []),
     ]);
+    const body = simple ? list.map(({ r, bunk: b }) => [r.heb ? `${r.heb} (${r.name})` : r.name, b]) : full;
     await logActivity("download", { what: `${title} (${pdf ? "PDF" : "Excel"})`, rows: body.length });
     if (!pdf) return tableDownload(title, [header, ...body], "xlsx");
     const { renderPdf } = await import("@/lib/print/chromium");
     const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const html = `<!doctype html><html><head><meta charset="utf-8"><style>
 ${(await import("@/lib/print/fonts")).embeddedFontCss()}
-@page{size:letter landscape;margin:12mm}*{box-sizing:border-box}body{margin:0;font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;font-size:9pt;color:#111}
+@page{size:letter ${simple ? "portrait" : "landscape"};margin:12mm}*{box-sizing:border-box}body{margin:0;font-family:"Kinus Sans","Noto Sans","Noto Sans Hebrew",Arial,sans-serif;font-size:9pt;color:#111}
 h1{font-size:15pt;margin:0 0 2pt}p{margin:0 0 8pt;color:#555;font-size:8.5pt}table{width:100%;border-collapse:collapse}thead{display:table-header-group}tr{break-inside:avoid}
 th{text-align:start;font-weight:600;color:#555;font-size:8pt;border-bottom:1pt solid #999;padding:3pt 5pt 3pt 0}td{padding:3pt 5pt 3pt 0;border-bottom:.5pt solid #ddd;vertical-align:top;unicode-bidi:plaintext;text-align:start}
-td:first-child{color:#888;width:6mm}
+${simple ? "td{font-size:11pt;padding:4pt 8pt 4pt 0}" : "td:first-child{color:#888;width:6mm}"}
 </style></head><body data-fitted><h1>${esc(title)}</h1><p>${body.length} ${body.length === 1 ? "camper" : "campers"} · ${esc(session.name ?? "")} · ${esc(formatDateTime(new Date().toISOString()))}</p>
 <table><thead><tr>${header.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${body.map((row) => `<tr>${row.map((c) => `<td dir="auto">${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></body></html>`;
     const { pdf: bytes } = await renderPdf(html);
