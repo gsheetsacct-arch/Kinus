@@ -589,7 +589,7 @@ export function Scanner({
             )}
             {printQueue && (
               <Button size="sm" variant="secondary" className="ml-auto bg-background/85 shadow-lg backdrop-blur" asChild>
-                <Link href={lineDiv ? `/print?division=${lineDiv.id}` : "/print"}>
+                <Link href={lineDiv ? `/print?line=${lineDiv.id}` : "/print"}>
                   <Printer /> Labels to print
                 </Link>
               </Button>
