@@ -167,7 +167,7 @@ A division's language is a **⚙ Setting** on **Divisions & bunks** (English, He
 - Empty bunks fold into "N empty bunks"; **Remove empty ones** removes bunks with no campers (archived campers don't count).
 - The export's bunk format ("Bunk סה - Online School Only") is read into the bunk's name.
 
-**Buzzer numbers** are given in this order: division by name (1, 2, 3, then A–Z), then bunk (in Alef-Beis order), then last name. The Thursday Program's second records get none (the camper has theirs on their regular record), nor do camps that get name tags only.
+**Buzzer numbers** are given in this order: division by name (1, 2, 3, then A–Z), then bunk (in Alef-Beis order), then last name. The Thursday Program's second records get none (the camper has theirs on their regular record), nor do camps that get name tags only. A new number always comes after the highest number given this session (also an archived camper's), so it's never one someone already has. Renumbering everyone takes archived campers' numbers off; an archived camper who comes back in an export keeps their number only if nobody else has it now, otherwise they get a new one at the end (Number the ones without one).
 
 **Camps that get name tags only** ⚙ Setting (Settings → Camps that get name tags only): a tick per camp, kept by camp name so it carries over to next session's camps. A ticked camp (the Thursday Program's camps and Virtual, until changed) gets its name tags and nothing else: no luggage tags, packing labels, buzzers or other printing (not in a batch, on the camper card, on Updates or on first check-in), no buzzer numbers, and its bunks and divisions don't move the continuing bunk and staff numbers. What counts: a template that ticks that camp still prints for it (the badges tick their Thursday camps); a template that ticks no camp prints for it only when its Kind is Name tag (the Virtual badge), otherwise it leaves those camps out.
 `,
@@ -194,6 +194,10 @@ Every camper of a place, live: counts by status (here, out, expected, check up, 
 
 ### Final check-out
 Check-in logins can be given final check-out (Staff → check-in logins): every scan records "gone home" for any division of the camp, with progress per division.
+It has three tabs:
+- **Find**: search a camper (any order, misspelt, Hebrew, code or buzzer number). Each shows their name and **buzzer number** large, and in small their division, bunk and where they're from. Their whole **family** (the export's family id) shows with them, so a parent's children are called together. **Tap a name** to mark them **called** (the parent is here); **Call all** calls the family's campers who are here. Campers who never checked in are greyed out, at the bottom. Pull up the bar at the bottom to see who's been called.
+- **Called**: everyone called and not gone home yet, newest first, with their buzzer number; **Not called** undoes a mistaken tap. Shared by every final check-out phone.
+- **Scanner**: scanning the camper's tag (or typing its number) is what checks them out, going home; they then leave the Called list.
 `,
   },
   {

@@ -2,11 +2,18 @@ import Link from "next/link";
 import { DoorOpen } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
-import { Scanner, type RosterEntry } from "@/components/scan/scanner";
+import { FinalCheckout, type CheckoutCamper } from "@/components/checkout/final-checkout";
+import { extraValuesFor } from "@/lib/data/extra-fields";
+import { hebrewNamesFor } from "@/lib/data/hebrew-display";
+import { checkoutState } from "./actions";
+
 import { requireUser } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { checkoutScope } from "@/lib/attendance/final-checkout";
+
+/** The export's columns for a camper's family (who to call together) and where they're from. */
+const FAMILY_COLUMNS = ["UserAttr.family_id", "Family.city", "Family.state", "Family.country"];
 
 export const metadata = { title: "Final check-out" };
 export const maxDuration = 60;
@@ -50,16 +57,30 @@ export default async function CheckoutPage() {
   ]);
   const div = new Map(scope.divisions.map((d) => [d.id, d.name]));
   const bunk = new Map((bunks ?? []).map((b) => [b.id, b.name]));
-  const roster: RosterEntry[] = rows.map((c) => ({
-    id: c.id,
-    code: c.camper_code,
-    name: `${c.first_name} ${c.last_name}`,
-    first: c.first_name,
-    last: c.last_name,
-    where: [div.get(c.division_id!) ?? "", (c.bunk_id && bunk.get(c.bunk_id)) || "no bunk"].join(" · "),
-    status: c.status,
-    div: c.division_id,
-    buzzer: c.current_buzzer_number,
-  }));
-  return <Scanner roster={roster} templates={[]} canScan final={{ campName: scope.campName, divisions: scope.divisions }} />;
+  // each camper's family (the export's family id) and where they're from, and Hebrew names
+  // (Hebrew and French divisions), to tell campers apart and call a family together
+  const [extra, hebrew, state] = await Promise.all([
+    extraValuesFor(rows.map((c) => c.id), FAMILY_COLUMNS.map((column) => ({ column }))).catch(() => new Map<string, Record<string, string>>()),
+    hebrewNamesFor(rows.map((c) => ({ id: c.id, division_id: c.division_id }))).catch(() => new Map<string, string>()),
+    checkoutState(),
+  ]);
+  const roster: CheckoutCamper[] = rows.map((c) => {
+    const x = extra.get(c.id) ?? {};
+    const from = [x["Family.city"], x["Family.country"] && !/^(usa|us|united states)$/i.test(x["Family.country"].trim()) ? x["Family.country"] : x["Family.state"]].map((v) => (v ?? "").trim()).filter(Boolean).join(", ");
+    return {
+      id: c.id,
+      code: c.camper_code,
+      name: `${c.first_name} ${c.last_name}`,
+      first: c.first_name,
+      last: c.last_name,
+      where: [div.get(c.division_id!) ?? "", (c.bunk_id && bunk.get(c.bunk_id)) || "no bunk"].join(" · "),
+      status: c.status,
+      div: c.division_id,
+      buzzer: c.current_buzzer_number,
+      ...(hebrew.has(c.id) ? { heb: hebrew.get(c.id) } : {}),
+      family: (x["UserAttr.family_id"] ?? "").trim() || null,
+      from,
+    };
+  });
+  return <FinalCheckout roster={roster} campName={scope.campName} divisions={scope.divisions} initialCalls={state.calls} />;
 }

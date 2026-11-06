@@ -101,3 +101,52 @@ export async function lookupCheckoutCode(code: string): Promise<CodeLookup> {
   const where = [(c.divisions as { name: string } | null)?.name, (c.bunks as { name: string } | null)?.name ?? "no bunk"].filter(Boolean).join(" · ");
   return { found: true, entry: { id: c.id, code: c.camper_code, name: `${c.first_name} ${c.last_name}`, first: c.first_name, last: c.last_name, where, status: c.status, div: c.division_id } };
 }
+
+/** Statuses and who's been called, for the final check-out page (every few seconds). */
+export async function checkoutState(): Promise<{ statuses: Record<string, CamperStatus>; calls: Record<string, string> }> {
+  const scope = await checkoutScope(await requireUser());
+  if (!scope) return { statuses: {}, calls: {} };
+  const admin = createAdminClient();
+  const ids = scope.divisions.map((d) => d.id);
+  const [rows, calls] = await Promise.all([
+    fetchAll((from, to) => admin.from("campers").select("id, status").eq("session_id", scope.sessionId).in("division_id", ids).is("archived_at", null).order("id").range(from, to)),
+    fetchAll((from, to) => admin.from("checkout_calls").select("camper_id, called_at").eq("session_id", scope.sessionId).order("camper_id").range(from, to)).catch(() => [] as { camper_id: string; called_at: string }[]),
+  ]);
+  const mine = new Set(rows.map((r) => r.id));
+  return {
+    statuses: Object.fromEntries(rows.map((r) => [r.id, r.status])),
+    calls: Object.fromEntries(calls.filter((c) => mine.has(c.camper_id)).map((c) => [c.camper_id, c.called_at])),
+  };
+}
+
+/**
+ * Marks campers called (their name tapped: a parent is here for them) or not called (undo).
+ * Only campers of this person's camp; shared by every final check-out phone.
+ */
+export async function setCalled(camperIds: string[], called: boolean): Promise<{ ok: true; calls: Record<string, string> } | { ok: false; error: string }> {
+  try {
+    const user = await requireUser();
+    const scope = await checkoutScope(user);
+    if (!scope) return { ok: false, error: "Your account can't do final check-out." };
+    const wanted = [...new Set(camperIds)].slice(0, 50);
+    if (!wanted.length) return { ok: true, calls: {} };
+    const admin = createAdminClient();
+    const { data: rows, error } = await admin.from("campers").select("id").in("id", wanted).eq("session_id", scope.sessionId).in("division_id", scope.divisions.map((d) => d.id)).is("archived_at", null);
+    if (error) throw error;
+    const ids = (rows ?? []).map((r) => r.id);
+    if (!ids.length) return { ok: false, error: `Not in ${scope.campName}.` };
+    if (called) {
+      const now = new Date().toISOString();
+      // already called: they keep the time they were first called
+      const { error: e } = await admin.from("checkout_calls").upsert(ids.map((camper_id) => ({ camper_id, session_id: scope.sessionId, called_at: now, called_by: user.id })), { onConflict: "camper_id", ignoreDuplicates: true });
+      if (e) throw /checkout_calls/.test(e.message) ? new Error("Calling needs a database update first (migration 0064).") : e;
+    } else {
+      const { error: e } = await admin.from("checkout_calls").delete().in("camper_id", ids);
+      if (e) throw e;
+    }
+    const { calls } = await checkoutState();
+    return { ok: true, calls };
+  } catch (e) {
+    return { ok: false, error: errorMessage(e) };
+  }
+}
