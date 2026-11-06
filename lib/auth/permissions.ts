@@ -27,7 +27,7 @@ export type CurrentUser = {
 };
 
 export const LEVEL_RANK: Record<AccessLevel, number> = { view: 1, scan: 2, edit: 3 };
-const ROLE_RANK: Record<StaffRole, number> = { owner: 9, director: 8, division_head: 6, kloli: 5.5, head_counselor: 5, office: 4, logistics: 4, counselor: 3, scanner: 2, staff: 1 };
+const ROLE_RANK: Record<StaffRole, number> = { owner: 9, director: 8, division_head: 6, head_kloli: 5.75, kloli: 5.5, head_counselor: 5, office: 4, logistics: 4, counselor: 3, scanner: 2, staff: 1 };
 
 export const effectiveLevel = (u: CurrentUser): AccessLevel => (u.role === "owner" ? "edit" : u.level);
 export const isOwner = (u: CurrentUser) => u.role === "owner";
@@ -36,7 +36,7 @@ export const isAdmin = (u: CurrentUser) => u.role === "owner" || (u.role === "di
 /** Directors of any area: staff for their area, bulk actions, corrections. */
 export const isDirector = (u: CurrentUser) => u.role === "owner" || u.role === "director";
 /** Who runs a Staff page: directors, and division heads and head counselors for the staff of their own divisions. */
-export const isStaffManager = (u: CurrentUser) => isDirector(u) || u.role === "division_head" || u.role === "kloli" || u.role === "head_counselor";
+export const isStaffManager = (u: CurrentUser) => isDirector(u) || u.role === "division_head" || u.role === "head_kloli" || u.role === "kloli" || u.role === "head_counselor";
 export const seesAllCamp = (u: CurrentUser) => u.role === "owner" || u.allAreas;
 export const roleRank = (r: StaffRole) => ROLE_RANK[r];
 
@@ -73,6 +73,7 @@ export function presetAudiencesFor(u: CurrentUser): string[] {
       return ["counselor", "head_counselor", "division_head", "director", "office", "custom"];
     case "division_head":
       return ["division_head", "head_counselor", "counselor", "custom"];
+    case "head_kloli":
     case "kloli":
     case "head_counselor":
       return ["head_counselor", "counselor", "custom"];
@@ -118,7 +119,9 @@ export function canManageRole(me: CurrentUser, role: StaffRole): boolean {
   if (isAdmin(me)) return role !== "owner";
   if (isDirector(me)) return roleRank(role) < roleRank("director");
   // division heads also look after the other division heads of their divisions (their area still applies)
-  if (me.role === "division_head") return role === "division_head" || role === "kloli" || role === "head_counselor" || role === "counselor" || role === "scanner" || role === "staff";
+  if (me.role === "division_head") return role === "division_head" || role === "head_kloli" || role === "kloli" || role === "head_counselor" || role === "counselor" || role === "scanner" || role === "staff";
+  // a head kloli looks after the klolim (and everyone a kloli looks after)
+  if (me.role === "head_kloli") return role === "kloli" || role === "head_counselor" || role === "counselor" || role === "scanner" || role === "staff";
   if (me.role === "kloli") return role === "head_counselor" || role === "counselor" || role === "scanner" || role === "staff";
   if (me.role === "head_counselor") return role === "counselor" || role === "scanner" || role === "staff";
   return false;
@@ -153,11 +156,11 @@ export const canFollowUp = (u: CurrentUser) => u.role !== "counselor";
 export const canFinalCheckout = (u: CurrentUser) => Boolean(u.finalCheckout) || (seesAllCamp(u) && LEVEL_RANK[effectiveLevel(u)] >= LEVEL_RANK.scan);
 
 /** Who gives a check-in login final check-out: whoever makes check-in logins (division heads and head counselors for their own division's, directors). */
-export const canGiveFinalCheckout = (u: CurrentUser) => isDirector(u) || u.role === "division_head" || u.role === "kloli" || u.role === "head_counselor";
+export const canGiveFinalCheckout = (u: CurrentUser) => isDirector(u) || u.role === "division_head" || u.role === "head_kloli" || u.role === "kloli" || u.role === "head_counselor";
 
 /** Text staff (Twilio): directors, division heads and head counselors, each to the staff of their own divisions. */
 export const canTextStaff = (u: CurrentUser) =>
-  !u.checkinLogin && (u.role === "owner" || (u.textRule ? u.textRule.can : isDirector(u) || u.role === "division_head" || u.role === "kloli" || u.role === "head_counselor"));
+  !u.checkinLogin && (u.role === "owner" || (u.textRule ? u.textRule.can : isDirector(u) || u.role === "division_head" || u.role === "head_kloli" || u.role === "kloli" || u.role === "head_counselor"));
 /** The roles this person may text (null = any role), as set for their role on Staff → Roles. */
 export const textableRoles = (u: CurrentUser): StaffRole[] | null => (u.role === "owner" ? null : (u.textRule?.roles ?? null));
 /** Text everyone at once (all staff, directors and office, and the /updates sign-ups): the owner and directors over all of camp. */

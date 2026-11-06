@@ -5,7 +5,7 @@ import { LEVEL_RANK, effectiveLevel, isDirector, seesAllCamp, type CurrentUser }
 import type { CountCamper, CountMark } from "@/lib/head-counts";
 
 /** Head staff and up start head counts (and close them). */
-export const canStartCount = (u: CurrentUser) => !u.checkinLogin && (isDirector(u) || u.role === "division_head" || u.role === "kloli" || u.role === "head_counselor");
+export const canStartCount = (u: CurrentUser) => !u.checkinLogin && (isDirector(u) || u.role === "division_head" || u.role === "head_kloli" || u.role === "kloli" || u.role === "head_counselor");
 /** Whoever can check kids in can count them. */
 export const canCount = (u: CurrentUser) => LEVEL_RANK[effectiveLevel(u)] >= LEVEL_RANK.scan;
 /** The divisions someone may start a count for (null: all of them). */

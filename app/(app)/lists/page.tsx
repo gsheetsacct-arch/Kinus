@@ -48,7 +48,7 @@ export default async function ListsPage({ searchParams }: { searchParams: Promis
   // the default list for this person's own role, else the nearest role below theirs
   const ladder = ["director", "division_head", "head_counselor", "counselor"];
   // klolim use the head counselors' lists
-  const own = user.role === "owner" ? "director" : user.role === "kloli" ? "head_counselor" : user.role;
+  const own = user.role === "owner" ? "director" : user.role === "kloli" || user.role === "head_kloli" ? "head_counselor" : user.role;
   const order = ladder.includes(own) ? ladder.slice(ladder.indexOf(own)) : [own];
   const preset =
     presets.find((p) => p.id === sp.preset) ??

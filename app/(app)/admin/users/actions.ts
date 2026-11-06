@@ -19,7 +19,7 @@ import { checkinEmail, emailWayIn, generatePassword, placeholderEmail, setLoginK
 import { checkinLoginProblem, checkinName, isPlaceholderEmail, type LoginKind } from "@/lib/staff/login-kinds";
 import { matchStaffRows } from "@/lib/staff/match";
 
-const ROLES = ["owner", "director", "division_head", "kloli", "head_counselor", "counselor", "scanner", "office", "logistics", "staff"] as const;
+const ROLES = ["owner", "director", "division_head", "head_kloli", "kloli", "head_counselor", "counselor", "scanner", "office", "logistics", "staff"] as const;
 const signInRedirect = async () => `${await appUrl()}/login?next=/set-password`;
 
 /** Roles removed on Staff → Roles aren't given to anyone new. */
