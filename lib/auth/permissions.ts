@@ -117,7 +117,8 @@ export function canManageRole(me: CurrentUser, role: StaffRole): boolean {
   if (me.role === "owner") return true;
   if (isAdmin(me)) return role !== "owner";
   if (isDirector(me)) return roleRank(role) < roleRank("director");
-  if (me.role === "division_head") return role === "kloli" || role === "head_counselor" || role === "counselor" || role === "scanner" || role === "staff";
+  // division heads also look after the other division heads of their divisions (their area still applies)
+  if (me.role === "division_head") return role === "division_head" || role === "kloli" || role === "head_counselor" || role === "counselor" || role === "scanner" || role === "staff";
   if (me.role === "kloli") return role === "head_counselor" || role === "counselor" || role === "scanner" || role === "staff";
   if (me.role === "head_counselor") return role === "counselor" || role === "scanner" || role === "staff";
   return false;
