@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
               : `${division.get(scope.divisionId) ?? ""} · ${bunk.get(scope.id) ?? ""}`;
     const title = `${VIEWS[view]} · ${where}`;
     const header = simple
-      ? ["Name", "Bunk"]
+      ? ["Name", "Bunk", ...(contacts ? ["Parents"] : [])]
       : [
           "#",
           "Name",
@@ -142,13 +142,27 @@ export async function GET(request: NextRequest) {
       flagText(r.id),
       followups[r.id]?.note ?? "",
       ...(contacts
-        ? [r.phones.map((p) => `${p.label} ${p.phone}`).join(" · ")]
+        ? [
+            r.phones
+              .map((p) => `${p.label}${p.who ? ` ${p.who}` : ""} ${p.phone}`)
+              .join(" · "),
+          ]
         : []),
     ]);
     const body = simple
       ? list.map(({ r, bunk: b }) => [
           r.heb ? `${r.heb} (${r.name})` : r.name,
           b,
+          // each parent on their own line in the PDF; Excel cells stay on one line
+          ...(contacts
+            ? [
+                r.phones
+                  .map(
+                    (p) => `${p.label}${p.who ? ` ${p.who}` : ""}: ${p.phone}`,
+                  )
+                  .join(pdf ? "\n" : " · "),
+              ]
+            : []),
         ])
       : full;
     await logActivity("download", {
@@ -173,7 +187,7 @@ ${(await import("@/lib/print/fonts")).embeddedFontCss()}
 h1{font-size:15pt;margin:0 0 2pt}p{margin:0 0 8pt;color:#555;font-size:8.5pt}table{width:100%;border-collapse:collapse}thead{display:table-header-group}tr{break-inside:avoid}
 th{text-align:start;font-weight:600;color:#555;font-size:8pt;border-bottom:1pt solid #999;padding:3pt 5pt 3pt 0}td{padding:3pt 5pt 3pt 0;border-bottom:.5pt solid #ddd;vertical-align:top;unicode-bidi:plaintext;text-align:start}
 .next{break-before:page}h2{font-size:13pt;margin:10pt 0 4pt}h2 span{color:#888;font-weight:400;font-size:10pt}
-${simple ? "td{font-size:11pt;padding:4pt 8pt 4pt 0}" : "td:first-child{color:#888;width:6mm}"}
+${simple ? "td{font-size:11pt;padding:4pt 8pt 4pt 0;white-space:pre-line}td:nth-child(3){font-size:9.5pt}" : "td:first-child{color:#888;width:6mm}"}
 </style></head><body data-fitted><h1>${esc(title)}</h1><p>${body.length} ${body.length === 1 ? "camper" : "campers"} · ${esc(session.name ?? "")} · ${esc(formatDateTime(new Date().toISOString()))}</p>
 ${sections.map((sec, i) => `${sec.name ? `<h2${i ? ' class="next"' : ""}>${esc(sec.name)} <span>${sec.rows.length}</span></h2>` : ""}<table><thead><tr>${header.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${sec.rows.map((row) => `<tr>${row.map((c) => `<td dir="auto">${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`).join("")}</body></html>`;
     const { pdf: bytes } = await renderPdf(html);

@@ -300,7 +300,7 @@ export function StatusBoard({
           <PdfButton href={`/status/export?${new URLSearchParams({ view, where: encodeScope(scope), format: "pdf", ...(simpleList ? { simple: "1" } : {}) })}`} label="PDF" size="sm" labelPrinter={false} />
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={simpleList} onChange={(e) => setSimpleList(e.target.checked)} className="size-4 accent-[var(--primary)]" />
-            Just name and bunk
+            Just name, bunk and parents
           </label>
         </div>
       )}
