@@ -23,6 +23,8 @@ const input = z.object({
     .min(1, "Pick at least one role.")
     .nullish()
     .transform((r) => r ?? null),
+  // "Send as": the sign in front instead of the sender's role's (null: their role's)
+  signAs: z.string().max(60).nullish(),
 });
 
 // "Counselor" → "Counselors"; "Office", "Staff", "Logistics", "Kloli" as they are
@@ -32,7 +34,7 @@ const plural = (label: string) => (/(s|Office|Staff|Kloli)$/.test(label) ? label
 const UNSUBSCRIBED = "21610";
 
 /** Texts the staff of the chosen divisions (or everyone), one message per number, through Twilio. */
-export async function sendText(raw: { body: string; divisionIds: string[] | null; roles?: string[] | null }): Promise<ActionResult> {
+export async function sendText(raw: { body: string; divisionIds: string[] | null; roles?: string[] | null; signAs?: string | null }): Promise<ActionResult> {
   const me = await requireUser();
   if (!canTextStaff(me)) return fail("Only directors, division heads and head counselors can text staff.");
   const config = twilioConfig();
@@ -41,7 +43,8 @@ export async function sendText(raw: { body: string; divisionIds: string[] | null
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the message and try again.");
   const { divisionIds, roles } = parsed.data;
   // the camp and the sender's role go first ("Kinus Tzeirei Hashluchim - HC: …"), as registered with the carriers
-  const body = textPrefix(me.role) + parsed.data.body;
+  // (or as they chose to sign: roles are shared, so a director's login isn't always the director)
+  const body = textPrefix(me.role, parsed.data.signAs) + parsed.data.body;
   if (body.length > 1600) return fail("That's too long for a text (1,600 characters at most, with the name in front).");
   if (divisionIds === null && !canTextEveryone(me)) return fail("Only directors over all of camp can text everyone.");
   const allowed = textableDivisionIds(me);
