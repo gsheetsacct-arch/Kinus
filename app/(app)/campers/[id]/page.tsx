@@ -24,6 +24,7 @@ import { CorrectStatus } from "@/components/scan/correct-status";
 import { EVENT_LABEL } from "@/lib/attendance/machine";
 import { getCamper } from "@/lib/data/campers";
 import { formatDateTime, formatPhone, telHref, whatsAppHref } from "@/lib/utils";
+import { convertNumber } from "@/lib/hebrew-number";
 import { bunkCounselors, type BunkCounselor } from "@/lib/data/bunk-counselors";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
 import { FIELD_BY_KEY } from "@/lib/fields";
@@ -457,7 +458,7 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
       {counselors.length > 0 && (
         <Card className="mt-6">
           <CardHeader>
-            <CardTitle>{c.bunk_name ? `${c.bunk_name}'s counselors` : "Counselors"}</CardTitle>
+            <CardTitle>{c.bunk_name ? `${convertNumber(c.bunk_name, "number", true)} counselors` : "Counselors"}</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="divide-y">
