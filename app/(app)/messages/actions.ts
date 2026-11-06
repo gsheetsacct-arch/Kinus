@@ -2,7 +2,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { canTextEveryone, canTextStaff, textableDivisionIds } from "@/lib/auth/permissions";
+import { canTextEveryone, canTextStaff, textableDivisionIds, textableRoles } from "@/lib/auth/permissions";
+import { allowedTextRoles } from "@/lib/messaging/text-rules";
 import { appUrl } from "@/lib/auth/app-url";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { loadAreaTree } from "@/lib/data/areas";
@@ -36,12 +37,16 @@ const UNSUBSCRIBED = "21610";
 /** Texts the staff of the chosen divisions (or everyone), one message per number, through Twilio. */
 export async function sendText(raw: { body: string; divisionIds: string[] | null; roles?: string[] | null; signAs?: string | null }): Promise<ActionResult> {
   const me = await requireUser();
-  if (!canTextStaff(me)) return fail("Only directors, division heads and head counselors can text staff.");
+  if (!canTextStaff(me)) return fail("Your role can't text staff (Staff → Roles).");
   const config = twilioConfig();
   if (!config) return fail("Texting isn't set up yet: Twilio's details need adding in Vercel.");
   const parsed = input.safeParse(raw);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the message and try again.");
-  const { divisionIds, roles } = parsed.data;
+  const { divisionIds } = parsed.data;
+  // only the roles this person's role may text (Staff → Roles), whatever was picked
+  const limit = textableRoles(me);
+  const roles = allowedTextRoles({ can: true, roles: limit }, parsed.data.roles);
+  if (roles && !roles.length) return fail("Your role can't text those roles.");
   // the camp and the sender's role go first ("Kinus Tzeirei Hashluchim - HC: …"), as registered with the carriers
   // (or as they chose to sign: roles are shared, so a director's login isn't always the director)
   const body = textPrefix(me.role, parsed.data.signAs) + parsed.data.body;

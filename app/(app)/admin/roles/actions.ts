@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { FIELD_GROUPS, STAFF_ROLES } from "@/lib/labels";
 import { KEPT_ROLES, loadRoles } from "@/lib/data/roles";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
+import { TEXT_RULES_KEY, textRuleFor } from "@/lib/messaging/text-rules";
 
 const ROLES = ["director", "division_head", "kloli", "head_counselor", "counselor", "scanner", "office", "logistics", "staff"] as const;
 const level = z.enum(["view", "scan", "edit"]);
@@ -26,6 +27,17 @@ export async function saveRoles(fd: FormData): Promise<ActionResult> {
       const { error: e } = await supabase.from("field_visibility").update({ roles }).eq("field_group", g);
       if (e) throw e;
     }
+    // who may text staff, and only whom (roles not on the form keep what they had)
+    const { data: before } = await supabase.from("settings").select("value").eq("key", TEXT_RULES_KEY).maybeSingle();
+    const rules = Object.fromEntries(
+      ROLES.map((r) =>
+        shown.includes(r)
+          ? [r, { can: fd.get(`text:can:${r}`) === "on", roles: ROLES.filter((t) => fd.get(`text:to:${r}:${t}`) === "on") }]
+          : [r, textRuleFor(before?.value ?? null, r)],
+      ),
+    );
+    const { error: te } = await supabase.from("settings").upsert({ key: TEXT_RULES_KEY, value: rules, updated_at: new Date().toISOString() });
+    if (te) throw te;
     revalidatePath("/", "layout");
     return ok("Saved. Everyone in each role has these permissions now.");
   } catch (e) {

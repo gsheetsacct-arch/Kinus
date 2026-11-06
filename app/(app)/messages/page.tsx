@@ -6,7 +6,7 @@ import { Section } from "@/components/section";
 import { Callout } from "@/components/callout";
 import { Compose, type ComposeCamp } from "@/components/messages/compose";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { canTextEveryone, canTextStaff, isAdmin, textableDivisionIds } from "@/lib/auth/permissions";
+import { canTextEveryone, canTextStaff, isAdmin, textableDivisionIds, textableRoles } from "@/lib/auth/permissions";
 import { loadAreaTree } from "@/lib/data/areas";
 import { loadTextRecipients } from "@/lib/data/text-recipients";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -41,7 +41,9 @@ export default async function MessagesPage() {
   const everyone = canTextEveryone(me);
   // only the people this person may text reach the page (sign-ups only with "everyone")
   const everybody = await loadTextRecipients(admin, tree);
-  const recipients = everybody.filter((r) => everyone || r.divisionIds.some((d) => !allowed || allowed.includes(d)));
+  // and only the roles their role may text (Staff → Roles); sign-ups have no role, so not then
+  const onlyRoles = textableRoles(me);
+  const recipients = everybody.filter((r) => (everyone || r.divisionIds.some((d) => !allowed || allowed.includes(d))) && (!onlyRoles || (r.role !== null && onlyRoles.includes(r.role as never))));
 
   // what was sent before: everything for directors over all of camp, otherwise their own and their divisions'
   let history = admin.from("text_broadcasts").select("id, sender_name, body, audience, recipient_count, failed_count, created_at").order("created_at", { ascending: false }).limit(30);
