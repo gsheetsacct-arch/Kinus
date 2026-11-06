@@ -60,7 +60,10 @@ export function Scanner({
   printQueue = false,
   campDivisionIds = null,
   resets = {},
+  offsetTop = 0,
 }: {
+  /** Room left at the top for a bar of the page's own (Final check-out's tabs), in pixels. */
+  offsetTop?: number;
   /** When divisions' check-ins were reset (Settings): their Recent entries from before are dropped. */
   resets?: Record<string, string>;
   /** The camp chosen at the top of the menu: its divisions (null: every camp). The recent list shows only its campers. */
@@ -431,7 +434,7 @@ export function Scanner({
   return (
     <div
       className="fixed z-20 overflow-hidden bg-neutral-950"
-      style={{ top: frame.top, bottom: frame.bottom, left: frame.left, right: 0 }}
+      style={{ top: frame.top + offsetTop, bottom: frame.bottom, left: frame.left, right: 0 }}
       // the first tap wakes the sound up, so scans after it beep (phones need a tap first)
       onPointerDown={unlockSound}
     >
@@ -707,7 +710,7 @@ export function Scanner({
  * Where the check-in page goes: everything between the app's top bar and its bottom tabs
  * (on a phone), or beside the side menu (a computer). The page itself doesn't scroll.
  */
-function useFullFrame() {
+export function useFullFrame() {
   const [box, setBox] = React.useState({ top: 0, bottom: 0, left: 0 });
   React.useLayoutEffect(() => {
     const measure = () => {

@@ -194,6 +194,10 @@ Every camper of a place, live: counts by status (here, out, expected, check up, 
 
 ### Final check-out
 Check-in logins can be given final check-out (Staff → check-in logins): every scan records "gone home" for any division of the camp, with progress per division.
+It has three tabs:
+- **Find**: search a camper (any order, misspelt, Hebrew, code or buzzer number). Each shows their name and **buzzer number** large, and in small their division, bunk and where they're from. Their whole **family** (the export's family id) shows with them, so a parent's children are called together. **Tap a name** to mark them **called** (the parent is here); **Call all** calls the family's campers who are here. Campers who never checked in are greyed out, at the bottom. Pull up the bar at the bottom to see who's been called.
+- **Called**: everyone called and not gone home yet, newest first, with their buzzer number; **Not called** undoes a mistaken tap. Shared by every final check-out phone.
+- **Scanner**: scanning the camper's tag (or typing its number) is what checks them out, going home; they then leave the Called list.
 `,
   },
   {

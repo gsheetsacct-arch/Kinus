@@ -159,6 +159,18 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"checkout_calls": {
+                  Row: {
+                    "called_at": string,"called_by": string | null,"camper_id": string,"session_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "called_at"?: string,"called_by"?: string | null,"camper_id": string,"session_id": string
+                  }
+                  Update: {
+                    "called_at"?: string,"called_by"?: string | null,"camper_id"?: string,"session_id"?: string
+                  }
+                  Relationships: []
                 },"camper_followups": {
                   Row: {
                     "camper_id": string,"note": string | null,"until": string | null,"updated_at": string,"updated_by": string | null
