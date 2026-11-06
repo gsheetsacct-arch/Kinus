@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
-import { matchScore, searchEntry } from "@/lib/search";
+import { isHebrewQuery, matchScore, searchEntry } from "@/lib/search";
 import type { CamperIndexRow } from "@/lib/data/campers";
 import { CAMPER_FLAGS, type CamperFlag } from "@/lib/camper-flags";
 import { cn, formatWhen } from "@/lib/utils";
@@ -80,7 +80,10 @@ export function CampersBrowser({
       if (score > 0) out.push({ r, score });
     }
     const byName = (a: CamperIndexRow, b: CamperIndexRow) => a.l.localeCompare(b.l) || a.n.localeCompare(b.n);
+    const hebrew = isHebrewQuery(q);
     out.sort((a, b) => {
+      // typed in Hebrew: the campers with a Hebrew name (Hebrew, French) first
+      if (hebrew && Boolean(a.r.h) !== Boolean(b.r.h)) return Number(Boolean(b.r.h)) - Number(Boolean(a.r.h));
       if (q.trim() && a.score !== b.score) return b.score - a.score;
       const flag = SORT_FLAGS.find((s) => `flag:${s.key}` === f.sort)?.key;
       if (flag) return Number(has(b.r, flag)) - Number(has(a.r, flag)) || byName(a.r, b.r);

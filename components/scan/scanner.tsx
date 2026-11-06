@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { normalizeName } from "@/lib/import/normalize";
-import { matchScore, searchEntry } from "@/lib/search";
+import { isHebrewQuery, matchScore, searchEntry } from "@/lib/search";
 import { findScanCode, looksLikeScan, type ScanMode } from "@/lib/attendance/scan";
 import type { CamperStatus } from "@/lib/attendance/machine";
 import { cn, formatTime } from "@/lib/utils";
@@ -287,7 +287,8 @@ export function Scanner({
       ? index
           .map(({ r, e }) => ({ r, score: matchScore(e, q) }))
           .filter((x) => x.score > 0)
-          .sort((a, b) => b.score - a.score || a.r.last.localeCompare(b.r.last))
+          // typed in Hebrew: the campers with a Hebrew name (Hebrew, French) first
+          .sort((a, b) => (isHebrewQuery(q) ? Number(Boolean(b.r.heb)) - Number(Boolean(a.r.heb)) : 0) || b.score - a.score || a.r.last.localeCompare(b.r.last))
       : [];
   const matches = allMatches.slice(0, MAX_RESULTS).map((x) => x.r);
   // a name that's only similar (spelled differently) is never checked in by Enter: tap it
