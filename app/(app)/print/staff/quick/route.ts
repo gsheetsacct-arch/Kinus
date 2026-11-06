@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { logActivity } from "@/lib/audit/log";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canUsePrintArea } from "@/lib/auth/permissions";
+import { canUsePrintArea, isStaffManager } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pdfFailed, told } from "@/lib/print/download-signal";
 import { forCampers } from "@/lib/print/staff-values";
@@ -44,7 +44,8 @@ async function staffTagFont(): Promise<string> {
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
   const user = await getCurrentUser();
-  if (!user || !canUsePrintArea(user))
+  // the print area, or the Staff page (staff managers): nothing is saved, it's only a tag
+  if (!user || user.checkinLogin || !(canUsePrintArea(user) || isStaffManager(user)))
     return pdfFailed("Not allowed.", 403, sp);
   const tag = cleanQuickTag(Object.fromEntries(sp));
   if (!tag.name && !tag.line2 && !tag.line3)
