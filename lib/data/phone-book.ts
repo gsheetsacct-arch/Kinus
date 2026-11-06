@@ -1,4 +1,5 @@
 import "server-only";
+import { convertNumber } from "@/lib/hebrew-number";
 import { shownEmail } from "@/lib/staff/login-kinds";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { phoneBookHeadsOnly, seesAllCamp, type CurrentUser, type StaffRole } from "@/lib/auth/permissions";
@@ -42,7 +43,7 @@ export async function loadPhoneBook(me: CurrentUser, sessionId: string, campDivi
       const here = (byUser.get(p.id) ?? []).filter((s) => s.division_id === d.id || (s.group_id && s.group_id === d.group_id));
       if (!here.length) continue;
       const bunks = here.filter((s) => s.bunk_id).map((s) => bunkName.get(s.bunk_id!)!).filter(Boolean);
-      const where = here.some((s) => s.group_id) ? `All of ${groupName.get(here.find((s) => s.group_id)!.group_id!) ?? "camp"}` : bunks.length ? bunks.map((b) => b.name).join(", ") : "Whole division";
+      const where = here.some((s) => s.group_id) ? `All of ${groupName.get(here.find((s) => s.group_id)!.group_id!) ?? "camp"}` : bunks.length ? bunks.map((b) => convertNumber(b.name, "number", true)).join(", ") : "Whole division";
       list.push({ ...entry(p, where), order: bunks.length ? Math.min(...bunks.map((b) => b.order)) : -1 });
     }
     return { key: d.id, title: d.name, color: d.color, entries: sort(list) };

@@ -80,9 +80,17 @@ export function PhoneBook({ sections }: { sections: PhoneBookSection[] }) {
                     {e.name}
                     {e.you && <span className="ml-1.5 text-xs font-normal text-muted-foreground">(you)</span>}
                   </span>
-                  <span className="block truncate text-xs text-muted-foreground" dir="auto">
-                    {e.title || STAFF_ROLES[e.role].label} · {e.where}
-                    {e.phone ? ` · ${formatPhone(e.phone)}` : " · no phone yet"}
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {/* each part kept apart, so a Hebrew bunk name doesn't pull the phone number into it */}
+                    {e.title || STAFF_ROLES[e.role].label} · <bdi>{e.where}</bdi>
+                    {e.phone ? (
+                      <>
+                        {" · "}
+                        <bdi>{formatPhone(e.phone)}</bdi>
+                      </>
+                    ) : (
+                      " · no phone yet"
+                    )}
                   </span>
                 </span>
                 <span className="flex shrink-0 gap-1.5">

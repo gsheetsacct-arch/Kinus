@@ -2,7 +2,7 @@ import Link from "next/link";
 import { compareBunkNames } from "@/lib/bunk-order";
 import { extraValuesFor, loadExtraFields, visibleExtraFields } from "@/lib/data/extra-fields";
 import { notFound } from "next/navigation";
-import { Phone, Mail } from "lucide-react";
+import { Phone, Mail, MessageCircle } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { hebrewNamesFor } from "@/lib/data/hebrew-display";
 import { StatusBadge } from "@/components/status-badge";
@@ -23,7 +23,9 @@ import { loadCard } from "@/app/(app)/scan/actions";
 import { CorrectStatus } from "@/components/scan/correct-status";
 import { EVENT_LABEL } from "@/lib/attendance/machine";
 import { getCamper } from "@/lib/data/campers";
-import { formatDateTime, formatPhone } from "@/lib/utils";
+import { formatDateTime, formatPhone, telHref, whatsAppHref } from "@/lib/utils";
+import { convertNumber } from "@/lib/hebrew-number";
+import { bunkCounselors, type BunkCounselor } from "@/lib/data/bunk-counselors";
 import { STATUS_LABEL, type CamperStatus } from "@/lib/attendance/machine";
 import { FIELD_BY_KEY } from "@/lib/fields";
 import { addContact, archiveCamper, removeContact, saveRegistrationDetails, updateCamper } from "../actions";
@@ -54,11 +56,15 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
   const supabase = await createClient();
   // everything at once: one round trip to the database instead of three
   const divisionsFor = (sessionId: string) => supabase.from("divisions").select("id, name, bunks(id, name, sort_order)").eq("session_id", sessionId).order("sort_order");
-  const [[c, heb], { data: fv }, { data: events }, { data: history }, activeBunks, { data: templates }, card, extraAll, { data: staffNames }, registration] = await Promise.all([
-    // the camper, and their Hebrew name as soon as their division is known (not after everything else)
+  const [[c, heb, counselors], { data: fv }, { data: events }, { data: history }, activeBunks, { data: templates }, card, extraAll, { data: staffNames }, registration] = await Promise.all([
+    // the camper, and (as soon as their division and bunk are known, not after everything else)
+    // their Hebrew name and their bunk's counselors, to call
     getCamper(supabase, id).then(async (camper) => {
-      const h = camper?.id ? (await hebrewNamesFor([{ id: camper.id, division_id: camper.division_id }]).catch(() => new Map<string, string>())).get(camper.id) : undefined;
-      return [camper, h] as const;
+      const [h, staff] = await Promise.all([
+        camper?.id ? hebrewNamesFor([{ id: camper.id, division_id: camper.division_id }]).then((m) => m.get(camper.id!), () => undefined) : undefined,
+        user.checkinLogin ? ([] as BunkCounselor[]) : bunkCounselors(camper?.bunk_id).catch(() => [] as BunkCounselor[]),
+      ]);
+      return [camper, h, staff] as const;
     }),
     supabase.from("field_visibility").select("field_group, roles"),
     supabase.from("attendance_events").select("id, event_type, method, occurred_at, note, resulting_status, profiles:recorded_by(full_name)").eq("camper_id", id).order("occurred_at", { ascending: false }).limit(100),
@@ -449,6 +455,42 @@ export default async function CamperPage({ params }: { params: Promise<{ id: str
           </TabsContent>
         )}
       </Tabs>
+      {counselors.length > 0 && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>{c.bunk_name ? `${convertNumber(c.bunk_name, "number", true)} counselors` : "Counselors"}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y">
+              {counselors.map((p) => (
+                <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 first:pt-0 last:pb-0">
+                  <div className="min-w-0">
+                    <div className="font-medium">{p.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {p.role}
+                      {p.phone ? ` · ${formatPhone(p.phone)}` : " · no phone number"}
+                    </div>
+                  </div>
+                  {p.phone && (
+                    <div className="flex gap-2">
+                      <Button asChild size="sm">
+                        <a href={telHref(p.phone)}>
+                          <Phone /> Call
+                        </a>
+                      </Button>
+                      <Button asChild size="sm" variant="outline">
+                        <a href={whatsAppHref(p.phone)} target="_blank" rel="noreferrer">
+                          <MessageCircle /> WhatsApp
+                        </a>
+                      </Button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
