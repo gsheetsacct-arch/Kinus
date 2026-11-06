@@ -21,7 +21,6 @@ import { feedback, unlockSound } from "./feedback";
 /** heb: the Hebrew name, for a camper in a Hebrew-language division (shown first, searched too) */
 export type RosterEntry = { id: string; code: string; name: string; first: string; last: string; where: string; status: CamperStatus; div: string | null; buzzer?: number | null; heb?: string };
 type Line = { id: string; name: string; color: string | null };
-const ANY = "any";
 /** ask: an already checked-in camper scanned at check-in, offered a check-out */
 /** labels: a camper scanned again, offered their labels (a new name tag…) */
 type Flash = { tone: "in" | "out" | "home" | "already" | "error"; title: string; detail: string; ask?: RosterEntry; labels?: RosterEntry };
@@ -81,7 +80,6 @@ export function Scanner({
   // from another division isn't checked in by mistake (final check-out is for all of them)
   const multi = !final && divisions.length > 1;
   const [line, setLine] = React.useState<string | null>(null);
-  const [wrong, setWrong] = React.useState<{ r: RosterEntry; method: "scan" | "manual" } | null>(null);
   const lineDiv = divisions.find((d) => d.id === line) ?? null;
   const [mode, setMode] = React.useState<ScanMode>(final ? "out" : canScan ? "in" : "lookup");
   const [statuses, setStatuses] = React.useState<Record<string, CamperStatus>>(() => Object.fromEntries(roster.map((r) => [r.id, r.status])));
@@ -113,7 +111,7 @@ export function Scanner({
       const saved = JSON.parse(localStorage.getItem("kinus:scan-mode") ?? "null") as { m: ScanMode; at: number } | null;
       if (!final && saved && Date.now() - saved.at < MODE_KEEP_MS && (canScan || saved.m === "lookup")) setMode(saved.m);
       const savedLine = JSON.parse(localStorage.getItem("kinus:line") ?? "null") as { id: string; at: number } | null;
-      if (savedLine && Date.now() - savedLine.at < MODE_KEEP_MS && (savedLine.id === ANY || divisions.some((d) => d.id === savedLine.id))) setLine(savedLine.id);
+      if (savedLine && Date.now() - savedLine.at < MODE_KEEP_MS && divisions.some((d) => d.id === savedLine.id)) setLine(savedLine.id);
       setSound(localStorage.getItem("kinus:sound") !== "off");
       setCamera(localStorage.getItem("kinus:no-camera") !== "1");
     } catch {}
@@ -166,16 +164,17 @@ export function Scanner({
   }, []);
 
   const act = React.useCallback(
-    async (r: RosterEntry, method: "scan" | "manual", anyway = false) => {
+    async (r: RosterEntry, method: "scan" | "manual") => {
       setQ("");
-      if (mode === "lookup") {
-        setCard(r.id);
+      // a camper from another division at this line: as for a division's own check-in login,
+      // just "wrong division" (nothing about them or their division), nothing recorded or shown
+      if (multi && line && r.div !== line) {
+        feedback("error");
+        show({ tone: "error", title: "Wrong division", detail: `${mode === "lookup" ? "Not shown" : "Not checked in"}. This line is ${lineDiv?.name ?? "another division"}: send them to their own division's line.` });
         return;
       }
-      // a camper from another division at this line: ask before recording anything
-      if (multi && line && line !== ANY && r.div !== line && !anyway) {
-        feedback("error");
-        setWrong({ r, method });
+      if (mode === "lookup") {
+        setCard(r.id);
         return;
       }
       // (the camera itself ignores a tag held in view; a repeat scan here is on purpose and
@@ -203,7 +202,7 @@ export function Scanner({
       }
       focusBox();
     },
-    [mode, show, focusBox, multi, line, final, templates.length],
+    [mode, show, focusBox, multi, line, lineDiv?.name, final, templates.length],
   );
 
   // the check-out offered for a camper scanned again at check-in
@@ -294,9 +293,11 @@ export function Scanner({
   }, [handleText, unreadable]);
 
   const needle = normalizeName(q);
+  // at a line (someone over several divisions): only that division's campers are found
+  const lineIndex = multi && line ? index.filter(({ r }) => r.div === line) : index;
   const allMatches =
     needle.length >= 2 && !findScanCode(q)
-      ? index
+      ? lineIndex
           .map(({ r, e }) => ({ r, score: matchScore(e, q) }))
           .filter((x) => x.score > 0)
           // typed in Hebrew: the campers with a Hebrew name (Hebrew, French) first
@@ -441,7 +442,9 @@ export function Scanner({
   };
   // the recent list: just the camp being looked at (an owner switching camps sees that camp's)
   const divOf = new Map([...roster, ...extra].map((r) => [r.id, r.div]));
-  const shown = campDivisionIds ? recent.filter((r) => !divOf.has(r.camperId) || campDivisionIds.includes(divOf.get(r.camperId) ?? "")) : recent;
+  const inCamp = campDivisionIds ? recent.filter((r) => !divOf.has(r.camperId) || campDivisionIds.includes(divOf.get(r.camperId) ?? "")) : recent;
+  // at a line: only that division's check-ins
+  const shown = multi && line ? inCamp.filter((r) => divOf.get(r.camperId) === line) : inCamp;
   const latest = shown[0];
 
   return (
@@ -552,7 +555,6 @@ export function Scanner({
                         <span className="block truncate text-xs text-muted-foreground" dir="auto">
                           {r.heb && <span className="mr-1">{r.name} ·</span>}
                           {similar.has(r.id) && <span className="mr-1 rounded bg-muted px-1.5 py-0.5 font-medium">Similar name</span>}
-                          {multi && line && line !== ANY && r.div !== line && <span className="mr-1 rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">Other line</span>}
                           {r.where} · {r.code}
                         </span>
                       </span>
@@ -671,40 +673,6 @@ export function Scanner({
         </section>
       )}
 
-      <Dialog open={Boolean(wrong)} onOpenChange={(o) => !o && (setWrong(null), focusBox())}>
-        <DialogContent className="border-amber-400">
-          <DialogHeader>
-            <DialogTitle>Not your line</DialogTitle>
-          </DialogHeader>
-          {wrong && (
-            <div className="space-y-4">
-              <p className="text-lg">
-                <span className="font-semibold" dir="auto">
-                  {wrong.r.heb ?? wrong.r.name}
-                </span>{" "}
-                is in <span className="font-semibold" dir="auto">{wrong.r.where}</span>.
-              </p>
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-                You&apos;re checking in <strong dir="auto">{lineDiv?.name}</strong>. Send them to their own line, or record it here anyway.
-              </p>
-              <div className="flex flex-wrap justify-end gap-2">
-                <Button variant="outline" onClick={() => (setWrong(null), focusBox())} autoFocus>
-                  Don&apos;t record
-                </Button>
-                <Button
-                  onClick={() => {
-                    const w = wrong;
-                    setWrong(null);
-                    act(w.r, w.method, true);
-                  }}
-                >
-                  {mode === "in" ? "Check in anyway" : "Check out anyway"}
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       {/* a camper: looked up, tapped in the list, or scanned again for labels */}
       <Dialog open={!final && Boolean(card)} onOpenChange={(o) => !o && (setCard(null), focusBox())}>
@@ -757,7 +725,7 @@ function LineBar({ divisions, line, lineDiv, onChoose }: { divisions: Line[]; li
     return (
       <div className="space-y-2 rounded-2xl border-2 border-amber-400 bg-amber-50 p-3 dark:bg-amber-950/30" role="alert">
         <p className="font-semibold text-amber-950 dark:text-amber-100">Which line are you checking in?</p>
-        <p className="text-sm text-amber-900 dark:text-amber-200">You can check in {divisions.length} divisions. Pick yours, and Kinus stops you if a camper from another division is scanned.</p>
+        <p className="text-sm text-amber-900 dark:text-amber-200">You can check in {divisions.length} divisions. Pick the one at your line: you&apos;ll find and check in only its campers, as on that division&apos;s own check-in phone.</p>
         <div className="flex flex-wrap gap-2">
           {divisions.map((d) => (
             <Button key={d.id} variant="outline" className="bg-card" onClick={() => onChoose(d.id)}>
@@ -765,9 +733,6 @@ function LineBar({ divisions, line, lineDiv, onChoose }: { divisions: Line[]; li
               <span dir="auto">{d.name}</span>
             </Button>
           ))}
-          <Button variant="ghost" onClick={() => onChoose(ANY)}>
-            Any division
-          </Button>
         </div>
       </div>
     );
