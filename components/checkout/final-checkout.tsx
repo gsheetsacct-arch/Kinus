@@ -258,7 +258,9 @@ function FindTab({
   React.useEffect(() => {
     if (window.matchMedia("(pointer: fine)").matches) input.current?.focus();
   }, []);
-  const index = React.useMemo(() => findIndex(campers), [campers]);
+  // only campers with a buzzer number: those without are in a camp or program with no buzzers
+  // (Virtual, the Thursday Program), so they're never looked up here; nor shown in a family
+  const index = React.useMemo(() => findIndex(campers.filter((c) => c.buzzer !== null && c.buzzer !== undefined)), [campers]);
   const deferred = React.useDeferredValue(q);
   const groups = React.useMemo(
     () => findFamilies(index, deferred),
