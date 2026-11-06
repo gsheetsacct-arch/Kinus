@@ -154,7 +154,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       {session && campers.length > 0 && (
         <section className="space-y-3">
           {/* the numbers reload by themselves every 30 s while the page is open */}
-          <AutoRefresh every={30000} />
+          <AutoRefresh every={120_000} />
           <h2 className="flex items-baseline gap-2 text-base font-semibold">
             Right now <span className="text-xs font-normal text-muted-foreground">as of {formatTime(new Date().toISOString())}</span>
           </h2>

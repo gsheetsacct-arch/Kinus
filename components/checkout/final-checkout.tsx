@@ -95,7 +95,7 @@ export function FinalCheckout({
   React.useEffect(() => {
     const t = setInterval(
       () => document.visibilityState === "visible" && refresh(),
-      5000,
+      8000,
     );
     const onVis = () => document.visibilityState === "visible" && refresh();
     document.addEventListener("visibilitychange", onVis);

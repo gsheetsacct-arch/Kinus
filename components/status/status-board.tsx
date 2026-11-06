@@ -161,9 +161,17 @@ export function StatusBoard({
   }, []);
   React.useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // at most one catch-up every 10 s however many check-ins come in (a rush is many a second,
+    // and every open board asking after each one wears out the database's disk budget)
+    let last = 0;
     const soon = () => {
-      clearTimeout(timer);
-      timer = setTimeout(refresh, 400);
+      if (timer) return;
+      const wait = Math.max(400, last + 10_000 - Date.now());
+      timer = setTimeout(() => {
+        timer = undefined;
+        last = Date.now();
+        refresh();
+      }, wait);
     };
     const supabase = createClient();
     const channel = supabase
@@ -186,8 +194,16 @@ export function StatusBoard({
   // notes and rule changes aren't check-ins, so the quick updates above don't carry them
   const router = useRouter();
   React.useEffect(() => {
-    const t = setInterval(() => document.visibilityState === "visible" && router.refresh(), 60000);
-    const onVisible = () => document.visibilityState === "visible" && router.refresh();
+    // every 5 minutes: the whole board is a big read, and check-ins already come in above
+    let last = Date.now();
+    const reload = (gap: number) => {
+      if (document.visibilityState !== "visible" || Date.now() - last < gap) return;
+      last = Date.now();
+      router.refresh();
+    };
+    const t = setInterval(() => reload(0), 5 * 60_000);
+    // back on the page (a phone unlocked): only if the last full reload was 2 minutes ago or more
+    const onVisible = () => reload(2 * 60_000);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       clearInterval(t);
