@@ -41,14 +41,21 @@ export function FinalCheckout({ roster, campName, divisions, initialCalls }: { r
       localStorage.setItem(TAB_KEY, t);
     } catch {}
   };
-  // statuses and calls from every phone, every few seconds while on screen
+  // statuses and calls from every phone, every few seconds while on screen: only the campers
+  // changed since the last time (the page already has everyone)
+  const since = React.useRef<string | undefined>(new Date(Date.now() - 60_000).toISOString());
+  const busy = React.useRef(false);
   const refresh = React.useCallback(() => {
-    checkoutState()
+    if (busy.current) return;
+    busy.current = true;
+    checkoutState(since.current)
       .then((s) => {
+        since.current = s.asOf;
         setStatuses((cur) => ({ ...cur, ...s.statuses }));
         setCalls(s.calls);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => (busy.current = false));
   }, []);
   React.useEffect(() => {
     const t = setInterval(() => document.visibilityState === "visible" && refresh(), 5000);

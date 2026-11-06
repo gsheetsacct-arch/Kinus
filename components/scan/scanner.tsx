@@ -138,7 +138,19 @@ export function Scanner({
   // keep statuses fresh while the screen is open
   React.useEffect(() => {
     // only while the page is on screen (a locked phone doesn't keep asking)
-    const t = setInterval(() => document.visibilityState === "visible" && (final ? checkoutStatuses() : rosterStatuses()).then((s) => setStatuses((cur) => ({ ...cur, ...s }))).catch(() => undefined), 20000);
+    // only the campers changed since the last time (the page already has everyone)
+    let since = new Date(Date.now() - 60_000).toISOString();
+    const t = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      // a minute back: overlapping is cheap, and a phone whose clock is a little off misses nothing
+      const next = new Date(Date.now() - 60_000).toISOString();
+      (final ? checkoutStatuses(since) : rosterStatuses(since))
+        .then((s) => {
+          since = next;
+          setStatuses((cur) => ({ ...cur, ...s }));
+        })
+        .catch(() => undefined);
+    }, 20000);
     const u = setInterval(() => setTick((x) => x + 1), 5000);
     return () => {
       clearInterval(t);
