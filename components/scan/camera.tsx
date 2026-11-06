@@ -113,41 +113,68 @@ export function Camera({ onCode, onTurnOff, overlay, fill = false }: { onCode: (
           loop();
           return;
         }
-        // ZXing on frames we grab ourselves, every other frame turned a quarter: the 4×6
-        // labels have their barcode running up the side
+        // ZXing on frames we grab ourselves (iPhones: Safari has no BarcodeDetector). Tags carry a
+        // QR code: most frames look for just that, in the middle of the picture where the tag is
+        // held, scaled down (QR codes read at any angle, so no turning). Every few frames the whole
+        // picture is also tried for a barcode (the 4×6 labels' runs up the side: turned a quarter
+        // every other time), for any older label that still has one.
         const { HTMLCanvasElementLuminanceSource } = await import("@zxing/browser");
         const { BarcodeFormat, BinaryBitmap, DecodeHintType, HybridBinarizer, MultiFormatReader } = await import("@zxing/library");
-        const reader = new MultiFormatReader();
-        reader.setHints(
-          new Map<number, unknown>([
-            [DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.CODE_128, BarcodeFormat.QR_CODE]],
-            [DecodeHintType.TRY_HARDER, true],
-          ]) as never,
-        );
+        const readerFor = (formats: unknown[]) => {
+          const r = new MultiFormatReader();
+          r.setHints(
+            new Map<number, unknown>([
+              [DecodeHintType.POSSIBLE_FORMATS, formats],
+              [DecodeHintType.TRY_HARDER, true],
+            ]) as never,
+          );
+          return r;
+        };
+        const qrReader = readerFor([BarcodeFormat.QR_CODE]);
+        const barReader = readerFor([BarcodeFormat.CODE_128]);
         const canvas = document.createElement("canvas");
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        const decode = (reader: InstanceType<typeof MultiFormatReader>) => {
+          try {
+            report(reader.decodeWithState(new BinaryBitmap(new HybridBinarizer(new HTMLCanvasElementLuminanceSource(canvas)))).getText());
+            return true;
+          } catch {
+            return false; // nothing readable in this frame
+          }
+        };
+        const QR_SIDE = 640; // the middle of the picture, scaled to at most this many pixels
+        let tick = 0;
         let turn = false;
         const loop = () => {
           if (cancelled || !ctx) return;
           const w = v.videoWidth;
           const h = v.videoHeight;
           if (v.readyState >= 2 && w && h) {
-            if (turn) {
-              canvas.width = h;
-              canvas.height = w;
-              ctx.setTransform(0, 1, -1, 0, h, 0);
-            } else {
-              canvas.width = w;
-              canvas.height = h;
+            tick++;
+            if (tick % 6 !== 0) {
+              // QR: the middle 80% square
+              const side = Math.round(Math.min(w, h) * 0.8);
+              const out = Math.min(side, QR_SIDE);
+              canvas.width = out;
+              canvas.height = out;
               ctx.setTransform(1, 0, 0, 1, 0, 0);
+              ctx.drawImage(v, Math.round((w - side) / 2), Math.round((h - side) / 2), side, side, 0, 0, out, out);
+              decode(qrReader);
+            } else {
+              // now and then: a barcode, anywhere in the picture (a QR code too, from the edges)
+              if (turn) {
+                canvas.width = h;
+                canvas.height = w;
+                ctx.setTransform(0, 1, -1, 0, h, 0);
+              } else {
+                canvas.width = w;
+                canvas.height = h;
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+              }
+              ctx.drawImage(v, 0, 0, w, h);
+              if (!decode(barReader)) decode(qrReader);
+              turn = !turn;
             }
-            ctx.drawImage(v, 0, 0, w, h);
-            try {
-              report(reader.decodeWithState(new BinaryBitmap(new HybridBinarizer(new HTMLCanvasElementLuminanceSource(canvas)))).getText());
-            } catch {
-              // nothing readable in this frame
-            }
-            turn = !turn;
           }
           timer = setTimeout(loop, 80);
         };
