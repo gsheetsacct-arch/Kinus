@@ -13,6 +13,9 @@ import { loadRoles, rolesInUse } from "@/lib/data/roles";
 import { areaNames, grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
 import { CheckinLogins } from "@/components/staff/checkin-logins";
+import { QuickStaffTagButton } from "@/components/print/quick-staff-tag";
+import { staffInView } from "@/lib/print/staff";
+import { appUrl } from "@/lib/auth/app-url";
 import { checkinNameOf, shownEmail } from "@/lib/staff/login-kinds";
 import { bulkSendLinks, bulkSetAccess, bulkSetActive, deletePeople } from "./actions";
 
@@ -25,13 +28,18 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   // anyone whose areas are all in an earlier session gets the same places in this one
   if (session) await carryAreasTo(session.id);
   const admin = createAdminClient();
-  const [{ data: profiles }, { data: areas }, tree, info, setup] = await Promise.all([
+  const [{ data: profiles }, { data: areas }, tree, info, setup, tagStaff, tagQr] = await Promise.all([
     admin.from("profiles").select("id, email, full_name, title, role, access_level, all_areas, is_active, login, phone").order("full_name"),
     admin.from("staff_scopes").select("user_id, group_id, division_id, bunk_id"),
     loadAreaTree(admin, session?.id),
     signInInfo(),
     loadRoles(admin),
+    // the quick staff tag: who can fill it (the staff this person may print for), and the QR link it starts with
+    staffInView(me),
+    appUrl(),
   ]);
+  const tagPeople = tagStaff.map((p) => ({ name: p.name, position: p.values.POSITION || p.values.ROLE || "", division: p.values.DIVISION ?? "" }));
+  const tagDivisions = [...new Set([...tree.divisions.map((d) => d.name), ...tagPeople.map((p) => p.division).filter(Boolean)])];
   const names = areaNames(tree);
   const groupOf = (id: string) => tree.divisions.find((d) => d.id === id)?.group_id ?? null;
   // a director of part of camp sees the people inside their part (and themselves)
@@ -120,6 +128,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                 </Link>
               </Button>
             )}
+            <QuickStaffTagButton people={tagPeople} divisions={tagDivisions} defaultQr={tagQr.replace(/\/+$/, "")} />
             <Button asChild variant="outline">
               <Link href="/admin/users/bulk">
                 <Users /> Add many at once
