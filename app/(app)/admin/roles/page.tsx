@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth/current-user";
 import { ACCESS_LEVELS, FIELD_GROUPS, ROLE_EXTRAS, ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
 import { KEPT_ROLES, loadRoles } from "@/lib/data/roles";
+import { TEXT_RULES_KEY, textRuleFor } from "@/lib/messaging/text-rules";
 import type { AccessLevel } from "@/lib/auth/permissions";
 import { plural } from "@/lib/utils";
 import { saveColumnGroups, saveRoles, setRoleInUse } from "./actions";
@@ -22,7 +23,12 @@ export default async function RolesPage() {
   await requireAdmin();
   const supabase = await createClient();
   // every export column Kinus has no field of its own for
-  const [setup, { data: people }, extra] = await Promise.all([loadRoles(supabase), createAdminClient().from("profiles").select("role").eq("is_active", true), loadExtraFields()]);
+  const [setup, { data: people }, extra, { data: textRules }] = await Promise.all([
+    loadRoles(supabase),
+    createAdminClient().from("profiles").select("role").eq("is_active", true),
+    loadExtraFields(),
+    supabase.from("settings").select("value").eq("key", TEXT_RULES_KEY).maybeSingle(),
+  ]);
   // who sees each kind of detail now, in words
   const seenBy = (g: string) =>
     ROLE_ORDER.filter((r) => r !== "owner" && setup.inUse[r] && setup.sees[r].includes(g))
@@ -87,6 +93,27 @@ export default async function RolesPage() {
                     </span>
                   </label>
                 ))}
+              </div>
+
+              <span className="pt-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Texts</span>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name={`text:can:${r}`} defaultChecked={textRuleFor(textRules?.value ?? null, r).can} className="size-4 accent-[var(--primary)]" />
+                  Can text staff <span className="text-muted-foreground">(the staff of their own divisions; all of camp for those over all of camp)</span>
+                </label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Only to:</span>
+                  {ROLE_ORDER.filter((t) => t !== "owner" && t !== "scanner" && setup.inUse[t]).map((t) => (
+                    <label key={t} className="cursor-pointer">
+                      <input type="checkbox" name={`text:to:${r}:${t}`} defaultChecked={textRuleFor(textRules?.value ?? null, r).roles?.includes(t) ?? false} className="peer sr-only" />
+                      <span className="flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs text-muted-foreground peer-checked:border-primary/40 peer-checked:bg-primary-soft peer-checked:text-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring [&>svg]:hidden peer-checked:[&>svg]:block">
+                        <Check className="size-3" />
+                        {STAFF_ROLES[t].label}
+                      </span>
+                    </label>
+                  ))}
+                  <span className="text-xs text-muted-foreground">(none ticked: any role)</span>
+                </div>
               </div>
 
               <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Also</span>

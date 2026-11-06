@@ -22,6 +22,8 @@ export type CurrentUser = {
   checkinLogin?: boolean;
   /** A check-in login also used for final check-out: "gone home" for every division of its camp. */
   finalCheckout?: boolean;
+  /** Whether their role may text staff, and only which roles (Staff → Roles; lib/messaging/text-rules). */
+  textRule?: { can: boolean; roles: StaffRole[] | null };
 };
 
 export const LEVEL_RANK: Record<AccessLevel, number> = { view: 1, scan: 2, edit: 3 };
@@ -115,7 +117,8 @@ export function canManageRole(me: CurrentUser, role: StaffRole): boolean {
   if (me.role === "owner") return true;
   if (isAdmin(me)) return role !== "owner";
   if (isDirector(me)) return roleRank(role) < roleRank("director");
-  if (me.role === "division_head") return role === "kloli" || role === "head_counselor" || role === "counselor" || role === "scanner" || role === "staff";
+  // division heads also look after the other division heads of their divisions (their area still applies)
+  if (me.role === "division_head") return role === "division_head" || role === "kloli" || role === "head_counselor" || role === "counselor" || role === "scanner" || role === "staff";
   if (me.role === "kloli") return role === "head_counselor" || role === "counselor" || role === "scanner" || role === "staff";
   if (me.role === "head_counselor") return role === "counselor" || role === "scanner" || role === "staff";
   return false;
@@ -153,7 +156,10 @@ export const canFinalCheckout = (u: CurrentUser) => Boolean(u.finalCheckout) || 
 export const canGiveFinalCheckout = (u: CurrentUser) => isDirector(u) || u.role === "division_head" || u.role === "kloli" || u.role === "head_counselor";
 
 /** Text staff (Twilio): directors, division heads and head counselors, each to the staff of their own divisions. */
-export const canTextStaff = (u: CurrentUser) => !u.checkinLogin && (isDirector(u) || u.role === "division_head" || u.role === "kloli" || u.role === "head_counselor");
+export const canTextStaff = (u: CurrentUser) =>
+  !u.checkinLogin && (u.role === "owner" || (u.textRule ? u.textRule.can : isDirector(u) || u.role === "division_head" || u.role === "kloli" || u.role === "head_counselor"));
+/** The roles this person may text (null = any role), as set for their role on Staff → Roles. */
+export const textableRoles = (u: CurrentUser): StaffRole[] | null => (u.role === "owner" ? null : (u.textRule?.roles ?? null));
 /** Text everyone at once (all staff, directors and office, and the /updates sign-ups): the owner and directors over all of camp. */
 export const canTextEveryone = (u: CurrentUser) => canTextStaff(u) && isAdmin(u);
 /** The divisions this person may text (null = every division). */

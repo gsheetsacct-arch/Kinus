@@ -128,10 +128,13 @@ export function CheckinLogins({ logins, helper = false }: { logins: CheckinLogin
               <ul className="mt-2 space-y-1.5 pl-[18px]">
                 {l.accounts.map((a) => (
                   <li key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 px-3 py-2">
-                    <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                      <code className="rounded bg-background px-1.5 py-0.5 text-sm font-medium text-foreground">{a.name}</code>
-                      {!a.active && " · deactivated"}
-                      {a.lastSignIn ? ` · last used ${formatDateTime(a.lastSignIn)}` : " · not used yet"}
+                    {/* the name and when it was last used on a line of their own (a full row on a phone), the buttons under it */}
+                    <span className="min-w-0 basis-full text-xs text-muted-foreground sm:basis-auto sm:flex-1">
+                      <code className="whitespace-nowrap rounded bg-background px-1.5 py-0.5 text-sm font-medium text-foreground">{a.name}</code>
+                      <span className="ml-1.5 inline-block">
+                        {!a.active && "deactivated · "}
+                        {a.lastSignIn ? `last used ${formatDateTime(a.lastSignIn)}` : "not used yet"}
+                      </span>
                     </span>
                     {!helper && (l.canGiveFinal || a.finalCheckout) && (
                       <Button

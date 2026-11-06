@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { TEXT_RULES_KEY, textRuleFor } from "@/lib/messaging/text-rules";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -16,10 +17,17 @@ const loadAccount = cache(async (): Promise<Account> => {
   const claims = auth?.claims;
   if (!claims?.sub) return { user: null, problem: "signed_out" };
   const user = { id: claims.sub, email: claims.email ?? "", user_metadata: claims.user_metadata ?? {} };
-  const [{ data: profileRow, error: profileError }, { data: areas, error: areasError }] = await Promise.all([
+  const [{ data: profileRow, error: profileError }, { data: areas, error: areasError }, textRules] = await Promise.all([
     // email comes from the sign-in: staff can't read profile emails (migration 0013)
     supabase.from("profiles").select("id, full_name, role, access_level, all_areas, is_active, login").eq("id", user.id).maybeSingle(),
     supabase.from("staff_scopes").select("id, group_id, division_id, bunk_id").eq("user_id", user.id),
+    // who may text staff, and whom (Staff → Roles); read alongside, never in the way of signing in
+    supabase
+      .from("settings")
+      .select("value")
+      .eq("key", TEXT_RULES_KEY)
+      .maybeSingle()
+      .then((r) => r.data?.value ?? null, () => null),
   ]);
   // a column or table the app expects is missing: the database is behind the app
   if (profileError || areasError) {
@@ -66,6 +74,7 @@ const loadAccount = cache(async (): Promise<Account> => {
       coverage,
       checkinLogin: profile.login === "shared",
       finalCheckout,
+      textRule: textRuleFor(textRules, profile.role),
     },
   };
 });
