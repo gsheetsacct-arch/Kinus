@@ -8,7 +8,7 @@ import type { StaffRole } from "@/lib/auth/permissions";
  */
 export const TEXT_RULES_KEY = "text_rules";
 export type TextRule = { can: boolean; roles: StaffRole[] | null };
-export const DEFAULT_TEXTERS: StaffRole[] = ["director", "division_head", "kloli", "head_counselor"];
+export const DEFAULT_TEXTERS: StaffRole[] = ["director", "division_head", "head_kloli", "kloli", "head_counselor"];
 
 export function textRuleFor(value: unknown, role: StaffRole): TextRule {
   if (role === "owner") return { can: true, roles: null };

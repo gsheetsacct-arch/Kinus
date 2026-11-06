@@ -9,7 +9,7 @@ import { KEPT_ROLES, loadRoles } from "@/lib/data/roles";
 import { errorMessage, fail, ok, type ActionResult } from "@/lib/actions/result";
 import { TEXT_RULES_KEY, textRuleFor } from "@/lib/messaging/text-rules";
 
-const ROLES = ["director", "division_head", "kloli", "head_counselor", "counselor", "scanner", "office", "logistics", "staff"] as const;
+const ROLES = ["director", "division_head", "head_kloli", "kloli", "head_counselor", "counselor", "scanner", "office", "logistics", "staff"] as const;
 const level = z.enum(["view", "scan", "edit"]);
 
 /** Saves what each role can do and see. Everyone with that role gets it at once. */

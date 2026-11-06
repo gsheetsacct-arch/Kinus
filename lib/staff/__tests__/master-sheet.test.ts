@@ -37,7 +37,8 @@ describe("the office's staff workbook (MASTER tab)", () => {
     const rows = readMasterSheet(grid, divisions).rows;
     expect(rows.map((x) => [x.role, x.title])).toEqual([
       ["Counselor", ""],
-      ["Head Kloli", "Head Kloli"],
+      // a role of its own now (Head kloli), so no title on top
+      ["Head Kloli", ""],
       ["", "EMT"],
       ["Virtual Counselor", "Virtual Counselor"],
     ]);

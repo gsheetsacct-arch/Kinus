@@ -76,7 +76,7 @@ export function divisionFor(value: string, divisions: string[]): string | null {
   return divisions.find((d) => letters(d) === v) ?? divisions.find((d) => v.length > 5 && distance(letters(d), v) <= 2) ?? null;
 }
 
-const PLAIN_ROLE = /^(counselor|counsellor|kloli|head counselor|division head|director)$/i;
+const PLAIN_ROLE = /^(counselor|counsellor|kloli|head kloli|head counselor|division head|director)$/i;
 /** The detail a staff tag's {{DIVISION}} reads first (lib/print/staff-values). */
 export const NAME_TAG_DIVISION = "Division (name tag)";
 const looksLikePhone = (s: string) => s.replace(/\D/g, "").length >= 7;

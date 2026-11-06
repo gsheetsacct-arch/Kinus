@@ -71,7 +71,7 @@ const STATUS_RANK: Record<string, number> = { queued: 0, accepted: 0, sending: 1
 export const laterStatus = (current: string, next: string) => next in STATUS_RANK && (STATUS_RANK[next] ?? 0) > (STATUS_RANK[current] ?? 0);
 
 // how a role signs a text: short where staff know the short form
-const ROLE_SIGN: Record<string, string> = { owner: "Director", director: "Director", division_head: "DH", kloli: "Kloli", head_counselor: "HC", counselor: "Counselor", office: "Office", logistics: "Logistics" };
+const ROLE_SIGN: Record<string, string> = { owner: "Director", director: "Director", division_head: "DH", head_kloli: "Head Kloli", kloli: "Kloli", head_counselor: "HC", counselor: "Counselor", office: "Office", logistics: "Logistics" };
 
 /**
  * What every staff text starts with: the camp, as registered with the carriers, and who it's
@@ -85,7 +85,7 @@ export function textPrefix(role: string, signAs?: string | null): string {
 }
 
 /** The signs to choose from ("Send as"), in order; "" is just the camp's name. */
-export const SIGN_CHOICES = ["Director", "DH", "Kloli", "HC", "Counselor", "Office", "Logistics", ""] as const;
+export const SIGN_CHOICES = ["Director", "DH", "Head Kloli", "Kloli", "HC", "Counselor", "Office", "Logistics", ""] as const;
 /** How this role signs by default. */
 export const defaultSign = (role: string) => ROLE_SIGN[role] ?? "";
 
