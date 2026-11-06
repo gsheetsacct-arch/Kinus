@@ -183,7 +183,7 @@ The whole page is the camera. Over it:
 - **Type a name** (any order, misspelt, Hebrew, the code or buzzer number) instead of scanning. A handheld USB/Bluetooth scanner works without touching anything.
 - Sound and camera buttons. Phones only make sound after a tap: tap the screen once and scans beep (iPhones play it even on silent).
 - **The line**: someone who checks in more than one division must pick the division at their line first. From then on it works like that division's own check-in phone: only its campers are found and listed under Recent, and a camper from another division just says **Wrong division** (not checked in, nothing shown about them). **Change** picks another line.
-- **Labels to print** (for people with print access): straight to that line's queue.
+- **Labels to print** (for people with print access): that line's label-printer labels only (its name tags and bag labels), as on the division's own check-in phone, whatever else the person may print; the full queue is still under Print.
 
 A scan shows the result over the picture. Scanning someone already checked in says so, offers **Check out**, and offers their **Labels** (a new name tag…).
 

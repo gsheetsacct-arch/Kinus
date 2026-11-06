@@ -1,6 +1,6 @@
 import "server-only";
 import { getActiveSession, getCurrentUser } from "@/lib/auth/current-user";
-import { canUsePrintArea } from "@/lib/auth/permissions";
+import { canPrintCheckin, canUsePrintArea } from "@/lib/auth/permissions";
 import { checkinOnly } from "./access";
 import { TO_PRINT, queueScope, waitingSets } from "./queue";
 
@@ -11,9 +11,10 @@ import { TO_PRINT, queueScope, waitingSets } from "./queue";
  */
 export async function waitingIds(sp: URLSearchParams): Promise<string[] | null> {
   const [user, session] = await Promise.all([getCurrentUser(), getActiveSession()]);
-  if (!user || !session || !(canUsePrintArea(user) || checkinOnly(user))) return null;
+  if (!user || !session || !(canUsePrintArea(user) || checkinOnly(user) || (sp.get("line") && canPrintCheckin(user)))) return null;
   const { shows } = await queueScope(user, session.id, { camp: sp.get("camp"), division: sp.get("division") }, TO_PRINT);
-  const sets = checkinOnly(user) ? await checkinWaitingSets(session.id, shows) : await waitingSets(session.id, shows);
+  // a check-in login, or anyone printing from a check-in line: the label-printer labels only
+  const sets = checkinOnly(user) || sp.get("line") ? await checkinWaitingSets(session.id, shows) : await waitingSets(session.id, shows);
   return sets.find((s) => s.key === sp.get("waiting"))?.ids ?? [];
 }
 

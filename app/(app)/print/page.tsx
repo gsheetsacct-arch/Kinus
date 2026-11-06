@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -7,7 +8,7 @@ import { PrintQueue } from "@/components/print/print-queue";
 import { LabelUpdates } from "@/components/print/label-updates";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { canUsePrintArea } from "@/lib/auth/permissions";
+import { canPrintCheckin, canUsePrintArea } from "@/lib/auth/permissions";
 import { TO_PRINT, queueScope, waitingSets } from "@/lib/print/queue";
 import { WaitingAll } from "@/components/print/waiting-all";
 import { DownloadNote } from "@/components/print/download-note";
@@ -33,11 +34,14 @@ const SHOW = {
   all: { label: "Everything", statuses: null },
 } as const;
 
-export default async function PrintQueuePage({ searchParams }: { searchParams: Promise<{ show?: string; camp?: string; division?: string }> }) {
+export default async function PrintQueuePage({ searchParams }: { searchParams: Promise<{ show?: string; camp?: string; division?: string; line?: string }> }) {
   const [user, session, sp] = await Promise.all([requireUser(), getActiveSession(), searchParams]);
   if (!session) return <EmptyState icon={Printer} title="No active session" description="Camp hasn't been set up yet." />;
   // a division's check-in login: only its divisions' label-printer labels
-  if (checkinOnly(user)) return <CheckinLabels user={user} sessionId={session.id} />;
+  if (checkinOnly(user)) return <CheckinLabels user={user} sessionId={session.id} line={sp.line} />;
+  // from a check-in line (Labels to print): only that division's label-printer labels, as on its
+  // own check-in phone, whatever else this person may print
+  if (sp.line && (canUsePrintArea(user) || canPrintCheckin(user))) return <CheckinLabels user={user} sessionId={session.id} line={sp.line} />;
   // staff who only design templates start there
   if (!canUsePrintArea(user)) redirect("/print/templates");
   const show = (sp.show && sp.show in SHOW ? sp.show : "todo") as keyof typeof SHOW;
@@ -140,8 +144,10 @@ function Bar({ items }: { items: { href: string; label: string; on: boolean }[] 
  * A check-in login's print page: every label-printer (thermal) label queued for its divisions,
  * all in one go. Nothing else from the queue.
  */
-async function CheckinLabels({ user, sessionId }: { user: CurrentUser; sessionId: string }) {
-  const { shows } = await queueScope(user, sessionId, {}, TO_PRINT);
+async function CheckinLabels({ user, sessionId, line }: { user: CurrentUser; sessionId: string; line?: string }) {
+  // a check-in line's division (one this person looks after): only its labels
+  const { shows, division } = await queueScope(user, sessionId, { division: line }, TO_PRINT);
+  const at = line ? division : null;
   const admin = createAdminClient();
   const [sets, { data: rows }] = await Promise.all([
     checkinWaitingSets(sessionId, shows),
@@ -154,10 +160,24 @@ async function CheckinLabels({ user, sessionId }: { user: CurrentUser; sessionId
   const jobs = await queueJobs(admin, (rows ?? []).filter((j) => shows(j.id)).slice(0, 300) as never);
   return (
     <div>
-      <PageHeader title="Labels to print" description="The label-printer labels waiting for your divisions: the name tags and bag labels for registration, however they were asked for." />
+      <PageHeader
+        title={at ? `Labels to print · ${at.name}` : "Labels to print"}
+        description={
+          at
+            ? `The label-printer labels waiting for ${at.name}, the division at your check-in line: the name tags and bag labels for registration, however they were asked for.`
+            : "The label-printer labels waiting for your divisions: the name tags and bag labels for registration, however they were asked for."
+        }
+        actions={
+          at ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/scan">Back to check-in</Link>
+            </Button>
+          ) : undefined
+        }
+      />
       <DownloadNote />
       {sets.map((set) => (
-        <WaitingAll key={set.key} set={set} where={null} query={new URLSearchParams({ waiting: set.key, order: "name" }).toString()} />
+        <WaitingAll key={set.key} set={set} where={at?.name ?? null} query={new URLSearchParams({ waiting: set.key, order: "name", ...(at ? { division: at.id, line: "1" } : {}) }).toString()} />
       ))}
       {jobs.length ? (
         <PrintQueue jobs={jobs} show="todo" together={sets.flatMap((s) => s.templateIds)} checkin />
