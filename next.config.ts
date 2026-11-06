@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: "16mb" },
   },
   // Chromium for tag PDFs ships as its own package and must not be bundled.
-  serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
+  serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core", "fonteditor-core"],
   // Read from disk at runtime, so the build can't see they're needed: the fonts embedded
   // into printed tags (small: every route), and, for /api/render only, the compressed Chromium
   // the PDFs and pictures are made with (without it: "The input directory …/@sparticuz/chromium/bin
