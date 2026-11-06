@@ -74,14 +74,17 @@ export async function finalCheckout(camperId: string, method: "scan" | "manual")
 }
 
 /** Everyone's status in the camp, to keep the page's counts fresh. */
-export async function checkoutStatuses(): Promise<Record<string, CamperStatus>> {
+export async function checkoutStatuses(since?: string): Promise<Record<string, CamperStatus>> {
   const scope = await checkoutScope(await requireUser());
   if (!scope) return {};
   const admin = createAdminClient();
   const ids = scope.divisions.map((d) => d.id);
-  const rows = await fetchAll((from, to) =>
-    admin.from("campers").select("id, status").eq("session_id", scope.sessionId).in("division_id", ids).is("archived_at", null).order("id").range(from, to),
-  );
+  // since: only campers changed since then
+  const rows = await fetchAll((from, to) => {
+    let q = admin.from("campers").select("id, status").eq("session_id", scope.sessionId).in("division_id", ids).is("archived_at", null);
+    if (since && !Number.isNaN(Date.parse(since))) q = q.gt("updated_at", since);
+    return q.order("id").range(from, to);
+  });
   return Object.fromEntries(rows.map((r) => [r.id, r.status]));
 }
 
@@ -103,20 +106,21 @@ export async function lookupCheckoutCode(code: string): Promise<CodeLookup> {
 }
 
 /** Statuses and who's been called, for the final check-out page (every few seconds). */
-export async function checkoutState(): Promise<{ statuses: Record<string, CamperStatus>; calls: Record<string, string> }> {
+export async function checkoutState(since?: string): Promise<{ statuses: Record<string, CamperStatus>; calls: Record<string, string>; asOf: string }> {
+  // the next "since": a little before now, so a change saved while this was read isn't missed
+  const asOf = new Date(Date.now() - 10_000).toISOString();
   const scope = await checkoutScope(await requireUser());
-  if (!scope) return { statuses: {}, calls: {} };
+  if (!scope) return { statuses: {}, calls: {}, asOf };
   const admin = createAdminClient();
   const ids = scope.divisions.map((d) => d.id);
-  const [rows, calls] = await Promise.all([
-    fetchAll((from, to) => admin.from("campers").select("id, status").eq("session_id", scope.sessionId).in("division_id", ids).is("archived_at", null).order("id").range(from, to)),
-    fetchAll((from, to) => admin.from("checkout_calls").select("camper_id, called_at").eq("session_id", scope.sessionId).order("camper_id").range(from, to)).catch(() => [] as { camper_id: string; called_at: string }[]),
+  const [statuses, calls] = await Promise.all([
+    // since: only the campers changed since then (every few seconds from every phone)
+    checkoutStatuses(since),
+    fetchAll((from, to) =>
+      admin.from("checkout_calls").select("camper_id, called_at, campers!inner(division_id)").eq("session_id", scope.sessionId).in("campers.division_id", ids).order("camper_id").range(from, to),
+    ).catch(() => [] as { camper_id: string; called_at: string }[]),
   ]);
-  const mine = new Set(rows.map((r) => r.id));
-  return {
-    statuses: Object.fromEntries(rows.map((r) => [r.id, r.status])),
-    calls: Object.fromEntries(calls.filter((c) => mine.has(c.camper_id)).map((c) => [c.camper_id, c.called_at])),
-  };
+  return { statuses, calls: Object.fromEntries(calls.map((c) => [c.camper_id, c.called_at])), asOf };
 }
 
 /**
@@ -144,7 +148,7 @@ export async function setCalled(camperIds: string[], called: boolean): Promise<{
       const { error: e } = await admin.from("checkout_calls").delete().in("camper_id", ids);
       if (e) throw e;
     }
-    const { calls } = await checkoutState();
+    const { calls } = await checkoutState(new Date().toISOString());
     return { ok: true, calls };
   } catch (e) {
     return { ok: false, error: errorMessage(e) };

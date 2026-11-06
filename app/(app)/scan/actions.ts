@@ -277,13 +277,18 @@ export async function requestTag(camperId: string, templateId: string, opts: { c
 }
 
 /** Fresh statuses for the scan screen's roster (polled). */
-export async function rosterStatuses(): Promise<Record<string, CamperStatus>> {
+export async function rosterStatuses(since?: string): Promise<Record<string, CamperStatus>> {
   await requireUser();
   const session = await getActiveSession();
   if (!session) return {};
   const supabase = await createClient();
   const { fetchAll } = await import("@/lib/supabase/fetch-all");
-  const rows = await fetchAll((from, to) => supabase.from("campers").select("id, status").eq("session_id", session.id).is("archived_at", null).order("id").range(from, to));
+  // since: only campers changed since then (a phone asking every 20 seconds needn't get all of camp)
+  const rows = await fetchAll((from, to) => {
+    let q = supabase.from("campers").select("id, status").eq("session_id", session.id).is("archived_at", null);
+    if (since && !Number.isNaN(Date.parse(since))) q = q.gt("updated_at", since);
+    return q.order("id").range(from, to);
+  });
   return Object.fromEntries(rows.map((r) => [r.id, r.status]));
 }
 
