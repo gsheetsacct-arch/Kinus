@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Segmented } from "@/components/ui/segmented";
-import { pickRecipients, smsSegments, textPrefix, type TextRecipient } from "@/lib/sms";
+import { Input } from "@/components/ui/input";
+import { SIGN_CHOICES, cleanSign, defaultSign, pickRecipients, smsSegments, textPrefix, type TextRecipient } from "@/lib/sms";
 import { cn } from "@/lib/utils";
 import { sendText } from "@/app/(app)/messages/actions";
 
@@ -48,7 +49,25 @@ export function Compose({
     for (const r of pickRecipients(recipients, divisionIds).to) if (r.role) n.set(r.role, (n.get(r.role) ?? 0) + 1);
     return n;
   }, [recipients, mode, picked]); // eslint-disable-line react-hooks/exhaustive-deps
-  const prefix = textPrefix(role);
+  // "Send as": the sign in front (their role's by default; remembered on this device)
+  const [signAs, setSignAs] = React.useState<string>(() => defaultSign(role));
+  const [custom, setCustom] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem("kinus:text-sign");
+      if (saved !== null) {
+        setSignAs(saved);
+        setCustom(!(SIGN_CHOICES as readonly string[]).includes(saved));
+      }
+    } catch {}
+  }, []);
+  const chooseSign = (v: string) => {
+    setSignAs(v);
+    try {
+      localStorage.setItem("kinus:text-sign", v);
+    } catch {}
+  };
+  const prefix = textPrefix(role, cleanSign(signAs));
   // counted as it goes out: with the camp and role in front
   const seg = smsSegments(body.trim() ? prefix + body.trim() : "");
   const nothingPicked = (mode === "divisions" && picked.size === 0) || (someRoles && pickedRoles.size === 0);
@@ -65,7 +84,7 @@ export function Compose({
   const send = () => {
     if (!confirm(`Text ${to.length} ${to.length === 1 ? "person" : "people"} now? This can't be taken back.`)) return;
     start(async () => {
-      const r = await sendText({ body, divisionIds, roles: roleIds });
+      const r = await sendText({ body, divisionIds, roles: roleIds, signAs: cleanSign(signAs) });
       if (!r.ok) {
         toast.error(r.error);
         return;
@@ -161,6 +180,30 @@ export function Compose({
           {someRoles && mode === "everyone" && <p className="text-xs text-muted-foreground">People who only signed up for updates have no role, so they don&apos;t get it.</p>}
         </div>
       )}
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Send as</p>
+        <div className="flex flex-wrap gap-2">
+          {SIGN_CHOICES.map((s) => (
+            <button
+              key={s || "none"}
+              type="button"
+              onClick={() => {
+                setCustom(false);
+                chooseSign(s);
+              }}
+              className={cn("rounded-full border px-3 py-1.5 text-sm", !custom && signAs === s ? "border-primary bg-primary-soft/50 font-medium" : "text-muted-foreground")}
+            >
+              {s || "Just the camp"}
+              {s && s === defaultSign(role) && <span className="ml-1 text-xs text-muted-foreground">(your role)</span>}
+            </button>
+          ))}
+          <button type="button" onClick={() => setCustom(true)} className={cn("rounded-full border px-3 py-1.5 text-sm", custom ? "border-primary bg-primary-soft/50 font-medium" : "text-muted-foreground")}>
+            Other…
+          </button>
+        </div>
+        {custom && <Input value={signAs} onChange={(e) => chooseSign(e.target.value)} maxLength={30} placeholder="A name or title, e.g. Mendel or Kitchen" className="max-w-xs" dir="auto" />}
+      </div>
 
       <div className="space-y-1.5">
         <label htmlFor="text-body" className="text-sm font-medium">

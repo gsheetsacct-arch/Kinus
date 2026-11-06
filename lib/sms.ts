@@ -78,7 +78,23 @@ const ROLE_SIGN: Record<string, string> = { owner: "Director", director: "Direct
  * from ("Kinus Tzeirei Hashluchim - HC: "), so staff see who's texting and texts match the
  * registered samples.
  */
-export function textPrefix(role: string): string {
-  const sign = ROLE_SIGN[role];
+export function textPrefix(role: string, signAs?: string | null): string {
+  const chosen = cleanSign(signAs);
+  const sign = chosen === null ? ROLE_SIGN[role] : chosen;
   return `${CAMP}${sign ? ` - ${sign}` : ""}: `;
+}
+
+/** The signs to choose from ("Send as"), in order; "" is just the camp's name. */
+export const SIGN_CHOICES = ["Director", "DH", "Kloli", "HC", "Counselor", "Office", "Logistics", ""] as const;
+/** How this role signs by default. */
+export const defaultSign = (role: string) => ROLE_SIGN[role] ?? "";
+
+/**
+ * A sign the sender chose instead of their role's ("Send as": roles are shared, a login with
+ * director access isn't always the director): a short name or title, one line, no colon.
+ * Null: not chosen (the role's own). "": just the camp's name.
+ */
+export function cleanSign(v: string | null | undefined): string | null {
+  if (v === null || v === undefined) return null;
+  return v.replace(/[\r\n:]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 30);
 }

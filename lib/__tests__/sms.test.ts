@@ -93,3 +93,13 @@ describe("text prefix", () => {
     expect(textPrefix("something_new")).toBe("Kinus Tzeirei Hashluchim: ");
   });
 });
+
+describe("send as", () => {
+  it("signs as chosen instead of the role, or just the camp", async () => {
+    const { textPrefix: tp, cleanSign } = await import("../sms");
+    expect(tp("director", "Office")).toBe(tp("office"));
+    expect(tp("director", "")).toMatch(/^[^-]+: $/);
+    expect(tp("counselor", null)).toBe(tp("counselor"));
+    expect(cleanSign(" Mendel:\nKitchen ")).toBe("Mendel Kitchen");
+  });
+});
