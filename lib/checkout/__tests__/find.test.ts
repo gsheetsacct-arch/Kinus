@@ -28,4 +28,9 @@ describe("final check-out: find", () => {
     expect(findFamilies(index, "40")[0].key).toBe("f:F3");
     expect(findFamilies(index, "")).toEqual([]);
   });
+  it("typed in Hebrew: campers with a Hebrew name first; English finds everyone alike", () => {
+    const he = findIndex([...roster, { ...c("7", "Levi Kahn", "F7", "present"), heb: "לוי כהן" }]);
+    expect(findFamilies(he, "כהן")[0].key).toBe("f:F7");
+    expect(findFamilies(he, "levi")[0].key).toBe("f:F1");
+  });
 });

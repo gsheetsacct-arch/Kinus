@@ -1,5 +1,8 @@
 import { normalizeName } from "@/lib/import/normalize";
 
+/** Typed in Hebrew letters: campers with a Hebrew name (the Hebrew and French divisions) come first. An English search finds everyone alike. */
+export const isHebrewQuery = (q: string) => /[\u05d0-\u05ea]/.test(q);
+
 export type SearchEntry = { name: string; words: string[]; keys: string[]; code: string; phones: string; buzzer: number | null };
 
 /** Precomputes what a camper can be found by: name in any order/language, code, parent phone digits, buzzer number. */
