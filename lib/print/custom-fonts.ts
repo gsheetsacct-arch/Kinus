@@ -105,6 +105,27 @@ export async function fontFile(path: string): Promise<{ bytes: Uint8Array; type:
 
 const cache = new Map<string, string>();
 
+/**
+ * The font with TrueType outlines, for printing. Chromium puts a font with PostScript (CFF)
+ * outlines, as most .otf files have, into a PDF as a "Type 3" font: a drawing of each letter,
+ * which some phone viewers and label-printer apps draw wrong (an "i" or "l" as an outline
+ * with dots). TrueType goes in as a real font, which every viewer reads. Anything else, or a
+ * file that doesn't convert, is used as it came.
+ */
+async function asTrueType(bytes: Uint8Array, format: CustomFontFile["format"]): Promise<{ bytes: Uint8Array; format: CustomFontFile["format"] }> {
+  const buf = Buffer.from(bytes);
+  // a .otf with CFF outlines starts "OTTO"
+  if (format === "woff" || format === "woff2" || buf.subarray(0, 4).toString("latin1") !== "OTTO") return { bytes, format };
+  try {
+    const { Font } = await import("fonteditor-core");
+    const font = Font.create(buf, { type: "otf" });
+    const out = font.write({ type: "ttf", toBuffer: true }) as Buffer;
+    return { bytes: new Uint8Array(out), format: "truetype" };
+  } catch {
+    return { bytes, format };
+  }
+}
+
 /** @font-face rules for the custom fonts a template uses, the files inlined (for printing and PDFs). */
 export async function customFontCss(spec: Pick<TemplateSpec, "layers">): Promise<string> {
   const used = [...new Set(spec.layers.flatMap((l) => (l.type === "text" && !l.hidden && l.font?.startsWith(CUSTOM_PREFIX) ? [l.font.slice(CUSTOM_PREFIX.length)] : [])))];
@@ -115,9 +136,10 @@ export async function customFontCss(spec: Pick<TemplateSpec, "layers">): Promise
       font.files.map(async (file) => {
         const hit = cache.get(file.path);
         if (hit !== undefined) return hit;
-        const got = await fontFile(file.path);
+        const raw = await fontFile(file.path);
+        const got = raw ? await asTrueType(raw.bytes, file.format) : null;
         const rule = got
-          ? `@font-face{font-family:"${customFamily(font.id)}";font-style:${file.italic ? "italic" : "normal"};font-weight:${file.weight};font-display:block;src:url(data:${got.type};base64,${Buffer.from(got.bytes).toString("base64")}) format("${file.format}");}`
+          ? `@font-face{font-family:"${customFamily(font.id)}";font-style:${file.italic ? "italic" : "normal"};font-weight:${file.weight};font-display:block;src:url(data:${MIME[got.format]};base64,${Buffer.from(got.bytes).toString("base64")}) format("${got.format}");}`
           : "";
         if (rule) cache.set(file.path, rule);
         return rule;
