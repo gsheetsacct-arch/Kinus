@@ -2,14 +2,15 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Clock, MessageSquare, Phone, Radio, Search, UserCheck, UserX, X } from "lucide-react";
+import { AlertTriangle, Clock, FileSpreadsheet, MessageSquare, Phone, Radio, Search, UserCheck, UserX, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { CamperCard, type TemplateButton } from "@/components/scan/camper-card";
-import { countStatuses, decodeScope, groupRows, inScope, scopeExists, type BoardScope } from "@/lib/attendance/board";
+import { countStatuses, decodeScope, encodeScope, groupRows, inScope, scopeExists, type BoardScope } from "@/lib/attendance/board";
+import { PdfButton } from "@/components/print/pdf-button";
 import { ScopeSelect, useScope } from "./scope-select";
 import { EVENT_LABEL, STATUS_LABEL, nextStatus, type AttendanceEventType, type CamperStatus } from "@/lib/attendance/machine";
 import type { BoardRow } from "@/lib/data/board";
@@ -112,6 +113,8 @@ export function StatusBoard({
   const [rows, setRows] = React.useState(initialRows);
   const [scope, chooseScopeRaw] = useScope(SCOPE_KEY, defaultScope, (x) => scopeExists(x, tree) && (x.kind === "all" || rows.some((r) => inScope(r, x, tree))), decodeScope, linkScope);
   const [view, setView] = React.useState<View>(linkView ?? "present");
+  // the export of Not here yet: everything, or just name and bunk
+  const [simpleList, setSimpleList] = React.useState(false);
   const [only, setOnly] = React.useState("");
   const [sort, setSort] = React.useState<"name" | "recent">("name");
   const [q, setQ] = React.useState("");
@@ -284,6 +287,23 @@ export function StatusBoard({
           );
         })}
       </div>
+
+      {/* not here yet (or check up, coming later): an easy list to hand out, for this place */}
+      {(view === "expected" || view === "check" || view === "later") && (
+        <div className="no-print flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted-foreground">This list:</span>
+          <Button asChild size="sm" variant="outline">
+            <a href={`/status/export?${new URLSearchParams({ view, where: encodeScope(scope), format: "xlsx", ...(simpleList ? { simple: "1" } : {}) })}`} download>
+              <FileSpreadsheet /> Excel
+            </a>
+          </Button>
+          <PdfButton href={`/status/export?${new URLSearchParams({ view, where: encodeScope(scope), format: "pdf", ...(simpleList ? { simple: "1" } : {}) })}`} label="PDF" size="sm" labelPrinter={false} />
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={simpleList} onChange={(e) => setSimpleList(e.target.checked)} className="size-4 accent-[var(--primary)]" />
+            Just name, bunk and parents
+          </label>
+        </div>
+      )}
 
       <div className="no-print grid grid-cols-2 gap-2 sm:grid-cols-[1fr_auto_auto]">
         <div className="relative col-span-2 sm:col-span-1">

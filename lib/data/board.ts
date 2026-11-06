@@ -1,11 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import type { AttendanceEventType, CamperStatus } from "@/lib/attendance/machine";
+import type {
+  AttendanceEventType,
+  CamperStatus,
+} from "@/lib/attendance/machine";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 
 type DB = SupabaseClient<Database>;
 
-export type BoardPhone = { label: string; phone: string; tel: string };
+export type BoardPhone = {
+  label: string;
+  phone: string;
+  tel: string;
+  /** The parent's name, when the export has it. */ who?: string;
+};
 export type BoardRow = {
   id: string;
   name: string;
@@ -27,16 +35,27 @@ export type BoardRow = {
   heb?: string;
 };
 
-const PARENT_LABEL: Record<string, string> = { mother: "Mom", father: "Dad", guardian: "Guardian" };
+const PARENT_LABEL: Record<string, string> = {
+  mother: "Mom",
+  father: "Dad",
+  guardian: "Guardian",
+};
 
 /** Every camper the user can see in the session, with their last check-in and parent phones (when allowed). */
-export async function loadBoard(supabase: DB, sessionId: string, withPhones: boolean, divisionIds: string[] | null = null): Promise<BoardRow[]> {
+export async function loadBoard(
+  supabase: DB,
+  sessionId: string,
+  withPhones: boolean,
+  divisionIds: string[] | null = null,
+): Promise<BoardRow[]> {
   if (divisionIds && !divisionIds.length) return [];
   const [rows, contacts] = await Promise.all([
     fetchAll((from, to) => {
       let q = supabase
         .from("campers_board")
-        .select("id, display_name, first_name, last_name, camper_code, division_id, bunk_id, status, last_event_at, last_event_by, last_event_type, last_event_note, has_medical_flag, current_buzzer_number")
+        .select(
+          "id, display_name, first_name, last_name, camper_code, division_id, bunk_id, status, last_event_at, last_event_by, last_event_type, last_event_note, has_medical_flag, current_buzzer_number",
+        )
         .eq("session_id", sessionId)
         .is("archived_at", null);
       if (divisionIds) q = q.in("division_id", divisionIds);
@@ -46,7 +65,9 @@ export async function loadBoard(supabase: DB, sessionId: string, withPhones: boo
       ? fetchAll((from, to) => {
           let q = supabase
             .from("camper_contacts")
-            .select("camper_id, role, slot, phone, phone_e164, campers!inner(session_id, division_id)")
+            .select(
+              "camper_id, role, slot, name, phone, phone_e164, campers!inner(session_id, division_id)",
+            )
             .eq("campers.session_id", sessionId)
             .in("role", ["mother", "father", "guardian"]);
           if (divisionIds) q = q.in("campers.division_id", divisionIds);
@@ -54,12 +75,24 @@ export async function loadBoard(supabase: DB, sessionId: string, withPhones: boo
         })
       : Promise.resolve([]),
   ]);
-  const hebrew = await import("./hebrew-display").then((m) => m.hebrewNamesFor(rows.map((c) => ({ id: c.id!, division_id: c.division_id })))).catch(() => new Map<string, string>());
+  const hebrew = await import("./hebrew-display")
+    .then((m) =>
+      m.hebrewNamesFor(
+        rows.map((c) => ({ id: c.id!, division_id: c.division_id })),
+      ),
+    )
+    .catch(() => new Map<string, string>());
   const phones = new Map<string, (BoardPhone & { order: number })[]>();
   for (const k of contacts) {
     if (!k.phone) continue;
     const list = phones.get(k.camper_id) ?? [];
-    list.push({ label: PARENT_LABEL[k.role] ?? k.role, phone: k.phone, tel: k.phone_e164 ?? k.phone, order: ["mother", "father", "guardian"].indexOf(k.role) * 10 + k.slot });
+    list.push({
+      label: PARENT_LABEL[k.role] ?? k.role,
+      who: k.name?.trim() || undefined,
+      phone: k.phone,
+      tel: k.phone_e164 ?? k.phone,
+      order: ["mother", "father", "guardian"].indexOf(k.role) * 10 + k.slot,
+    });
     phones.set(k.camper_id, list);
   }
   return rows.map((c) => ({
@@ -76,7 +109,9 @@ export async function loadBoard(supabase: DB, sessionId: string, withPhones: boo
     type: c.last_event_type,
     note: c.last_event_note,
     medical: Boolean(c.has_medical_flag),
-    phones: (phones.get(c.id!) ?? []).sort((a, b) => a.order - b.order).map(({ label, phone, tel }) => ({ label, phone, tel })),
+    phones: (phones.get(c.id!) ?? [])
+      .sort((a, b) => a.order - b.order)
+      .map(({ label, phone, tel }) => ({ label, phone, tel })),
     buzzer: c.current_buzzer_number ?? null,
     ...(hebrew.has(c.id!) ? { heb: hebrew.get(c.id!) } : {}),
   }));
