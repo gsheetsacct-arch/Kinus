@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MessageSquare, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { MessageSquare, ShieldCheck, Tag, UserPlus, Users } from "lucide-react";
 import { carryAreasTo } from "@/lib/staff/carry-areas";
 import { PageHeader } from "@/components/page-header";
 import { Callout } from "@/components/callout";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { StaffTable, type StaffRow } from "@/components/staff/staff-table";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
-import { canGiveFinalCheckout, canGrantAreas, canManageRole, isAdmin, type StaffRole, isDirector } from "@/lib/auth/permissions";
+import { canGiveFinalCheckout, canGrantAreas, canManageRole, canUsePrintArea, isAdmin, type StaffRole, isDirector } from "@/lib/auth/permissions";
 import { ROLE_ORDER, areaLabel, STAFF_ROLES } from "@/lib/labels";
 import { loadRoles, rolesInUse } from "@/lib/data/roles";
 import { areaNames, grantableTree, loadAreaTree } from "@/lib/data/areas";
@@ -117,6 +117,13 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
               <Button asChild variant="ghost">
                 <Link href="/admin/roles">
                   <ShieldCheck /> Roles
+                </Link>
+              </Button>
+            )}
+            {canUsePrintArea(me) && (
+              <Button asChild variant="outline">
+                <Link href="/print/staff#quick">
+                  <Tag /> Quick staff tag
                 </Link>
               </Button>
             )}

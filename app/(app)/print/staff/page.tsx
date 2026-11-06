@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { BlankStaffTags, StaffTags } from "@/components/print/staff-tags";
+import { QuickStaffTag } from "@/components/print/quick-staff-tag";
+import { appUrl } from "@/lib/auth/app-url";
 import { getActiveSession } from "@/lib/auth/current-user";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/current-user";
@@ -21,11 +23,12 @@ export default async function StaffTagsPage() {
   if (!canUsePrintArea(user)) redirect("/print/templates");
   const admin = createAdminClient();
   const session = await getActiveSession();
-  const [{ data: rows }, people, designs, { data: divisionRows }] = await Promise.all([
+  const [{ data: rows }, people, designs, { data: divisionRows }, url] = await Promise.all([
     admin.from("print_templates").select("*").not("name", "like", "(retired)%").order("sort_order").order("name"),
     staffInView(user),
     canDesign(user),
     session ? admin.from("divisions").select("name").eq("session_id", session.id).order("sort_order") : Promise.resolve({ data: [] as { name: string }[] }),
+    appUrl(),
   ]);
   // the divisions a blank badge can be for: this session's, and the name-tag ones on the staff sheet (Ohel Rally…)
   const divisions = [...new Set([...(divisionRows ?? []).map((d) => d.name), ...people.map((p) => p.values.DIVISION ?? "").filter(Boolean)])];
@@ -35,6 +38,13 @@ export default async function StaffTagsPage() {
   return (
     <div>
       <PageHeader title="Staff tags" description="Name tags and badges for staff, filled from the staff list: name, position, division, bunk, phone and what registration sent." />
+      <div className="mb-6">
+        <QuickStaffTag
+          people={people.map((p) => ({ name: p.name, position: p.values.POSITION || p.values.ROLE || "", division: p.values.DIVISION ?? "" }))}
+          divisions={divisions}
+          defaultQr={url.replace(/\/+$/, "")}
+        />
+      </div>
       {!templates.length ? (
         <EmptyState
           icon={UserRound}
