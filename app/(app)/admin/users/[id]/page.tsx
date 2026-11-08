@@ -13,7 +13,8 @@ import { Field } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession, requireStaffManager } from "@/lib/auth/current-user";
-import { canGrantAreas, canManageRole, isAdmin } from "@/lib/auth/permissions";
+import { canGiveFinalCheckout, canGrantAreas, canManageRole, isAdmin } from "@/lib/auth/permissions";
+import { FinalCheckoutToggle } from "@/components/staff/final-checkout-toggle";
 import { ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
 import { encodeArea, grantableTree, loadAreaTree } from "@/lib/data/areas";
 import { signInInfo, statusOf } from "@/lib/data/staff";
@@ -64,6 +65,13 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
       ),
     ),
   ];
+  // final check-out (check-in helpers): whether it's on, and the camps it covers (their divisions' camps)
+  const finalOn = Boolean(await admin.from("profiles").select("final_checkout").eq("id", id).maybeSingle().then((r) => r.data?.final_checkout, () => false));
+  const bunkDivision = new Map(tree.divisions.flatMap((d) => d.bunks.map((b) => [b.id, d.id] as const)));
+  const campIds = new Set(
+    (areas ?? []).map((a) => a.group_id ?? tree.divisions.find((d) => d.id === (a.division_id ?? (a.bunk_id ? bunkDivision.get(a.bunk_id) : null)))?.group_id).filter(Boolean),
+  );
+  const theirCamps = tree.groups.filter((g) => campIds.has(g.id)).map((g) => g.name);
   const summaries = Object.fromEntries(ROLE_ORDER.map((r) => [r, roleSummary(setup, r)]));
   if (!p) notFound();
   const isSelf = me.id === p.id;
@@ -121,6 +129,15 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
                 <dd dir="auto">{regAddress}</dd>
               </>
             )}
+      {p.role === "scanner" && p.login !== "shared" && (
+        <Section
+          title="Final check-out"
+          description={`Going home at the end of camp: their own Final check-out page, for every division of ${theirCamps.length ? theirCamps.join(" and ") : "their camp"}, not only their own.`}
+        >
+          <FinalCheckoutToggle id={p.id} on={finalOn} canChange={manageable && canGiveFinalCheckout(me)} />
+          {!(manageable && canGiveFinalCheckout(me)) && <p className="mt-2 text-sm text-muted-foreground">Head staff or a director of their division changes this.</p>}
+        </Section>
+      )}
       {p.login !== "shared" && (
         <Section
           title="Name tag"

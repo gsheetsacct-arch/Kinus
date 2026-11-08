@@ -581,19 +581,22 @@ export async function setFinalCheckout(id: string, on: boolean): Promise<ActionR
   try {
     const admin = createAdminClient();
     const [{ data: p }, { data: scopes }] = await Promise.all([
-      admin.from("profiles").select("id, login, full_name").eq("id", id).single(),
-      admin.from("staff_scopes").select("division_id").eq("user_id", id),
+      admin.from("profiles").select("id, login, full_name, role").eq("id", id).single(),
+      admin.from("staff_scopes").select("division_id, bunks(division_id)").eq("user_id", id),
     ]);
-    if (!p || p.login !== "shared") return fail("Final check-out is for check-in logins.");
+    // check-in logins (shared phones) and check-in helpers (people)
+    if (!p || (p.login !== "shared" && p.role !== "scanner")) return fail("Final check-out is for check-in logins and check-in helpers.");
     await assertCanManage(me, [id]);
-    const divisions = (scopes ?? []).map((s) => s.division_id).filter((d): d is string => Boolean(d));
-    if (!divisions.length) return fail("This login isn't in a division.");
+    const divisions = [...new Set((scopes ?? []).map((s) => s.division_id ?? (s.bunks as { division_id: string } | null)?.division_id).filter((d): d is string => Boolean(d)))];
+    if (!divisions.length) return fail(p.login === "shared" ? "This login isn't in a division." : "Give them a division first (Role and access), then final check-out covers that division's whole camp.");
     if (!canGiveFinalCheckout(me) || !canGrantAreas(me, divisions.map((d) => ({ group_id: null, division_id: d, bunk_id: null })), false, await divisionGroupLookup()))
       return fail("Only the head staff or a director of this login's division can turn final check-out on.");
     const { error } = await admin.from("profiles").update({ final_checkout: on }).eq("id", id);
     if (error) return fail(/final_checkout/.test(error.message) ? "The database needs updating first (migration 0029)." : error.message);
     revalidatePath("/admin/users");
-    return ok(on ? "Final check-out is on for this login: it now has a Final check-out page for the whole camp." : "Final check-out is off for this login.");
+    revalidatePath(`/admin/users/${id}`);
+    const who = p.login === "shared" ? "this login" : p.full_name;
+    return ok(on ? `Final check-out is on for ${who}: a Final check-out page for the whole camp.` : `Final check-out is off for ${who}.`);
   } catch (e) {
     return fail(errorMessage(e));
   }
