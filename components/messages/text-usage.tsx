@@ -1,55 +1,51 @@
-import { Section } from "@/components/section";
-import { RATES, type TextUsage, type UsageWindow } from "@/lib/messaging/usage";
-import { formatWhen } from "@/lib/utils";
+import type { Range, TextUsage, UsageWindow } from "@/lib/messaging/usage";
 
-const money = (n: number) => "$" + (n < 10 ? n.toFixed(2) : n.toFixed(0));
+const money = (n: number) => "$" + (n < 100 ? n.toFixed(2) : n.toFixed(0));
+const range = (r: Range) => (money(r.min) === money(r.max) ? money(r.min) : `${money(r.min)}–${money(r.max)}`);
 const num = (n: number) => n.toLocaleString("en-US");
 
-function Column({ title, w }: { title: string; w: UsageWindow }) {
+function Tile({ title, w }: { title: string; w: UsageWindow }) {
+  const b = w.billed;
   return (
-    <div className="rounded-lg border p-3">
-      <div className="text-xs font-medium text-muted-foreground">{title}</div>
-      <div className="mt-1 text-2xl font-semibold tabular-nums">{money(w.cost)}</div>
-      <dl className="mt-2 space-y-0.5 text-sm">
-        <div className="flex justify-between gap-3">
-          <dt className="text-muted-foreground">Sent</dt>
-          <dd className="tabular-nums">
-            {num(w.texts)} <span className="text-muted-foreground">({num(w.segments)} segments)</span>
-          </dd>
+    <div className="min-w-36 shrink-0 snap-start rounded-lg border bg-card px-3 py-2 text-xs">
+      <div className="font-medium text-muted-foreground">{title}</div>
+      {b ? (
+        <div className="mt-0.5 text-base font-semibold tabular-nums" title="Twilio's bill for texts (with carrier fees)">
+          {money(b.sms)}
+          <span className="ml-1 text-[10px] font-normal text-muted-foreground">Twilio</span>
         </div>
-        <div className="flex justify-between gap-3">
-          <dt className="text-muted-foreground">Received</dt>
-          <dd className="tabular-nums">
-            {num(w.replies)} <span className="text-muted-foreground">({num(w.replySegments)} segments)</span>
-          </dd>
+      ) : (
+        <div className="mt-0.5 text-base font-semibold tabular-nums" title="Estimated, low to high">
+          {range(w.cost)}
         </div>
-        {w.failed > 0 && (
-          <div className="flex justify-between gap-3">
-            <dt className="text-muted-foreground">Not sent</dt>
-            <dd className="tabular-nums">{num(w.failed)}</dd>
-          </div>
-        )}
-      </dl>
+      )}
+      <div className="mt-1 space-y-0.5 tabular-nums text-muted-foreground">
+        <div>
+          <span className="text-foreground">{num(b ? b.sent : w.texts)}</span> sent · {num(b ? b.sentSegments : w.segments)} seg.
+        </div>
+        <div>
+          <span className="text-foreground">{num(b ? b.received : w.replies)}</span> received
+        </div>
+        {b && <div title="Kinus' own estimate, low to high">Est. {range(w.cost)}</div>}
+        {b && b.total > b.sms && <div title="Everything on the Twilio account, the phone number too">All Twilio {money(b.total)}</div>}
+      </div>
     </div>
   );
 }
 
-/** Texting so far and what it costs, roughly (owners only). */
+/** Texting so far and what it costs (owners only): Twilio's bill when it answers, else Kinus' estimate. */
 export function TextUsageCard({ usage }: { usage: TextUsage }) {
   return (
-    <Section
-      title="Texting usage (owners only)"
-      description={
-        <>
-          Texts sent and received through Twilio, from Kinus&apos; records{usage.since ? ` since ${formatWhen(usage.since)}` : ""}, with an estimated cost: {"$" + RATES.twilio} a segment (Twilio) plus about {"$" + RATES.carrierOut} for each sent and {"$" + RATES.carrierIn} for each received (carrier fees). A long text counts as several segments; a Hebrew text holds 70 characters, not 160. Not included: the phone number, about {"$" + RATES.number} a month. The real bill is on Twilio: Console → Billing.
-        </>
-      }
-    >
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Column title="Today" w={usage.today} />
-        <Column title="Last 7 days" w={usage.week} />
-        <Column title="All time" w={usage.all} />
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold">Texting usage</h2>
+        <span className="text-xs text-muted-foreground">Owners only · from Twilio when it answers, else estimated</span>
       </div>
-    </Section>
+      <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
+        <Tile title="Today" w={usage.today} />
+        <Tile title="Last 7 days" w={usage.week} />
+        <Tile title="All time" w={usage.all} />
+      </div>
+    </div>
   );
 }
