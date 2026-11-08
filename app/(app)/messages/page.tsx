@@ -6,7 +6,7 @@ import { Section } from "@/components/section";
 import { Callout } from "@/components/callout";
 import { Compose, type ComposeCamp } from "@/components/messages/compose";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
-import { canTextEveryone, canTextStaff, isAdmin, textableDivisionIds, textableRoles } from "@/lib/auth/permissions";
+import { canTextEveryone, canTextStaff, isAdmin, isOwner, textableDivisionIds, textableRoles } from "@/lib/auth/permissions";
 import { loadAreaTree } from "@/lib/data/areas";
 import { loadTextRecipients } from "@/lib/data/text-recipients";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -17,6 +17,8 @@ import { ReplyList } from "@/components/messages/reply-list";
 import { replyDivisions, replyVisibility } from "@/lib/data/reply-access";
 import type { Reply } from "@/components/messages/reply-list";
 import { ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
+import { TextUsageCard } from "@/components/messages/text-usage";
+import { loadTextUsage } from "@/lib/data/text-usage";
 
 export const metadata = { title: "Text staff" };
 // sending to a few hundred staff runs inside this page's action
@@ -88,10 +90,13 @@ export default async function MessagesPage() {
   // the roles a text can be narrowed to, in their usual order
   const roleOptions = ROLE_ORDER.filter((r) => r !== "owner" && recipients.some((x) => x.role === r)).map((r) => ({ value: r, label: STAFF_ROLES[r].label }));
   const missing = twilioMissing();
+  // what texting has cost so far (owners only)
+  const usage = isOwner(me) ? await loadTextUsage().catch(() => null) : null;
 
   return (
     <div className="space-y-6">
       <PageHeader title="Text staff" description={everyone ? "Text all staff, or the staff of chosen divisions." : "Text the staff of your divisions."} />
+      {usage && <TextUsageCard usage={usage} />}
       {error && <Callout tone="warning" title="Texting needs a database update">Apply migration 0039 (Setup workflow or Supabase), then reload.</Callout>}
       {missing.length > 0 && (
         <Callout tone="warning" title="Texting isn't set up yet">
