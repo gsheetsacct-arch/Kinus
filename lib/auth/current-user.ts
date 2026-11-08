@@ -57,10 +57,10 @@ const loadAccount = cache(async (): Promise<Account> => {
       coverage = await coverageOf(rows);
     }
   }
-  // final check-out (whole camp, going home): only check-in logins get it. Read on its own, so
-  // a database without migration 0029 yet still signs everyone in.
+  // final check-out (whole camp, going home): check-in logins and check-in helpers get it, when
+  // turned on for them. Read on its own, so a database without migration 0029 yet still signs everyone in.
   const finalCheckout =
-    profile.login === "shared" &&
+    (profile.login === "shared" || profile.role === "scanner") &&
     Boolean((await supabase.from("profiles").select("final_checkout").eq("id", profile.id).maybeSingle().then((r) => r.data?.final_checkout, () => false)));
   return {
     user: {
