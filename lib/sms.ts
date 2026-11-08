@@ -44,8 +44,24 @@ export function pickRecipients(all: TextRecipient[], divisionIds: string[] | nul
 const GSM = new Set("@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà");
 const GSM_EXT = new Set("^{}\\[~]|€");
 
-/** How many texts a message is billed as (long messages are split, and each part counts). */
-export function smsSegments(body: string): { segments: number; unicode: boolean; length: number } {
+// Twilio's Smart Encoding: characters phones type for you (curly quotes, long dashes, special
+// spaces…) sent as their plain look-alikes, so the text stays in the cheaper alphabet
+const SMART: Record<string, string> = {
+  "\u2018": "'", "\u2019": "'", "\u201A": "'", "\u201B": "'", "\u2032": "'", "\u2039": "'", "\u203A": "'", "\u02BC": "'", "\u02BB": "'",
+  "\u201C": '"', "\u201D": '"', "\u201E": '"', "\u201F": '"', "\u2033": '"', "\u00AB": '"', "\u00BB": '"',
+  "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-", "\u2014": "-", "\u2015": "-", "\u2212": "-", "\u2022": "-",
+  "\u2026": "...", "\u02C6": "^", "\u02DC": "~", "\u2044": "/", "\u2215": "/",
+  "\u00A0": " ", "\u2000": " ", "\u2001": " ", "\u2002": " ", "\u2003": " ", "\u2004": " ", "\u2005": " ", "\u2006": " ",
+  "\u2007": " ", "\u2008": " ", "\u2009": " ", "\u200A": " ", "\u202F": " ", "\u205F": " ", "\u3000": " ",
+  "\u200B": "", "\u200C": "", "\u200D": "", "\u2060": "", "\uFEFF": "",
+};
+
+/** The text as Twilio sends it with Smart Encoding on (lib/twilio sends with it). */
+export const smartEncode = (body: string) => [...body].map((c) => SMART[c] ?? c).join("");
+
+/** How many texts a message is billed as (long messages are split, and each part counts), after Twilio's Smart Encoding. */
+export function smsSegments(text: string): { segments: number; unicode: boolean; length: number } {
+  const body = smartEncode(text);
   const chars = [...body];
   const unicode = chars.some((c) => !GSM.has(c) && !GSM_EXT.has(c));
   if (unicode) {

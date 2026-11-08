@@ -44,7 +44,9 @@ export class TwilioError extends Error {
 
 /** Sends one text. Twilio queues it and reports how it went to statusCallback. */
 export async function sendSms(config: TwilioConfig, msg: { to: string; body: string; statusCallback?: string }): Promise<{ sid: string; status: string }> {
-  const form = new URLSearchParams({ To: msg.to, Body: msg.body });
+  // SmartEncoded: Twilio swaps curly quotes, long dashes and the like for plain ones, so a text
+  // stays at 160 characters a segment instead of 70 (lib/sms smartEncode counts it the same way)
+  const form = new URLSearchParams({ To: msg.to, Body: msg.body, SmartEncoded: "true" });
   if (config.messagingServiceSid) form.set("MessagingServiceSid", config.messagingServiceSid);
   else form.set("From", config.from!);
   if (msg.statusCallback) form.set("StatusCallback", msg.statusCallback);

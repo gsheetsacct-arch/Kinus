@@ -9,8 +9,8 @@ import { smsSegments } from "@/lib/sms";
 export const RATES = {
   /** Twilio, per segment, sent or received (US, low and high). */
   twilio: [0.0079, 0.0083],
-  /** Carriers' fees per segment sent (registered A2P 10DLC: AT&T ~0.002 to T-Mobile/Verizon ~0.003, more unregistered). */
-  carrierOut: [0.002, 0.005],
+  /** Carriers' fees per segment sent (registered A2P 10DLC: AT&T ~0.002 to T-Mobile/Verizon ~0.003; this account's bill works out at ~0.0025). */
+  carrierOut: [0.002, 0.003],
   /** Carriers' fees per segment received (most charge none; T-Mobile ~0.003). */
   carrierIn: [0, 0.003],
 } as const;

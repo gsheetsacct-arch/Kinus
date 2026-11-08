@@ -103,3 +103,15 @@ describe("send as", () => {
     expect(cleanSign(" Mendel:\nKitchen ")).toBe("Mendel Kitchen");
   });
 });
+
+describe("smart encoding", () => {
+  it("counts curly quotes and long dashes as Twilio sends them: plain, 160 a segment", () => {
+    const text = "Kinus Tzeirei Hashluchim - DH: Don’t forget — the buses leave at 9… “Thanks”";
+    expect(smsSegments(text)).toMatchObject({ segments: 1, unicode: false });
+    expect(smsSegments("x".repeat(150) + "’").segments).toBe(1);
+  });
+  it("keeps Hebrew and emoji as Unicode, 70 a segment", () => {
+    expect(smsSegments("שלום").unicode).toBe(true);
+    expect(smsSegments("Hi 👋").unicode).toBe(true);
+  });
+});
