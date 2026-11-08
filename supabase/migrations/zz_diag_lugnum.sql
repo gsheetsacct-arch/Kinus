@@ -1,9 +1,0 @@
-\pset pager off
-\pset format unaligned
-\pset fieldsep '|'
-select 'SETTING', value::text from settings where key = 'name_tag_only_camps';
-select 'BUNK', g.sort_order, g.name, d.sort_order, d.name, b.sort_order, b.name, (select count(*) from campers c where c.bunk_id = b.id and c.archived_at is null)
-from divisions d left join division_groups g on g.id = d.group_id left join bunks b on b.division_id = d.id
-where d.session_id = (select id from sessions where is_active) order by 2, 4, 6, 7;
-select 'GROUP', g.sort_order, g.name from division_groups g where g.session_id = (select id from sessions where is_active) order by 2, 3;
-rollback;
