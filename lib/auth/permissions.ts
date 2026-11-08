@@ -22,6 +22,8 @@ export type CurrentUser = {
   checkinLogin?: boolean;
   /** A check-in login also used for final check-out: "gone home" for every division of its camp. */
   finalCheckout?: boolean;
+  /** The camps of the final check-outs set up for them (Final check-out → Set up). */
+  checkoutCamps?: string[];
   /** Whether their role may text staff, and only which roles (Staff → Roles; lib/messaging/text-rules). */
   textRule?: { can: boolean; roles: StaffRole[] | null };
 };
@@ -153,7 +155,7 @@ export const phoneBookHeadsOnly = (u: CurrentUser) => u.role === "counselor" || 
 export const canFollowUp = (u: CurrentUser) => u.role !== "counselor";
 
 /** The Final check-out page: check-in logins given it, and directors over all of camp (who can record going home anyway). */
-export const canFinalCheckout = (u: CurrentUser) => Boolean(u.finalCheckout) || (seesAllCamp(u) && LEVEL_RANK[effectiveLevel(u)] >= LEVEL_RANK.scan);
+export const canFinalCheckout = (u: CurrentUser) => Boolean(u.finalCheckout) || Boolean(u.checkoutCamps?.length) || (seesAllCamp(u) && LEVEL_RANK[effectiveLevel(u)] >= LEVEL_RANK.scan);
 
 /** Who gives a check-in login final check-out: whoever makes check-in logins (division heads and head counselors for their own division's, directors). */
 export const canGiveFinalCheckout = (u: CurrentUser) => isDirector(u) || u.role === "division_head" || u.role === "head_kloli" || u.role === "kloli" || u.role === "head_counselor";

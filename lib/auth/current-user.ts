@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { TEXT_RULES_KEY, textRuleFor } from "@/lib/messaging/text-rules";
+import { FINAL_CHECKOUTS_KEY, checkoutCampsFor, parseSetups, setupIsFor } from "@/lib/checkout/setups";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -17,18 +18,20 @@ const loadAccount = cache(async (): Promise<Account> => {
   const claims = auth?.claims;
   if (!claims?.sub) return { user: null, problem: "signed_out" };
   const user = { id: claims.sub, email: claims.email ?? "", user_metadata: claims.user_metadata ?? {} };
-  const [{ data: profileRow, error: profileError }, { data: areas, error: areasError }, textRules] = await Promise.all([
+  const [{ data: profileRow, error: profileError }, { data: areas, error: areasError }, settingsRows] = await Promise.all([
     // email comes from the sign-in: staff can't read profile emails (migration 0013)
     supabase.from("profiles").select("id, full_name, role, access_level, all_areas, is_active, login").eq("id", user.id).maybeSingle(),
     supabase.from("staff_scopes").select("id, group_id, division_id, bunk_id").eq("user_id", user.id),
-    // who may text staff, and whom (Staff → Roles); read alongside, never in the way of signing in
+    // who may text staff, and whom (Staff → Roles), and the final check-outs set up (Final
+    // check-out → Set up); read alongside, never in the way of signing in
     supabase
       .from("settings")
-      .select("value")
-      .eq("key", TEXT_RULES_KEY)
-      .maybeSingle()
-      .then((r) => r.data?.value ?? null, () => null),
+      .select("key, value")
+      .in("key", [TEXT_RULES_KEY, FINAL_CHECKOUTS_KEY])
+      .then((r) => new Map((r.data ?? []).map((x) => [x.key, x.value])), () => new Map<string, unknown>()),
   ]);
+  const textRules = settingsRows.get(TEXT_RULES_KEY) ?? null;
+  const checkoutSetups = parseSetups(settingsRows.get(FINAL_CHECKOUTS_KEY));
   // a column or table the app expects is missing: the database is behind the app
   if (profileError || areasError) {
     console.error("Loading the signed-in profile failed", profileError ?? areasError);
@@ -62,6 +65,17 @@ const loadAccount = cache(async (): Promise<Account> => {
   const finalCheckout =
     (profile.login === "shared" || profile.role === "scanner") &&
     Boolean((await supabase.from("profiles").select("final_checkout").eq("id", profile.id).maybeSingle().then((r) => r.data?.final_checkout, () => false)));
+  // the camps of the final check-outs set up for them (their kind of account, a camp they work in)
+  const who = { role: profile.role as string, checkinLogin: profile.login === "shared" };
+  const divisionIds = [...new Set(coverage.map((c) => c.division_id))];
+  const checkoutCamps =
+    checkoutSetups.some((s) => setupIsFor(s, who)) && divisionIds.length
+      ? checkoutCampsFor(
+          checkoutSetups,
+          who,
+          ((await supabase.from("divisions").select("group_id").in("id", divisionIds)).data ?? []).map((d) => d.group_id).filter((g): g is string => Boolean(g)),
+        )
+      : [];
   return {
     user: {
       id: profile.id,
@@ -74,6 +88,7 @@ const loadAccount = cache(async (): Promise<Account> => {
       coverage,
       checkinLogin: profile.login === "shared",
       finalCheckout,
+      checkoutCamps,
       textRule: textRuleFor(textRules, profile.role),
     },
   };
