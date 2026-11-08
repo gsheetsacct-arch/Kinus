@@ -15,8 +15,9 @@ function Tile({ title, w }: { title: string; w: UsageWindow }) {
           <span className="ml-1 text-[10px] font-normal text-muted-foreground">Twilio</span>
         </div>
       ) : (
-        <div className="mt-0.5 text-base font-semibold tabular-nums" title="Estimated, low to high">
+        <div className="mt-0.5 text-base font-semibold tabular-nums" title="Estimated, low to high (Twilio didn't answer)">
           {range(w.cost)}
+          <span className="ml-1 text-[10px] font-normal text-muted-foreground">est.</span>
         </div>
       )}
       <div className="mt-1 space-y-0.5 tabular-nums text-muted-foreground">
@@ -26,7 +27,6 @@ function Tile({ title, w }: { title: string; w: UsageWindow }) {
         <div>
           <span className="text-foreground">{num(b ? b.received : w.replies)}</span> received
         </div>
-        {b && <div title="Kinus' own estimate, low to high">Est. {range(w.cost)}</div>}
         {b && b.total > b.sms && <div title="Everything on the Twilio account, the phone number too">All Twilio {money(b.total)}</div>}
       </div>
     </div>
