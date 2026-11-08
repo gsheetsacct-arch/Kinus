@@ -14,10 +14,21 @@ async function load() {
   return parseSetups(data?.value);
 }
 
+/** This session's camps (division_groups ids). */
+async function sessionCamps(): Promise<Set<string>> {
+  const session = await getActiveSession();
+  if (!session) return new Set();
+  const { data } = await createAdminClient().from("division_groups").select("id").eq("session_id", session.id);
+  return new Set((data ?? []).map((g) => g.id));
+}
+
 async function store(list: CheckoutSetup[], by: string) {
+  // final check-outs of an earlier session cover nothing now: dropped as the list is saved
+  const known = await sessionCamps();
+  const kept = list.filter((s) => s.camps.some((c) => known.has(c)));
   const { error } = await createAdminClient()
     .from("settings")
-    .upsert({ key: FINAL_CHECKOUTS_KEY, value: list as never, updated_by: by, updated_at: new Date().toISOString() });
+    .upsert({ key: FINAL_CHECKOUTS_KEY, value: kept as never, updated_by: by, updated_at: new Date().toISOString() });
   if (error) throw error;
   revalidatePath("/checkout");
   revalidatePath("/checkout/setup");
@@ -28,10 +39,8 @@ export async function saveCheckoutSetup(input: { id?: string; name: string; camp
   const me = await requireUser();
   if (!isAdmin(me)) return fail("Only the owner and directors over all of camp set up final check-out.");
   try {
-    const session = await getActiveSession();
-    if (!session) return fail("There's no active session.");
-    const { data: groups } = await createAdminClient().from("division_groups").select("id").eq("session_id", session.id);
-    const known = new Set((groups ?? []).map((g) => g.id));
+    const known = await sessionCamps();
+    if (!known.size) return fail("There's no active session with camps.");
     const camps = [...new Set(input.camps)].filter((c) => known.has(c));
     if (!camps.length) return fail("Pick at least one camp.");
     const kinds = new Set<string>([...ROLE_ORDER, CHECKIN_LOGIN]);

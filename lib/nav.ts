@@ -1,18 +1,20 @@
 import type { CurrentUser } from "@/lib/auth/permissions";
 import { canSeeHelp } from "@/lib/help/access";
 import { canConnect } from "@/lib/ai/connect";
-import { LEVEL_RANK, canAddCheckinLogins, canFinalCheckout, canPrintCheckin, canTextStaff, canUsePhoneBook, canUsePrintArea, effectiveLevel, isAdmin, isDirector, isStaffManager } from "@/lib/auth/permissions";
+import { LEVEL_RANK, canAddCheckinLogins, canFinalCheckout, finalCheckoutNow, canPrintCheckin, canTextStaff, canUsePhoneBook, canUsePrintArea, effectiveLevel, isAdmin, isDirector, isStaffManager } from "@/lib/auth/permissions";
 
 export type NavIcon = "DoorOpen" | "LayoutGrid" | "Users" | "ListChecks" | "UserCog" | "Upload" | "Layers" | "SlidersHorizontal" | "CalendarDays" | "Settings" | "CircleUser" | "ScanLine" | "Activity" | "Printer" | "UserSearch" | "BookUser" | "ShieldCheck" | "MessageSquare" | "ClipboardCheck" | "History" | "Search" | "CircleHelp" | "Sparkles" | "KeyRound";
 export type NavItem = { href: string; label: string; icon: NavIcon; description: string; section: "main" | "admin"; mobile?: boolean };
 
 export function buildNav(user: CurrentUser, opts: { designs?: boolean } = {}): NavItem[] {
   const canScan = LEVEL_RANK[effectiveLevel(user)] >= LEVEL_RANK.scan;
+  // final check-out running for them: it takes Check in's place on the phone's bottom bar (Check in moves to More)
+  const going = finalCheckoutNow(user);
   // the phones at a check-in line: checking in and out, and finding campers and staff. Nothing else.
   if (user.checkinLogin)
     return [
-      { href: "/scan", label: "Check in", icon: "ScanLine", description: "Scan or search to check campers in and out", section: "main", mobile: true },
-      ...(canFinalCheckout(user) ? [{ href: "/checkout", label: "Final check-out", icon: "DoorOpen" as const, description: "Going home: every division of the camp", section: "main" as const, mobile: true }] : []),
+      ...(going ? [{ href: "/checkout", label: "Final check-out", icon: "DoorOpen" as const, description: "Going home: every division of the camp", section: "main" as const, mobile: true }] : []),
+      { href: "/scan", label: "Check in", icon: "ScanLine", description: "Scan or search to check campers in and out", section: "main", mobile: !going },
       { href: "/status", label: "Who's here", icon: "Activity", description: "Who's here and who isn't yet, live", section: "main", mobile: true },
       { href: "/counts", label: "Head counts", icon: "ClipboardCheck", description: "Count who's on a bus or trip", section: "main", mobile: true },
       { href: "/campers", label: "Campers", icon: "Users", description: "Find any camper", section: "main", mobile: true },
@@ -23,10 +25,11 @@ export function buildNav(user: CurrentUser, opts: { designs?: boolean } = {}): N
   const nav: NavItem[] = [
     { href: "/", label: "Home", icon: "LayoutGrid", description: "Overview and next steps", section: "main" },
     { href: "/search", label: "Search", icon: "Search", description: "Search all of Kinus, or one part of it", section: "main" },
+    ...(going ? [{ href: "/checkout", label: "Final check-out", icon: "DoorOpen" as const, description: "Going home: every division of the camp", section: "main" as const, mobile: true }] : []),
     canScan
-      ? { href: "/scan", label: "Check in", icon: "ScanLine", description: "Scan or search to check campers in and out", section: "main", mobile: true }
-      : { href: "/scan", label: "Look up", icon: "ScanLine", description: "Scan a tag or search to open a camper", section: "main", mobile: true },
-    ...(canFinalCheckout(user) ? [{ href: "/checkout", label: "Final check-out", icon: "DoorOpen" as const, description: "Going home: every division of the camp", section: "main" as const }] : []),
+      ? { href: "/scan", label: "Check in", icon: "ScanLine", description: "Scan or search to check campers in and out", section: "main", mobile: !going }
+      : { href: "/scan", label: "Look up", icon: "ScanLine", description: "Scan a tag or search to open a camper", section: "main", mobile: !going },
+    ...(!going && canFinalCheckout(user) ? [{ href: "/checkout", label: "Final check-out", icon: "DoorOpen" as const, description: "Going home: every division of the camp", section: "main" as const }] : []),
     { href: "/status", label: "Who's here", icon: "Activity", description: "Who's here and who isn't yet, live", section: "main", mobile: true },
     ...(canScan ? [{ href: "/counts", label: "Head counts", icon: "ClipboardCheck" as const, description: "Count who's on a bus or trip", section: "main" as const }] : []),
     { href: "/campers", label: "Campers", icon: "Users", description: "Find any camper", section: "main", mobile: true },
