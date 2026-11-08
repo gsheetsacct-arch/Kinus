@@ -89,6 +89,7 @@ const loadAccount = cache(async (): Promise<Account> => {
       checkinLogin: profile.login === "shared",
       finalCheckout,
       checkoutCamps,
+      checkoutSetUp: checkoutSetups.length > 0,
       textRule: textRuleFor(textRules, profile.role),
     },
   };
