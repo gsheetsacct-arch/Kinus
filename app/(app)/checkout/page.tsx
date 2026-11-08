@@ -11,6 +11,8 @@ import { requireUser } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { checkoutScope } from "@/lib/attendance/final-checkout";
+import { isAdmin } from "@/lib/auth/permissions";
+import { Settings2 } from "lucide-react";
 
 /** The export's columns for a camper's family (who to call together) and where they're from. */
 const FAMILY_COLUMNS = ["UserAttr.family_id", "Family.city", "Family.state", "Family.country"];
@@ -31,10 +33,10 @@ export default async function CheckoutPage() {
       <EmptyState
         icon={DoorOpen}
         title="Final check-out isn't on for this account"
-        description="A director turns it on for a check-in login on the Staff page."
+        description="A director sets up final check-out (Final check-out → Set up) and chooses who can do it."
         action={
           <Button asChild>
-            <Link href="/scan">Check in</Link>
+            <Link href={isAdmin(user) ? "/checkout/setup" : "/scan"}>{isAdmin(user) ? "Set up final check-out" : "Check in"}</Link>
           </Button>
         }
       />
@@ -82,5 +84,18 @@ export default async function CheckoutPage() {
       from,
     };
   });
-  return <FinalCheckout roster={roster} campName={scope.campName} divisions={scope.divisions} initialCalls={state.calls} />;
+  return (
+    <>
+      {isAdmin(user) && (
+        <div className="mb-2 flex justify-end">
+          <Button asChild size="sm" variant="ghost">
+            <Link href="/checkout/setup">
+              <Settings2 /> Set up
+            </Link>
+          </Button>
+        </div>
+      )}
+      <FinalCheckout roster={roster} campName={scope.campName} divisions={scope.divisions} initialCalls={state.calls} />
+    </>
+  );
 }

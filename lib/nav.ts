@@ -12,7 +12,7 @@ export function buildNav(user: CurrentUser, opts: { designs?: boolean } = {}): N
   if (user.checkinLogin)
     return [
       { href: "/scan", label: "Check in", icon: "ScanLine", description: "Scan or search to check campers in and out", section: "main", mobile: true },
-      ...(user.finalCheckout ? [{ href: "/checkout", label: "Final check-out", icon: "DoorOpen" as const, description: "Going home: every division of the camp", section: "main" as const, mobile: true }] : []),
+      ...(canFinalCheckout(user) ? [{ href: "/checkout", label: "Final check-out", icon: "DoorOpen" as const, description: "Going home: every division of the camp", section: "main" as const, mobile: true }] : []),
       { href: "/status", label: "Who's here", icon: "Activity", description: "Who's here and who isn't yet, live", section: "main", mobile: true },
       { href: "/counts", label: "Head counts", icon: "ClipboardCheck", description: "Count who's on a bus or trip", section: "main", mobile: true },
       { href: "/campers", label: "Campers", icon: "Users", description: "Find any camper", section: "main", mobile: true },
