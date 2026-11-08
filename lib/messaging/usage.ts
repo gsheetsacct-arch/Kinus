@@ -1,28 +1,30 @@
 import { smsSegments } from "@/lib/sms";
 
 /**
- * What texting has cost, roughly (Text staff, for owners): texts sent and received through
- * Twilio, counted from Kinus' own records, and an estimate at Twilio's US rates. Twilio bills
- * per segment: a long text is several (a Hebrew or emoji text holds 70 characters, not 160).
- * Carrier fees are an average across carriers. The real bill is on Twilio (Console → Billing).
+ * What texting has cost (Text staff, for owners): texts sent and received through Twilio.
+ * Twilio's own billing (its Usage API) is used when it answers: that is the real bill. Kinus'
+ * records give the counts and a low–high estimate either way, since carrier fees vary by carrier.
+ * Twilio bills per segment: a long text is several (a Hebrew or emoji text holds 70 characters, not 160).
  */
 export const RATES = {
-  /** Twilio, per segment, sent or received (US). */
-  twilio: 0.0083,
-  /** Carriers' fees per segment, roughly: sent texts (registered A2P 10DLC), received ones. */
-  carrierOut: 0.003,
-  carrierIn: 0.001,
-  /** The phone number, a month. */
-  number: 1.15,
+  /** Twilio, per segment, sent or received (US, low and high). */
+  twilio: [0.0079, 0.0083],
+  /** Carriers' fees per segment sent (registered A2P 10DLC: AT&T ~0.002 to T-Mobile/Verizon ~0.003, more unregistered). */
+  carrierOut: [0.002, 0.005],
+  /** Carriers' fees per segment received (most charge none; T-Mobile ~0.003). */
+  carrierIn: [0, 0.003],
 } as const;
 
-export type UsageWindow = { texts: number; segments: number; replies: number; replySegments: number; failed: number; cost: number };
+export type Range = { min: number; max: number };
+/** Twilio's bill for the window: SMS sent and received (with carrier fees), and everything (the number too). */
+export type Billed = { sent: number; sentSegments: number; received: number; sms: number; total: number };
+export type UsageWindow = { texts: number; segments: number; replies: number; replySegments: number; failed: number; cost: Range; billed?: Billed | null };
 export type TextUsage = { today: UsageWindow; week: UsageWindow; all: UsageWindow; since: string | null };
 
 type Sent = { at: string; body: string; billed: boolean };
 type Received = { at: string; body: string };
 
-const empty = (): UsageWindow => ({ texts: 0, segments: 0, replies: 0, replySegments: 0, failed: 0, cost: 0 });
+const empty = (): UsageWindow => ({ texts: 0, segments: 0, replies: 0, replySegments: 0, failed: 0, cost: { min: 0, max: 0 } });
 
 /**
  * Counts per window (since the start of today in camp time, the last 7 days, everything).
@@ -56,7 +58,30 @@ export function textUsage(sent: Sent[], received: Received[], todayStart: Date, 
       w.replies += 1;
       w.replySegments += segmentsOf(r.body);
     }
-  for (const w of Object.values(windows)) w.cost = w.segments * (RATES.twilio + RATES.carrierOut) + w.replySegments * (RATES.twilio + RATES.carrierIn);
+  for (const w of Object.values(windows))
+    w.cost = {
+      min: w.segments * (RATES.twilio[0] + RATES.carrierOut[0]) + w.replySegments * (RATES.twilio[0] + RATES.carrierIn[0]),
+      max: w.segments * (RATES.twilio[1] + RATES.carrierOut[1]) + w.replySegments * (RATES.twilio[1] + RATES.carrierIn[1]),
+    };
   const times = [...sent.map((s) => s.at), ...received.map((r) => r.at)].sort();
   return { ...windows, since: times[0] ?? null };
+}
+
+/** Twilio usage records (one category), as its Usage API lists them. */
+export type UsageRecord = { category: string; count: string; usage: string; price: string | null };
+
+/** Twilio's bill from its usage records: SMS sent and received, their carrier fees, and the total. */
+export function billedFrom(records: UsageRecord[]): Billed {
+  const of = (c: string) => records.filter((r) => r.category === c);
+  const sum = (rs: UsageRecord[], k: "count" | "usage" | "price") => rs.reduce((s, r) => s + (Number(r[k]) || 0), 0);
+  const out = of("sms-outbound");
+  const inbound = of("sms-inbound");
+  return {
+    sent: sum(out, "count"),
+    sentSegments: sum(out, "usage"),
+    received: sum(inbound, "count"),
+    // the separate parts (not "sms", which may already hold some of them)
+    sms: Math.abs(sum(out, "price")) + Math.abs(sum(inbound, "price")) + Math.abs(sum(of("sms-messages-carrierfees"), "price")),
+    total: Math.abs(sum(of("totalprice"), "price")),
+  };
 }
