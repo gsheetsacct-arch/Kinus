@@ -19,6 +19,8 @@ import type { Reply } from "@/components/messages/reply-list";
 import { ROLE_ORDER, STAFF_ROLES } from "@/lib/labels";
 import { TextUsageCard } from "@/components/messages/text-usage";
 import { loadTextUsage } from "@/lib/data/text-usage";
+import { textingOff } from "@/lib/messaging/kill-switch";
+import { TextingSwitch } from "@/components/messages/texting-switch";
 
 export const metadata = { title: "Text staff" };
 // sending to a few hundred staff runs inside this page's action
@@ -91,11 +93,22 @@ export default async function MessagesPage() {
   const roleOptions = ROLE_ORDER.filter((r) => r !== "owner" && recipients.some((x) => x.role === r)).map((r) => ({ value: r, label: STAFF_ROLES[r].label }));
   const missing = twilioMissing();
   // what texting has cost so far (owners only)
-  const usage = isOwner(me) ? await loadTextUsage().catch(() => null) : null;
+  const [usage, killed] = await Promise.all([isOwner(me) ? loadTextUsage().catch(() => null) : null, textingOff().catch(() => ({ off: false }) as { off: boolean; by?: string; at?: string })]);
 
   return (
     <div className="space-y-6">
       <PageHeader title="Text staff" description={everyone ? "Text all staff, or the staff of chosen divisions." : "Text the staff of your divisions."} />
+      {killed.off && (
+        <Callout tone="warning" title="Texting is turned off">
+          The owner turned texting off{killed.by ? ` (${killed.by}${killed.at ? `, ${formatWhen(killed.at)}` : ""})` : ""}. No texts can be sent until it&apos;s turned back on. Replies still come in.
+        </Callout>
+      )}
+      {isOwner(me) && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs text-muted-foreground">Owner: stop all texting at once (staff texts and sign-up welcome texts)</span>
+          <TextingSwitch off={killed.off} />
+        </div>
+      )}
       {usage && <TextUsageCard usage={usage} />}
       {error && <Callout tone="warning" title="Texting needs a database update">Apply migration 0039 (Setup workflow or Supabase), then reload.</Callout>}
       {missing.length > 0 && (
@@ -111,7 +124,7 @@ export default async function MessagesPage() {
         </Callout>
       )}
       <Section title="New text">
-        <Compose camps={camps} recipients={recipients} roles={roleOptions} canEveryone={everyone} role={me.role} configured={!missing.length && !error && Boolean(twilioConfig())} />
+        <Compose camps={camps} recipients={recipients} roles={roleOptions} canEveryone={everyone} role={me.role} configured={!missing.length && !error && Boolean(twilioConfig()) && !killed.off} />
       </Section>
       {inbox.length > 0 && (
         <Section
