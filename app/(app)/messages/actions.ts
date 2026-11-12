@@ -1,4 +1,6 @@
 "use server";
+import { textingOff, TEXTING_OFF_KEY } from "@/lib/messaging/kill-switch";
+import { isOwner } from "@/lib/auth/permissions";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getActiveSession, requireUser } from "@/lib/auth/current-user";
@@ -40,6 +42,8 @@ export async function sendText(raw: { body: string; divisionIds: string[] | null
   if (!canTextStaff(me)) return fail("Your role can't text staff (Staff → Roles).");
   const config = twilioConfig();
   if (!config) return fail("Texting isn't set up yet: Twilio's details need adding in Vercel.");
+  // the owner's kill switch (Text staff): no texts go out while it's on
+  if ((await textingOff()).off) return fail("Texting is turned off by the owner. Nothing was sent.");
   const parsed = input.safeParse(raw);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the message and try again.");
   const { divisionIds } = parsed.data;
@@ -114,4 +118,16 @@ export async function sendText(raw: { body: string; divisionIds: string[] | null
   } catch (e) {
     return fail(/text_broadcast/.test(errorMessage(e)) ? "Texting needs a database update first (migration 0039)." : errorMessage(e));
   }
+}
+
+/** The owner's kill switch: turns all texting off (or back on). */
+export async function setTextingOff(off: boolean): Promise<ActionResult> {
+  const me = await requireUser();
+  if (!isOwner(me)) return fail("Only the owner can turn texting off or on.");
+  const { error } = await createAdminClient()
+    .from("settings")
+    .upsert({ key: TEXTING_OFF_KEY, value: { off, by: me.fullName, at: new Date().toISOString() } as never, updated_by: me.id, updated_at: new Date().toISOString() });
+  if (error) return fail(error.message);
+  revalidatePath("/messages");
+  return ok(off ? "Texting is off: nobody can send texts until you turn it back on." : "Texting is back on.");
 }

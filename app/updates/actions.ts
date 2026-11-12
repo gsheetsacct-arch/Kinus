@@ -1,4 +1,5 @@
 "use server";
+import { textingOff } from "@/lib/messaging/kill-switch";
 import { headers } from "next/headers";
 import { after } from "next/server";
 import { z } from "zod";
@@ -47,7 +48,8 @@ export async function signUpForUpdates(_prev: SignUpState, data: FormData): Prom
   if (twilio && !welcomed)
     after(async () => {
       const { data: stopped } = await admin.from("text_opt_outs").select("phone_e164").eq("phone_e164", e164).maybeSingle();
-      if (!stopped) await sendSms(twilio, { to: e164, body: UPDATES_WELCOME }).catch(() => undefined);
+      // and not while the owner has texting turned off
+      if (!stopped && !(await textingOff()).off) await sendSms(twilio, { to: e164, body: UPDATES_WELCOME }).catch(() => undefined);
     });
   return {
     ok: true,
